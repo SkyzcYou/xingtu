@@ -1,0 +1,7 @@
+services:
+  aitu:
+    image: crpi-b1po1b8mfjqfuj2k.cn-shenzhen.personal.cr.aliyuncs.com/skyzcstack/dev:0.6.39
+    container_name: aitu
+    restart: unless-stopped
+    ports:
+      - "80:80"

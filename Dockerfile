@@ -1,19 +1,30 @@
-FROM node:20 AS builder 
+FROM node:20-bookworm-slim AS builder
 
-WORKDIR /builder
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+ENV NODE_OPTIONS="--max-old-space-size=8192"
 
-COPY . /builder
+WORKDIR /app
 
-RUN npm install \
-    && npm run build 
+RUN corepack enable
 
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml nx.json tsconfig.base.json .npmrc ./
+COPY apps ./apps
+COPY packages ./packages
+COPY scripts ./scripts
+COPY tools ./tools
+COPY postcss.config.js tailwind.config.js ./
 
-FROM lipanski/docker-static-website:2.4.0
+RUN pnpm install --frozen-lockfile
+RUN node scripts/update-version.js \
+    && pnpm exec tsc -p apps/web/tsconfig.app.json --noEmit \
+    && pnpm exec vite build --config apps/web/vite.config.ts \
+    && pnpm exec vite build --config apps/web/vite.sw.config.ts
 
-WORKDIR /home/static
+FROM nginx:1.27-alpine AS runner
 
-COPY  --from=builder /builder/dist/apps/web/  /home/static
+COPY --from=builder /app/dist/apps/web /usr/share/nginx/html
 
 EXPOSE 80
 
-CMD ["/busybox-httpd", "-f", "-v", "-p", "80", "-c", "httpd.conf"]
+CMD ["nginx", "-g", "daemon off;"]
