@@ -14,7 +14,7 @@ import { WeComIcon } from '../icons';
 import { ToolButton } from '../tool-button';
 import './feedback-button.scss';
 
-const QR_CODE_URL = 'https://tuziai.oss-cn-shenzhen.aliyuncs.com/aitu/AiTu.png';
+const QR_CODE_URL = './logo/wechat-qr.jpg';
 const SERVICE_QR_CODE_URL = 'https://tuziai.oss-cn-shenzhen.aliyuncs.com/linkme.png';
 
 export const FeedbackButton: React.FC = () => {
