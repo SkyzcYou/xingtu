@@ -43,7 +43,7 @@ import {
 import './model-dropdown.scss';
 import { ModelHealthBadge } from '../shared/ModelHealthBadge';
 import { ModelBenchmarkBadge } from '../shared/ModelBenchmarkBadge';
-import { useFormattedModelPrice, useModelMeta } from '../../hooks/use-model-pricing';
+import { useModelMeta } from '../../hooks/use-model-pricing';
 import { modelPricingService } from '../../utils/model-pricing-service';
 import { KeyboardDropdown } from './KeyboardDropdown';
 import {
@@ -68,14 +68,6 @@ type ProviderSettingsIntent =
 function normalizeSearchText(value?: string | null): string {
   return (value || '').toLowerCase().replace(/[\s\-_.:/]+/g, '').trim();
 }
-
-const ModelDropdownPriceTag: React.FC<{ model: ModelConfig }> = React.memo(
-  ({ model }) => {
-    const text = useFormattedModelPrice(model.sourceProfileId, model.id);
-    if (!text) return null;
-    return <span className="model-dropdown__item-price">{text}</span>;
-  }
-);
 
 const ModelDropdownDescFallback: React.FC<{ model: ModelConfig }> = React.memo(
   ({ model }) => {
@@ -1048,7 +1040,6 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
                               )}
                               <ModelHealthBadge modelId={model.id} />
                               <ModelBenchmarkBadge modelId={model.id} />
-                              <ModelDropdownPriceTag model={model} />
                             </div>
                             {model.description ? (
                               <div className="model-dropdown__item-desc">

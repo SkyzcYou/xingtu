@@ -19,6 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Eye,
+  EyeOff,
   FlaskConical,
   Loader2,
   Search,
@@ -27,11 +29,7 @@ import {
 } from 'lucide-react';
 import { LS_KEYS } from '../../constants/storage-keys';
 import { ModelDiscoveryDialog } from './model-discovery-dialog';
-import { PricingFieldGroup } from './pricing-field-group';
-import {
-  useFormattedModelPrice,
-  useModelMeta,
-} from '../../hooks/use-model-pricing';
+import { useModelMeta } from '../../hooks/use-model-pricing';
 import {
   getDefaultAudioModel,
   getDefaultImageModel,
@@ -133,18 +131,6 @@ const MODEL_GROUP_LABELS: Record<ModelType, string> = {
   audio: '音频模型',
   text: '文本模型',
 };
-
-const ModelPriceLabel = memo(function ModelPriceLabel({
-  profileId,
-  modelId,
-}: {
-  profileId: string;
-  modelId: string;
-}) {
-  const priceText = useFormattedModelPrice(profileId, modelId);
-  if (!priceText) return null;
-  return <span className="settings-dialog__model-price">{priceText}</span>;
-});
 
 const ModelIdWithDesc = memo(function ModelIdWithDesc({
   profileId,
@@ -564,6 +550,7 @@ export const SettingsDialog = ({
   const [imageModelName, setImageModelName] = useState('');
   const [videoModelName, setVideoModelName] = useState('');
   const [textModelName, setTextModelName] = useState('');
+  const [showProviderApiKey, setShowProviderApiKey] = useState(false);
   const [showWorkZoneCard, setShowWorkZoneCard] = useState(true);
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [discoveryDialogOpen, setDiscoveryDialogOpen] = useState(false);
@@ -682,6 +669,7 @@ export const SettingsDialog = ({
 
   const handleSelectProfile = (profileId: string) => {
     setSelectedProfileId(profileId);
+    setShowProviderApiKey(false);
 
     if (isCompactLayout) {
       setCompactProviderMode('detail');
@@ -788,6 +776,7 @@ export const SettingsDialog = ({
     setCompactPresetMode('catalog');
     setModelSearchQuery('');
     setDiscoveryDialogOpen(false);
+    setShowProviderApiKey(false);
     setInitialDraftSignature(
       createSettingsDraftSignature({
         profiles: nextProfiles,
@@ -1910,48 +1899,30 @@ export const SettingsDialog = ({
                 </label>
                 <HoverTip
                   content={
-                    <div style={{ maxWidth: 480 }}>
-                      您可以从以下地址获取 API Key:
-                      <br />
-                      <a
-                        href="https://api.tu-zi.com/token"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          color: '#F39C12',
-                          textDecoration: 'none',
-                          display: 'inline-block',
-                          marginBottom: 8,
-                        }}
-                      >
-                        api.tu-zi.com/token
-                      </a>
-                      <div
-                        style={{
-                          position: 'relative',
-                          width: '100%',
-                          paddingTop: '56.25%',
-                          marginTop: 8,
-                          borderRadius: 8,
-                          overflow: 'hidden',
-                          backgroundColor: '#000',
-                          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-                        }}
-                      >
-                        <iframe
-                          title="Bilibili tutorial video"
-                          src="//player.bilibili.com/player.html?isOutside=true&aid=116171584049629&bvid=BV1k4PqzPEKz&cid=36455319822&p=1"
-                          allowFullScreen={true}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            border: 0,
-                          }}
-                        ></iframe>
+                    <div
+                      style={{
+                        width: 260,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 12,
+                        padding: '4px 0',
+                      }}
+                    >
+                      <div style={{ fontSize: 14, color: '#333' }}>
+                        扫码获取 API Key 支持
                       </div>
+                      <img
+                        src="./logo/wechat-qr.jpg"
+                        alt="获取 API Key 二维码"
+                        style={{
+                          width: 220,
+                          height: 220,
+                          objectFit: 'contain',
+                          borderRadius: 12,
+                          background: '#fff',
+                        }}
+                      />
                     </div>
                   }
                   placement="top"
@@ -1971,19 +1942,49 @@ export const SettingsDialog = ({
                   flexDirection: isCompactLayout ? 'column' : 'row',
                 }}
               >
-                <input
-                  type="password"
-                  className="settings-dialog__input"
-                  style={{ flex: isCompactLayout ? 'none' : 1, width: '100%' }}
-                  value={selectedProfile.apiKey}
-                  onChange={(event) =>
-                    updateProfile(selectedProfile.id, (profile) => ({
-                      ...profile,
-                      apiKey: event.target.value,
-                    }))
-                  }
-                  autoComplete="off"
-                />
+                <div
+                  style={{
+                    position: 'relative',
+                    flex: isCompactLayout ? 'none' : 1,
+                    width: '100%',
+                  }}
+                >
+                  <input
+                    type={showProviderApiKey ? 'text' : 'password'}
+                    className="settings-dialog__input"
+                    style={{ width: '100%', paddingRight: '40px' }}
+                    value={selectedProfile.apiKey}
+                    onChange={(event) =>
+                      updateProfile(selectedProfile.id, (profile) => ({
+                        ...profile,
+                        apiKey: event.target.value,
+                      }))
+                    }
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showProviderApiKey ? '隐藏 API Key' : '显示 API Key'}
+                    title={showProviderApiKey ? '隐藏 API Key' : '显示 API Key'}
+                    onClick={() => setShowProviderApiKey((prev) => !prev)}
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      right: 10,
+                      transform: 'translateY(-50%)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: 'none',
+                      background: 'transparent',
+                      padding: 0,
+                      color: '#666',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {showProviderApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 <button
                   type="button"
                   className="settings-dialog__button settings-dialog__button--fetch"
@@ -2014,12 +2015,6 @@ export const SettingsDialog = ({
           </div>
         </div>
 
-        <PricingFieldGroup
-          profile={selectedProfile}
-          onUpdateProfile={(updater) =>
-            updateProfile(selectedProfile.id, updater)
-          }
-        />
 
         {selectedProfile.id === LEGACY_DEFAULT_PROVIDER_PROFILE_ID ? (
           <div className="settings-dialog__section settings-dialog__section--compact">
@@ -2242,10 +2237,6 @@ export const SettingsDialog = ({
                               <span className="settings-dialog__model-type-item-vendor">
                                 {getDiscoveryVendorLabel(model.vendor)}
                               </span>
-                              <ModelPriceLabel
-                                profileId={selectedProfile!.id}
-                                modelId={model.id}
-                              />
                             </div>
                             <div className="settings-dialog__model-type-item-btns">
                               {(() => {

@@ -78,13 +78,6 @@ const MODE_DESCRIPTIONS: Record<BenchmarkCompareMode, string> = {
   custom: '手动编排供应商与模型组合，适合做定向复测和候选名单对比。',
 };
 
-const RANKING_LABELS: Record<BenchmarkRankingMode, string> = {
-  speed: '速度优先',
-  cost: '成本优先',
-  balanced: '综合平衡',
-  'value-for-money': '性价比',
-};
-
 const SESSION_STATUS_LABELS: Record<string, string> = {
   draft: '待启动',
   running: '测试中',
@@ -1100,7 +1093,6 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
           完成时间: formatDateTime(entry.completedAt),
           首响ms: entry.firstResponseMs,
           总耗时ms: entry.totalDurationMs,
-          预估成本: entry.estimatedCost,
           用户评分: entry.userScore,
           已收藏: toBooleanLabel(entry.favorite),
           已淘汰: toBooleanLabel(entry.rejected),
@@ -1225,7 +1217,6 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
             item.totalDurationValues.length > 0
               ? Math.min(...item.totalDurationValues)
               : null,
-          平均成本: averageNullableNumbers(item.costValues),
           平均评分: averageNullableNumbers(item.scoreValues),
           最近测试时间: formatDateTime(item.latestAt),
         }))
@@ -1233,13 +1224,9 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
           const scoreDelta =
             (right['平均评分'] ?? -1) - (left['平均评分'] ?? -1);
           if (scoreDelta !== 0) return scoreDelta;
-          const speedDelta =
-            (left['平均首响ms'] ?? Number.MAX_SAFE_INTEGER) -
-            (right['平均首响ms'] ?? Number.MAX_SAFE_INTEGER);
-          if (speedDelta !== 0) return speedDelta;
           return (
-            (left['平均成本'] ?? Number.MAX_SAFE_INTEGER) -
-            (right['平均成本'] ?? Number.MAX_SAFE_INTEGER)
+            (left['平均首响ms'] ?? Number.MAX_SAFE_INTEGER) -
+            (right['平均首响ms'] ?? Number.MAX_SAFE_INTEGER)
           );
         });
 
@@ -1935,8 +1922,6 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                     : ''}
                   {' · '}
                   {SESSION_STATUS_LABELS[displayedSession.status]}
-                  {' · '}
-                  {RANKING_LABELS[displayedSession.rankingMode]}
                 </p>
               ) : (
                 <p className="model-benchmark__main-desc">
@@ -2009,19 +1994,6 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                       <span>首响 {formatDuration(entry.firstResponseMs)}</span>
                       <span>
                         总耗时 {formatDuration(entry.totalDurationMs)}
-                      </span>
-                      <span>
-                        成本{' '}
-                        {entry.estimatedCost === null
-                          ? '未知'
-                          : `¥${entry.estimatedCost.toFixed(4)}`}
-                      </span>
-                      <span>
-                        性价比{' '}
-                        {(() => {
-                          const vs = computeValueScore(entry);
-                          return vs === null ? '—' : `${vs}/10`;
-                        })()}
                       </span>
                     </div>
 

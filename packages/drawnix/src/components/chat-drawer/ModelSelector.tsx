@@ -26,7 +26,7 @@ import { ModelVendorMark } from '../shared/ModelVendorBrand';
 import { VendorTabPanel, type VendorTab } from '../shared/VendorTabPanel';
 import { ModelHealthBadge } from '../shared/ModelHealthBadge';
 import { ModelBenchmarkBadge } from '../shared/ModelBenchmarkBadge';
-import { useFormattedModelPrice, useModelMeta } from '../../hooks/use-model-pricing';
+import { useModelMeta } from '../../hooks/use-model-pricing';
 import { Z_INDEX } from '../../constants/z-index';
 import { useSelectableModels } from '../../hooks/use-runtime-models';
 import {
@@ -52,14 +52,6 @@ export interface ModelSelectorProps {
 function getProviderLabel(model: ModelConfig): string {
   return model.sourceProfileName || VENDOR_NAMES[model.vendor] || model.id;
 }
-
-const ModelSelectorPriceTag: React.FC<{ model: ModelConfig }> = React.memo(
-  ({ model }) => {
-    const text = useFormattedModelPrice(model.sourceProfileId, model.id);
-    if (!text) return null;
-    return <span className="model-selector__item-price">{text}</span>;
-  }
-);
 
 const ModelDescFallback: React.FC<{ model: ModelConfig }> = React.memo(
   ({ model }) => {
@@ -387,7 +379,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
                           ) : null}
                           <ModelHealthBadge modelId={model.id} />
                           <ModelBenchmarkBadge modelId={model.id} />
-                          <ModelSelectorPriceTag model={model} />
                         </div>
                         {itemDescription ? (
                           <div className="model-selector__item-desc">

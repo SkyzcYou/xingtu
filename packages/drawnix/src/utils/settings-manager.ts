@@ -124,11 +124,11 @@ export const LEGACY_DEFAULT_PROVIDER_PROFILE_ID = 'legacy-default';
 export const DEFAULT_INVOCATION_PRESET_ID = 'default';
 export const TUZI_ORIGINAL_PROVIDER_PROFILE_ID = 'tuzi-origin';
 export const TUZI_MIX_PROVIDER_PROFILE_ID = 'tuzi-mix';
-export const TUZI_PROVIDER_ICON_URL = '/logo-tuzi.png';
-export const TUZI_PROVIDER_DEFAULT_BASE_URL = 'https://api.tu-zi.com/v1';
-export const TUZI_DEFAULT_PROVIDER_NAME = 'default 分组';
-export const TUZI_ORIGINAL_PROVIDER_NAME = '原价分组';
-export const TUZI_MIX_PROVIDER_NAME = 'gemini-mix 分组';
+export const TUZI_PROVIDER_ICON_URL = '/logo-xingtu.png';
+export const TUZI_PROVIDER_DEFAULT_BASE_URL = 'https://api.ourzhishi.top/v1';
+export const TUZI_DEFAULT_PROVIDER_NAME = '星图ai-通用渠道';
+export const TUZI_ORIGINAL_PROVIDER_NAME = '星图ai-VIP高速渠道';
+export const TUZI_MIX_PROVIDER_NAME = '星图ai-Gemini渠道';
 
 const DEFAULT_PROVIDER_CAPABILITIES: ProviderCapabilities = {
   supportsModelsEndpoint: true,
