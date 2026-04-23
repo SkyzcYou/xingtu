@@ -303,31 +303,7 @@ export const VersionInfo = () => {
       onSelect={() => {}}
       aria-label={t('menu.version')}
     >
-      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-        <span style={{ color: '#666' }}>{t('menu.version')}：{version}</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span
-            style={{ color: '#1890ff', cursor: 'pointer' }}
-            data-track="toolbar_click_menu_changelog"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.open('./versions.html', '_blank');
-            }}
-          >
-            {t('menu.changelog')}
-          </span>
-          <span
-            style={{ color: '#1890ff', cursor: 'pointer' }}
-            data-track="toolbar_click_menu_more_versions"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.open('https://release.opentu.ai/', '_blank');
-            }}
-          >
-            {t('menu.more')}
-          </span>
-        </span>
-      </span>
+      <span style={{ color: '#666' }}>{t('menu.version')}：{version}</span>
     </MenuItem>
   );
 };
