@@ -4,7 +4,7 @@ import {
   OpenFileIcon,
   SaveFileIcon,
   TrashIcon,
-  GithubIcon,
+  WebsiteIcon,
   BackupRestoreIcon,
   DebugLogIcon,
   BookOpenIcon,
@@ -240,10 +240,10 @@ export const GitHubLink = () => {
   const { t } = useI18n();
   return (
     <MenuItem
-      icon={<GithubIcon />}
+      icon={<WebsiteIcon />}
       data-track="toolbar_click_menu_github"
       onSelect={() => {
-        window.open('https://github.com/ljquan/aitu', '_blank');
+        window.open('https://ai.skyzcstack.space', '_blank');
       }}
       aria-label={t('menu.github')}
     >

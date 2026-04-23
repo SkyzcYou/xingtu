@@ -330,6 +330,25 @@ export const GithubIcon: React.FC<React.SVGProps<SVGSVGElement> & { size?: numbe
   </svg>
 );
 
+export const WebsiteIcon: React.FC<React.SVGProps<SVGSVGElement> & { size?: number }> = ({ size = 20, ...props }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.25"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    width={size}
+    height={size}
+    {...props}
+  >
+    <circle cx="10" cy="10" r="7" />
+    <path d="M3 10h14" />
+    <path d="M10 3c2 2 3 4.5 3 7s-1 5-3 7c-2-2-3-4.5-3-7s1-5 3-7Z" />
+  </svg>
+);
+
 // AI 图片图标
 export const AIImageIcon: React.FC<React.SVGProps<SVGSVGElement> & { size?: number }> = ({ size = 24, ...props }) => (
   <svg
