@@ -208,7 +208,6 @@ const BUILT_IN_MODEL_RECOMMENDATION_SCORES: Readonly<Record<string, number>> = {
   'gemini-3.1-flash-image-preview': 93,
   'gemini-3-pro-image-preview': 92,
   'gpt-image-1.5': 91,
-  'gpt-image-2': 90,
   'gemini-3-pro-image-preview-vip': 89,
   'gemini-3-pro-image-preview-2k-vip': 89,
   'gpt-4o-image': -999,

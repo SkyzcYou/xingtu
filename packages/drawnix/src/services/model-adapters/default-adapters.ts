@@ -37,6 +37,7 @@ import { registerTuziGPTImageAdapter } from './tuzi-gpt-image-adapter';
 import {
   isGPTImage2Model,
   resolveImageResolutionTier,
+  resolveOfficialGPTImageSize,
 } from './image-size-quality-resolver';
 
 const imageModelIds = [...IMAGE_MODEL_VIP_OPTIONS, ...IMAGE_MODEL_MORE_OPTIONS]
@@ -168,10 +169,9 @@ export const geminiImageAdapter: ImageModelAdapter = {
       | 'url'
       | 'b64_json'
       | undefined;
-    const size =
-      model === 'gpt-image-2'
-        ? normalizeGptImage2Size(request.size)
-        : request.size;
+    const size = isGPTImage2Model(model)
+      ? resolveOfficialGPTImageSize(model, request.size, request.params)
+      : request.size;
 
     const result = await defaultGeminiClient.generateImage(request.prompt, {
       size,
