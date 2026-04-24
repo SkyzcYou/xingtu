@@ -86,6 +86,10 @@ import { ModelDropdown } from '../ai-input-bar/ModelDropdown';
 import { WinBoxWindow } from '../winbox';
 import { TtsSettingsPanel } from '../project-drawer/TtsSettingsPanel';
 import { openModelBenchmarkTool } from '../../services/model-benchmark-launcher';
+import {
+  analytics,
+  getProviderEndpointAnalytics,
+} from '../../utils/posthog-analytics';
 import { modelBenchmarkService } from '../../services/model-benchmark-service';
 import { HoverTip } from '../shared';
 import { createProviderProfileDraft } from './provider-profile-draft';
@@ -722,6 +726,13 @@ export const SettingsDialog = ({
   }, [appState.openSettings]);
 
   const handleViewChange = (nextView: SettingsView) => {
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'view_changed',
+      control: 'settings_nav',
+      value: nextView,
+      source: 'settings_dialog',
+    });
     setActiveView(nextView);
 
     if (!isCompactLayout) {
@@ -738,6 +749,16 @@ export const SettingsDialog = ({
   };
 
   const handleSelectProfile = (profileId: string) => {
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'provider_selected',
+      control: 'provider_list',
+      source: 'settings_dialog',
+      metadata: {
+        profileId,
+        isManagedProfile: isManagedProviderProfile(profileId),
+      },
+    });
     setSelectedProfileId(profileId);
     setShowProviderApiKey(false);
 
@@ -747,6 +768,13 @@ export const SettingsDialog = ({
   };
 
   const handleSelectPreset = (presetId: string) => {
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'preset_selected',
+      control: 'preset_list',
+      source: 'settings_dialog',
+      metadata: { presetId },
+    });
     setSelectedPresetId(presetId);
 
     if (isCompactLayout) {
@@ -985,6 +1013,17 @@ export const SettingsDialog = ({
     profileId: string,
     enabled: boolean
   ) => {
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'provider_enabled_changed',
+      control: 'provider_enabled_switch',
+      value: enabled,
+      source: 'settings_dialog',
+      metadata: {
+        profileId,
+        isManagedProfile: isManagedProviderProfile(profileId),
+      },
+    });
     setProfilesDraft((current) =>
       current.map((profile) =>
         profile.id === profileId ? { ...profile, enabled } : profile
@@ -1014,6 +1053,13 @@ export const SettingsDialog = ({
   };
 
   const handleCanvasVisibilityChange = async (checked: boolean) => {
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'workzone_card_visibility_changed',
+      control: 'workzone_card_switch',
+      value: checked,
+      source: 'settings_dialog',
+    });
     setShowWorkZoneCard(checked);
 
     try {
@@ -1058,6 +1104,13 @@ export const SettingsDialog = ({
 
   const handleAddProfile = () => {
     const nextProfile = createProfile(profilesDraft.length + 1);
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'provider_added',
+      control: 'add_provider',
+      source: 'settings_dialog',
+      metadata: { profilesCount: profilesDraft.length + 1 },
+    });
     setProfilesDraft((current) => [...current, nextProfile]);
     setSelectedProfileId(nextProfile.id);
     setActiveView('providers');
@@ -1113,6 +1166,17 @@ export const SettingsDialog = ({
       return;
     }
 
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'provider_deleted',
+      control: 'delete_provider',
+      source: 'settings_dialog',
+      metadata: {
+        profileId,
+        profilesCount: Math.max(0, profilesDraft.length - 1),
+      },
+    });
+
     const remainingProfiles = profilesDraft.filter(
       (profile) => profile.id !== profileId
     );
@@ -1141,6 +1205,17 @@ export const SettingsDialog = ({
         name: `${source.name} (副本)`,
       };
       setProfilesDraft((current) => [...current, cloned]);
+      analytics.trackUIInteraction({
+        area: 'settings',
+        action: 'provider_cloned',
+        control: 'clone_provider',
+        source: 'settings_dialog',
+        metadata: {
+          profileId,
+          clonedProfileId: cloned.id,
+          profilesCount: profilesDraft.length + 1,
+        },
+      });
       setSelectedProfileId(cloned.id);
       setActiveView('providers');
       if (isCompactLayout) {
@@ -1188,6 +1263,17 @@ export const SettingsDialog = ({
       text: textModelName || getDefaultTextModel(),
     });
     setPresetsDraft((current) => [...current, nextPreset]);
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'preset_added',
+      control: 'add_preset',
+      source: 'settings_dialog',
+      metadata: {
+        presetId: nextPreset.id,
+        presetsCount: presetsDraft.length + 1,
+        hasFallbackProfile: !!fallbackProfileId,
+      },
+    });
     setSelectedPresetId(nextPreset.id);
     setActiveView('presets');
 
@@ -1215,6 +1301,17 @@ export const SettingsDialog = ({
     if (!confirmed) {
       return;
     }
+
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'preset_deleted',
+      control: 'delete_preset',
+      source: 'settings_dialog',
+      metadata: {
+        presetId,
+        presetsCount: Math.max(0, presetsDraft.length - 1),
+      },
+    });
 
     const remainingPresets = presetsDraft.filter(
       (preset) => preset.id !== presetId
@@ -1254,6 +1351,19 @@ export const SettingsDialog = ({
     );
 
     setPresetsDraft(nextPresets);
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'route_model_changed',
+      control: 'route_model_dropdown',
+      value: routeType,
+      source: 'settings_dialog',
+      metadata: {
+        presetId: selectedPreset.id,
+        routeType,
+        hasModel: !!nextModelRef?.modelId,
+        hasProfile: !!nextModelRef?.profileId,
+      },
+    });
     void persistPresetConfiguration(nextPresets, activePresetIdDraft);
   };
 
@@ -1283,14 +1393,38 @@ export const SettingsDialog = ({
     }
 
     try {
+      analytics.trackUIInteraction({
+        area: 'settings',
+        action: 'model_discovery_started',
+        control: 'fetch_models',
+        source: 'settings_dialog',
+        metadata: { profileId: selectedProfile.id },
+      });
       await runtimeModelDiscovery.discover(
         selectedProfile.id,
         normalizedBaseUrl,
         trimmedApiKey
       );
+      analytics.trackUIInteraction({
+        area: 'settings',
+        action: 'model_discovery_succeeded',
+        control: 'fetch_models',
+        source: 'settings_dialog',
+        metadata: { profileId: selectedProfile.id },
+      });
       setDiscoveryDialogOpen(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : '模型同步失败';
+      analytics.trackUIInteraction({
+        area: 'settings',
+        action: 'model_discovery_failed',
+        control: 'fetch_models',
+        source: 'settings_dialog',
+        metadata: {
+          profileId: selectedProfile.id,
+          error: message,
+        },
+      });
       runtimeModelDiscovery.setError(selectedProfile.id, message);
       MessagePlugin.error({
         content: message,
@@ -1367,6 +1501,18 @@ export const SettingsDialog = ({
     if (successMessage) {
       MessagePlugin.success(successMessage);
     }
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'discovered_models_applied',
+      control: 'model_discovery_dialog',
+      source: 'settings_dialog',
+      metadata: {
+        profileId: selectedProfile.id,
+        selectedCount: selectedModels.length,
+        addedCount: selectionChange.addedModelIds.length,
+        removedCount: selectionChange.removedModelIds.length,
+      },
+    });
     setDiscoveryDialogOpen(false);
   };
 
@@ -1548,9 +1694,51 @@ export const SettingsDialog = ({
         closeSettingsDialog();
       }
 
+      analytics.trackUIInteraction({
+        area: 'settings',
+        action: 'settings_saved',
+        control: 'save_settings',
+        source: 'settings_dialog',
+        metadata: {
+          closeAfterSave,
+          profilesCount: normalizedProfiles.length,
+          presetsCount: normalizedPresets.length,
+          enabledProfilesCount: normalizedProfiles.filter((profile) => profile.enabled).length,
+        },
+      });
+
+      normalizedProfiles.forEach((profile) => {
+        const endpoint = getProviderEndpointAnalytics(profile.baseUrl);
+        analytics.track('provider_endpoint_configured', {
+          profileId: profile.id,
+          providerType: profile.providerType,
+          providerOrigin: endpoint?.origin,
+          providerHost: endpoint?.host,
+          providerProtocol: endpoint?.protocol,
+          enabled: profile.enabled,
+          authType: profile.authType,
+          supportsText: profile.capabilities.supportsText,
+          supportsImage: profile.capabilities.supportsImage,
+          supportsVideo: profile.capabilities.supportsVideo,
+          supportsAudio: profile.capabilities.supportsAudio,
+          supportsTools: profile.capabilities.supportsTools,
+          hasApiKey: Boolean(profile.apiKey),
+        });
+      });
+
       return true;
     } catch (error) {
       console.error('Failed to persist settings drafts:', error);
+      analytics.trackUIInteraction({
+        area: 'settings',
+        action: 'settings_save_failed',
+        control: 'save_settings',
+        source: 'settings_dialog',
+        metadata: {
+          closeAfterSave,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
       MessagePlugin.error('设置保存失败，请稍后重试');
       return false;
     } finally {
@@ -2193,6 +2381,18 @@ export const SettingsDialog = ({
         modelId: payload.modelId,
         modality: payload.modality,
         compareMode: payload.compareMode,
+      });
+      analytics.trackUIInteraction({
+        area: 'settings',
+        action: 'model_benchmark_launched',
+        control: 'model_benchmark',
+        source: 'settings_dialog',
+        metadata: {
+          profileId: payload.profileId,
+          modality: payload.modality,
+          compareMode: payload.compareMode,
+          hasModel: !!payload.modelId,
+        },
       });
     },
     [setAppState]

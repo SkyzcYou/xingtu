@@ -146,7 +146,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
-    <meta name="app-version" content="0.6.64" />
+    <meta name="app-version" content="0.6.74" />
     <style>
       :root {
         --app-boot-bg: radial-gradient(
@@ -1304,6 +1304,29 @@
           }),
           (e.__SV = 1));
       })(document, window.posthog || []);
+      var isIgnorableExceptionEvent = function (event) {
+        if (!event || event.event !== '$exception') return false;
+        var properties = event.properties || {};
+        var values = properties.$exception_values || [];
+        var list = properties.$exception_list || [];
+        var messages = [];
+
+        if (Array.isArray(values)) messages = messages.concat(values);
+        if (Array.isArray(list)) {
+          for (var i = 0; i < list.length; i++) {
+            if (list[i] && list[i].value) messages.push(list[i].value);
+          }
+        }
+
+        var text = messages.join('\n');
+        return (
+          (text.indexOf("Failed to execute 'write' on 'Clipboard'") !== -1 &&
+            text.indexOf('permissions policy') !== -1) ||
+          text.indexOf("Failed to execute 'showOpenFilePicker'") !== -1 ||
+          text.indexOf('No key or key range specified') !== -1
+        );
+      };
+
       posthog.init('phc_13URtidKwTR9POlwnB153NsN99shRykvPguKWf3vZVn', {
         api_host: 'https://us.i.posthog.com',
         defaults: '2025-11-30',
@@ -1327,6 +1350,10 @@
               console.debug('[PostHog] 413 Content Too Large, batch dropped');
             }
           }
+        },
+        before_send: function (event) {
+          if (isIgnorableExceptionEvent(event)) return false;
+          return event;
         },
       });
     })();

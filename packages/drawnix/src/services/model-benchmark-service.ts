@@ -6,6 +6,7 @@ import type { ModelVendor } from '../constants/model-config';
 import { kvStorageService } from './kv-storage-service';
 import { generateTaskId } from '../utils/task-utils';
 import { createModelRef } from '../utils/settings-manager';
+import { analytics } from '../utils/posthog-analytics';
 import {
   getAdapterContextFromSettings,
   resolveAdapterForInvocation,
@@ -259,6 +260,16 @@ function summarizeError(error: unknown): string {
     return error.message || '请求失败';
   }
   return '请求失败';
+}
+
+function trackBenchmarkEvent(
+  eventName: string,
+  payload: Record<string, unknown>
+): void {
+  analytics.track(eventName, {
+    area: 'model_benchmark',
+    ...payload,
+  });
 }
 
 async function executeTextBenchmark(
@@ -593,6 +604,16 @@ class ModelBenchmarkService {
       activeSessionId: session.id,
     }));
 
+    trackBenchmarkEvent('model_benchmark_session_created', {
+      sessionId: session.id,
+      modality: session.modality,
+      compareMode: session.compareMode,
+      source: session.source,
+      targetCount: session.entries.length,
+      promptPresetId: session.promptPresetId,
+      promptLength: session.prompt.length,
+    });
+
     return session;
   }
 
@@ -664,6 +685,18 @@ class ModelBenchmarkService {
       return;
     }
 
+    const runStartedAt = Date.now();
+    trackBenchmarkEvent('model_benchmark_session_started', {
+      sessionId,
+      modality: currentSession.modality,
+      compareMode: currentSession.compareMode,
+      source: currentSession.source,
+      targetCount: currentSession.entries.length,
+      concurrency,
+      promptPresetId: currentSession.promptPresetId,
+      promptLength: currentSession.prompt.length,
+    });
+
     const preset = resolvePromptPreset(
       currentSession.promptPresetId,
       currentSession.modality
@@ -725,6 +758,29 @@ class ModelBenchmarkService {
         };
       }),
     }));
+
+    const finalSession = this.state$.value.sessions.find(
+      (session) => session.id === sessionId
+    );
+    if (finalSession) {
+      const completedCount = finalSession.entries.filter(
+        (entry) => entry.status === 'completed'
+      ).length;
+      const failedCount = finalSession.entries.filter(
+        (entry) => entry.status === 'failed'
+      ).length;
+      trackBenchmarkEvent('model_benchmark_session_completed', {
+        sessionId,
+        modality: finalSession.modality,
+        compareMode: finalSession.compareMode,
+        source: finalSession.source,
+        status: finalSession.status,
+        targetCount: finalSession.entries.length,
+        completedCount,
+        failedCount,
+        durationMs: Date.now() - runStartedAt,
+      });
+    }
   }
 
   private async runEntry(
@@ -796,8 +852,29 @@ class ModelBenchmarkService {
             : session
         ),
       }));
+      trackBenchmarkEvent('model_benchmark_entry_completed', {
+        sessionId,
+        entryId,
+        modality: latestEntry.modality,
+        compareMode: latestSession.compareMode,
+        profileId: latestEntry.profileId,
+        profileName: latestEntry.profileName,
+        modelId: latestEntry.modelId,
+        vendor: latestEntry.vendor,
+        firstResponseMs: firstResponseAt - startedAt,
+        totalDurationMs: completedAt - startedAt,
+        hasPreview: Boolean(result.text || result.url || result.urls?.length),
+        resultCount: result.urls?.length || (result.url || result.text ? 1 : 0),
+        format: result.format,
+      });
     } catch (error) {
       const completedAt = Date.now();
+      const latestSession = this.state$.value.sessions.find(
+        (session) => session.id === sessionId
+      );
+      const latestEntry = latestSession?.entries.find(
+        (entry) => entry.id === entryId
+      );
       this.mutate((state) => ({
         ...state,
         sessions: state.sessions.map((session) =>
@@ -820,6 +897,20 @@ class ModelBenchmarkService {
             : session
         ),
       }));
+      if (latestEntry && latestSession) {
+        trackBenchmarkEvent('model_benchmark_entry_failed', {
+          sessionId,
+          entryId,
+          modality: latestEntry.modality,
+          compareMode: latestSession.compareMode,
+          profileId: latestEntry.profileId,
+          profileName: latestEntry.profileName,
+          modelId: latestEntry.modelId,
+          vendor: latestEntry.vendor,
+          totalDurationMs: completedAt - startedAt,
+          errorMessage: summarizeError(error),
+        });
+      }
     }
   }
 }

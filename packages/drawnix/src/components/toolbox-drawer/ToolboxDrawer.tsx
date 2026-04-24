@@ -141,6 +141,18 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
           usageType: 'insert',
           isCustomTool: !tool.id.startsWith('builtin-'),
         });
+        analytics.trackUIInteraction({
+          area: 'toolbox',
+          action: 'tool_inserted',
+          control: 'tool_item',
+          source: 'toolbox_drawer',
+          metadata: {
+            toolId: tool.id,
+            toolName: tool.name,
+            category: tool.category,
+            isCustomTool: !tool.id.startsWith('builtin-'),
+          },
+        });
       } else {
         MessagePlugin.warning('该工具未定义内容（URL 或组件）');
       }
@@ -159,6 +171,19 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
       // 检查 URL 是否需要 API Key 配置
       const toolUrl = (tool as any).url;
       if (toolUrl && needsApiKeyConfiguration(toolUrl)) {
+        analytics.trackUIInteraction({
+          area: 'toolbox',
+          action: 'api_key_required',
+          control: 'insert_tool',
+          source: 'toolbox_drawer',
+          metadata: {
+            toolId: tool.id,
+            toolName: tool.name,
+            category: tool.category,
+            usageType: 'insert',
+            isCustomTool: !tool.id.startsWith('builtin-'),
+          },
+        });
         // 需要配置 API Key，保存待处理的操作并打开设置弹窗
         pendingToolRef.current = { tool, action: 'insert' };
         MessagePlugin.info('该工具需要配置 API Key，请先完成设置');
@@ -188,6 +213,18 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
         usageType: 'window',
         isCustomTool: !tool.id.startsWith('builtin-'),
       });
+      analytics.trackUIInteraction({
+        area: 'toolbox',
+        action: 'tool_opened_window',
+        control: 'tool_item',
+        source: 'toolbox_drawer',
+        metadata: {
+          toolId: tool.id,
+          toolName: tool.name,
+          category: tool.category,
+          isCustomTool: !tool.id.startsWith('builtin-'),
+        },
+      });
 
       // 在窗口打开后，可以选择关闭抽屉，也可以保持打开
       handleClose();
@@ -203,6 +240,19 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
       // 检查 URL 是否需要 API Key 配置
       const toolUrl = (tool as any).url;
       if (toolUrl && needsApiKeyConfiguration(toolUrl)) {
+        analytics.trackUIInteraction({
+          area: 'toolbox',
+          action: 'api_key_required',
+          control: 'open_tool_window',
+          source: 'toolbox_drawer',
+          metadata: {
+            toolId: tool.id,
+            toolName: tool.name,
+            category: tool.category,
+            usageType: 'window',
+            isCustomTool: !tool.id.startsWith('builtin-'),
+          },
+        });
         // 需要配置 API Key，保存待处理的操作并打开设置弹窗
         pendingToolRef.current = { tool, action: 'window' };
         MessagePlugin.info('该工具需要配置 API Key，请先完成设置');
@@ -278,10 +328,35 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
     return Object.keys(toolsByCategory);
   }, [toolsByCategory]);
 
+  const handleSearchBlur = useCallback(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      return;
+    }
+
+    analytics.trackUIInteraction({
+      area: 'toolbox',
+      action: 'search_used',
+      control: 'tool_search_input',
+      value: 'non_empty',
+      source: 'toolbox_drawer',
+      metadata: {
+        queryLength: query.length,
+        resultCount: filteredTools.length,
+      },
+    });
+  }, [filteredTools.length, searchQuery]);
+
   /**
    * 处理添加自定义工具按钮点击
    */
   const handleAddCustomTool = useCallback(() => {
+    analytics.trackUIInteraction({
+      area: 'toolbox',
+      action: 'open_custom_tool_dialog',
+      control: 'add_custom_tool',
+      source: 'toolbox_drawer',
+    });
     setCustomToolDialogVisible(true);
   }, []);
 
@@ -304,6 +379,17 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
     try {
       const removed = await toolboxService.removeCustomTool(tool.id);
       if (removed) {
+        analytics.trackUIInteraction({
+          area: 'toolbox',
+          action: 'custom_tool_deleted',
+          control: 'delete_tool',
+          source: 'toolbox_drawer',
+          metadata: {
+            toolId: tool.id,
+            toolName: tool.name,
+            category: tool.category,
+          },
+        });
         MessagePlugin.success('工具已删除');
         setRefreshKey((prev) => prev + 1);
       } else {
@@ -313,12 +399,18 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
       console.error('Failed to delete tool:', error);
       MessagePlugin.error('删除工具失败，请重试');
     }
-  }, []);
+  }, [confirm]);
 
   /**
    * 处理添加成功
    */
   const handleCustomToolSaved = useCallback(() => {
+    analytics.trackUIInteraction({
+      area: 'toolbox',
+      action: 'custom_tool_saved',
+      control: 'custom_tool_dialog',
+      source: 'toolbox_drawer',
+    });
     // 触发列表刷新
     setRefreshKey((prev) => prev + 1);
     // 清空搜索和分类过滤，显示所有工具
@@ -354,6 +446,7 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
         placeholder="搜索工具..."
         value={searchQuery}
         onChange={setSearchQuery}
+        onBlur={handleSearchBlur}
         prefixIcon={<SearchIcon />}
         size="small"
         clearable
@@ -362,7 +455,16 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
         <Button
           variant={selectedCategory === null ? 'base' : 'outline'}
           size="small"
-          onClick={() => setSelectedCategory(null)}
+          onClick={() => {
+            analytics.trackUIInteraction({
+              area: 'toolbox',
+              action: 'category_filter_changed',
+              control: 'category_filter',
+              value: 'all',
+              source: 'toolbox_drawer',
+            });
+            setSelectedCategory(null);
+          }}
         >
           全部
         </Button>
@@ -371,7 +473,16 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
             key={category}
             variant={selectedCategory === category ? 'base' : 'outline'}
             size="small"
-            onClick={() => setSelectedCategory(category)}
+            onClick={() => {
+              analytics.trackUIInteraction({
+                area: 'toolbox',
+                action: 'category_filter_changed',
+                control: 'category_filter',
+                value: category,
+                source: 'toolbox_drawer',
+              });
+              setSelectedCategory(category);
+            }}
           >
             {TOOL_CATEGORY_LABELS[category] || category}
           </Button>

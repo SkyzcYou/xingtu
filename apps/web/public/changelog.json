@@ -1,6 +1,115 @@
 {
   "versions": [
     {
+      "version": "0.6.74",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [
+          "添加UI交互埋点并优化剪贴板权限检测",
+          "为缓存失败的媒体添加下载提示角标"
+        ],
+        "fixes": [
+          "修复离线 CDN 资源缓存回退"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "添加UI交互埋点并优化剪贴板权限检测"
+    },
+    {
+      "version": "0.6.73",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修复版本更新条假升级与 SW 提交时序"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修复版本更新条假升级与 SW 提交时序"
+    },
+    {
+      "version": "0.6.72",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "确保更新安装时所有预缓存资源就绪后再提示升级"
+        ],
+        "improvements": [
+          "perf(sw): 优化空闲预取机制并移除调试日志"
+        ]
+      },
+      "type": "patch",
+      "highlights": "确保更新安装时所有预缓存资源就绪后再提示升级"
+    },
+    {
+      "version": "0.6.70",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [
+          "完善 GPT Image 兼容链路"
+        ],
+        "fixes": [
+          "收口预缓存并补齐按需工具离线资源",
+          "接力完整离线补齐并清理 drawnix tsc",
+          "修正跨域静态资源离线缓存命中",
+          "修正按需资源预缓存与预热分组",
+          "限制 app shell 仅匹配根壳页面",
+          "修复离线模式下懒加载模块资源未预热",
+          "修复 GPT Image 适配器 readonly 元组类型不兼容和灵感图缺少 imageQuality 默认值"
+        ],
+        "improvements": [
+          "更新版本号至0.6.69并刷新构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "完善 GPT Image 兼容链路"
+    },
+    {
+      "version": "0.6.68",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修正跨域静态资源离线缓存命中"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修正跨域静态资源离线缓存命中"
+    },
+    {
+      "version": "0.6.66",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修正按需资源预缓存与预热分组"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修正按需资源预缓存与预热分组"
+    },
+    {
+      "version": "0.6.65",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "限制 app shell 仅匹配根壳页面",
+          "修复离线模式下懒加载模块资源未预热"
+        ],
+        "improvements": [
+          "更新版本号至0.6.64并修正回滚脚本参数顺序"
+        ]
+      },
+      "type": "patch",
+      "highlights": "限制 app shell 仅匹配根壳页面"
+    },
+    {
       "version": "0.6.64",
       "date": "2026-04-23",
       "changes": {

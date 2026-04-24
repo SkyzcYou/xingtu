@@ -6,6 +6,7 @@
  * Based on data-model.md specifications.
  */
 import { generateUUID } from '../utils/runtime-helpers';
+import type { CacheWarning } from './cache-warning.types';
 
 /**
  * Asset Type Enum
@@ -58,6 +59,7 @@ export interface Asset {
   duration?: number; // 音频/视频时长（秒）
   clipId?: string; // 音频片段 ID（仅 AI 音频）
   providerTaskId?: string; // 供应商任务 ID（仅 AI 音频）
+  cacheWarning?: CacheWarning; // 缓存失败/不可用提醒
 }
 
 /**
@@ -77,6 +79,7 @@ export interface StoredAsset {
   contentHash?: string; // 文件内容哈希，用于去重
   prompt?: string; // AI 生成的提示词（仅 AI_GENERATED）
   modelName?: string; // 生成模型名称（仅 AI_GENERATED）
+  cacheWarning?: CacheWarning; // 缓存失败/不可用提醒
 }
 
 /**

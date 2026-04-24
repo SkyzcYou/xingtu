@@ -16,6 +16,11 @@ export class CardGenerator {
   private reactRoot: Root | null = null;
   private resizeObserver: ResizeObserver | null = null;
   onHeightMeasured?: (height: number) => void;
+  private isEditing = false;
+
+  setEditing(editing: boolean): void {
+    this.isEditing = editing;
+  }
 
   processDrawing(element: PlaitCard, parentG: SVGGElement): SVGGElement {
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');

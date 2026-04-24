@@ -27,6 +27,7 @@ import { extractFramesFromVideo, cacheFrameBlob } from '../../../utils/video-fra
 import { cacheVideoSource, restoreVideoFileFromSnapshot } from '../video-source-cache';
 import { taskQueueService } from '../../../services/task-queue';
 import { syncVideoAnalyzerTask } from '../task-sync';
+import { analytics } from '../../../utils/posthog-analytics';
 
 type InputMode = 'upload' | 'youtube';
 
@@ -280,6 +281,20 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
         return;
       }
 
+      analytics.trackUIInteraction({
+        area: 'popular_video_tool',
+        action: 'video_analysis_started',
+        control: 'analyze_video',
+        source: 'video_analyzer_analyze_page',
+        metadata: {
+          inputMode,
+          hasUpload: !!videoFile,
+          hasYoutubeUrl: !!youtubeUrl,
+          fileSizeBytes: videoFile?.size,
+          hasModelRef: !!selectedModelRef,
+        },
+      });
+
       setProgress('加入任务队列...');
       const result = await videoAnalyzeTool.execute(params, { mode: 'queue' });
 
@@ -361,6 +376,17 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   const handleInsertAnalysis = useCallback(async () => {
     if (!analysis) return;
     await quickInsert('text', formatShotsMarkdown(analysis.shots, analysis));
+    analytics.trackUIInteraction({
+      area: 'popular_video_tool',
+      action: 'analysis_inserted_to_canvas',
+      control: 'insert_analysis',
+      source: 'video_analyzer_analyze_page',
+      metadata: {
+        shotCount: analysis.shots.length,
+        productExposureRatio: analysis.productExposureRatio,
+        characterCount: analysis.characters?.length || 0,
+      },
+    });
   }, [analysis]);
 
   return (

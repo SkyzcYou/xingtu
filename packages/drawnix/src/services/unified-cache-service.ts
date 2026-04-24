@@ -17,6 +17,7 @@ import {
   AI_GENERATED_AUDIO_URL_PREFIX,
   isVirtualMediaUrl,
 } from '../utils/virtual-media-url';
+import type { CacheWarning, CacheWarningReasonCode } from '../types/cache-warning.types';
 
 // ==================== 常量定义 ====================
 
@@ -135,6 +136,7 @@ export interface CachedMedia {
     prompt?: string;
     model?: string;
     params?: any;
+    cacheWarning?: CacheWarning;
     [key: string]: any;
   };
 }
@@ -147,6 +149,7 @@ export interface CacheInfo {
   age?: number; // 毫秒
   size?: number;
   metadata?: CachedMedia['metadata'];
+  cacheWarning?: CacheWarning;
 }
 
 /** 存储使用情况 */
@@ -200,6 +203,43 @@ export interface MainToSWMessage {
   type: 'DELETE_CACHE' | 'DELETE_CACHE_BATCH' | 'CLEAR_ALL_CACHE';
   url?: string;
   urls?: string[];
+}
+
+function classifyCacheWarningReason(error: unknown): CacheWarningReasonCode {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes('opaque') || normalized.includes('cors')) {
+    return 'cors_opaque';
+  }
+  if (normalized.includes('quota') || normalized.includes('storage')) {
+    return 'storage_error';
+  }
+  if (normalized.includes('http') || normalized.includes('failed to fetch image:')) {
+    return 'http_error';
+  }
+  if (normalized.includes('body') || normalized.includes('blob')) {
+    return 'response_unreadable';
+  }
+  if (normalized.includes('fetch') || normalized.includes('network')) {
+    return 'network_error';
+  }
+  return 'unknown';
+}
+
+function createCacheWarning(
+  reasonCode: CacheWarningReasonCode,
+  message?: string
+): CacheWarning {
+  return {
+    status: 'failed',
+    reasonCode,
+    message:
+      message ||
+      '该资源未能缓存到浏览器，原始链接可能会过期，请尽快下载保存。',
+    detectedAt: Date.now(),
+    expiresHint: '原始链接可能带有效期',
+  };
 }
 
 // ==================== 统一缓存服务类 ====================
@@ -441,11 +481,12 @@ class UnifiedCacheService {
     mimeType: string
   ): Promise<void> {
     try {
-      const existing = await this.getItem(url);
+      const normalizedUrl = this.normalizeRemoteCacheUrl(url);
+      const existing = await this.getItem(normalizedUrl);
       const now = Date.now();
 
       const item: CachedMedia = {
-        url,
+        url: normalizedUrl,
         type: 'image',
         mimeType,
         size,
@@ -455,7 +496,7 @@ class UnifiedCacheService {
       };
 
       await this.putItem(item);
-      this.cachedUrls.add(url);
+      this.cachedUrls.add(normalizedUrl);
       this.notifyListeners();
 
       // console.log('[UnifiedCache] Image metadata updated:', url);
@@ -512,7 +553,6 @@ class UnifiedCacheService {
       };
 
       await this.putItem(item);
-      this.cachedUrls.add(normalizedUrl);
       this.notifyListeners();
 
       // console.log('[UnifiedCache] Image metadata registered:', { url, taskId: metadata.taskId });
@@ -658,7 +698,8 @@ class UnifiedCacheService {
   async getCacheInfo(url: string): Promise<CacheInfo> {
     try {
       // 1. 检查 IndexedDB 中是否有元数据
-      const item = await this.getItem(url);
+      const normalizedUrl = this.normalizeRemoteCacheUrl(url);
+      const item = await this.getItem(normalizedUrl);
       if (!item) {
         return { isCached: false };
       }
@@ -670,11 +711,11 @@ class UnifiedCacheService {
           const cache = await caches.open(IMAGE_CACHE_NAME);
 
           // 尝试精确匹配
-          let response = await cache.match(url);
+          let response = await cache.match(normalizedUrl);
 
           // 如果精确匹配失败，尝试忽略查询参数匹配
           if (!response) {
-            response = await cache.match(url, { ignoreSearch: true });
+            response = await cache.match(normalizedUrl, { ignoreSearch: true });
           }
 
           isInCacheAPI = !!response;
@@ -696,11 +737,20 @@ class UnifiedCacheService {
 
       // 3. 只有在 IndexedDB 和 Cache API 都有时，才返回 isCached: true
       if (!isInCacheAPI) {
-        // IndexedDB 有记录但 Cache API 没有，清理 IndexedDB 记录
-        // console.log('[UnifiedCache] Found orphaned metadata, cleaning up:', url);
-        await this.deleteItem(url);
-        this.cachedUrls.delete(url);
-        return { isCached: false };
+        const cacheWarning =
+          item.metadata?.cacheWarning ||
+          createCacheWarning(
+            'cache_missing',
+            '该资源未在浏览器缓存中找到，原始链接可能会过期，请尽快下载保存。'
+          );
+        return {
+          isCached: false,
+          metadata: {
+            ...item.metadata,
+            cacheWarning,
+          },
+          cacheWarning,
+        };
       }
 
       const age = Date.now() - item.cachedAt;
@@ -723,6 +773,8 @@ class UnifiedCacheService {
    * 手动缓存图片
    */
   async cacheImage(url: string, metadata?: any): Promise<boolean> {
+    const normalizedUrl = this.normalizeRemoteCacheUrl(url);
+
     try {
       // 触发缓存（通过 fetch）
       const response = await fetch(url);
@@ -733,13 +785,14 @@ class UnifiedCacheService {
       const blob = await response.blob();
 
       // 注册元数据
-      const existing = await this.getItem(url);
+      const existing = await this.getItem(normalizedUrl);
       const now = Date.now();
 
+      const mimeType = blob.type || 'image/png';
       const item: CachedMedia = {
-        url,
+        url: normalizedUrl,
         type: 'image',
-        mimeType: blob.type || 'image/png',
+        mimeType,
         size: blob.size,
         cachedAt: existing?.cachedAt || now,
         lastUsed: now,
@@ -749,8 +802,22 @@ class UnifiedCacheService {
         },
       };
 
+      if (typeof caches !== 'undefined') {
+        const cache = await caches.open(IMAGE_CACHE_NAME);
+        await cache.put(
+          normalizedUrl,
+          new Response(blob, {
+            status: 200,
+            headers: {
+              'Content-Type': mimeType,
+              'sw-image-size': String(blob.size),
+            },
+          })
+        );
+      }
+
       await this.putItem(item);
-      this.cachedUrls.add(url);
+      this.cachedUrls.add(normalizedUrl);
       this.notifyListeners();
 
       // console.log('[UnifiedCache] Image cached manually:', url);
@@ -758,6 +825,31 @@ class UnifiedCacheService {
     } catch (error) {
       this.handleQuotaError(error);
       console.error('[UnifiedCache] Failed to cache image:', error);
+
+      try {
+        const existing = await this.getItem(normalizedUrl);
+        const now = Date.now();
+        const cacheWarning = createCacheWarning(
+          classifyCacheWarningReason(error)
+        );
+        await this.putItem({
+          url: normalizedUrl,
+          type: existing?.type || 'image',
+          mimeType: existing?.mimeType || 'image/png',
+          size: existing?.size || 0,
+          cachedAt: existing?.cachedAt || now,
+          lastUsed: now,
+          metadata: {
+            ...existing?.metadata,
+            ...metadata,
+            cacheWarning,
+          },
+        });
+        this.notifyListeners();
+      } catch (recordError) {
+        console.warn('[UnifiedCache] Failed to record cache warning:', recordError);
+      }
+
       return false;
     }
   }
@@ -913,11 +1005,8 @@ class UnifiedCacheService {
    * 检查 URL 是否已缓存
    */
   async isCached(url: string): Promise<boolean> {
-    if (this.cachedUrls.has(url)) {
-      return true;
-    }
-    const item = await this.getItem(url);
-    return !!item;
+    const info = await this.getCacheInfo(url);
+    return info.isCached;
   }
 
   /**

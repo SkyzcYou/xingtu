@@ -16,6 +16,7 @@ import {
   readStoredModelSelection,
   writeStoredModelSelection,
 } from '../utils';
+import { analytics } from '../../../utils/posthog-analytics';
 
 const STORAGE_KEY_AUDIO_MODEL = 'music-analyzer:audio-model';
 
@@ -272,6 +273,22 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       return;
     }
     generatingRef.current = true;
+
+    analytics.trackUIInteraction({
+      area: 'popular_music_tool',
+      action: 'music_generation_started',
+      control: 'generate_music',
+      source: 'music_analyzer_generate_page',
+      metadata: {
+        editAction: action,
+        batchCount,
+        promptLength: trimmedPrompt.length,
+        hasTitle: !!trimmedTitle,
+        tagsCount: toStyleTags(trimmedTags).length,
+        hasMv: !!mv,
+        hasModelRef: !!selectedModelRef,
+      },
+    });
 
     setSubmitting(true);
     setMessage('');

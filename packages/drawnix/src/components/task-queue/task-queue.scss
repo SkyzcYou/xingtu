@@ -644,6 +644,23 @@
     svg { width: 10px; height: 10px; }
   }
 
+
+  &__cache-warning-badge {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    z-index: 2;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(245, 158, 11, 0.92);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 14px;
+    cursor: help;
+    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.28);
+  }
+
   // Sync badge styles
   &__sync-badge {
     position: absolute;

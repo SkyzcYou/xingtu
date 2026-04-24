@@ -14,7 +14,7 @@ import { useI18n } from '../../../i18n';
 import { SHADOW_PRESETS, DEFAULT_TEXT_SHADOW, DEFAULT_GLOW } from '../../../constants/text-effects';
 import type { TextShadowConfig, GlowConfig, ShadowEffectConfig } from '../../../types/text-effects.types';
 import { generateTextShadowCSS, generateGlowCSS } from '../../../utils/text-effects-utils';
-import { setTextShadow } from '../../../transforms/property';
+import { setTextShadow as applyTextShadow } from '../../../transforms/property';
 import { ShadowEffectIcon } from '../../icons';
 import './shadow-effect-button.scss';
 
@@ -38,12 +38,12 @@ export const PopupShadowEffectButton: React.FC<PopupShadowEffectButtonProps> = (
   const [activeTab, setActiveTab] = useState<ShadowTab>('text');
   
   // 文字阴影状态
-  const [textShadow, setTextShadow] = useState<TextShadowConfig>(
+  const [textShadow, setTextShadowState] = useState<TextShadowConfig>(
     currentShadow?.textShadows[0] || { ...DEFAULT_TEXT_SHADOW, enabled: true }
   );
   
   // 发光效果状态
-  const [glow, setGlow] = useState<GlowConfig>(
+  const [glow, setGlowState] = useState<GlowConfig>(
     currentShadow?.glow || { ...DEFAULT_GLOW }
   );
 
@@ -63,7 +63,7 @@ export const PopupShadowEffectButton: React.FC<PopupShadowEffectButtonProps> = (
       : updates.glow 
         ? generateGlowCSS(updates.glow)
         : null;
-    setTextShadow(board, shadowCSS);
+    applyTextShadow(board, shadowCSS);
     
     onShadowChange?.(newConfig);
   }, [board, currentShadow, textShadow, glow, onShadowChange]);
@@ -71,25 +71,25 @@ export const PopupShadowEffectButton: React.FC<PopupShadowEffectButtonProps> = (
   // 处理文字阴影变化
   const handleTextShadowChange = useCallback((key: keyof TextShadowConfig, value: any) => {
     const newShadow = { ...textShadow, [key]: value };
-    setTextShadow(newShadow);
+    setTextShadowState(newShadow);
     updateShadow({ textShadows: [newShadow] });
   }, [textShadow, updateShadow]);
 
   // 处理发光效果变化
   const handleGlowChange = useCallback((key: keyof GlowConfig, value: any) => {
     const newGlow = { ...glow, [key]: value };
-    setGlow(newGlow);
+    setGlowState(newGlow);
     updateShadow({ glow: newGlow });
   }, [glow, updateShadow]);
 
   // 应用预设
   const applyTextShadowPreset = useCallback((preset: TextShadowConfig) => {
-    setTextShadow(preset);
+    setTextShadowState(preset);
     updateShadow({ textShadows: [preset] });
   }, [updateShadow]);
 
   const applyGlowPreset = useCallback((preset: GlowConfig) => {
-    setGlow(preset);
+    setGlowState(preset);
     updateShadow({ glow: preset });
   }, [updateShadow]);
 

@@ -1,12 +1,11 @@
 export type IdlePrefetchGroup =
   | 'ai-chat'
-  | 'tool-runtime'
-  | 'tool-drawers'
-  | 'tool-dialogs'
-  | 'tool-commanding'
+  | 'tool-windows'
   | 'diagram-engines'
   | 'office-data'
-  | 'external-skills';
+  | 'external-skills'
+  | 'runtime-static-assets'
+  | 'offline-static-assets';
 
 interface IdlePrefetchMessage {
   type: 'SW_PREFETCH_GROUPS';
@@ -14,6 +13,21 @@ interface IdlePrefetchMessage {
 }
 
 const requestedGroups = new Set<IdlePrefetchGroup>();
+const MAX_IDLE_PREFETCH_POST_ATTEMPTS = 4;
+const IDLE_PREFETCH_RETRY_DELAY_MS = 1000;
+
+function logStartupPrefetch(message: string, detail?: unknown): void {
+  if (detail === undefined) {
+    console.info(`[StartupPrefetch] ${message}`);
+    return;
+  }
+
+  console.info(`[StartupPrefetch] ${message}`, detail);
+}
+
+function releaseRequestedGroups(groups: IdlePrefetchGroup[]): void {
+  groups.forEach((group) => requestedGroups.delete(group));
+}
 
 function canUseConnectionForPrefetch(): boolean {
   const connection =
@@ -47,6 +61,13 @@ export function requestServiceWorkerIdlePrefetch(
     groups.length === 0 ||
     !canUseConnectionForPrefetch()
   ) {
+    logStartupPrefetch('skip idle prefetch request', {
+      hasWindow: typeof window !== 'undefined',
+      hasServiceWorker:
+        typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
+      groupCount: groups.length,
+      canUseConnection: canUseConnectionForPrefetch(),
+    });
     return;
   }
 
@@ -59,6 +80,9 @@ export function requestServiceWorkerIdlePrefetch(
   });
 
   if (pendingGroups.length === 0) {
+    logStartupPrefetch('skip idle prefetch request: all groups already requested', {
+      groups,
+    });
     return;
   }
 
@@ -67,19 +91,64 @@ export function requestServiceWorkerIdlePrefetch(
     groups: pendingGroups,
   };
 
-  const postMessage = () => {
+  const postMessage = (attempt = 1) => {
     const controller = navigator.serviceWorker.controller;
     if (controller) {
       controller.postMessage(message);
+      logStartupPrefetch('posted idle prefetch request via controller', {
+        groups: pendingGroups,
+        attempt,
+      });
       return;
     }
 
     navigator.serviceWorker.ready
       .then((registration) => {
-        registration.active?.postMessage(message);
+        if (registration.active) {
+          registration.active.postMessage(message);
+          logStartupPrefetch('posted idle prefetch request via registration.active', {
+            groups: pendingGroups,
+            attempt,
+          });
+          return;
+        }
+
+        if (attempt >= MAX_IDLE_PREFETCH_POST_ATTEMPTS) {
+          releaseRequestedGroups(pendingGroups);
+          console.warn(
+            '[StartupPrefetch] idle prefetch request dropped: no active service worker',
+            {
+              groups: pendingGroups,
+              attempt,
+            }
+          );
+          return;
+        }
+
+        logStartupPrefetch('retry idle prefetch request: no active service worker yet', {
+          groups: pendingGroups,
+          attempt,
+          retryDelayMs: IDLE_PREFETCH_RETRY_DELAY_MS,
+        });
+        window.setTimeout(() => postMessage(attempt + 1), IDLE_PREFETCH_RETRY_DELAY_MS);
       })
-      .catch(() => {
-        pendingGroups.forEach((group) => requestedGroups.delete(group));
+      .catch((error) => {
+        if (attempt >= MAX_IDLE_PREFETCH_POST_ATTEMPTS) {
+          releaseRequestedGroups(pendingGroups);
+          console.warn('[StartupPrefetch] idle prefetch request failed after retries', {
+            groups: pendingGroups,
+            attempt,
+            error,
+          });
+          return;
+        }
+
+        logStartupPrefetch('retry idle prefetch request after navigator.serviceWorker.ready failure', {
+          groups: pendingGroups,
+          attempt,
+          retryDelayMs: IDLE_PREFETCH_RETRY_DELAY_MS,
+        });
+        window.setTimeout(() => postMessage(attempt + 1), IDLE_PREFETCH_RETRY_DELAY_MS);
       });
   };
 
@@ -93,8 +162,14 @@ export function requestServiceWorkerIdlePrefetch(
   ).requestIdleCallback;
 
   if (typeof idleCallback === 'function') {
+    logStartupPrefetch('queue idle prefetch request with requestIdleCallback', {
+      groups: pendingGroups,
+    });
     idleCallback(() => postMessage(), { timeout: 1500 });
   } else {
+    logStartupPrefetch('queue idle prefetch request with setTimeout fallback', {
+      groups: pendingGroups,
+    });
     window.setTimeout(postMessage, 400);
   }
 }

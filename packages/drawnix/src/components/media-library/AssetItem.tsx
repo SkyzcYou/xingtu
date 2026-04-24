@@ -18,6 +18,7 @@ import { formatDate, formatFileSize } from '../../utils/asset-utils';
 import { useAssetSize } from '../../hooks/useAssetSize';
 import { LazyImage } from '../lazy-image';
 import { useThumbnailUrl } from '../../hooks/useThumbnailUrl';
+import { useUnifiedCache } from '../../hooks/useUnifiedCache';
 import { VideoPosterPreview } from '../shared/VideoPosterPreview';
 import type { Asset, ViewMode } from '../../types/asset.types';
 import './AssetItem.scss';
@@ -62,6 +63,16 @@ export const AssetItem = memo<AssetItemProps>(
       asset.type === 'IMAGE' ? 'image' : undefined,
       thumbnailSize
     );
+    const { isCached, cacheWarning: detectedCacheWarning } = useUnifiedCache(
+      asset.type === 'IMAGE' || asset.type === 'VIDEO' ? asset.url : undefined
+    );
+    const cacheWarning =
+      asset.type === 'IMAGE' || asset.type === 'VIDEO'
+        ? asset.cacheWarning || (!isCached ? detectedCacheWarning : undefined)
+        : undefined;
+    const cacheWarningTip = cacheWarning
+      ? `${cacheWarning.message}${cacheWarning.expiresHint ? `\n${cacheWarning.expiresHint}` : ''}`
+      : '';
 
     const handleClick = useCallback(
       (e: React.MouseEvent) => {
@@ -208,6 +219,11 @@ export const AssetItem = memo<AssetItemProps>(
                   </div>
                 </HoverTip>
               )}
+              {cacheWarning && (
+                <HoverTip content={cacheWarningTip} showArrow={false}>
+                  <div className="asset-item__cache-warning-badge">需下载</div>
+                </HoverTip>
+              )}
             </div>
           )}
 
@@ -319,6 +335,14 @@ export const AssetItem = memo<AssetItemProps>(
           </HoverTip>
         )}
 
+        {isListMode && cacheWarning && (
+          <HoverTip content={cacheWarningTip} showArrow={false}>
+            <div className="asset-item__cache-warning-badge asset-item__cache-warning-badge--list">
+              需下载
+            </div>
+          </HoverTip>
+        )}
+
         {/* 列表模式：插入按钮 */}
         {isListMode && !isInSelectionMode && onDoubleClick && (
           <HoverTip content="插入到画布" showArrow={false}>
@@ -340,6 +364,7 @@ export const AssetItem = memo<AssetItemProps>(
     return (
       prevProps.asset.id === nextProps.asset.id &&
       prevProps.asset.name === nextProps.asset.name && // 检查名称变化（重命名后更新）
+      prevProps.asset.cacheWarning === nextProps.asset.cacheWarning &&
       prevProps.viewMode === nextProps.viewMode &&
       prevProps.isSelected === nextProps.isSelected &&
       prevProps.isInSelectionMode === nextProps.isInSelectionMode &&

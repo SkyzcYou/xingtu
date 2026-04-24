@@ -27,6 +27,7 @@ export interface FetchFallbackOptions {
   preferLocal?: boolean;
   cdnTimeout?: number;
   localTimeout?: number;
+  requestKind?: 'interactive-runtime' | 'background-prefetch';
 }
 
 // CDN 源配置
@@ -65,6 +66,7 @@ const CDN_CONFIG = {
   degradeTimeout: 60 * 1000,
   failThreshold: 3,
   fetchTimeout: 1500,
+  backgroundFetchTimeout: 8000,
   localFetchTimeout: 5000,
   preferenceCacheExpiry: 60 * 60 * 1000,
   preferenceCacheName: 'drawnix-cdn-v1',
@@ -294,11 +296,21 @@ function getCDNCooldownSnapshot(status: CDNHealthStatus): {
   };
 }
 
-export function isCDNAvailable(cdnName: string): boolean {
+export function isCDNAvailable(
+  cdnName: string,
+  options: { ignoreCooldown?: boolean } = {}
+): boolean {
   const status = cdnHealthStatus.get(cdnName);
   if (!status) return false;
 
   if (status.isHealthy) return true;
+
+  if (options.ignoreCooldown) {
+    console.log(
+      `[CDN Fallback] Ignoring cooldown for ${cdnName}, probing CDN directly`
+    );
+    return true;
+  }
 
   const now = Date.now();
   const degradeTimeout = getCDNDegradeTimeout(cdnName, status.failCount);
@@ -312,20 +324,28 @@ export function isCDNAvailable(cdnName: string): boolean {
   return false;
 }
 
-function getPreferredCDNName(version: string): Exclude<CDNName, 'local'> | null {
+function getPreferredCDNName(
+  version: string,
+  options: { ignoreCooldown?: boolean } = {}
+): Exclude<CDNName, 'local'> | null {
   const preference = persistedCDNPreference;
   if (!preference || !isFreshPreference(preference, version) || preference.cdn === 'local') {
     return null;
   }
 
-  return isCDNAvailable(preference.cdn) ? preference.cdn : null;
+  return isCDNAvailable(preference.cdn, options) ? preference.cdn : null;
 }
 
-export function getAvailableCDNs(version?: string): CDNSource[] {
-  const preferredName = version ? getPreferredCDNName(version) : null;
+export function getAvailableCDNs(
+  version?: string,
+  options: { ignoreCooldown?: boolean } = {}
+): CDNSource[] {
+  const preferredName = version
+    ? getPreferredCDNName(version, options)
+    : null;
 
   return CDN_SOURCES.filter(
-    (source) => source.enabled && isCDNAvailable(source.name)
+    (source) => source.enabled && isCDNAvailable(source.name, options)
   ).sort((a, b) => {
     if (preferredName && a.name === preferredName && b.name !== preferredName) {
       return -1;
@@ -347,7 +367,8 @@ function cleanResourcePath(resourcePath: string): string {
 
   try {
     if (/^https?:\/\//i.test(normalizedPath)) {
-      normalizedPath = new URL(normalizedPath).pathname;
+      const absoluteUrl = new URL(normalizedPath);
+      normalizedPath = `${absoluteUrl.pathname}${absoluteUrl.search}`;
     }
   } catch {
     // 保持原始路径，继续走后续正则归一化。
@@ -367,11 +388,55 @@ export function extractVersionFromCDNPath(
   return match ? match[1] : null;
 }
 
+function buildThirdPartyCDNUrl(
+  source: CDNSource,
+  resourcePath: string
+): string | null {
+  const rawPath = String(resourcePath || '').trim();
+  if (!rawPath) {
+    return null;
+  }
+
+  let normalizedPath = rawPath;
+
+  try {
+    if (/^https?:\/\//i.test(normalizedPath)) {
+      const absoluteUrl = new URL(normalizedPath);
+      normalizedPath = `${absoluteUrl.pathname}${absoluteUrl.search}`;
+    }
+  } catch {
+    // 保持原始路径，继续走 npm 包路径识别。
+  }
+
+  const packagePath = normalizedPath.startsWith('/')
+    ? normalizedPath
+    : `/${normalizedPath}`;
+
+  if (!/^\/npm\/(?!aitu-app@)[^/]+@[^/]+\//.test(packagePath)) {
+    return null;
+  }
+
+  if (source.name === 'jsdelivr') {
+    return `https://cdn.jsdelivr.net${packagePath}`;
+  }
+
+  if (source.name === 'unpkg') {
+    return `https://unpkg.com/${packagePath.replace(/^\/npm\//, '')}`;
+  }
+
+  return null;
+}
+
 export function buildCDNUrl(
   source: CDNSource,
   version: string,
   resourcePath: string
 ): string {
+  const thirdPartyCDNUrl = buildThirdPartyCDNUrl(source, resourcePath);
+  if (thirdPartyCDNUrl) {
+    return thirdPartyCDNUrl;
+  }
+
   const cleanPath = cleanResourcePath(resourcePath);
   return source.urlTemplate
     .replace('{version}', version)
@@ -542,9 +607,15 @@ export async function fetchFromCDNWithFallback(
 
   const {
     preferLocal = false,
-    cdnTimeout = CDN_CONFIG.fetchTimeout,
     localTimeout = CDN_CONFIG.localFetchTimeout,
+    requestKind = 'interactive-runtime',
   } = options;
+  const ignoreCooldown = requestKind === 'background-prefetch';
+  const effectiveCDNTimeout =
+    options.cdnTimeout ??
+    (requestKind === 'background-prefetch'
+      ? CDN_CONFIG.backgroundFetchTimeout
+      : CDN_CONFIG.fetchTimeout);
 
   if (preferLocal) {
     const localResult = await tryFetchFromLocalOrigin(
@@ -557,12 +628,12 @@ export async function fetchFromCDNWithFallback(
     }
   }
 
-  const availableCDNs = getAvailableCDNs(version);
+  const availableCDNs = getAvailableCDNs(version, { ignoreCooldown });
   const cdnResult = await tryFetchFromCDNList(
     availableCDNs,
     version,
     resourcePath,
-    cdnTimeout
+    effectiveCDNTimeout
   );
   if (cdnResult) {
     return cdnResult;
@@ -591,7 +662,7 @@ export async function fetchFromCDNWithFallback(
       recoveryCDNs,
       version,
       resourcePath,
-      cdnTimeout
+      effectiveCDNTimeout
     );
     if (recoveryResult) {
       return recoveryResult;

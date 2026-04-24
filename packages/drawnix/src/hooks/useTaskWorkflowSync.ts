@@ -216,30 +216,20 @@ function processTaskEvent(
   updateWorkflowMessageRef: React.MutableRefObject<(data: WorkflowMessageData) => void>,
   boardRef: React.MutableRefObject<PlaitBoard | null>,
   workZoneIdRef: React.MutableRefObject<string | null>,
-  options?: { logProcessing?: boolean; logUnmatched?: boolean },
 ): boolean {
   const task = event.task;
   const mapped = mapTaskToStepStatus(task);
   if (!mapped) return false;
 
-  if (options?.logProcessing !== false) {
-    console.debug(`[useTaskWorkflowSync] Processing task ${task.id} → ${mapped.status}`);
-  }
-
   // Primary: update via WorkflowContext
   if (processViaContext(task, mapped, workflowControl, updateWorkflowMessageRef, boardRef, workZoneIdRef)) {
-    console.debug(`[useTaskWorkflowSync] Task ${task.id} handled via WorkflowContext`);
     return true;
   }
   // Fallback: update WorkZone Plait element directly
   if (processViaWorkZone(task, mapped, workflowControl, updateWorkflowMessageRef, boardRef, workZoneIdRef)) {
-    console.debug(`[useTaskWorkflowSync] Task ${task.id} handled via WorkZone fallback`);
     return true;
   }
 
-  if (options?.logUnmatched !== false) {
-    console.debug(`[useTaskWorkflowSync] Task ${task.id} not matched to any workflow step (buffering)`);
-  }
   return false;
 }
 
@@ -284,7 +274,6 @@ export function useTaskWorkflowSync(options: UseTaskWorkflowSyncOptions): void {
           updateWorkflowMessageRef,
           boardRef,
           workZoneIdRef,
-          { logProcessing: false, logUnmatched: false }
         );
         if (!handled) {
           remaining.set(taskId, buffered);

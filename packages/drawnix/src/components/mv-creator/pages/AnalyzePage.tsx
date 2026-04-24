@@ -24,6 +24,7 @@ import {
   writeStoredModelSelection,
   ShotCard,
 } from '../../shared/workflow';
+import { analytics } from '../../../utils/posthog-analytics';
 
 const STORAGE_KEY_PROMPT = 'mv-creator:creation-prompt';
 const STORAGE_KEY_VIDEO_MODEL = 'mv-creator:video-model';
@@ -164,6 +165,13 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   const clipDuration = existingRecord?.selectedClipDuration || selectedClip?.duration || 30;
 
   const handleOpenMusicTool = useCallback(() => {
+    analytics.trackUIInteraction({
+      area: 'popular_mv_tool',
+      action: 'music_tool_opened',
+      control: 'open_music_tool',
+      source: 'mv_creator_analyze_page',
+      metadata: { existingAudioClipsCount: existingAudioClips.length },
+    });
     const mvState = toolWindowService.getPrimaryToolState('mv-creator');
     const mvPos = mvState?.position;
     const offsetPos = mvPos
@@ -176,6 +184,17 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   }, []);
 
   const handleSelectExistingClip = useCallback(async (clip: GeneratedClip & { prompt?: string }) => {
+    analytics.trackUIInteraction({
+      area: 'popular_mv_tool',
+      action: 'music_clip_selected',
+      control: 'select_music_clip',
+      source: 'mv_creator_analyze_page',
+      metadata: {
+        hasClipId: !!clip.clipId,
+        hasAudioUrl: !!clip.audioUrl,
+        duration: clip.duration,
+      },
+    });
     if (clip.prompt && !creationPrompt.trim()) {
       setCreationPrompt(clip.prompt);
     }
@@ -232,6 +251,19 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   const handleGenerateStoryboard = useCallback(async () => {
     if (generatingRef.current || !existingRecord) return;
     generatingRef.current = true;
+    analytics.trackUIInteraction({
+      area: 'popular_mv_tool',
+      action: 'storyboard_generation_started',
+      control: 'generate_storyboard',
+      source: 'mv_creator_analyze_page',
+      metadata: {
+        hasSelectedClip: !!selectedClip?.audioUrl,
+        clipDuration,
+        segmentDuration,
+        hasStoryboardModelRef: !!storyboardModelRef,
+        hasVideoModelRef: !!videoModelRef,
+      },
+    });
     setSubmitting(true);
     setMessage('');
     try {

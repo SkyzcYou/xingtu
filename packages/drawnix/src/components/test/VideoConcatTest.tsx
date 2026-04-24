@@ -6,7 +6,10 @@
 
 import React, { useState } from 'react';
 import { Button, Progress, Space, MessagePlugin } from 'tdesign-react';
-import { videoConcatService, type ConcatProgressCallback } from '../../services/video-concat-service';
+import {
+  mergeVideos,
+  type MergeProgressCallback,
+} from '../../services/video-merge-webcodecs';
 
 export const VideoConcatTest: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -27,13 +30,13 @@ export const VideoConcatTest: React.FC = () => {
         'https://example.com/video2.mp4',
       ];
 
-      const onProgress: ConcatProgressCallback = (prog, st) => {
+      const onProgress: MergeProgressCallback = (prog, st) => {
         setProgress(Math.round(prog));
         setStage(st);
         // console.log(`[Test] Progress: ${Math.round(prog)}% - ${st}`);
       };
 
-      const result = await videoConcatService.concatVideos(testUrls, onProgress);
+      const result = await mergeVideos(testUrls, onProgress);
 
       setResultUrl(result.url);
       MessagePlugin.success('视频合并成功！');

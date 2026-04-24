@@ -24,6 +24,7 @@ import {
   AnchorSymmetricIcon,
 } from '../../icons';
 import './pen-settings-toolbar.scss';
+import { analytics } from '../../../utils/posthog-analytics';
 
 // 锚点类型选项
 interface AnchorTypeOption {
@@ -79,9 +80,18 @@ export const PenSettingsToolbar: React.FC = () => {
 
   // 处理锚点类型变化
   const handleAnchorTypeChange = useCallback((type: AnchorType) => {
+    if (type !== anchorType) {
+      analytics.trackUIInteraction({
+        area: 'canvas_tool_settings',
+        action: 'pen_anchor_type_changed',
+        control: 'anchor_type_button',
+        value: type,
+        source: 'pen_settings_toolbar',
+      });
+    }
     setAnchorType(type);
     setPenDefaultAnchorType(board, type);
-  }, [board]);
+  }, [anchorType, board]);
 
   // 只在选择钢笔指针时显示
   if (!isPenPointer) {

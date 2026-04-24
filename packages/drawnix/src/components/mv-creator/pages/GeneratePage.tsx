@@ -42,6 +42,7 @@ import {
   collectWorkflowExportAssets,
   exportWorkflowAssetsZip,
 } from '../../../utils/workflow-generation-utils';
+import { analytics } from '../../../utils/posthog-analytics';
 
 const STORAGE_KEY_IMAGE_MODEL = 'mv-creator:image-model';
 const STORAGE_KEY_VIDEO_MODEL = 'mv-creator:gen-video-model';
@@ -211,6 +212,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       if (!result.success) {
         throw new Error(result.error || '插入失败，请确认画布已打开');
       }
+      analytics.trackUIInteraction({
+        area: 'popular_mv_tool',
+        action: 'script_inserted_to_canvas',
+        control: 'insert_script',
+        source: 'mv_creator_generate_page',
+        metadata: { shotCount: currentShots.length },
+      });
       MessagePlugin.success('脚本已插入画布');
     } catch (error) {
       console.error('[MVCreator] Failed to insert script to canvas:', error);
@@ -618,6 +626,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const handleShotGenerateFirstFrame = useCallback((shot: VideoShot) => {
     const rawPrompt = shot.first_frame_prompt || shot.description || '';
     if (!rawPrompt) return;
+    analytics.trackUIInteraction({
+      area: 'popular_mv_tool',
+      action: 'shot_first_frame_generation_opened',
+      control: 'generate_first_frame',
+      source: 'mv_creator_generate_page',
+      metadata: { shotId: shot.id, hasDraft: !!shot.first_frame_draft },
+    });
     const prompt = buildFramePrompt(rawPrompt, pseudoAnalysis, pseudoProductInfo);
     const draft = shot.first_frame_draft;
     const shotBatchId = `mv_${record.id}_shot${shot.id}_first`;
@@ -649,6 +664,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const handleShotGenerateLastFrame = useCallback((shot: VideoShot, index: number) => {
     const rawPrompt = shot.last_frame_prompt || shot.description || '';
     if (!rawPrompt) return;
+    analytics.trackUIInteraction({
+      area: 'popular_mv_tool',
+      action: 'shot_last_frame_generation_opened',
+      control: 'generate_last_frame',
+      source: 'mv_creator_generate_page',
+      metadata: { shotId: shot.id, shotIndex: index, hasDraft: !!shot.last_frame_draft },
+    });
     const prompt = buildFramePrompt(rawPrompt, pseudoAnalysis, pseudoProductInfo);
     const draft = shot.last_frame_draft;
     const shotBatchId = `mv_${record.id}_shot${shot.id}_last`;
@@ -676,6 +698,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const handleShotGenerateVideo = useCallback(async (shot: VideoShot, index: number) => {
     const prompt = buildVideoPrompt(shot, pseudoAnalysis, pseudoProductInfo);
     if (!prompt) return;
+    analytics.trackUIInteraction({
+      area: 'popular_mv_tool',
+      action: 'shot_video_generation_opened',
+      control: 'generate_shot_video',
+      source: 'mv_creator_generate_page',
+      metadata: { shotId: shot.id, shotIndex: index, hasDraft: !!shot.video_draft },
+    });
     const draft = shot.video_draft;
     const shotBatchId = `mv_${record.id}_shot${shot.id}_video`;
     const initialImages: ReferenceImage[] = [];
@@ -926,6 +955,19 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     if (batchVideoState.running) {
       return;
     }
+
+    analytics.trackUIInteraction({
+      area: 'popular_mv_tool',
+      action: 'batch_video_generation_started',
+      control: 'generate_all_videos',
+      source: 'mv_creator_generate_page',
+      metadata: {
+        shotCount: latestShotsRef.current.length,
+        charactersCount: latestRecordRef.current.characters?.length || 0,
+        insertToCanvasRequested: insertGeneratedVideosToCanvas,
+        hasBoard: !!board,
+      },
+    });
 
     let shouldInsertToCanvas = insertGeneratedVideosToCanvas;
     if (shouldInsertToCanvas && !board) {

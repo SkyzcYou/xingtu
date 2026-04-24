@@ -38,6 +38,7 @@ import {
 } from '../../icons';
 import './pencil-settings-toolbar.scss';
 import { HoverTip } from '../../shared/hover';
+import { analytics } from '../../../utils/posthog-analytics';
 
 // 模拟光标预览组件
 const CursorPreview: React.FC<{
@@ -122,6 +123,16 @@ export const PencilSettingsToolbar: React.FC = () => {
   const handleInputConfirm = useCallback(() => {
     const value = parseInt(inputValue, 10);
     if (!isNaN(value) && value >= 1 && value <= 100) {
+      if (value !== strokeWidth) {
+        analytics.trackUIInteraction({
+          area: 'canvas_tool_settings',
+          action: 'pencil_stroke_width_changed',
+          control: 'stroke_width_input',
+          value,
+          source: 'pencil_settings_toolbar',
+          metadata: { previousValue: strokeWidth },
+        });
+      }
       setStrokeWidth(value);
       setFreehandStrokeWidth(board, value);
       // 更新光标
@@ -149,41 +160,78 @@ export const PencilSettingsToolbar: React.FC = () => {
   // 处理画笔颜色变化
   const handleColorChange = useCallback(
     (color: string) => {
+      if (color !== strokeColor) {
+        analytics.trackUIInteraction({
+          area: 'canvas_tool_settings',
+          action: 'pencil_color_changed',
+          control: 'stroke_color_picker',
+          value: 'custom',
+          source: 'pencil_settings_toolbar',
+          metadata: { hasColor: !!color },
+        });
+      }
       setStrokeColor(color);
       setFreehandStrokeColor(board, color);
       // 更新光标
       updatePencilCursor(board, appState.pointer);
     },
-    [board, appState.pointer]
+    [board, appState.pointer, strokeColor]
   );
 
   // 处理描边样式变化
   const handleStrokeStyleChange = useCallback(
     (style: FreehandStrokeStyle) => {
+      if (style !== strokeStyle) {
+        analytics.trackUIInteraction({
+          area: 'canvas_tool_settings',
+          action: 'pencil_stroke_style_changed',
+          control: 'stroke_style_button',
+          value: style,
+          source: 'pencil_settings_toolbar',
+        });
+      }
       setStrokeStyleState(style);
       setFreehandStrokeStyle(board, style);
     },
-    [board]
+    [board, strokeStyle]
   );
 
   // 处理形状切换
   const handleShapeChange = useCallback(
     (shape: BrushShape) => {
+      if (shape !== currentShape) {
+        analytics.trackUIInteraction({
+          area: 'canvas_tool_settings',
+          action: 'pencil_shape_changed',
+          control: 'brush_shape_button',
+          value: shape,
+          source: 'pencil_settings_toolbar',
+        });
+      }
       setCurrentShape(shape);
       setPencilShape(board, shape);
       // 更新光标
       updatePencilCursor(board, appState.pointer);
     },
-    [board, appState.pointer]
+    [board, appState.pointer, currentShape]
   );
 
   // 处理压力感应开关变化
   const handlePressureChange = useCallback(
     (enabled: boolean) => {
+      if (enabled !== pressureEnabled) {
+        analytics.trackUIInteraction({
+          area: 'canvas_tool_settings',
+          action: 'pencil_pressure_changed',
+          control: 'pressure_switch',
+          value: enabled,
+          source: 'pencil_settings_toolbar',
+        });
+      }
       setPressureEnabled(enabled);
       setFreehandPressureEnabled(board, enabled);
     },
-    [board]
+    [board, pressureEnabled]
   );
 
   // 只在选择画笔指针时显示（不包括橡皮擦）

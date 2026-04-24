@@ -13,6 +13,7 @@ import { Task, TaskStatus, TaskType, GenerationParams } from '../types/task.type
 import { BaseStorageReader } from './base-storage-reader';
 import { normalizeImageDataUrl } from '@aitu/utils';
 import { STORAGE_LIMITS } from '../constants/TASK_CONSTANTS';
+import type { CacheWarning } from '../types/cache-warning.types';
 
 import { APP_DB_NAME, APP_DB_STORES, getAppDB } from './app-database';
 
@@ -49,6 +50,7 @@ interface SWTask {
     providerTaskId?: string;
     primaryClipId?: string;
     clipIds?: string[];
+    cacheWarning?: CacheWarning;
     clips?: Array<{
       id?: string;
       clipId?: string;
@@ -105,6 +107,7 @@ export interface AssetTaskRecord {
     providerTaskId?: string;
     primaryClipId?: string;
     clipIds?: string[];
+    cacheWarning?: CacheWarning;
     clips?: Array<{
       id?: string;
       clipId?: string;
@@ -201,6 +204,7 @@ function convertSWTaskToAssetTask(swTask: SWTask): AssetTaskRecord | null {
           providerTaskId: normalizedResult.providerTaskId,
           primaryClipId: normalizedResult.primaryClipId,
           clipIds: normalizedResult.clipIds,
+          cacheWarning: normalizedResult.cacheWarning,
           clips: normalizedResult.clips?.map((clip) => ({
             id: clip.id,
             clipId: clip.clipId,

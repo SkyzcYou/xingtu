@@ -405,6 +405,7 @@ if ('serviceWorker' in navigator) {
   let pendingWorker: ServiceWorker | null = null;
   // 用户是否已确认升级（只有用户确认后才触发刷新）
   let userConfirmedUpgrade = false;
+  let upgradeReloadScheduled = false;
   let lastPendingVersionNotified: string | null = null;
 
   // Global reference to service worker registration
@@ -452,6 +453,64 @@ if ('serviceWorker' in navigator) {
 
     worker.postMessage({ type: 'GET_VERSION_STATE' });
   };
+
+  const scheduleConfirmedUpgradeReload = (reason: string) => {
+    if (!userConfirmedUpgrade || upgradeReloadScheduled) {
+      return;
+    }
+
+    upgradeReloadScheduled = true;
+    console.info('[Main] Scheduling reload after service worker takeover:', {
+      reason,
+    });
+
+    // 延迟一点，给新 SW 留出接管后收尾时间
+    setTimeout(() => {
+      void safeReload();
+    }, 1000);
+  };
+
+  const resolvePendingUpgradeWorker =
+    async (): Promise<ServiceWorker | null> => {
+      const candidates: Array<ServiceWorker | null | undefined> = [
+        pendingWorker,
+        swRegistration?.waiting,
+      ];
+
+      try {
+        const liveRegistration =
+          (await navigator.serviceWorker.getRegistration()) || null;
+        if (liveRegistration) {
+          swRegistration = liveRegistration;
+          candidates.push(liveRegistration.waiting);
+        }
+      } catch (error) {
+        console.warn('[Main] Failed to get live service worker registration:', error);
+      }
+
+      try {
+        const readyRegistration = await navigator.serviceWorker.ready;
+        candidates.push(readyRegistration.waiting);
+      } catch (error) {
+        console.warn('[Main] Failed to inspect ready service worker registration:', error);
+      }
+
+      for (const worker of candidates) {
+        if (!worker || worker.state === 'redundant') {
+          continue;
+        }
+
+        // staged update only commits the waiting/installed worker, never the old controller
+        if (worker === navigator.serviceWorker.controller) {
+          continue;
+        }
+
+        pendingWorker = worker;
+        return worker;
+      }
+
+      return null;
+    };
 
   const swRegistrationPromise =
     window.__OPENTU_SW_REGISTRATION_PROMISE__ ||
@@ -562,14 +621,9 @@ if ('serviceWorker' in navigator) {
 
     swChannelClient.setEventHandlers({
       onSWUpdated: (_event) => {
-        // 只有用户主动确认升级后才刷新页面
-        if (!userConfirmedUpgrade) {
-          return;
-        }
-        // 等待一小段时间，确保新的Service Worker已经完全接管
-        setTimeout(() => {
-          void safeReload();
-        }, 1000);
+        // sw:updated 在 skipWaiting() 后立即发出，早于 activate/claim。
+        // 这里只同步一次状态，真正刷新等待 sw:activated / controllerchange。
+        requestSWVersionState();
       },
       onSWNewVersionReady: (event) => {
         notifyUpdateReady(event.version);
@@ -577,6 +631,7 @@ if ('serviceWorker' in navigator) {
       },
       onSWActivated: (_event) => {
         if (userConfirmedUpgrade) {
+          scheduleConfirmedUpgradeReload('sw:activated');
           return;
         }
 
@@ -673,41 +728,28 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     scheduleCDNPreferenceSync(swRegistration);
     requestSWVersionState();
-
-    // 只有用户主动确认升级后才刷新页面
-    if (!userConfirmedUpgrade) {
-      return;
-    }
-
-    // 延迟刷新，确保新Service Worker的缓存已准备好
-    setTimeout(() => {
-      void safeReload();
-    }, 1000);
+    scheduleConfirmedUpgradeReload('controllerchange');
   });
 
   // 监听用户确认升级事件
   window.addEventListener('user-confirmed-upgrade', () => {
-    // 标记用户已确认升级，允许后续的 reload
-    userConfirmedUpgrade = true;
+    void (async () => {
+      const worker = await resolvePendingUpgradeWorker();
+      if (!worker) {
+        console.warn(
+          '[Main] No waiting service worker available for COMMIT_UPGRADE'
+        );
+        requestSWVersionState();
+        swRegistration?.update().catch((error) => {
+          console.warn('[Main] Update check after missing waiting worker failed:', error);
+        });
+        return;
+      }
 
-    // 优先使用 pendingWorker
-    if (pendingWorker) {
-      pendingWorker.postMessage({ type: 'COMMIT_UPGRADE' });
-      return;
-    }
-
-    // 如果没有 pendingWorker，尝试查找 waiting 状态的 worker
-    if (swRegistration && swRegistration.waiting) {
-      swRegistration.waiting.postMessage({ type: 'COMMIT_UPGRADE' });
-      return;
-    }
-
-    if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({ type: 'COMMIT_UPGRADE' });
-      return;
-    }
-
-    void safeReload();
+      // 标记用户已确认升级，允许后续的 reload
+      userConfirmedUpgrade = true;
+      worker.postMessage({ type: 'COMMIT_UPGRADE' });
+    })();
   });
 
   // 页面卸载前，不再自动触发升级，必须用户手动确认

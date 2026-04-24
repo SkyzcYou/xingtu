@@ -20,6 +20,7 @@ import {
   ORIGINAL_VERSION_ID,
   switchToLyricsVersion,
 } from '../utils';
+import { analytics } from '../../../utils/posthog-analytics';
 
 const STORAGE_KEY_MODEL = 'music-analyzer:model';
 const DEFAULT_ANALYSIS_MODEL = 'gemini-2.5-pro';
@@ -148,6 +149,17 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
   const handleRewrite = useCallback(async () => {
     setError('');
     setRewriteProgress(isSunoModel ? '歌词生成中...' : '歌词改写中 0%');
+    analytics.trackUIInteraction({
+      area: 'popular_music_tool',
+      action: 'lyrics_rewrite_started',
+      control: 'rewrite_lyrics',
+      source: 'music_analyzer_lyrics_page',
+      metadata: {
+        engine: isSunoModel ? 'suno' : 'text_model',
+        hasRewritePrompt: !!rewritePrompt.trim(),
+        lyricsLength: lyricsDraft.trim().length,
+      },
+    });
     try {
       let task;
       if (isSunoModel) {
@@ -278,7 +290,18 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
     );
     if (!result.success) {
       setError(result.error || '插入失败，请确认画布已打开');
+      return;
     }
+    analytics.trackUIInteraction({
+      area: 'popular_music_tool',
+      action: 'lyrics_inserted_to_canvas',
+      control: 'insert_lyrics',
+      source: 'music_analyzer_lyrics_page',
+      metadata: {
+        lyricsLength: lyricsDraft.trim().length,
+        tagsCount: styleTagsInput.split(',').filter((item) => item.trim()).length,
+      },
+    });
   }, [lyricsDraft, styleTagsInput, title]);
 
   return (

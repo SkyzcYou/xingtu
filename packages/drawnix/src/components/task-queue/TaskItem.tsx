@@ -321,9 +321,16 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
         ? normalizeImageDataUrl(rawMediaUrl)
         : rawMediaUrl;
 
-    const { isCached } = useUnifiedCache(
+    const { isCached, cacheWarning: detectedCacheWarning } = useUnifiedCache(
       isCharacterTask || isAudioTask ? undefined : mediaUrl
     );
+    const cacheWarning =
+      isPreviewableTask && !isAudioTask
+        ? task.result?.cacheWarning || (!isCached ? detectedCacheWarning : undefined)
+        : undefined;
+    const cacheWarningTip = cacheWarning
+      ? `${cacheWarning.message}${cacheWarning.expiresHint ? `\n${cacheWarning.expiresHint}` : ''}`
+      : '';
 
     // Use original URL or cached URL (Service Worker handles caching automatically)
     const mediaCount = isLyricsTask
@@ -653,6 +660,11 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
                           </>
                         )}
                       </div>
+                    )}
+                    {cacheWarning && (
+                      <HoverTip content={cacheWarningTip} showArrow={false}>
+                        <span className="task-item__cache-warning-badge">需下载</span>
+                      </HoverTip>
                     )}
                   </>
                 )}

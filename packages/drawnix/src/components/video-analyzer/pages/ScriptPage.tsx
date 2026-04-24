@@ -31,6 +31,7 @@ import {
 import { taskQueueService } from '../../../services/task-queue';
 import { TaskType } from '../../../types/task.types';
 import { syncVideoAnalyzerTask } from '../task-sync';
+import { analytics } from '../../../utils/posthog-analytics';
 
 /** 自适应高度 textarea 的 onInput 处理 */
 function autoResize(el: HTMLTextAreaElement) {
@@ -262,6 +263,17 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
     setRewriting(true);
     setError('');
     setRewriteProgress('AI 改编中 0%');
+    analytics.trackUIInteraction({
+      area: 'popular_video_tool',
+      action: 'script_rewrite_started',
+      control: 'rewrite_script',
+      source: 'video_analyzer_script_page',
+      metadata: {
+        shotCount: shots.length,
+        promptLength: productInfo.prompt.trim().length,
+        hasModelRef: !!scriptModelRef,
+      },
+    });
     try {
       const actualPrompt = buildScriptRewritePrompt({
         recordAnalysis: record.analysis,
@@ -358,6 +370,13 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
 
   const handleInsertScripts = useCallback(async () => {
     await quickInsert('text', formatShotsMarkdown(shots, record.analysis, productInfo));
+    analytics.trackUIInteraction({
+      area: 'popular_video_tool',
+      action: 'script_inserted_to_canvas',
+      control: 'insert_script',
+      source: 'video_analyzer_script_page',
+      metadata: { shotCount: shots.length },
+    });
   }, [shots, productInfo, record]);
 
   const handleSwitchVersion = useCallback(async (versionId: string) => {

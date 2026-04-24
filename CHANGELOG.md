@@ -1,3 +1,108 @@
+## 0.6.74 (2026-04-24)
+
+### 🚀 Features
+
+- 添加UI交互埋点并优化剪贴板权限检测 ([26ae1854](https://github.com/ljquan/aitu/commit/26ae1854))
+- 为缓存失败的媒体添加下载提示角标 ([a42ed0ff](https://github.com/ljquan/aitu/commit/a42ed0ff))
+
+### 🩹 Fixes
+
+- 修复离线 CDN 资源缓存回退 ([b70ad2ae](https://github.com/ljquan/aitu/commit/b70ad2ae))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.73 (2026-04-24)
+
+### 🩹 Fixes
+
+- 修复版本更新条假升级与 SW 提交时序 ([328468bf](https://github.com/ljquan/aitu/commit/328468bf))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.72 (2026-04-24)
+
+### 🩹 Fixes
+
+- 确保更新安装时所有预缓存资源就绪后再提示升级 ([a1833973](https://github.com/ljquan/aitu/commit/a1833973))
+
+### 🔧 Chores
+
+- perf(sw): 优化空闲预取机制并移除调试日志 ([cd0b738d](https://github.com/ljquan/aitu/commit/cd0b738d))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.70 (2026-04-24)
+
+### 🚀 Features
+
+- 完善 GPT Image 兼容链路 ([fafb3ae6](https://github.com/ljquan/aitu/commit/fafb3ae6))
+
+### 🩹 Fixes
+
+- 收口预缓存并补齐按需工具离线资源 ([c511ba29](https://github.com/ljquan/aitu/commit/c511ba29))
+- 接力完整离线补齐并清理 drawnix tsc ([317291d8](https://github.com/ljquan/aitu/commit/317291d8))
+- 修正跨域静态资源离线缓存命中 ([99054680](https://github.com/ljquan/aitu/commit/99054680))
+- 修正按需资源预缓存与预热分组 ([2dcd6928](https://github.com/ljquan/aitu/commit/2dcd6928))
+- 限制 app shell 仅匹配根壳页面 ([3b8f28f1](https://github.com/ljquan/aitu/commit/3b8f28f1))
+- 修复离线模式下懒加载模块资源未预热 ([55eee6a2](https://github.com/ljquan/aitu/commit/55eee6a2))
+- 修复 GPT Image 适配器 readonly 元组类型不兼容和灵感图缺少 imageQuality 默认值 ([9da7d380](https://github.com/ljquan/aitu/commit/9da7d380))
+
+### 🔧 Chores
+
+- 更新版本号至0.6.69并刷新构建时间 ([52915fd2](https://github.com/ljquan/aitu/commit/52915fd2))
+- bump version to 0.6.69 ([c99a25ee](https://github.com/ljquan/aitu/commit/c99a25ee))
+- bump version to 0.6.68 ([7e005fd2](https://github.com/ljquan/aitu/commit/7e005fd2))
+- bump version to 0.6.67 ([ba280129](https://github.com/ljquan/aitu/commit/ba280129))
+- bump version to 0.6.66 ([c4124d29](https://github.com/ljquan/aitu/commit/c4124d29))
+- bump version to 0.6.65 ([ebf074bc](https://github.com/ljquan/aitu/commit/ebf074bc))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+- gongchengtu <1817063960@qq.com>
+
+## 0.6.68 (2026-04-24)
+
+### 🩹 Fixes
+
+- 修正跨域静态资源离线缓存命中 ([5b2d6774](https://github.com/ljquan/aitu/commit/5b2d6774))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.66 (2026-04-24)
+
+### 🩹 Fixes
+
+- 修正按需资源预缓存与预热分组 ([ccb41849](https://github.com/ljquan/aitu/commit/ccb41849))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.65 (2026-04-24)
+
+### 🩹 Fixes
+
+- 限制 app shell 仅匹配根壳页面 ([f78d33ee](https://github.com/ljquan/aitu/commit/f78d33ee))
+- 修复离线模式下懒加载模块资源未预热 ([68d368fc](https://github.com/ljquan/aitu/commit/68d368fc))
+
+### 🔧 Chores
+
+- 更新版本号至0.6.64并修正回滚脚本参数顺序 ([7e024607](https://github.com/ljquan/aitu/commit/7e024607))
+- docs: 添加CDN熔断与静态资源可用性问题的经验总结 ([b46459a1](https://github.com/ljquan/aitu/commit/b46459a1))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
 ## 0.6.64 (2026-04-23)
 
 ### 🚀 Features

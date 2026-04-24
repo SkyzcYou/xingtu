@@ -27,7 +27,7 @@ export async function recoverBoardsFromRemote(
   };
 
   try {
-    logDebug('BoardRecovery] Starting recovery from gist:', gistId);
+    logDebug('BoardRecovery] Starting recovery from gist', { gistId });
 
     // 获取 Gist 中的所有文件
     const gist = await gitHubApiService.getGist(gistId);
@@ -35,7 +35,7 @@ export async function recoverBoardsFromRemote(
       filename => filename.startsWith('board_') && filename.endsWith('.json')
     );
 
-    logDebug('BoardRecovery] Found board files:', boardFiles.length);
+    logDebug('BoardRecovery] Found board files', { count: boardFiles.length });
 
     if (boardFiles.length === 0) {
       result.errors.push('未找到任何画布文件');
@@ -62,14 +62,19 @@ export async function recoverBoardsFromRemote(
           createdAt: board.createdAt,
           updatedAt: board.updatedAt,
           folderId: board.folderId || null,
+          order: board.order ?? 0,
         };
 
         result.recoveredBoards.push(metadata);
-        logDebug('BoardRecovery] Recovered board:', metadata.name);
+        logDebug('BoardRecovery] Recovered board', { name: metadata.name });
       } catch (error) {
         const errorMsg = `解密失败: ${filename} - ${error instanceof Error ? error.message : '未知错误'}`;
         result.errors.push(errorMsg);
-        logError('BoardRecovery]', errorMsg);
+        logError(
+          'BoardRecovery] Recover board failed',
+          error instanceof Error ? error : new Error(errorMsg),
+          { filename }
+        );
       }
     }
 
@@ -82,7 +87,10 @@ export async function recoverBoardsFromRemote(
     return result;
   } catch (error) {
     result.errors.push(`恢复失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    logError('BoardRecovery] Recovery failed:', error);
+    logError(
+      'BoardRecovery] Recovery failed',
+      error instanceof Error ? error : new Error(String(error))
+    );
     return result;
   }
 }

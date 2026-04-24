@@ -46,6 +46,7 @@ import {
   resolveInvocationRoute,
   type ModelRef,
 } from '../../utils/settings-manager';
+import { copyToClipboard } from '../../utils/runtime-helpers';
 
 // 默认使用的模型，避免使用 gpt-5.1 导致 500 错误
 const DEFAULT_MODEL = 'gemini-3.1-pro-preview';
@@ -381,8 +382,7 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
       MessagePlugin.warning('没有可复制的内容');
       return;
     }
-    navigator.clipboard
-      .writeText(text)
+    copyToClipboard(text)
       .then(() => {
         MessagePlugin.success('复制成功');
       })

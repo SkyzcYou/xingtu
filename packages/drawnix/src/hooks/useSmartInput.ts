@@ -6,13 +6,70 @@
  */
 
 import { useState, useRef, useCallback, useEffect, RefObject } from 'react';
-import {
-  useTriggerDetection,
-  insertToInput,
-  TRIGGER_CHARS,
-} from '../components/ai-input-bar/smart-suggestion-panel';
-import type { PromptItem } from '../components/ai-input-bar/smart-suggestion-panel/types';
+import type { PromptItem } from '../components/ai-input-bar/PromptSuggestionPanel';
 import { useTextSelection } from './useTextSelection';
+
+const TRIGGER_CHARS = {
+  model: '#',
+  param: '-',
+  count: '+',
+  prompt: '/',
+} as const;
+
+type TriggerMode = keyof typeof TRIGGER_CHARS;
+
+interface TriggerDetectionResult {
+  mode: TriggerMode | null;
+  triggerPosition?: number;
+}
+
+function insertToInput(
+  input: string,
+  value: string,
+  triggerPosition: number | undefined,
+  triggerChar: string
+): string {
+  if (triggerPosition === undefined || triggerPosition < 0) {
+    return input;
+  }
+
+  const prefix = input.slice(0, triggerPosition);
+  const suffix = input.slice(triggerPosition + 1).trimStart();
+  const insertedValue = `${triggerChar}${value}`;
+  const nextInput = [prefix.trimEnd(), insertedValue, suffix]
+    .filter((part) => part.length > 0)
+    .join(' ');
+
+  return nextInput.trim();
+}
+
+function detectTrigger(input: string, hasSelection: boolean): TriggerDetectionResult {
+  const lastIndexByMode = Object.entries(TRIGGER_CHARS).reduce<
+    Array<{ mode: TriggerMode; position: number }>
+  >((result, [mode, triggerChar]) => {
+    const position = input.lastIndexOf(triggerChar);
+    if (position >= 0) {
+      result.push({ mode: mode as TriggerMode, position });
+    }
+    return result;
+  }, []);
+
+  if (lastIndexByMode.length === 0) {
+    return {
+      mode: hasSelection ? 'prompt' : null,
+      triggerPosition: hasSelection ? input.length : undefined,
+    };
+  }
+
+  const latestTrigger = lastIndexByMode.reduce((current, candidate) =>
+    candidate.position > current.position ? candidate : current
+  );
+
+  return {
+    mode: latestTrigger.mode,
+    triggerPosition: latestTrigger.position,
+  };
+}
 
 export interface UseSmartInputOptions {
   /** 是否有选中内容 */
@@ -35,7 +92,7 @@ export interface UseSmartInputReturn {
   /** 设置建议面板显示状态 */
   setShowSuggestion: (show: boolean) => void;
   /** 解析结果 */
-  parseResult: ReturnType<typeof useTriggerDetection>;
+  parseResult: TriggerDetectionResult;
   /** 处理模型选择 */
   handleSelectModel: (modelId: string) => void;
   /** 处理参数选择 */
@@ -63,7 +120,7 @@ export function useSmartInput(options: UseSmartInputOptions): UseSmartInputRetur
   const [showSuggestion, setShowSuggestion] = useState(false);
 
   // 解析输入
-  const parseResult = useTriggerDetection(input, hasSelection);
+  const parseResult = detectTrigger(input, hasSelection);
   const { mode, triggerPosition } = parseResult;
 
   // 处理文本选择和复制

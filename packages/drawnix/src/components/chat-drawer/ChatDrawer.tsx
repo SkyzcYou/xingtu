@@ -293,6 +293,14 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
             success: true,
             resultCount: results.length,
           });
+          analytics.track('ai_modality_used', {
+            modality: 'agent',
+            action: 'tool_execution_completed',
+            source: 'chat_drawer',
+            success: true,
+            toolCount: toolCalls.length,
+            resultCount: results.length,
+          });
 
           // 更新步骤状态
           setWorkflowMessages((prev) => {
@@ -769,6 +777,19 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
         try {
           analytics.track('chat_message_send', {
             hasImages: msg.parts.some((p) => p.type === 'image_url'), // Message parts uses image_url usually
+          });
+          analytics.track('ai_modality_used', {
+            modality: 'agent',
+            action: 'message_send',
+            source: 'chat_drawer',
+            hasImages: msg.parts.some((p) => p.type === 'image_url'),
+            partCount: msg.parts.length,
+            textLength: msg.parts
+              .filter((part) => part.type === 'text')
+              .reduce(
+                (total, part) => total + String((part as any).text || '').length,
+                0
+              ),
           });
           // Check if API key is configured
           const settings = geminiSettings.get();

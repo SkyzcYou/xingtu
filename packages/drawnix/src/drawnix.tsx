@@ -150,13 +150,9 @@ interface SWIdlePrefetchStatusMessage {
   completedGroups?: string[];
 }
 
-const TOOL_RUNTIME_GROUPS: IdlePrefetchGroup[] = ['tool-runtime'];
-const TOOL_DRAWER_GROUPS: IdlePrefetchGroup[] = ['tool-drawers'];
-const TOOL_DIALOG_GROUPS: IdlePrefetchGroup[] = ['tool-dialogs'];
 const TOOL_WINDOW_GROUPS: IdlePrefetchGroup[] = [
-  'tool-runtime',
-  'tool-drawers',
-  'tool-dialogs',
+  'tool-windows',
+  'runtime-static-assets',
 ];
 
 const DrawnixDeferredFeatures = lazy(() =>
@@ -302,7 +298,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
 
   // 处理知识库切换（通过 WinBox 打开）
   const handleKnowledgeBaseToggle = useCallback(() => {
-    enableToolWindows([...TOOL_RUNTIME_GROUPS, ...TOOL_DRAWER_GROUPS]);
+    enableToolWindows(TOOL_WINDOW_GROUPS);
     void Promise.all([
       import('./services/tool-window-service'),
       import('./constants/built-in-tools'),
@@ -327,7 +323,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   useEffect(() => {
     const handleKBOpen = (e: Event) => {
       const { noteId } = (e as CustomEvent<{ noteId?: string }>).detail;
-      enableToolWindows([...TOOL_RUNTIME_GROUPS, ...TOOL_DRAWER_GROUPS]);
+      enableToolWindows(TOOL_WINDOW_GROUPS);
       void Promise.all([
         import('./services/tool-window-service'),
         import('./constants/built-in-tools'),
@@ -359,7 +355,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
 
   // 处理项目抽屉切换（互斥逻辑）
   const handleProjectDrawerToggle = useCallback(() => {
-    enableToolWindows([...TOOL_RUNTIME_GROUPS, ...TOOL_DRAWER_GROUPS]);
+    enableToolWindows(TOOL_WINDOW_GROUPS);
     if (projectDrawerOpen) {
       setProjectDrawerOpen(false);
       return;
@@ -373,7 +369,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
 
   // 处理工具箱抽屉切换（互斥逻辑）
   const handleToolboxDrawerToggle = useCallback(() => {
-    enableToolWindows([...TOOL_RUNTIME_GROUPS, ...TOOL_DRAWER_GROUPS]);
+    enableToolWindows(TOOL_WINDOW_GROUPS);
     if (toolboxDrawerOpen) {
       setToolboxDrawerOpen(false);
       return;
@@ -387,7 +383,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
 
   // 处理任务面板切换（互斥逻辑）
   const handleTaskPanelToggle = useCallback(() => {
-    enableDeferredRuntime(TOOL_RUNTIME_GROUPS);
+    enableDeferredRuntime(TOOL_WINDOW_GROUPS);
     if (taskPanelExpanded) {
       setTaskPanelExpanded(false);
       return;
@@ -401,7 +397,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
 
   // 打开素材库（用于缓存满提示）
   const handleOpenMediaLibrary = useCallback((config?: MediaLibraryOpenConfig) => {
-    enableToolWindows([...TOOL_RUNTIME_GROUPS, ...TOOL_DIALOG_GROUPS]);
+    enableToolWindows(TOOL_WINDOW_GROUPS);
     closeAllDrawers();
     setMediaLibraryConfig({
       mode: SelectionMode.BROWSE,
@@ -411,12 +407,12 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   }, [closeAllDrawers, enableToolWindows]);
 
   const handleOpenBackupRestore = useCallback(() => {
-    enableDeferredRuntime([...TOOL_RUNTIME_GROUPS, ...TOOL_DIALOG_GROUPS]);
+    enableDeferredRuntime(TOOL_WINDOW_GROUPS);
     setBackupRestoreOpen(true);
   }, [enableDeferredRuntime]);
 
   const handleOpenCloudSync = useCallback(() => {
-    enableDeferredRuntime([...TOOL_RUNTIME_GROUPS, ...TOOL_DIALOG_GROUPS]);
+    enableDeferredRuntime(TOOL_WINDOW_GROUPS);
     setCloudSyncOpen(true);
   }, [enableDeferredRuntime]);
 
@@ -479,7 +475,11 @@ export const Drawnix: React.FC<DrawnixProps> = ({
         return;
       }
 
-      if (!event.data.completedGroups?.includes('tool-drawers')) {
+      if (
+        !TOOL_WINDOW_GROUPS.every((group) =>
+          event.data.completedGroups?.includes(group)
+        )
+      ) {
         return;
       }
 

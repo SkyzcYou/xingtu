@@ -485,6 +485,7 @@ export function AssetProvider({ children }: AssetProviderProps) {
       mimeType,
       createdAt: task.completedAt || task.createdAt,
       size: result.size,
+      cacheWarning: result.cacheWarning,
       prompt: task.params.prompt,
       modelName: task.params.model,
       duration:
@@ -593,6 +594,7 @@ export function AssetProvider({ children }: AssetProviderProps) {
           mimeType: item.mimeType,
           createdAt: item.cachedAt,
           size: item.size,
+          cacheWarning: item.metadata?.cacheWarning,
           contentHash: item.contentHash || getAssetContentHash({ url: normalizedPathname }),
           taskId: item.metadata?.taskId,
           providerTaskId:
@@ -690,6 +692,7 @@ export function AssetProvider({ children }: AssetProviderProps) {
             clipId: asset.clipId || cachedClipId,
             providerTaskId: asset.providerTaskId || cachedProviderTaskId,
             taskId: asset.taskId || cachedMetadata?.metadata?.taskId,
+            cacheWarning: asset.cacheWarning || cachedMetadata?.metadata?.cacheWarning,
           };
         });
         const localCacheAssets = cacheStorageAssets.filter(

@@ -36,6 +36,42 @@ declare global {
 enum AnalyticsCategory {
   AI_GENERATION = 'ai_generation',
   SYSTEM = 'system',
+  UI_INTERACTION = 'ui_interaction',
+}
+
+export interface UIInteractionEventParams {
+  area: string;
+  action: string;
+  control?: string;
+  value?: string | number | boolean | null;
+  source?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface ProviderEndpointAnalytics {
+  origin: string;
+  host: string;
+  protocol: string;
+}
+
+export function getProviderEndpointAnalytics(
+  baseUrl?: string | null
+): ProviderEndpointAnalytics | null {
+  const trimmed = String(baseUrl || '').trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    return {
+      origin: parsed.origin,
+      host: parsed.host,
+      protocol: parsed.protocol.replace(':', ''),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Event names for AI generation */
@@ -210,6 +246,17 @@ class PostHogAnalytics {
     }
   }
 
+  /** Track low-frequency UI interactions without adding one-off event names. */
+  trackUIInteraction(params: UIInteractionEventParams): void {
+    const { metadata, ...coreParams } = params;
+    this.track('ui_interaction', {
+      category: AnalyticsCategory.UI_INTERACTION,
+      ...coreParams,
+      metadata: metadata || undefined,
+      timestamp: Date.now(),
+    });
+  }
+
   /** Check if analytics is enabled */
   isAnalyticsEnabled(): boolean {
     return typeof window !== 'undefined' && !!window.posthog;
@@ -321,7 +368,7 @@ class PostHogAnalytics {
     model: string;
     messageCount: number;
     stream: boolean;
-  }): void {
+  } & Record<string, unknown>): void {
     this.track(APICallEvent.API_CALL_START, {
       category: AnalyticsCategory.SYSTEM,
       ...params,
@@ -336,7 +383,7 @@ class PostHogAnalytics {
     duration: number;
     responseLength?: number;
     stream: boolean;
-  }): void {
+  } & Record<string, unknown>): void {
     this.track(APICallEvent.API_CALL_SUCCESS, {
       category: AnalyticsCategory.SYSTEM,
       ...params,
@@ -352,7 +399,7 @@ class PostHogAnalytics {
     error: string;
     httpStatus?: number;
     stream: boolean;
-  }): void {
+  } & Record<string, unknown>): void {
     this.track(APICallEvent.API_CALL_FAILED, {
       category: AnalyticsCategory.SYSTEM,
       ...params,

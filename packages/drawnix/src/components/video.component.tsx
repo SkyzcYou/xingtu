@@ -20,25 +20,27 @@ export const VideoComponent: React.FC<VideoComponentProps> = ({
   
   useEffect(() => {
     const video = videoRef.current;
-    if (video) {
-      const handleLoadedData = () => {
-        setIsLoading(false);
-        setVideoError(false);
-      };
-      
-      const handleError = () => {
-        setIsLoading(false);
-        setVideoError(true);
-      };
-
-      video.addEventListener('loadeddata', handleLoadedData);
-      video.addEventListener('error', handleError);
-
-      return () => {
-        video.removeEventListener('loadeddata', handleLoadedData);
-        video.removeEventListener('error', handleError);
-      };
+    if (!video) {
+      return undefined;
     }
+
+    const handleLoadedData = () => {
+      setIsLoading(false);
+      setVideoError(false);
+    };
+    
+    const handleError = () => {
+      setIsLoading(false);
+      setVideoError(true);
+    };
+
+    video.addEventListener('loadeddata', handleLoadedData);
+    video.addEventListener('error', handleError);
+
+    return () => {
+      video.removeEventListener('loadeddata', handleLoadedData);
+      video.removeEventListener('error', handleError);
+    };
   }, [url]);
 
   const handleVideoClick = (e: React.MouseEvent) => {

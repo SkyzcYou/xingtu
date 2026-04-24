@@ -147,6 +147,24 @@ $brand-orange-dark: #E67E22;
     }
   }
 
+  &__cache-warning-badge {
+    padding: 4px 7px;
+    border-radius: 4px;
+    background: rgba(245, 158, 11, 0.92);
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 12px;
+    cursor: help;
+    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.28);
+
+    &--list {
+      flex-shrink: 0;
+      padding: 3px 6px;
+      font-size: 10px;
+    }
+  }
+
   // ========== 复选框 ==========
   &__checkbox {
     &--overlay {

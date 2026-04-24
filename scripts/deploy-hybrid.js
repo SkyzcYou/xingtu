@@ -307,6 +307,7 @@ async function waitForRuntimeCdnAssetsReady(version) {
         const result = await isRemoteAssetReady(url);
         return {
           assetPath,
+          url,
           ...result,
         };
       })
@@ -324,7 +325,7 @@ async function waitForRuntimeCdnAssetsReady(version) {
     log(
       `    运行时 CDN 关键资源未就绪，${elapsedSec}s 后重试：${failed
         .slice(0, 3)
-        .map((item) => `${item.assetPath} (${item.reason})`)
+        .map((item) => `${item.assetPath} -> ${item.url} (${item.reason})`)
         .join(', ')}`,
       'gray'
     );

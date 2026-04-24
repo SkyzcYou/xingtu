@@ -18,6 +18,8 @@ export interface SizePickerProps {
   size: number;
   /** 大小变化回调 */
   onSizeChange: (size: number) => void;
+  /** 用户完成一次大小调整时回调，避免 slider 拖动高频埋点 */
+  onSizeCommit?: (size: number) => void;
   /** 预设大小列表 */
   presets: number[];
   /** 预览颜色 */
@@ -42,6 +44,7 @@ const DefaultSizeIcon = () => (
 export const SizePicker: React.FC<SizePickerProps> = ({
   size,
   onSizeChange,
+  onSizeCommit,
   presets,
   previewColor,
   title,
@@ -51,11 +54,25 @@ export const SizePicker: React.FC<SizePickerProps> = ({
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(String(size));
+  const [committedSize, setCommittedSize] = useState(size);
 
   // 同步外部 size 变化
   React.useEffect(() => {
     setInputValue(String(size));
   }, [size]);
+
+  React.useEffect(() => {
+    if (!isOpen) {
+      setCommittedSize(size);
+    }
+  }, [isOpen, size]);
+
+  const commitSize = useCallback((value: number) => {
+    if (value !== committedSize) {
+      onSizeCommit?.(value);
+      setCommittedSize(value);
+    }
+  }, [committedSize, onSizeCommit]);
 
   // 处理输入框变化
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,10 +84,11 @@ export const SizePicker: React.FC<SizePickerProps> = ({
     const value = parseInt(inputValue, 10);
     if (!isNaN(value) && value >= 1) {
       onSizeChange(value);
+      commitSize(value);
     } else {
       setInputValue(String(size));
     }
-  }, [inputValue, size, onSizeChange]);
+  }, [commitSize, inputValue, size, onSizeChange]);
 
   // 处理键盘事件
   const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -89,7 +107,12 @@ export const SizePicker: React.FC<SizePickerProps> = ({
       <Popover
         sideOffset={12}
         open={isOpen}
-        onOpenChange={setIsOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            commitSize(size);
+          }
+          setIsOpen(open);
+        }}
         placement="bottom"
       >
         <PopoverTrigger asChild>

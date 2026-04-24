@@ -84,6 +84,7 @@ export function useUnifiedCache(url: string | undefined) {
     cacheInfo,
     isLoading,
     isCached: cacheInfo.isCached,
+    cacheWarning: cacheInfo.cacheWarning,
     cacheAge: cacheInfo.age,
     cacheImage,
     deleteCache,

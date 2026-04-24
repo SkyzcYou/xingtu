@@ -28,6 +28,7 @@ import {
 import { taskQueueService } from '../../../services/task-queue';
 import { TaskType } from '../../../types/task.types';
 import { syncMVRewriteTask } from '../task-sync';
+import { analytics } from '../../../utils/posthog-analytics';
 
 function autoResize(el: HTMLTextAreaElement) {
   el.style.height = 'auto';
@@ -201,6 +202,18 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
     rewritingRef.current = true;
     setRewriting(true);
     setError('');
+    analytics.trackUIInteraction({
+      area: 'popular_mv_tool',
+      action: 'script_rewrite_started',
+      control: 'rewrite_script',
+      source: 'mv_creator_script_page',
+      metadata: {
+        shotCount: shots.length,
+        hasRewritePrompt: !!rewritePrompt.trim(),
+        segmentDuration: selectedSegmentDuration,
+        hasModelRef: !!scriptModelRef,
+      },
+    });
     try {
       const prompt = buildMVScriptRewritePrompt({
         record,

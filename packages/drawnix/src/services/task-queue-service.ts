@@ -120,6 +120,13 @@ function buildTaskAnalyticsPayload(task: Task): Record<string, unknown> {
         task.params.uploadedImages?.length ||
         task.params.uploadedImage
     ),
+    promptLength:
+      typeof task.params.prompt === 'string' ? task.params.prompt.length : 0,
+    source: task.params.source,
+    generationMode: task.params.generationMode,
+    size: task.params.size,
+    duration: task.params.duration,
+    resultKind: task.result?.resultKind,
   };
 }
 
@@ -1473,6 +1480,7 @@ class TaskQueueService {
 
     // Emit event
     this.emitEvent('taskCreated', task);
+    trackTaskAnalytics('generation_task_created', task);
 
     // 归档超出限制的旧任务
     this.enforceRetentionLimit();
@@ -1553,7 +1561,24 @@ class TaskQueueService {
     this.emitEvent('taskUpdated', updatedTask);
 
     // console.log(`[TaskQueueService] Updated task ${taskId} to ${status}`);
-    if (status === TaskStatus.FAILED || status === TaskStatus.COMPLETED) {
+    const enteredTerminalStatus =
+      (status === TaskStatus.FAILED || status === TaskStatus.COMPLETED) &&
+      task.status !== status;
+    if (enteredTerminalStatus) {
+      trackTaskAnalytics(
+        status === TaskStatus.COMPLETED
+          ? 'generation_task_completed'
+          : 'generation_task_failed',
+        updatedTask,
+        {
+          durationMs:
+            updatedTask.startedAt && updatedTask.completedAt
+              ? updatedTask.completedAt - updatedTask.startedAt
+              : undefined,
+          errorCode: updatedTask.error?.code,
+          errorMessage: updatedTask.error?.message,
+        }
+      );
       console.debug(
         `[TaskQueueService] Task ${taskId} → ${status}, event emitted`
       );
@@ -1769,6 +1794,9 @@ class TaskQueueService {
     this.tasks.set(task.id, task);
     this.persistTask(task);
     this.emitEvent('taskCreated', task);
+    trackTaskAnalytics('generation_task_created', task, {
+      source: 'external_task',
+    });
   }
 
   /**

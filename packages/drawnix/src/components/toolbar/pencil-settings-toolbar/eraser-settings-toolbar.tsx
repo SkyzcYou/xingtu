@@ -25,6 +25,7 @@ import { CursorPreview } from './cursor-preview';
 import { SizePicker } from './size-picker';
 import './pencil-settings-toolbar.scss';
 import { HoverTip } from '../../shared/hover';
+import { analytics } from '../../../utils/posthog-analytics';
 
 // 预设橡皮擦大小（步长更大，最大256px）
 const ERASER_WIDTH_PRESETS = [16, 32, 48, 64, 96, 128, 192, 256];
@@ -74,15 +75,37 @@ export const EraserSettingsToolbar: React.FC = () => {
     [board]
   );
 
+  const handleSizeCommit = useCallback(
+    (size: number) => {
+      analytics.trackUIInteraction({
+        area: 'canvas_tool_settings',
+        action: 'eraser_size_changed',
+        control: 'eraser_size_picker',
+        value: size,
+        source: 'eraser_settings_toolbar',
+      });
+    },
+    []
+  );
+
   // 处理形状切换
   const handleShapeChange = useCallback(
     (shape: BrushShape) => {
+      if (shape !== currentShape) {
+        analytics.trackUIInteraction({
+          area: 'canvas_tool_settings',
+          action: 'eraser_shape_changed',
+          control: 'eraser_shape_button',
+          value: shape,
+          source: 'eraser_settings_toolbar',
+        });
+      }
       setCurrentShape(shape);
       setEraserShape(board, shape);
       // 更新光标
       updateEraserCursor(board);
     },
-    [board]
+    [board, currentShape]
   );
 
   // 只在选择橡皮擦指针时显示
@@ -115,6 +138,7 @@ export const EraserSettingsToolbar: React.FC = () => {
           <SizePicker
             size={eraserSize}
             onSizeChange={handleSizeChange}
+            onSizeCommit={handleSizeCommit}
             presets={ERASER_WIDTH_PRESETS}
             previewColor="#999"
             title={t('toolbar.eraserSize')}

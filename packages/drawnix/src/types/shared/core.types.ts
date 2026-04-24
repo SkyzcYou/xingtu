@@ -8,6 +8,8 @@
  * 主线程和 SW 都从这里导入，确保类型一致性。
  */
 
+import type { CacheWarning } from '../cache-warning.types';
+
 // ============================================================================
 // Chat Tool Call
 // ============================================================================
@@ -227,6 +229,8 @@ export interface TaskResult {
   analysisData?: unknown;
   /** Tool calls made during chat (chat only) */
   toolCalls?: ChatToolCall[];
+  /** Cache failure warning for media results */
+  cacheWarning?: CacheWarning;
 }
 
 export type TaskResultKind =

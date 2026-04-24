@@ -46,7 +46,7 @@ export function download(blob: Blob | MediaSource, filename: string): void {
  */
 export async function copyToClipboard(text: string): Promise<void> {
   try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+    if (canUseClipboardWrite() && navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
       return;
     }
@@ -67,6 +67,20 @@ export async function copyToClipboard(text: string): Promise<void> {
     document.execCommand('copy');
   } finally {
     textArea.remove();
+  }
+}
+
+function canUseClipboardWrite(): boolean {
+  const policyDocument = document as Document & {
+    permissionsPolicy?: { allowsFeature?: (feature: string) => boolean };
+    featurePolicy?: { allowsFeature?: (feature: string) => boolean };
+  };
+  const policy = policyDocument.permissionsPolicy || policyDocument.featurePolicy;
+
+  try {
+    return policy?.allowsFeature?.('clipboard-write') !== false;
+  } catch {
+    return true;
   }
 }
 

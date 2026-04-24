@@ -50,18 +50,26 @@ export async function cleanupExpiredTombstones(
       return result;
     }
 
-    logDebug('[TombstoneCleanup] Found expired tombstones:', expiredBoardIds.length);
+    logDebug('[TombstoneCleanup] Found expired tombstones', {
+      count: expiredBoardIds.length,
+    });
 
     // 删除远程文件
     if (filesToDelete.length > 0) {
       try {
         await gitHubApiService.deleteGistFiles(filesToDelete, gistId);
         result.deletedFiles = filesToDelete;
-        logDebug('[TombstoneCleanup] Deleted remote files:', filesToDelete.length);
+        logDebug('[TombstoneCleanup] Deleted remote files', {
+          count: filesToDelete.length,
+        });
       } catch (error) {
         const errorMsg = `删除远程文件失败: ${error instanceof Error ? error.message : '未知错误'}`;
         result.errors.push(errorMsg);
-        logError('[TombstoneCleanup]', errorMsg);
+        logError(
+          '[TombstoneCleanup] Delete remote files failed',
+          error instanceof Error ? error : new Error(errorMsg),
+          { fileCount: filesToDelete.length }
+        );
       }
     }
 
@@ -82,7 +90,10 @@ export async function cleanupExpiredTombstones(
     return result;
   } catch (error) {
     result.errors.push(`清理失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    logError('[TombstoneCleanup] Cleanup failed:', error);
+    logError(
+      '[TombstoneCleanup] Cleanup failed',
+      error instanceof Error ? error : new Error(String(error))
+    );
     return result;
   }
 }

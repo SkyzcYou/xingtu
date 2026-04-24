@@ -44,6 +44,7 @@ import {
   collectWorkflowExportAssets,
   exportWorkflowAssetsZip,
 } from '../../../utils/workflow-generation-utils';
+import { analytics } from '../../../utils/posthog-analytics';
 
 const STORAGE_KEY_IMAGE_MODEL = 'video-analyzer:image-model';
 const STORAGE_KEY_VIDEO_MODEL = 'video-analyzer:video-model';
@@ -253,6 +254,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       if (!result.success) {
         throw new Error(result.error || '插入失败，请确认画布已打开');
       }
+      analytics.trackUIInteraction({
+        area: 'popular_video_tool',
+        action: 'script_inserted_to_canvas',
+        control: 'insert_script',
+        source: 'video_analyzer_generate_page',
+        metadata: { shotCount: currentShots.length },
+      });
       MessagePlugin.success('脚本已插入画布');
     } catch (error) {
       console.error('[VideoAnalyzer] Failed to insert script to canvas:', error);
@@ -639,6 +647,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const handleShotGenerateFirstFrame = useCallback((shot: VideoShot) => {
     const rawPrompt = shot.first_frame_prompt || shot.description || '';
     if (!rawPrompt) return;
+    analytics.trackUIInteraction({
+      area: 'popular_video_tool',
+      action: 'shot_first_frame_generation_opened',
+      control: 'generate_first_frame',
+      source: 'video_analyzer_generate_page',
+      metadata: { shotId: shot.id, hasDraft: !!shot.first_frame_draft },
+    });
     const prompt = buildFramePrompt(rawPrompt, record.analysis, record.productInfo);
     const draft = shot.first_frame_draft;
     const shotBatchId = `va_${record.id}_shot${shot.id}_first`;
@@ -673,6 +688,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const handleShotGenerateLastFrame = useCallback((shot: VideoShot, index: number) => {
     const rawPrompt = shot.last_frame_prompt || shot.description || '';
     if (!rawPrompt) return;
+    analytics.trackUIInteraction({
+      area: 'popular_video_tool',
+      action: 'shot_last_frame_generation_opened',
+      control: 'generate_last_frame',
+      source: 'video_analyzer_generate_page',
+      metadata: { shotId: shot.id, shotIndex: index, hasDraft: !!shot.last_frame_draft },
+    });
     const prompt = buildFramePrompt(rawPrompt, record.analysis, record.productInfo);
     const draft = shot.last_frame_draft;
     const shotBatchId = `va_${record.id}_shot${shot.id}_last`;
@@ -700,6 +722,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const handleShotGenerateVideo = useCallback((shot: VideoShot, index: number) => {
     const prompt = buildVideoPrompt(shot, record.analysis, record.productInfo);
     if (!prompt) return;
+    analytics.trackUIInteraction({
+      area: 'popular_video_tool',
+      action: 'shot_video_generation_opened',
+      control: 'generate_shot_video',
+      source: 'video_analyzer_generate_page',
+      metadata: { shotId: shot.id, shotIndex: index, hasDraft: !!shot.video_draft },
+    });
     const draft = shot.video_draft;
     const shotBatchId = `va_${record.id}_shot${shot.id}_video`;
     // 将已生成的首帧/尾帧作为参考图带入
@@ -938,6 +967,18 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     if (batchVideoState.running) {
       return;
     }
+
+    analytics.trackUIInteraction({
+      area: 'popular_video_tool',
+      action: 'batch_video_generation_started',
+      control: 'generate_all_videos',
+      source: 'video_analyzer_generate_page',
+      metadata: {
+        shotCount: latestShotsRef.current.length,
+        insertToCanvasRequested: insertGeneratedVideosToCanvas,
+        hasBoard: !!board,
+      },
+    });
 
     let shouldInsertToCanvas = insertGeneratedVideosToCanvas;
     if (shouldInsertToCanvas && !board) {

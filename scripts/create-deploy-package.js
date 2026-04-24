@@ -336,21 +336,76 @@ function createDeployPackage() {
         const hasIndex = files.some(f => f.includes('index.html'));
         const assetCount = files.filter(f => f.includes('assets/') && (f.endsWith('.js') || f.endsWith('.css'))).length;
         
-        // 检查当前构建产物的关键资源组（文件名哈希是动态的，只检查 chunk 前缀）
-        const hasMainJs = files.some(f => f.includes('assets/') && /\/?assets\/main-[^/]+\.js$/.test(f));
-        const hasMainCss = files.some(f => f.includes('assets/') && /\/?assets\/main-[^/]+\.css$/.test(f));
-        const hasToolRuntimeJs = files.some(f => f.includes('assets/') && /\/?assets\/tool-runtime-[^/]+\.js$/.test(f));
-        const hasToolDrawersJs = files.some(f => f.includes('assets/') && /\/?assets\/tool-drawers-[^/]+\.js$/.test(f));
-        const hasToolDialogsJs = files.some(f => f.includes('assets/') && /\/?assets\/tool-dialogs-[^/]+\.js$/.test(f));
-        const hasExternalSkillsJs = files.some(f => f.includes('assets/') && /\/?assets\/external-skills-[^/]+\.js$/.test(f));
+        // 检查当前构建产物的关键资源组（文件名哈希是动态的，只检查 chunk 前缀 / manifest 语义）
+        const hasAssetChunk = (pattern) =>
+          files.some(f => f.includes('assets/') && pattern.test(f));
+        const hasMainJs = hasAssetChunk(/\/?assets\/main-[^/]+\.js$/);
+        const hasMainCss = hasAssetChunk(/\/?assets\/main-[^/]+\.css$/);
+        const hasToolWindowsJs = hasAssetChunk(/\/?assets\/tool-windows-[^/]+\.js$/);
+        const hasToolWindowsCss = hasAssetChunk(/\/?assets\/tool-windows-[^/]+\.css$/);
+        const hasToolRuntimeJs = hasAssetChunk(/\/?assets\/tool-runtime-[^/]+\.js$/);
+        const hasToolDrawersJs = hasAssetChunk(/\/?assets\/tool-drawers-[^/]+\.js$/);
+        const hasToolDialogsJs = hasAssetChunk(/\/?assets\/tool-dialogs-[^/]+\.js$/);
+        const hasExternalSkillsJs = hasAssetChunk(/\/?assets\/external-skills-[^/]+\.js$/);
         const hasAnyAssetJs = files.some(f => f.includes('assets/') && f.endsWith('.js'));
+        const idlePrefetchManifestEntry = files.find(
+          f => /(^|\/)idle-prefetch-manifest\.json$/.test(f)
+        );
+        let idlePrefetchManifest = null;
+        let idlePrefetchGroupCounts = {};
+        let idlePrefetchDefaults = [];
+
+        if (idlePrefetchManifestEntry) {
+          try {
+            const manifestContent = execSync(
+              `tar -xOzf "${tarPath}" "${idlePrefetchManifestEntry}" 2>/dev/null`,
+              { encoding: 'utf8' }
+            );
+            idlePrefetchManifest = JSON.parse(manifestContent);
+            idlePrefetchGroupCounts = Object.fromEntries(
+              Object.entries(idlePrefetchManifest.groups || {}).map(([group, entries]) => [
+                group,
+                Array.isArray(entries) ? entries.length : 0,
+              ])
+            );
+            idlePrefetchDefaults = Array.isArray(idlePrefetchManifest.defaults)
+              ? idlePrefetchManifest.defaults
+              : [];
+          } catch (e) {
+            console.warn(`⚠️  无法读取 idle-prefetch-manifest.json: ${e.message}`);
+          }
+        }
+
+        const hasRuntimeStaticAssetsGroup =
+          Object.prototype.hasOwnProperty.call(
+            idlePrefetchGroupCounts,
+            'runtime-static-assets'
+          );
+        const runtimeStaticAssetsCount = idlePrefetchGroupCounts['runtime-static-assets'] || 0;
+        const hasOfflineStaticAssetsGroup =
+          Object.prototype.hasOwnProperty.call(
+            idlePrefetchGroupCounts,
+            'offline-static-assets'
+          );
+        const offlineStaticAssetsCount = idlePrefetchGroupCounts['offline-static-assets'] || 0;
+        const usesCurrentToolChunkLayout =
+          hasToolWindowsJs || hasRuntimeStaticAssetsGroup || idlePrefetchDefaults.includes('tool-windows');
+        const usesLegacyToolChunkLayout =
+          hasToolRuntimeJs || hasToolDrawersJs || hasToolDialogsJs;
         const missingCriticalGroups = [];
 
         if (!hasMainJs) missingCriticalGroups.push('main-*.js');
         if (!hasMainCss) missingCriticalGroups.push('main-*.css');
-        if (!hasToolRuntimeJs) missingCriticalGroups.push('tool-runtime-*.js');
-        if (!hasToolDrawersJs) missingCriticalGroups.push('tool-drawers-*.js');
-        if (!hasToolDialogsJs) missingCriticalGroups.push('tool-dialogs-*.js');
+        if (usesCurrentToolChunkLayout) {
+          if (!hasToolWindowsJs) missingCriticalGroups.push('tool-windows-*.js');
+          if (!hasRuntimeStaticAssetsGroup) {
+            missingCriticalGroups.push('runtime-static-assets(group)');
+          }
+        } else {
+          if (!hasToolRuntimeJs) missingCriticalGroups.push('tool-runtime-*.js');
+          if (!hasToolDrawersJs) missingCriticalGroups.push('tool-drawers-*.js');
+          if (!hasToolDialogsJs) missingCriticalGroups.push('tool-dialogs-*.js');
+        }
         
         console.log(`📊 打包统计:`);
         console.log(`   总文件数: ${files.length}`);
@@ -358,10 +413,45 @@ function createDeployPackage() {
         console.log(`   关键资源组检查:`);
         console.log(`     - main-*.js: ${hasMainJs ? '✅' : '❌'}`);
         console.log(`     - main-*.css: ${hasMainCss ? '✅' : '❌'}`);
-        console.log(`     - tool-runtime-*.js: ${hasToolRuntimeJs ? '✅' : '❌'}`);
-        console.log(`     - tool-drawers-*.js: ${hasToolDrawersJs ? '✅' : '❌'}`);
-        console.log(`     - tool-dialogs-*.js: ${hasToolDialogsJs ? '✅' : '❌'}`);
+        if (usesCurrentToolChunkLayout) {
+          console.log(`     - tool-windows-*.js: ${hasToolWindowsJs ? '✅' : '❌'}`);
+          console.log(`     - tool-windows-*.css: ${hasToolWindowsCss ? '✅' : 'ℹ️  未生成'}`);
+          console.log(
+            `     - runtime-static-assets(group): ${
+              hasRuntimeStaticAssetsGroup
+                ? `✅ (${runtimeStaticAssetsCount} entries)`
+                : '❌'
+            }`
+          );
+          console.log(
+            `     - offline-static-assets(group): ${
+              hasOfflineStaticAssetsGroup
+                ? `✅ (${offlineStaticAssetsCount} entries)`
+                : 'ℹ️  未生成'
+            }`
+          );
+          if (usesLegacyToolChunkLayout) {
+            console.log(
+              `     - legacy tool-runtime/tool-drawers/tool-dialogs: ℹ️  兼容存在，不再作为当前布局必需项`
+            );
+          }
+        } else {
+          console.log(`     - tool-runtime-*.js: ${hasToolRuntimeJs ? '✅' : '❌'}`);
+          console.log(`     - tool-drawers-*.js: ${hasToolDrawersJs ? '✅' : '❌'}`);
+          console.log(`     - tool-dialogs-*.js: ${hasToolDialogsJs ? '✅' : '❌'}`);
+        }
         console.log(`     - external-skills-*.js: ${hasExternalSkillsJs ? '✅' : 'ℹ️  未生成'}`);
+        if (idlePrefetchManifest) {
+          console.log(
+            `     - idle-prefetch defaults: ${
+              idlePrefetchDefaults.length > 0
+                ? idlePrefetchDefaults.join(', ')
+                : 'ℹ️  空'
+            }`
+          );
+        } else {
+          console.log(`     - idle-prefetch-manifest.json: ℹ️  未找到`);
+        }
         
         if (!hasAssets) {
           console.warn(`⚠️  警告: 未找到 assets 目录`);

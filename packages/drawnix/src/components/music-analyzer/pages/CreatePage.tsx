@@ -27,6 +27,7 @@ import {
   normalizeMusicAnalysisData,
 } from '../../../services/music-analysis-service';
 import { getDefaultAudioModel } from '../../../constants/model-config';
+import { analytics } from '../../../utils/posthog-analytics';
 
 const DEFAULT_ANALYSIS_MODEL = 'gemini-2.5-pro';
 const STORAGE_KEY_MODEL = 'music-analyzer:model';
@@ -281,6 +282,16 @@ export const CreatePage: React.FC<CreatePageProps> = ({
       setError('请先上传音频');
       return;
     }
+    analytics.trackUIInteraction({
+      area: 'popular_music_tool',
+      action: 'audio_analysis_started',
+      control: 'analyze_audio',
+      source: 'music_analyzer_create_page',
+      metadata: {
+        fileSizeBytes: audioFile.size,
+        hasModelRef: !!selectedModelRef,
+      },
+    });
     setError('');
     setProgress('缓存音频...');
     try {
@@ -315,6 +326,17 @@ export const CreatePage: React.FC<CreatePageProps> = ({
       return;
     }
     const useSunoLyricsModel = isSunoLyricsModel(selectedLyricsModel);
+    analytics.trackUIInteraction({
+      area: 'popular_music_tool',
+      action: 'lyrics_generation_started',
+      control: 'generate_lyrics',
+      source: 'music_analyzer_create_page',
+      metadata: {
+        engine: useSunoLyricsModel ? 'suno' : 'text_model',
+        promptLength: creationPrompt.trim().length,
+        hasModelRef: !!selectedLyricsModelRef,
+      },
+    });
     setError('');
     setLyricsGenProgress(useSunoLyricsModel ? '歌词生成中...' : '歌词草稿生成中 0%');
     try {
@@ -447,6 +469,16 @@ export const CreatePage: React.FC<CreatePageProps> = ({
   const handleInsertAnalysis = useCallback(async () => {
     if (!normalizedAnalysis) return;
     await quickInsert('text', formatMusicAnalysisMarkdown(normalizedAnalysis));
+    analytics.trackUIInteraction({
+      area: 'popular_music_tool',
+      action: 'analysis_inserted_to_canvas',
+      control: 'insert_analysis',
+      source: 'music_analyzer_create_page',
+      metadata: {
+        hasSunoTitle: !!normalizedAnalysis.sunoTitle,
+        tagsCount: normalizedAnalysis.sunoStyleTags.length,
+      },
+    });
   }, [normalizedAnalysis]);
 
   return (

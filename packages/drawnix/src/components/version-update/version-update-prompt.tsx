@@ -73,8 +73,8 @@ export const VersionUpdatePrompt: React.FC = () => {
   }, []);
 
   const handleUpdate = () => {
-    // Hide the prompt immediately to provide visual feedback
-    setUpdateAvailable(null);
+    // Keep the prompt visible until the new SW actually takes over.
+    // Otherwise a failed COMMIT_UPGRADE looks like a successful update.
     setShowChangelog(false);
     // Dispatch event to notify main.tsx to proceed with upgrade
     window.dispatchEvent(new CustomEvent('user-confirmed-upgrade'));
