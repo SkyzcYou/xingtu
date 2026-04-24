@@ -17,6 +17,7 @@ import React, {
   Suspense,
 } from 'react';
 import { useDeviceType } from '../../hooks/useDeviceType';
+import { getDefaultImageModel } from '../../constants/model-config';
 import {
   processSelectedContentForAI,
   extractSelectedContent,
@@ -84,7 +85,7 @@ const TTDDialogComponent = ({
     const videoRoute = resolveInvocationRoute('video');
 
     const nextImageModel =
-      imageRoute.modelId || 'gemini-3-pro-image-preview-vip';
+      imageRoute.modelId || getDefaultImageModel();
     const nextImageModelRef = createModelRef(
       imageRoute.profileId,
       nextImageModel

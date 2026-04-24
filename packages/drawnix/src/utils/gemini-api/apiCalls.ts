@@ -13,6 +13,7 @@ import {
   VideoGenerationOptions,
 } from './types';
 import { VIDEO_DEFAULT_CONFIG } from './config';
+import { getDefaultImageModel } from '../../constants/model-config';
 import { analytics } from '../posthog-analytics';
 
 type GoogleInlineData = {
@@ -514,7 +515,7 @@ export async function callApiRaw(
   }
 
   const startTime = Date.now();
-  const model = config.modelName || 'gemini-3-pro-image-preview-vip';
+  const model = config.modelName || getDefaultImageModel();
   const endpoint = '/chat/completions';
 
   // Track API call start
@@ -639,7 +640,7 @@ async function callApiStreamDirect(
   signal?: AbortSignal
 ): Promise<GeminiResponse> {
   const startTime = Date.now();
-  const model = config.modelName || 'gemini-3-pro-image-preview-vip';
+  const model = config.modelName || getDefaultImageModel();
   const endpoint = '/chat/completions';
 
   console.log('[callApiStreamDirect] 发起 direct fetch 请求:', {

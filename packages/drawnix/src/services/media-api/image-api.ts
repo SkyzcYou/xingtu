@@ -23,6 +23,7 @@ import {
   buildProviderContextFromApiConfig,
 } from './utils';
 import { providerTransport } from '../provider-routing/provider-transport';
+import { getDefaultImageModel } from '../../constants/model-config';
 
 // 重新导出工具函数，方便外部使用
 export { isAsyncImageModel, aspectRatioToSize };
@@ -132,7 +133,7 @@ export async function generateImageSync(
   signal?: AbortSignal
 ): Promise<ImageGenerationResult> {
   const fetchFn = config.fetchImpl || fetch;
-  const model = params.model || config.defaultModel || 'gemini-3-pro-image-preview-vip';
+  const model = params.model || config.defaultModel || getDefaultImageModel();
 
   const requestBody = buildImageRequestBody({
     ...params,

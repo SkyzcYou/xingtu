@@ -26,6 +26,7 @@ import {
   settingsManager,
   type ModelRef,
 } from '../settings-manager';
+import { getDefaultImageModel } from '../../constants/model-config';
 import {
   providerTransport,
   resolveInvocationPlanFromRoute,
@@ -197,7 +198,7 @@ export async function generateImageWithGemini(
   const modelName =
     route.modelId ||
     DEFAULT_CONFIG.modelName ||
-    'gemini-3-pro-image-preview-vip';
+    getDefaultImageModel();
 
   return generateImageDirect(prompt, options, modelName, routeModel);
 }
@@ -312,7 +313,7 @@ async function generateImageDirect(
     // 构建请求体 - 强调生成图片
     const enhancedPrompt = `Generate an image: ${prompt}`;
     const data: any = {
-      model: validatedConfig.modelName || 'gemini-3-pro-image-preview-vip',
+      model: validatedConfig.modelName || getDefaultImageModel(),
       prompt: enhancedPrompt,
       response_format: options.response_format || 'url', // 默认返回 url
     };

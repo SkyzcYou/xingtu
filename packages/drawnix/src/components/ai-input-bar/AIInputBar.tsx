@@ -2473,8 +2473,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             audio:
               resolveInvocationRoute('audio').modelId || getDefaultAudioModel(),
             image:
-              resolveInvocationRoute('image').modelId ||
-              'gemini-3-pro-image-preview-vip',
+              resolveInvocationRoute('image').modelId || getDefaultImageModel(),
             video: resolveInvocationRoute('video').modelId || 'veo3.1',
           },
           params: {

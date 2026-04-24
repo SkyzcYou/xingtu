@@ -29,6 +29,7 @@ import { ToolMessageType, GenerateImagePayload, GenerateImageResponse, InsertIma
 import { taskQueueService } from '../services/task-queue';
 import { TaskType } from '../types/task.types';
 import { geminiSettings } from '../utils/settings-manager';
+import { getDefaultImageModel } from '../constants/model-config';
 import { insertImageFromUrlAndSelect } from '../data/image';
 
 /**
@@ -53,7 +54,7 @@ function setupCommunicationHandlers(
       config: {
         apiKey: settings.apiKey,
         baseUrl: settings.baseUrl,
-        imageModel: settings.imageModelName || 'gemini-2.5-flash-image-vip',
+        imageModel: settings.imageModelName || getDefaultImageModel(),
       },
     });
   });
@@ -157,7 +158,7 @@ function setupCommunicationHandlers(
 
       // 获取当前图片模型
       const settings = geminiSettings.get();
-      generateParams.model = settings.imageModelName || 'gemini-2.5-flash-image-vip';
+      generateParams.model = settings.imageModelName || getDefaultImageModel();
 
       // 通过 taskQueueService 创建任务（这样任务会出现在全局任务队列中）
       const task = taskQueueService.createTask(generateParams, TaskType.IMAGE);

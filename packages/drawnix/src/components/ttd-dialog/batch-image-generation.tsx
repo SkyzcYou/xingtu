@@ -39,6 +39,7 @@ import {
   createModelRef,
   type ModelRef,
 } from '../../utils/settings-manager';
+import { getDefaultImageModel } from '../../constants/model-config';
 import { promptForApiKey } from '../../utils/gemini-api';
 import { ModelDropdown } from '../ai-input-bar/ModelDropdown';
 import { getSizeOptionsForModel } from '../../constants/model-config';
@@ -311,7 +312,7 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
   const [selectedModel, setSelectedModel] = useState<string>(
     initialMatchedModel?.id ||
       imageModels[0]?.id ||
-      'gemini-2.5-flash-image-vip'
+      getDefaultImageModel()
   );
   const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
     getModelRefFromConfig(initialMatchedModel) ||
@@ -1763,7 +1764,7 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
             model:
               selectedModel ||
               resolveInvocationRoute('image').modelId ||
-              'gemini-2.5-flash-image-vip',
+              getDefaultImageModel(),
             modelRef: selectedModelRef || null,
             uploadedImages,
             batchId,

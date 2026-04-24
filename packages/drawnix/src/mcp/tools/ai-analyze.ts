@@ -11,7 +11,8 @@
  */
 
 import type { MCPTool, MCPResult, MCPExecuteOptions, AgentExecutionContext, WorkflowStepInfo, AgentExecuteOptions } from '../types';
-import { getModelType, IMAGE_MODELS } from '../types';
+import { getModelType, IMAGE_MODELS } from '../../constants/model-config';
+import { getDefaultImageModel } from '../../constants/model-config';
 import { agentExecutor } from '../../services/agent';
 import { geminiSettings, type ModelRef } from '../../utils/settings-manager';
 import type { GeminiMessagePart } from '../../utils/gemini-api/types';
@@ -141,7 +142,7 @@ export const aiAnalyzeTool: MCPTool = {
                 : null;
 
             // 获取用户设置的默认模型
-            const defaultImageModel = settings.imageModelName || IMAGE_MODELS[0]?.id || 'gemini-2.5-flash-image-vip';
+            const defaultImageModel = settings.imageModelName || IMAGE_MODELS[0]?.id || getDefaultImageModel();
             const defaultVideoModel = settings.videoModelName || 'veo3';
             const fallbackModel = preferredContextModelId || (isVideoTool ? defaultVideoModel : defaultImageModel);
 

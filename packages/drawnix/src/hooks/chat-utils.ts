@@ -8,7 +8,7 @@ import type { ChatMessage, WorkflowMessageData } from '../types/chat.types';
 import type { Message, MessagePart } from '@llamaindex/chat-ui';
 import { MessageStatus, MessageRole } from '../types/chat.types';
 import { geminiSettings } from '../utils/settings-manager';
-import { getModelType, IMAGE_MODELS } from '../constants/model-config';
+import { getDefaultImageModel, getModelType, IMAGE_MODELS } from '../constants/model-config';
 
 // 工作流消息的特殊标记前缀
 export const WORKFLOW_MESSAGE_PREFIX = '[[WORKFLOW_MESSAGE]]';
@@ -60,7 +60,7 @@ export function injectModelForGenerationTool<T extends GenericToolCall>(toolCall
     if (isVideoTool) {
       targetModel = settings.videoModelName || 'veo3';
     } else {
-      targetModel = settings.imageModelName || IMAGE_MODELS[0]?.id || 'gemini-2.5-flash-image-vip';
+      targetModel = settings.imageModelName || IMAGE_MODELS[0]?.id || getDefaultImageModel();
     }
 
     args.model = targetModel;

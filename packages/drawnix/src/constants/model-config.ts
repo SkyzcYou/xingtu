@@ -206,7 +206,8 @@ const BUILT_IN_MODEL_RECOMMENDATION_SCORES: Readonly<Record<string, number>> = {
   'gemini-3.1-flash-image-preview': 93,
   'gemini-3-pro-image-preview': 92,
   'gpt-image-1.5': 91,
-  'gemini-3-pro-image-preview-vip': 90,
+  'gpt-image-2': 90,
+  'gemini-3-pro-image-preview-vip': 89,
   'gemini-3-pro-image-preview-2k-vip': 89,
   'gpt-4o-image': 88,
   'gpt-image-1': 87,
@@ -591,6 +592,17 @@ export const IMAGE_MODEL_MORE_OPTIONS: ModelConfig[] = [
     imageDefaults: IMAGE_DEFAULT_PARAMS,
   },
   {
+    id: 'gpt-image-2',
+    label: 'GPT Image 2',
+    shortCode: 'gpt2',
+    description: 'OpenAI GPT Image 2 图片生成',
+    type: 'image',
+    vendor: ModelVendor.GPT,
+    supportsTools: true,
+    imageDefaults: IMAGE_DEFAULT_PARAMS,
+    tags: ['new'],
+  },
+  {
     id: 'gpt-4o-image',
     label: 'GPT-4o Image',
     shortCode: 'g4oi',
@@ -599,7 +611,6 @@ export const IMAGE_MODEL_MORE_OPTIONS: ModelConfig[] = [
     vendor: ModelVendor.GPT,
     supportsTools: true,
     imageDefaults: IMAGE_DEFAULT_PARAMS,
-    tags: ['new'],
   },
   {
     id: 'qwen-image-2.0',
@@ -1443,7 +1454,7 @@ export const AUDIO_MODEL_SELECT_OPTIONS = AUDIO_MODELS.map((model) => ({
 /**
  * 默认图片模型 ID
  */
-export const DEFAULT_IMAGE_MODEL_ID = 'gemini-3-pro-image-preview-vip';
+export const DEFAULT_IMAGE_MODEL_ID = 'gpt-image-2';
 
 /**
  * 获取默认图片模型 ID（优先使用环境变量）

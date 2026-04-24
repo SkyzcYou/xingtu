@@ -2,11 +2,12 @@
  * Gemini API 配置常量
  */
 
+import { getDefaultImageModel } from '../../constants/model-config';
 import { GeminiConfig } from './types';
 
 // 默认配置
 export const DEFAULT_CONFIG: Partial<GeminiConfig> = {
-  modelName: 'gemini-3-pro-image-preview-vip', // 图片生成和聊天的默认模型
+  modelName: getDefaultImageModel(), // 图片生成和聊天的默认模型
 };
 
 // 视频生成专用配置

@@ -27,6 +27,7 @@ import { convertToWorkflow, type WorkflowDefinition as LegacyWorkflowDefinition 
 import { WorkZoneTransforms } from '../plugins/with-workzone';
 import { PlaitBoard } from '@plait/core';
 import { geminiSettings } from '../utils/settings-manager';
+import { getDefaultImageModel } from '../constants/model-config';
 import { useTaskWorkflowSync } from './useTaskWorkflowSync';
 
 // ============================================================================
@@ -260,7 +261,7 @@ export function useWorkflowSubmission(
                 isExplicit: true,
               },
               defaultModels: {
-                image: globalSettings.imageModelName || 'gemini-3-pro-image-preview-vip',
+                image: globalSettings.imageModelName || getDefaultImageModel(),
                 video: globalSettings.videoModelName || 'veo3.1',
                 audio: globalSettings.audioModelName || 'suno_music',
               } as any,
@@ -509,7 +510,7 @@ export function useWorkflowSubmission(
           isExplicit: parsedInput.isModelExplicit,
         },
         defaultModels: {
-          image: globalSettings.imageModelName || 'gemini-3-pro-image-preview-vip',
+          image: globalSettings.imageModelName || getDefaultImageModel(),
           video: globalSettings.videoModelName || 'veo3.1',
           audio: globalSettings.audioModelName || 'suno_music',
         },

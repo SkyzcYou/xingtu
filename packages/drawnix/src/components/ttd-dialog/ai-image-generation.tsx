@@ -38,6 +38,7 @@ import {
   type AspectRatioOption,
   convertAspectRatioToSize,
 } from '../../constants/image-aspect-ratios';
+import { getDefaultImageModel } from '../../constants/model-config';
 import { DialogTaskList } from '../task-queue/DialogTaskList';
 import { LS_KEYS } from '../../constants/storage-keys';
 import {
@@ -124,7 +125,7 @@ const AIImageGeneration = ({
   const [currentModel, setCurrentModel] = useState(
     initialMatchedModel?.id ||
       imageModels[0]?.id ||
-      'gemini-2.5-flash-image-vip'
+      getDefaultImageModel()
   );
   const [currentModelRef, setCurrentModelRef] = useState<ModelRef | null>(
     getModelRefFromConfig(initialMatchedModel) ||
@@ -133,14 +134,14 @@ const AIImageGeneration = ({
   const initialSelectionKey = getSelectionKey(
     initialMatchedModel?.id ||
       imageModels[0]?.id ||
-      'gemini-2.5-flash-image-vip',
+      getDefaultImageModel(),
     getModelRefFromConfig(initialMatchedModel) ||
       createModelRef(initialRoute.profileId, initialRoute.modelId)
   );
   const initialScopedPreferences = loadScopedAIImageToolPreferences(
     initialMatchedModel?.id ||
       imageModels[0]?.id ||
-      'gemini-2.5-flash-image-vip',
+      getDefaultImageModel(),
     initialSelectionKey
   );
   const [prompt, setPrompt] = useState(initialPrompt);
@@ -349,7 +350,7 @@ const AIImageGeneration = ({
       const nextModel =
         newSettings.imageModelName ||
         visibleImageModels[0]?.id ||
-        'gemini-2.5-flash-image-vip';
+        getDefaultImageModel();
       if (nextModel !== currentModel) {
         setCurrentModel(nextModel);
         const matchedModel = findMatchingSelectableModel(
