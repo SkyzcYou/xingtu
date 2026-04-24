@@ -32,6 +32,7 @@ import { registerMJImageAdapter } from './mj-image-adapter';
 import { registerFluxAdapter } from './flux-adapter';
 import { registerSeedreamAdapter } from './seedream-adapter';
 import { registerSeedanceAdapter } from './seedance-adapter';
+import { aspectRatioToSize } from '../media-api/utils';
 
 const imageModelIds = [...IMAGE_MODEL_VIP_OPTIONS, ...IMAGE_MODEL_MORE_OPTIONS]
   .map((model) => model.id)
@@ -48,6 +49,14 @@ const videoModelIds = VIDEO_MODELS.map((model) => model.id).filter(
 );
 
 const audioModelIds = AUDIO_MODELS.map((model) => model.id);
+
+function normalizeGptImage2Size(size?: string): string | undefined {
+  if (!size || size === 'auto') {
+    return undefined;
+  }
+
+  return aspectRatioToSize(size);
+}
 
 const extractImageUrl = (
   response: any,
@@ -160,9 +169,13 @@ export const geminiImageAdapter: ImageModelAdapter = {
       | 'url'
       | 'b64_json'
       | undefined;
+    const size =
+      model === 'gpt-image-2'
+        ? normalizeGptImage2Size(request.size)
+        : request.size;
 
     const result = await defaultGeminiClient.generateImage(request.prompt, {
-      size: request.size,
+      size,
       image: request.referenceImages,
       response_format: responseFormat || 'url',
       quality,
