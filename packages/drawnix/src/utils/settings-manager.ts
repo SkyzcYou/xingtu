@@ -156,7 +156,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     baseUrl: TUZI_PROVIDER_DEFAULT_BASE_URL,
     chatModel: 'gpt-5',
     audioModelName: 'suno_music',
-    imageModelName: 'gpt-image-2-vip',
+    imageModelName: 'gpt-image-2',
     videoModelName: 'seedance-1.5-pro',
     textModelName: 'deepseek-v3.2',
   },

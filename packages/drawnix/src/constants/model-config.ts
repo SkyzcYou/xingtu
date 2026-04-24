@@ -1496,7 +1496,7 @@ export const AUDIO_MODEL_SELECT_OPTIONS = AUDIO_MODELS.map((model) => ({
 /**
  * 默认图片模型 ID
  */
-export const DEFAULT_IMAGE_MODEL_ID = 'gpt-image-2-vip';
+export const DEFAULT_IMAGE_MODEL_ID = 'gpt-image-2';
 
 /**
  * 获取默认图片模型 ID（优先使用环境变量）
