@@ -61,6 +61,7 @@ import {
   cacheRemoteUrls,
 } from './fallback-utils';
 import { resolveAdapterForInvocation } from '../model-adapters';
+import { GPT_IMAGE_EDIT_REQUEST_SCHEMAS } from '../model-adapters';
 import {
   executeImageViaAdapter,
   executeVideoViaAdapter,
@@ -106,6 +107,43 @@ function extractUrlsFromUploadedImages(
   return urls.length > 0 ? urls : undefined;
 }
 
+function getStringParam(
+  params: ImageGenerationParams,
+  keys: string[]
+): string | undefined {
+  const rawParams = params as unknown as Record<string, unknown>;
+  const nestedParams =
+    rawParams.params && typeof rawParams.params === 'object'
+      ? (rawParams.params as Record<string, unknown>)
+      : undefined;
+
+  for (const key of keys) {
+    const value = rawParams[key] ?? nestedParams?.[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function isImageEditRequest(
+  params: ImageGenerationParams,
+  referenceImages?: string[]
+): boolean {
+  const generationMode = getStringParam(params, [
+    'generationMode',
+    'generation_mode',
+  ]);
+
+  return (
+    !!referenceImages?.length ||
+    generationMode === 'image_edit' ||
+    generationMode === 'image_to_image' ||
+    !!getStringParam(params, ['maskImage', 'mask_image'])
+  );
+}
+
 /**
  * 主线程媒体执行器
  *
@@ -149,6 +187,12 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       (params.referenceImages && params.referenceImages.length > 0
         ? params.referenceImages
         : undefined) || extractUrlsFromUploadedImages(params.uploadedImages);
+    const shouldUseEditSchema = isImageEditRequest(params, referenceImages);
+    const invocationOptions = {
+      preferredRequestSchema: shouldUseEditSchema
+        ? GPT_IMAGE_EDIT_REQUEST_SCHEMAS
+        : undefined,
+    };
 
     const config = this.getConfig({ imageModel: modelRef || model });
 
@@ -163,7 +207,8 @@ export class FallbackMediaExecutor implements IMediaExecutor {
     const imageAdapter = resolveAdapterForInvocation(
       'image',
       modelName,
-      modelRef || null
+      modelRef || null,
+      invocationOptions
     );
     if (imageAdapter && imageAdapter.kind === 'image') {
       return executeImageViaAdapter(
@@ -174,10 +219,20 @@ export class FallbackMediaExecutor implements IMediaExecutor {
           model: modelName,
           modelRef: modelRef || null,
           size,
+          resolution: params.resolution,
           quality,
           count,
           referenceImages,
+          generationMode:
+            params.generationMode ||
+            (shouldUseEditSchema ? 'image_to_image' : 'text_to_image'),
+          maskImage: params.maskImage,
+          inputFidelity: params.inputFidelity,
+          background: params.background,
+          outputFormat: params.outputFormat,
+          outputCompression: params.outputCompression,
           params: params.params,
+          preferredRequestSchema: invocationOptions.preferredRequestSchema,
         },
         options,
         startTime
@@ -331,7 +386,11 @@ export class FallbackMediaExecutor implements IMediaExecutor {
 
       // 检测认证错误，触发设置弹窗
       if (isAuthError(error)) {
-        dispatchApiAuthError({ message: errorMessage, source: 'image', reason: 'invalid' });
+        dispatchApiAuthError({
+          message: errorMessage,
+          source: 'image',
+          reason: 'invalid',
+        });
       }
 
       // 如果日志还未更新为失败，更新它
@@ -677,7 +736,11 @@ export class FallbackMediaExecutor implements IMediaExecutor {
 
       // 检测认证错误，触发设置弹窗
       if (isAuthError(error)) {
-        dispatchApiAuthError({ message: errorMessage, source: 'video', reason: 'invalid' });
+        dispatchApiAuthError({
+          message: errorMessage,
+          source: 'video',
+          reason: 'invalid',
+        });
       }
 
       failLLMApiLog(logId, {
@@ -935,35 +998,39 @@ export class FallbackMediaExecutor implements IMediaExecutor {
                   : {}),
               },
             })
-          : await providerTransport.send(buildProviderContext(config.textConfig), {
-              path: '/chat/completions',
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: modelName,
-                messages,
-                stream: false,
-                ...(toNumber(extraParams?.temperature) !== undefined
-                  ? { temperature: toNumber(extraParams?.temperature) }
-                  : {}),
-                ...(toNumber(extraParams?.top_p) !== undefined
-                  ? { top_p: toNumber(extraParams?.top_p) }
-                  : {}),
-                ...(toNumber(extraParams?.max_tokens) !== undefined
-                  ? { max_tokens: toNumber(extraParams?.max_tokens) }
-                  : {}),
-              }),
-              signal: options?.signal,
-            }).then(async (response) => {
-              if (!response.ok) {
-                throw new Error(
-                  `HTTP ${response.status}: ${response.statusText || 'Text generation failed'}`
-                );
-              }
-              return response.json();
-            });
+          : await providerTransport
+              .send(buildProviderContext(config.textConfig), {
+                path: '/chat/completions',
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: modelName,
+                  messages,
+                  stream: false,
+                  ...(toNumber(extraParams?.temperature) !== undefined
+                    ? { temperature: toNumber(extraParams?.temperature) }
+                    : {}),
+                  ...(toNumber(extraParams?.top_p) !== undefined
+                    ? { top_p: toNumber(extraParams?.top_p) }
+                    : {}),
+                  ...(toNumber(extraParams?.max_tokens) !== undefined
+                    ? { max_tokens: toNumber(extraParams?.max_tokens) }
+                    : {}),
+                }),
+                signal: options?.signal,
+              })
+              .then(async (response) => {
+                if (!response.ok) {
+                  throw new Error(
+                    `HTTP ${response.status}: ${
+                      response.statusText || 'Text generation failed'
+                    }`
+                  );
+                }
+                return response.json();
+              });
 
       const fullResponse = data.choices?.[0]?.message?.content || '';
       options?.onProgress?.({ progress: 100 });
@@ -1227,17 +1294,26 @@ export class FallbackMediaExecutor implements IMediaExecutor {
     const imageRoute = resolveInvocationRoute('image', models?.imageModel);
     const textRoute = resolveInvocationRoute('text', models?.textModel);
     const videoRoute = resolveInvocationRoute('video', models?.videoModel);
-    const imagePlan = resolveInvocationPlanFromRoute('image', models?.imageModel);
+    const imagePlan = resolveInvocationPlanFromRoute(
+      'image',
+      models?.imageModel
+    );
     const textPlan = resolveInvocationPlanFromRoute('text', models?.textModel);
-    const videoPlan = resolveInvocationPlanFromRoute('video', models?.videoModel);
+    const videoPlan = resolveInvocationPlanFromRoute(
+      'video',
+      models?.videoModel
+    );
     return {
       imageConfig: {
         apiKey: imageRoute.apiKey,
         baseUrl: imageRoute.baseUrl || 'https://api.tu-zi.com/v1',
         modelName: imageRoute.modelId,
-        authType: imagePlan?.provider.authType || inferAuthTypeFromRoute(imageRoute),
+        authType:
+          imagePlan?.provider.authType || inferAuthTypeFromRoute(imageRoute),
         providerType:
-          imagePlan?.provider.providerType || imageRoute.providerType || 'custom',
+          imagePlan?.provider.providerType ||
+          imageRoute.providerType ||
+          'custom',
         extraHeaders: imagePlan?.provider.extraHeaders,
         protocol: imagePlan?.binding.protocol || null,
         binding: imagePlan?.binding || null,
@@ -1247,7 +1323,8 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         apiKey: textRoute.apiKey,
         baseUrl: textRoute.baseUrl || 'https://api.tu-zi.com/v1',
         modelName: textRoute.modelId,
-        authType: textPlan?.provider.authType || inferAuthTypeFromRoute(textRoute),
+        authType:
+          textPlan?.provider.authType || inferAuthTypeFromRoute(textRoute),
         providerType:
           textPlan?.provider.providerType || textRoute.providerType || 'custom',
         extraHeaders: textPlan?.provider.extraHeaders,
@@ -1261,9 +1338,12 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         baseUrl: this.normalizeApiBase(
           videoRoute.baseUrl || 'https://api.tu-zi.com'
         ),
-        authType: videoPlan?.provider.authType || inferAuthTypeFromRoute(videoRoute),
+        authType:
+          videoPlan?.provider.authType || inferAuthTypeFromRoute(videoRoute),
         providerType:
-          videoPlan?.provider.providerType || videoRoute.providerType || 'custom',
+          videoPlan?.provider.providerType ||
+          videoRoute.providerType ||
+          'custom',
         extraHeaders: videoPlan?.provider.extraHeaders,
         binding: videoPlan?.binding || null,
         provider: videoPlan?.provider || null,

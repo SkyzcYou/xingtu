@@ -15,6 +15,10 @@ import { useI18n } from '../../../i18n';
 import classNames from 'classnames';
 import './minimized-tools-bar.scss';
 
+interface MinimizedToolsBarProps {
+  ensureToolWindowsEnabled?: () => void;
+}
+
 /**
  * 渲染图标组件，支持字符串和 React 组件
  */
@@ -39,7 +43,9 @@ const renderIcon = (icon: unknown, size = 20): React.ReactNode => {
 /**
  * 最小化工具栏组件
  */
-export const MinimizedToolsBar: React.FC = () => {
+export const MinimizedToolsBar: React.FC<MinimizedToolsBarProps> = ({
+  ensureToolWindowsEnabled,
+}) => {
   const [toolbarTools, setToolbarTools] = useState<ToolWindowState[]>([]);
   const [contextMenuOpenId, setContextMenuOpenId] = useState<string | null>(null);
   const { language, t } = useI18n();
@@ -87,6 +93,8 @@ export const MinimizedToolsBar: React.FC = () => {
    * 处理工具图标点击
    */
   const handleToolClick = useCallback((state: ToolWindowState, tool: ToolDefinition) => {
+    ensureToolWindowsEnabled?.();
+
     if (state.isLauncher || state.status === 'closed') {
       const fullTool = toolboxService.getToolById(tool.id);
       if (fullTool) {
@@ -97,7 +105,7 @@ export const MinimizedToolsBar: React.FC = () => {
     } else {
       toolWindowService.toggleToolVisibility(state.instanceId);
     }
-  }, []);
+  }, [ensureToolWindowsEnabled]);
 
   /**
    * 处理右键菜单操作
@@ -117,10 +125,11 @@ export const MinimizedToolsBar: React.FC = () => {
         toolWindowService.closeTool(state.instanceId);
         break;
       case 'new-window':
+        ensureToolWindowsEnabled?.();
         toolWindowService.openNewToolInstance(tool);
         break;
     }
-  }, []);
+  }, [ensureToolWindowsEnabled]);
 
   /**
    * 生成右键菜单选项

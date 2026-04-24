@@ -55,6 +55,8 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
     onOpenCloudSync,
     onOpenMediaLibrary,
     deferredFeaturesEnabled = false,
+    minimizedToolsBarEnabled = false,
+    onEnableToolWindows,
   }) => {
     const [isIconMode, setIsIconMode] = useState(false);
     const [isMobileCollapsed, setIsMobileCollapsed] = useState(true); // 移动端默认收起
@@ -268,6 +270,8 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
                 iconMode={isIconMode || isMobileOrTablet}
                 onOpenMediaLibrary={onOpenMediaLibrary}
                 deferredFeaturesEnabled={deferredFeaturesEnabled}
+                minimizedToolsBarEnabled={minimizedToolsBarEnabled}
+                onEnableToolWindows={onEnableToolWindows}
               />
             </div>
           </div>

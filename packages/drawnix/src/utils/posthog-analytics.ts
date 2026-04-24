@@ -10,10 +10,24 @@
 
 import { sanitizeObject } from '@aitu/utils';
 
+declare const __APP_VERSION__: string;
+
+export interface AnalyticsReleaseContext {
+  version: string;
+  appVersion: string;
+  app_version: string;
+  deployment_env: 'local' | 'preview' | 'staging' | 'production';
+  release_channel: 'local' | 'preview' | 'staging' | 'production';
+  host: string;
+  hostname: string;
+  route_name: string;
+}
+
 declare global {
   interface Window {
     posthog?: {
       capture: (eventName: string, properties?: Record<string, any>) => void;
+      register?: (properties: Record<string, any>) => void;
     };
   }
 }
@@ -49,6 +63,121 @@ enum APICallEvent {
   API_CALL_RETRY = 'api_call_retry',
 }
 
+type AnalyticsEventData = Record<string, any>;
+
+function inferDeploymentEnv(hostname: string): 'local' | 'preview' | 'staging' | 'production' {
+  const normalized = hostname.toLowerCase();
+  if (
+    normalized === 'localhost' ||
+    normalized === '127.0.0.1' ||
+    normalized === '0.0.0.0' ||
+    normalized.endsWith('.local')
+  ) {
+    return 'local';
+  }
+  if (
+    normalized.includes('preview') ||
+    normalized.includes('vercel') ||
+    normalized.includes('netlify')
+  ) {
+    return 'preview';
+  }
+  if (
+    normalized.includes('staging') ||
+    normalized.includes('test') ||
+    normalized.includes('dev')
+  ) {
+    return 'staging';
+  }
+  return 'production';
+}
+
+function getAppVersion(): string {
+  if (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) {
+    return __APP_VERSION__;
+  }
+
+  if (typeof document !== 'undefined') {
+    return (
+      document.querySelector('meta[name="app-version"]')?.getAttribute('content') ||
+      '0.0.0'
+    );
+  }
+
+  return '0.0.0';
+}
+
+export function getAnalyticsReleaseContext(): AnalyticsReleaseContext {
+  const appVersion = getAppVersion();
+  if (typeof window === 'undefined') {
+    return {
+      version: appVersion,
+      appVersion,
+      app_version: appVersion,
+      deployment_env: 'local',
+      release_channel: 'local',
+      host: '',
+      hostname: '',
+      route_name: '/',
+    };
+  }
+
+  const { hostname, pathname } = window.location;
+  const deploymentEnv = inferDeploymentEnv(hostname);
+  return {
+    version: appVersion,
+    appVersion,
+    app_version: appVersion,
+    host: window.location.host || hostname,
+    hostname,
+    route_name: pathname || '/',
+    deployment_env: deploymentEnv,
+    release_channel: deploymentEnv,
+  };
+}
+
+function getCommonEventProperties(): AnalyticsEventData {
+  return getAnalyticsReleaseContext();
+}
+
+export function registerAnalyticsSuperProperties(
+  properties?: Partial<AnalyticsReleaseContext>
+): void {
+  if (typeof window === 'undefined' || !window.posthog?.register) {
+    return;
+  }
+
+  try {
+    window.posthog.register({
+      ...getAnalyticsReleaseContext(),
+      ...(properties || {}),
+    });
+  } catch (error) {
+    console.debug('[Analytics] register super properties failed', error);
+  }
+}
+
+function buildAICompatProperties(params: {
+  taskId: string;
+  taskType: 'image' | 'video' | 'audio' | 'chat';
+  model: string;
+  duration: number;
+  status: 'success' | 'failed';
+  error?: string;
+}): AnalyticsEventData {
+  return {
+    $ai_model: params.model,
+    $ai_latency: params.duration,
+    $ai_is_error: params.status === 'failed',
+    task_id: params.taskId,
+    task_type: params.taskType,
+    status: params.status,
+    model: params.model,
+    duration_ms: params.duration,
+    ...(params.error ? { error: params.error } : {}),
+  };
+}
+
 /** Analytics utility class */
 class PostHogAnalytics {
   /**
@@ -56,14 +185,19 @@ class PostHogAnalytics {
    * SECURITY: Event data is sanitized before being sent to PostHog
    */
   track(eventName: string, eventData?: Record<string, any>): void {
-    if (!window.posthog) {
+    if (typeof window === 'undefined' || !window.posthog) {
       return;
     }
     const doTrack = (): void => {
       try {
-        const sanitizedData = eventData
-          ? (sanitizeObject(eventData) as Record<string, any>)
-          : undefined;
+        const payload = {
+          ...getCommonEventProperties(),
+          ...(eventData || {}),
+        };
+        const sanitizedData =
+          Object.keys(payload).length > 0
+            ? (sanitizeObject(payload) as Record<string, any>)
+            : undefined;
         window.posthog!.capture(eventName, sanitizedData);
       } catch (error) {
         console.debug('[Analytics] track failed', error);
@@ -132,6 +266,16 @@ class PostHogAnalytics {
       chat: AIGenerationEvent.CHAT_GENERATION_SUCCESS,
     };
     this.trackAIGeneration(eventMap[params.taskType], params);
+    this.track(
+      '$ai_generation',
+      buildAICompatProperties({
+        taskId: params.taskId,
+        taskType: params.taskType,
+        model: params.model,
+        duration: params.duration,
+        status: 'success',
+      })
+    );
   }
 
   /** Track failed model call */
@@ -149,6 +293,17 @@ class PostHogAnalytics {
       chat: AIGenerationEvent.CHAT_GENERATION_FAILED,
     };
     this.trackAIGeneration(eventMap[params.taskType], params);
+    this.track(
+      '$ai_generation',
+      buildAICompatProperties({
+        taskId: params.taskId,
+        taskType: params.taskType,
+        model: params.model,
+        duration: params.duration,
+        status: 'failed',
+        error: params.error,
+      })
+    );
   }
 
   /** Track task cancellation */

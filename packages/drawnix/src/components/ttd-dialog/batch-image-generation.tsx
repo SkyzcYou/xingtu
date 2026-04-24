@@ -11,6 +11,7 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
+import { copyToClipboard, readFromClipboard } from '../../utils/runtime-helpers';
 import { MessagePlugin, Dialog, Button, Checkbox } from 'tdesign-react';
 import {
   DownloadIcon,
@@ -2007,7 +2008,7 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
             )
             .join('\n');
 
-          navigator.clipboard.writeText(textToCopy).then(() => {
+          copyToClipboard(textToCopy).then(() => {
             // 存储复制的单元格信息用于内部粘贴
             (window as any).__copiedCells = values;
           });
@@ -2048,7 +2049,7 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
           }
         } else {
           // 从系统剪贴板粘贴文本
-          navigator.clipboard.readText().then((text) => {
+          readFromClipboard().then((text) => {
             const lines = text.split('\n').filter((l) => l.trim());
 
             // 如果只有一行或选中了多个单元格，粘贴相同值到所有选中单元格

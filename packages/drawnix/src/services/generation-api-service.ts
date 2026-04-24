@@ -32,7 +32,141 @@ import {
   getAdapterContextFromSettings,
   resolveAdapterForInvocation,
 } from './model-adapters';
+import { GPT_IMAGE_EDIT_REQUEST_SCHEMAS } from './model-adapters';
 import type { ModelRef } from '../utils/settings-manager';
+import type { AdapterContext, ImageModelAdapter } from './model-adapters/types';
+
+type ImageGenerationMode = 'text_to_image' | 'image_to_image' | 'image_edit';
+type ImageOutputFormat = 'png' | 'jpeg' | 'webp';
+type ImageBackground = 'transparent' | 'opaque' | 'auto';
+type ImageInputFidelity = 'high' | 'low';
+
+function resolveAnalyticsModelName(
+  routeModel: string | ModelRef | null | undefined,
+  fallback: string
+): string {
+  if (typeof routeModel === 'string' && routeModel) {
+    return routeModel;
+  }
+  if (
+    routeModel &&
+    typeof routeModel === 'object' &&
+    typeof routeModel.modelId === 'string' &&
+    routeModel.modelId
+  ) {
+    return routeModel.modelId;
+  }
+  return fallback;
+}
+
+function logImageAdapterSelection(
+  taskId: string,
+  adapter: ImageModelAdapter,
+  modelId: string | undefined,
+  context: AdapterContext
+): void {
+  const binding = context.binding;
+  const imageMetadata = binding?.metadata?.image as
+    | {
+        imageApiCompatibility?: unknown;
+        resolvedImageApiCompatibility?: unknown;
+      }
+    | undefined;
+
+  console.debug('[GenerationAPI] Image adapter selected', {
+    taskId,
+    profileId: context.provider?.profileId || binding?.profileId || null,
+    modelId: binding?.modelId || modelId || null,
+    adapterId: adapter.id,
+    requestSchema: binding?.requestSchema || null,
+    submitPath: binding?.submitPath || null,
+    imageApiCompatibility: imageMetadata?.imageApiCompatibility || null,
+    resolvedImageApiCompatibility:
+      imageMetadata?.resolvedImageApiCompatibility || null,
+  });
+}
+
+function readParamValue(params: GenerationParams, keys: string[]): unknown {
+  const rawParams = params as Record<string, unknown>;
+  const nestedParams =
+    rawParams.params && typeof rawParams.params === 'object'
+      ? (rawParams.params as Record<string, unknown>)
+      : undefined;
+
+  for (const key of keys) {
+    if (rawParams[key] !== undefined) {
+      return rawParams[key];
+    }
+    if (nestedParams?.[key] !== undefined) {
+      return nestedParams[key];
+    }
+  }
+
+  return undefined;
+}
+
+function readStringParam(
+  params: GenerationParams,
+  keys: string[]
+): string | undefined {
+  const value = readParamValue(params, keys);
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function readNumberParam(
+  params: GenerationParams,
+  keys: string[]
+): number | undefined {
+  const value = readParamValue(params, keys);
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function readAllowedParam<T extends string>(
+  params: GenerationParams,
+  keys: string[],
+  allowed: readonly T[]
+): T | undefined {
+  const value = readStringParam(params, keys);
+  return value && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : undefined;
+}
+
+function isImageEditRequest(
+  params: GenerationParams,
+  referenceImages: string[]
+): boolean {
+  const generationMode = readStringParam(params, [
+    'generationMode',
+    'generation_mode',
+  ]);
+
+  return (
+    referenceImages.length > 0 ||
+    generationMode === 'image_edit' ||
+    generationMode === 'image_to_image' ||
+    !!readStringParam(params, ['maskImage', 'mask_image'])
+  );
+}
+
+function resolveImageGenerationMode(
+  params: GenerationParams,
+  isEditRequest: boolean
+): ImageGenerationMode {
+  const generationMode = readAllowedParam<ImageGenerationMode>(
+    params,
+    ['generationMode', 'generation_mode'],
+    ['text_to_image', 'image_to_image', 'image_edit']
+  );
+
+  if (generationMode) {
+    return generationMode;
+  }
+
+  return isEditRequest ? 'image_to_image' : 'text_to_image';
+}
 
 /**
  * Generation API Service
@@ -69,6 +203,13 @@ class GenerationAPIService {
         : type === TaskType.VIDEO
         ? 'video'
         : 'audio';
+    const modelName =
+      params.model ||
+      (taskType === 'image'
+        ? DEFAULT_IMAGE_MODEL_ID
+        : taskType === 'video'
+        ? 'gemini-video'
+        : DEFAULT_AUDIO_MODEL_ID);
 
     // Track model call start with enhanced parameters
     const hasRefImage =
@@ -78,13 +219,7 @@ class GenerationAPIService {
     analytics.trackModelCall({
       taskId,
       taskType,
-      model:
-        params.model ||
-        (taskType === 'image'
-          ? 'gemini-image'
-          : taskType === 'video'
-          ? 'gemini-video'
-          : DEFAULT_AUDIO_MODEL_ID),
+      model: modelName,
       promptLength: params.prompt.length,
       hasUploadedImage: hasRefImage,
       startTime,
@@ -131,12 +266,7 @@ class GenerationAPIService {
       analytics.trackModelSuccess({
         taskId,
         taskType,
-        model:
-          taskType === 'image'
-            ? 'gemini-image'
-            : taskType === 'video'
-            ? 'gemini-video'
-            : DEFAULT_AUDIO_MODEL_ID,
+        model: modelName,
         duration,
         resultSize: result.size,
       });
@@ -154,12 +284,7 @@ class GenerationAPIService {
         analytics.trackModelFailure({
           taskId,
           taskType,
-          model:
-            taskType === 'image'
-              ? 'gemini-image'
-              : taskType === 'video'
-              ? 'gemini-video'
-              : DEFAULT_AUDIO_MODEL_ID,
+          model: modelName,
           duration,
           error: 'TIMEOUT',
         });
@@ -188,12 +313,7 @@ class GenerationAPIService {
       analytics.trackModelFailure({
         taskId,
         taskType,
-        model:
-          taskType === 'image'
-            ? 'gemini-image'
-            : taskType === 'video'
-            ? 'gemini-video'
-            : DEFAULT_AUDIO_MODEL_ID,
+        model: modelName,
         duration,
         error: error.message || 'UNKNOWN_ERROR',
       });
@@ -294,17 +414,23 @@ class GenerationAPIService {
         | ModelRef
         | null
         | undefined;
+      const referenceImages = await this.extractReferenceImages(params);
+      const shouldUseEditSchema = isImageEditRequest(params, referenceImages);
+      const invocationOptions = {
+        preferredRequestSchema: shouldUseEditSchema
+          ? GPT_IMAGE_EDIT_REQUEST_SCHEMAS
+          : undefined,
+      };
       const adapter = resolveAdapterForInvocation(
         'image',
         requestedModel || DEFAULT_IMAGE_MODEL_ID,
-        requestedModelRef || null
+        requestedModelRef || null,
+        invocationOptions
       );
 
       if (!adapter || adapter.kind !== 'image') {
         throw new Error(`No image adapter for model: ${requestedModel}`);
       }
-
-      const referenceImages = await this.extractReferenceImages(params);
 
       // Derive size: use params.size, or convert aspectRatio, or derive ratio for async models
       let size: string | undefined = params.size;
@@ -315,37 +441,60 @@ class GenerationAPIService {
         size = this.deriveAspectRatio(params) || '1:1';
       }
 
-      const result = await adapter.generateImage(
-        getAdapterContextFromSettings(
-          'image',
-          requestedModelRef || requestedModel
-        ),
-        {
-          prompt: params.prompt,
-          model: requestedModel,
-          modelRef: requestedModelRef || null,
-          size,
-          referenceImages:
-            referenceImages.length > 0 ? referenceImages : undefined,
-          params: {
-            quality: (params as any).quality,
-            response_format: (params as any).response_format,
-            ...(params as any).params,
-            onProgress: (progress: number) => {
-              taskQueueService.updateTaskProgress(taskId, progress);
-              taskQueueService.updateTaskStatus(taskId, TaskStatus.PROCESSING, {
-                executionPhase: TaskExecutionPhase.POLLING,
-              });
-            },
-            onSubmitted: (remoteId: string) => {
-              taskQueueService.updateTaskStatus(taskId, TaskStatus.PROCESSING, {
-                remoteId,
-                executionPhase: TaskExecutionPhase.POLLING,
-              });
-            },
-          },
-        }
+      const adapterContext = getAdapterContextFromSettings(
+        'image',
+        requestedModelRef || requestedModel,
+        invocationOptions
       );
+      logImageAdapterSelection(taskId, adapter, requestedModel, adapterContext);
+
+      const result = await adapter.generateImage(adapterContext, {
+        prompt: params.prompt,
+        model: requestedModel,
+        modelRef: requestedModelRef || null,
+        size,
+        generationMode: resolveImageGenerationMode(params, shouldUseEditSchema),
+        referenceImages:
+          referenceImages.length > 0 ? referenceImages : undefined,
+        maskImage: readStringParam(params, ['maskImage', 'mask_image']),
+        inputFidelity: readAllowedParam<ImageInputFidelity>(
+          params,
+          ['inputFidelity', 'input_fidelity'],
+          ['high', 'low']
+        ),
+        background: readAllowedParam<ImageBackground>(
+          params,
+          ['background'],
+          ['transparent', 'opaque', 'auto']
+        ),
+        outputFormat: readAllowedParam<ImageOutputFormat>(
+          params,
+          ['outputFormat', 'output_format'],
+          ['png', 'jpeg', 'webp']
+        ),
+        outputCompression: readNumberParam(params, [
+          'outputCompression',
+          'output_compression',
+        ]),
+        params: {
+          resolution: (params as any).resolution,
+          quality: (params as any).quality,
+          response_format: (params as any).response_format,
+          ...(params as any).params,
+          onProgress: (progress: number) => {
+            taskQueueService.updateTaskProgress(taskId, progress);
+            taskQueueService.updateTaskStatus(taskId, TaskStatus.PROCESSING, {
+              executionPhase: TaskExecutionPhase.POLLING,
+            });
+          },
+          onSubmitted: (remoteId: string) => {
+            taskQueueService.updateTaskStatus(taskId, TaskStatus.PROCESSING, {
+              remoteId,
+              executionPhase: TaskExecutionPhase.POLLING,
+            });
+          },
+        },
+      });
 
       return {
         url: result.url,
@@ -564,7 +713,8 @@ class GenerationAPIService {
       return {
         url: result.url,
         urls: result.urls,
-        format: result.format || (result.resultKind === 'lyrics' ? 'lyrics' : 'mp3'),
+        format:
+          result.format || (result.resultKind === 'lyrics' ? 'lyrics' : 'mp3'),
         size: 0,
         resultKind: result.resultKind,
         duration:
@@ -605,12 +755,13 @@ class GenerationAPIService {
     routeModel?: string | ModelRef | null
   ): Promise<TaskResult> {
     const startTime = Date.now();
+    const modelName = resolveAnalyticsModelName(routeModel, 'gemini-video');
 
     // Track resumed task
     analytics.trackModelCall({
       taskId,
       taskType: 'video',
-      model: 'gemini-video',
+      model: modelName,
       promptLength: 0, // Unknown for resumed tasks
       hasUploadedImage: false,
       startTime,
@@ -649,7 +800,7 @@ class GenerationAPIService {
       analytics.trackModelSuccess({
         taskId,
         taskType: 'video',
-        model: 'gemini-video',
+        model: modelName,
         duration,
         resultSize: 0,
       });
@@ -677,7 +828,7 @@ class GenerationAPIService {
       analytics.trackModelFailure({
         taskId,
         taskType: 'video',
-        model: 'gemini-video',
+        model: modelName,
         duration,
         error: error.message || 'UNKNOWN_ERROR',
       });
@@ -695,11 +846,15 @@ class GenerationAPIService {
     routeModel?: string | ModelRef | null
   ): Promise<TaskResult> {
     const startTime = Date.now();
+    const modelName = resolveAnalyticsModelName(
+      routeModel,
+      DEFAULT_AUDIO_MODEL_ID
+    );
 
     analytics.trackModelCall({
       taskId,
       taskType: 'audio',
-      model: DEFAULT_AUDIO_MODEL_ID,
+      model: modelName,
       promptLength: 0,
       hasUploadedImage: false,
       startTime,
@@ -728,7 +883,7 @@ class GenerationAPIService {
       analytics.trackModelSuccess({
         taskId,
         taskType: 'audio',
-        model: DEFAULT_AUDIO_MODEL_ID,
+        model: modelName,
         duration,
         resultSize: 0,
       });
@@ -736,7 +891,8 @@ class GenerationAPIService {
       return {
         url: result.url,
         urls: result.urls,
-        format: result.format || (result.resultKind === 'lyrics' ? 'lyrics' : 'mp3'),
+        format:
+          result.format || (result.resultKind === 'lyrics' ? 'lyrics' : 'mp3'),
         size: 0,
         resultKind: result.resultKind,
         duration:
@@ -761,7 +917,7 @@ class GenerationAPIService {
       analytics.trackModelFailure({
         taskId,
         taskType: 'audio',
-        model: DEFAULT_AUDIO_MODEL_ID,
+        model: modelName,
         duration,
         error: error.message || 'UNKNOWN_ERROR',
       });

@@ -111,39 +111,37 @@ async function saveLogToDB(log: LLMApiLog): Promise<void> {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
-    
+
     store.put(log);
-    
-    // 清理旧日志（保留最新的 MAX_DB_LOGS 条）
-    const countRequest = store.count();
-    countRequest.onsuccess = () => {
-      const count = countRequest.result;
-      if (count > MAX_DB_LOGS) {
-        const index = store.index('timestamp');
-        const deleteCount = count - MAX_DB_LOGS;
-        let deleted = 0;
-        
-        index.openCursor().onsuccess = (e) => {
-          const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
-          if (cursor && deleted < deleteCount) {
-            cursor.delete();
-            deleted++;
-            cursor.continue();
-          }
-        };
-      }
-    };
-    
+
     await new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => {
-        db.close();
-        resolve();
-      };
-      tx.onerror = () => {
-        db.close();
-        reject(tx.error);
-      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
     });
+
+    // 清理旧日志在独立 transaction 中执行，失败不影响写入
+    try {
+      const cleanTx = db.transaction(STORE_NAME, 'readwrite');
+      const cleanStore = cleanTx.objectStore(STORE_NAME);
+      const countRequest = cleanStore.count();
+      countRequest.onsuccess = () => {
+        if (countRequest.result > MAX_DB_LOGS) {
+          const index = cleanStore.index('timestamp');
+          const deleteCount = countRequest.result - MAX_DB_LOGS;
+          let deleted = 0;
+          index.openCursor().onsuccess = (e) => {
+            const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+            if (cursor && deleted < deleteCount) {
+              cursor.delete();
+              deleted++;
+              cursor.continue();
+            }
+          };
+        }
+      };
+    } catch {
+      // 清理失败不影响主流程
+    }
   } catch (error) {
     console.warn('[LLMApiLogger] Failed to save log to DB:', error);
   }
@@ -169,13 +167,11 @@ export async function getAllLLMApiLogs(): Promise<LLMApiLog[]> {
     return new Promise((resolve, reject) => {
       const request = index.getAll();
       request.onsuccess = () => {
-        db.close();
         // 按时间倒序排列
         const logs = (request.result as LLMApiLog[]).reverse();
         resolve(logs);
       };
       request.onerror = () => {
-        db.close();
         reject(request.error);
       };
     });
@@ -289,11 +285,9 @@ export async function getLLMApiLogById(logId: string): Promise<LLMApiLog | null>
     return new Promise((resolve, reject) => {
       const request = store.get(logId);
       request.onsuccess = () => {
-        db.close();
         resolve(request.result as LLMApiLog || null);
       };
       request.onerror = () => {
-        db.close();
         reject(request.error);
       };
     });
@@ -327,7 +321,6 @@ export async function findSuccessLogByTaskId(taskId: string): Promise<LLMApiLog 
       const request = index.getAll(taskId);
       request.onsuccess = () => {
         const results = request.result as LLMApiLog[];
-        db.close();
         // 查找成功的且有结果 URL 的，按时间降序
         const successLog = results
           .filter(l => l.status === 'success' && l.resultUrl)
@@ -335,7 +328,6 @@ export async function findSuccessLogByTaskId(taskId: string): Promise<LLMApiLog 
         resolve(successLog || null);
       };
       request.onerror = () => {
-        db.close();
         resolve(null);
       };
     });
@@ -379,7 +371,6 @@ export async function findLatestLogByTaskId(taskId: string): Promise<LLMApiLog |
       
       request.onsuccess = () => {
         let results = request.result as LLMApiLog[];
-        db.close();
         
         // 如果是全表扫描，需要手动过滤
         if (!useIndex) {
@@ -391,7 +382,6 @@ export async function findLatestLogByTaskId(taskId: string): Promise<LLMApiLog |
         resolve(latestLog || null);
       };
       request.onerror = () => {
-        db.close();
         resolve(null);
       };
     });
@@ -415,11 +405,9 @@ export async function clearAllLLMApiLogs(): Promise<void> {
     
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => {
-        db.close();
         resolve();
       };
       tx.onerror = () => {
-        db.close();
         reject(tx.error);
       };
     });
@@ -457,11 +445,9 @@ export async function deleteLLMApiLogs(logIds: string[]): Promise<number> {
     
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => {
-        db.close();
         resolve();
       };
       tx.onerror = () => {
-        db.close();
         reject(tx.error);
       };
     });

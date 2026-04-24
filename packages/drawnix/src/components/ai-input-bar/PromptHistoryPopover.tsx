@@ -30,11 +30,14 @@ interface PromptHistoryPopoverProps {
   onSelectPrompt: (info: PromptSelectInfo) => void;
   /** 语言 */
   language: 'zh' | 'en';
+  /** 附加快捷操作，显示在更多按钮下方 */
+  extraActions?: React.ReactNode;
 }
 
 export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
   onSelectPrompt,
   language,
+  extraActions,
 }) => {
   // 禁用预设去重，因为我们会在下面自己处理去重
   const { history, removeHistory, togglePinHistory, refreshHistory } = usePromptHistory({
@@ -173,24 +176,27 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
   }, [togglePinHistory]);
 
   return (
-    <div
-      ref={containerRef}
-      className="prompt-history-popover"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-      {/* 提示词按钮 */}
-      <button
-        className="prompt-history-popover__trigger"
-        title={language === 'zh' ? '提示词' : 'Prompts'}
-        data-track="ai_input_click_history"
-      >
-        <MoreHorizontal size={18} />
-      </button>
+    <div ref={containerRef} className="prompt-history-popover">
+      <div className="prompt-history-popover__actions">
+        <button
+          className="prompt-history-popover__trigger"
+          title={language === 'zh' ? '提示词' : 'Prompts'}
+          data-track="ai_input_click_history"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
+          <MoreHorizontal size={18} />
+        </button>
+        {extraActions}
+      </div>
 
       {/* 提示词面板 */}
       {isOpen && (
-        <div className="prompt-history-popover__panel-wrapper">
+        <div
+          className="prompt-history-popover__panel-wrapper"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
           <PromptListPanel
             title={language === 'zh' ? '提示词' : 'Prompts'}
             items={promptItems}

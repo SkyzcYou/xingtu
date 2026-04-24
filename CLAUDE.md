@@ -206,7 +206,12 @@ aitu/
 28. **降级路径强制主线程执行器**：workflow 提交超时后降级时，MainThreadWorkflowEngine 须传 `forceFallbackExecutor: true`，否则 `executorFactory.getExecutor()` 可能仍返回 SW 执行器导致二次超时
 29. **Fetch Relay 初始化超时保护**：`fetchRelayClient.initialize()` 在热路径（如 `generateImage`、`doInitialize`）中必须用 `Promise.race` 加 3s 超时，超时后降级到 `directFetch`
 30. **模块迁移接口完整性**：将模块从 SW 迁移到主线程（或反向）时，新模块的 `interface` 定义必须与原模块逐字段对比，确保无遗漏；不仅调用时传参要完整，**类型定义本身**也要包含所有字段（如 `referenceImages`），否则即使调用方想传数据也无法传入
-31. **模型参数偏好按作用域隔离**：图片/视频/音频的参数持久化必须优先使用 `selectionKey`、回退 `modelId`，避免不同供应商的同名模型串配置；表单回填优先级必须是“任务/显式初始化参数 > 模型偏好 > 模型默认值”
+31. **模型参数偏好按作用域隔离**：图片/视频/音频的参数持久化必须优先使用 `selectionKey`、回退 `modelId`，避免不同供应商的同名模型串配置；表单回填优先级必须是”任务/显式初始化参数 > 模型偏好 > 模型默认值”
+32. **activate 必须无条件更新 committedVersion**：SW 一旦激活（无论首次安装、用户确认、还是所有旧 tab 关闭后自然激活），`committedVersion` 必须设为 `APP_VERSION`；否则新 tab 会用旧版本号请求新 hash 资源导致 CDN 404
+33. **CDN URL 版本重写需保留原始版本**：`cleanResourcePath` 会剥离 CDN 路径中的版本前缀，`buildCDNUrl` 再用 `committedVersion` 重建；当请求 URL 已包含 CDN 版本号时，必须优先使用该版本（`extractVersionFromCDNPath`），避免版本不匹配
+34. **waiting SW 通知不可靠需重试**：waiting 状态的 SW 通过 `postmessage-duplex` 广播可能无法到达客户端；`statechange` 后的 `requestSWVersionState` 需延迟重试，并在 `visibilitychange` 时重新检查版本状态
+35. **HTML 缓存需双 key 存储**：precache `index.html` 时必须同时存 `/` 和 `/index.html` 两个 cache key；导航请求 URL 是 `https://origin/`，而 precache 默认只存 `/index.html`，不存 `/` 会导致首次 `cache.match(request)` miss、回退到网络请求
+36. **IndexedDB 连接禁止主动 close**：`db.close()` 会导致同一连接上的后续 `transaction()` 抛出 "database connection is closing"；旁路逻辑（日志、统计）的 IDB 错误绝不能影响主流程（大模型调用）；清理旧数据必须在独立 transaction 中执行，失败静默
 
 ### React 规则
 

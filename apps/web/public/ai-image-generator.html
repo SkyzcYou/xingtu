@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 图片生成器 | 文生图、参考图、批量生图工作台 - Opentu</title>
+    <meta
+      name="description"
+      content="用 Opentu 在浏览器里完成 AI 图片生成、参考图生成、批量生图和素材整理。适合做海报、社媒配图、电商主图和创意草图。"
+    />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <link rel="canonical" href="https://opentu.ai/ai-image-generator.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="AI 图片生成器 | 文生图、参考图、批量生图工作台 - Opentu" />
+    <meta
+      property="og:description"
+      content="在同一块画布里完成 AI 图片生成、参考图生成、批量生图和素材整理。"
+    />
+    <meta property="og:url" content="https://opentu.ai/ai-image-generator.html" />
+    <meta property="og:image" content="https://opentu.ai/product_showcase/aitu-01.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="AI 图片生成器 | 文生图、参考图、批量生图工作台 - Opentu"
+    />
+    <meta
+      name="twitter:description"
+      content="适合做海报、社媒配图、电商主图和创意草图的 AI 图片生成工作台。"
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Opentu AI 图片生成器",
+        "url": "https://opentu.ai/ai-image-generator.html",
+        "applicationCategory": "DesignApplication",
+        "operatingSystem": "Any",
+        "description": "在浏览器里完成文生图、参考图生成、批量生图和素材整理的 AI 图片生成工作台。",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
+    <style>
+      :root {
+        --bg: #fffaf3;
+        --surface: #ffffff;
+        --border: #eadfce;
+        --text: #18202a;
+        --muted: #556070;
+        --accent: #f39c12;
+        --accent-2: #5a4fcf;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top right, rgba(90, 79, 207, 0.08), transparent 34%),
+          linear-gradient(180deg, var(--bg) 0%, #ffffff 56%);
+      }
+
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 48px 24px 80px;
+      }
+
+      .hero,
+      .grid,
+      .faq {
+        display: grid;
+        gap: 20px;
+      }
+
+      .hero {
+        grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+        align-items: center;
+      }
+
+      .hero h1 {
+        margin: 0 0 16px;
+        font-size: clamp(34px, 6vw, 60px);
+        line-height: 1.04;
+      }
+
+      .hero p,
+      .card p,
+      .faq li p,
+      .section p {
+        color: var(--muted);
+        line-height: 1.8;
+      }
+
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 18px;
+        border-radius: 999px;
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: #1a1200;
+      }
+
+      .btn-secondary {
+        background: rgba(90, 79, 207, 0.08);
+        color: var(--accent-2);
+      }
+
+      .panel,
+      .card,
+      .faq li {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 22px;
+        box-shadow: 0 14px 40px rgba(24, 32, 42, 0.05);
+      }
+
+      .panel img {
+        width: 100%;
+        border-radius: 18px;
+        display: block;
+      }
+
+      .section {
+        margin-top: 36px;
+      }
+
+      .section h2 {
+        margin: 0 0 14px;
+        font-size: 28px;
+      }
+
+      .grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .card h3,
+      .faq h3 {
+        margin: 0 0 10px;
+        font-size: 18px;
+      }
+
+      .faq {
+        list-style: none;
+        padding: 0;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 18px;
+        margin-top: 12px;
+      }
+
+      a {
+        color: var(--accent-2);
+      }
+
+      @media (max-width: 760px) {
+        .hero,
+        .grid,
+        .faq {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div>
+          <p>Opentu AI 图片生成器</p>
+          <h1>文生图、参考图、批量生图放进同一块画布</h1>
+          <p>
+            Opentu 把 AI 图片生成、素材整理和后续编辑放在同一个浏览器工作区里。你可以直接输入提示词、上传参考图、批量生成多张图片，再把结果继续放到画布里整理和交付。
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="/">立即打开工作台</a>
+            <a class="btn btn-secondary" href="/user-manual/ai-generation-image-generation.html">查看操作指南</a>
+          </div>
+        </div>
+        <aside class="panel">
+          <img src="/product_showcase/aitu-01.png" alt="Opentu AI 图片生成工作台截图" />
+        </aside>
+      </section>
+
+      <section class="section">
+        <h2>适合哪些场景</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>营销与社媒配图</h3>
+            <p>快速生成活动海报、封面和社交媒体配图，不用在聊天窗口和画布之间来回切换。</p>
+          </article>
+          <article class="card">
+            <h3>电商主图与物料</h3>
+            <p>用参考图生成商品展示图、细节图和不同尺寸的素材，再统一整理到画布或素材库。</p>
+          </article>
+          <article class="card">
+            <h3>创意探索与草图</h3>
+            <p>先用提示词快速出方向，再在画布里保留候选方案、灵感来源和下一步修改思路。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>为什么比单点文生图页更顺手</h2>
+        <p>
+          很多 AI 图片生成器只负责“出图”，后续的筛选、整理、复用还得切到别的工具。Opentu 更像一个创作工作台：生成结果、参考图、灵感、任务和画布处在同一处，适合持续推进而不是一次性试图。
+        </p>
+        <div class="links">
+          <a href="/flowchart-maker.html">流程图工作台</a>
+          <a href="/mindmap-maker.html">思维导图工作台</a>
+          <a href="/user-manual/index.html">完整用户手册</a>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>常见问题</h2>
+        <ul class="faq">
+          <li>
+            <h3>支持参考图生成吗？</h3>
+            <p>支持。你可以上传参考图，再继续做风格延展、细节变化或批量生成。</p>
+          </li>
+          <li>
+            <h3>适合批量生图吗？</h3>
+            <p>适合。Opentu 把生成与任务队列放在一起，更适合处理多轮、多张和多版本产出。</p>
+          </li>
+          <li>
+            <h3>生成后的图片怎么整理？</h3>
+            <p>可以直接放入画布、素材库或后续工作流，避免出图后再复制到别处归档。</p>
+          </li>
+          <li>
+            <h3>只能做图片吗？</h3>
+            <p>不止。Opentu 同时支持流程图、思维导图、文本和其他画布工作流能力。</p>
+          </li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

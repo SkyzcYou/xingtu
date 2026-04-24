@@ -5,8 +5,16 @@
  * 然后以散落的横向布局插入画布，营造更有创意感的效果
  */
 
-import type { MCPTool, MCPResult, MCPExecuteOptions, MCPTaskResult } from '../types';
-import { INSPIRATION_BOARD_DEFAULTS, INSPIRATION_BOARD_PROMPT_TEMPLATE } from '../../types/photo-wall.types';
+import type {
+  MCPTool,
+  MCPResult,
+  MCPExecuteOptions,
+  MCPTaskResult,
+} from '../types';
+import {
+  INSPIRATION_BOARD_DEFAULTS,
+  INSPIRATION_BOARD_PROMPT_TEMPLATE,
+} from '../../types/photo-wall.types';
 import { taskQueueService } from '../../services/task-queue';
 import { TaskType } from '../../types/task.types';
 import { getCurrentImageModel } from './image-generation';
@@ -21,7 +29,7 @@ export interface InspirationBoardParams {
   imageCount?: number;
   /** 图片尺寸比例（默认 16x9 横向） */
   imageSize?: string;
-  /** 图片质量（默认 2k） */
+  /** 分辨率档位（默认 2k） */
   imageQuality?: '1k' | '2k' | '4k';
   /** 参考图片 URL 列表 */
   referenceImages?: string[];
@@ -32,7 +40,10 @@ export interface InspirationBoardParams {
 /**
  * 构建灵感图生图提示词
  */
-function buildInspirationBoardPrompt(theme: string, imageCount: number): string {
+function buildInspirationBoardPrompt(
+  theme: string,
+  imageCount: number
+): string {
   const template = INSPIRATION_BOARD_PROMPT_TEMPLATE.zh;
   return template(theme, imageCount);
 }
@@ -41,7 +52,10 @@ function buildInspirationBoardPrompt(theme: string, imageCount: number): string 
  * 创建灵感图任务（queue 模式）
  * 复用图片生成的任务队列，添加灵感图特有参数
  */
-function executeQueue(params: InspirationBoardParams, options: MCPExecuteOptions): MCPTaskResult {
+function executeQueue(
+  params: InspirationBoardParams,
+  options: MCPExecuteOptions
+): MCPTaskResult {
   const {
     theme,
     imageCount = INSPIRATION_BOARD_DEFAULTS.imageCount,
@@ -105,7 +119,13 @@ function executeQueue(params: InspirationBoardParams, options: MCPExecuteOptions
           size: imageSize,
           model: actualModel,
           // 参考图片
-          uploadedImages: uploadedImages && uploadedImages.length > 0 ? uploadedImages : undefined,
+          uploadedImages:
+            uploadedImages && uploadedImages.length > 0
+              ? uploadedImages
+              : undefined,
+          params: {
+            resolution: imageQuality,
+          },
           // 灵感图特有参数
           isInspirationBoard: true,
           inspirationBoardImageCount: validImageCount,
@@ -186,7 +206,8 @@ export const inspirationBoardTool: MCPTool = {
     properties: {
       theme: {
         type: 'string',
-        description: '灵感图主题描述，如"可爱香蕉的各种形态"、"咖啡文化"、"城市街角"等',
+        description:
+          '灵感图主题描述，如"可爱香蕉的各种形态"、"咖啡文化"、"城市街角"等',
       },
       imageCount: {
         type: 'number',
@@ -223,11 +244,14 @@ export const inspirationBoardTool: MCPTool = {
   supportedModes: ['queue'],
 
   promptGuidance: {
-    whenToUse: '当用户想要生成创意灵感图、灵感板、Mood Board 效果时使用。关键词：灵感图、灵感板、创意拼贴、艺术展示、Mood Board、Pinterest 风格。',
+    whenToUse:
+      '当用户想要生成创意灵感图、灵感板、Mood Board 效果时使用。关键词：灵感图、灵感板、创意拼贴、艺术展示、Mood Board、Pinterest 风格。',
 
     parameterGuidance: {
-      theme: '主题描述应该具体且有多样性潜力。好的主题：描述一类事物的多种变体、不同角度或不同场景。避免过于具体的单一描述。',
-      imageCount: '1-16 张，会自动计算最优网格布局（如 9 张 = 3x3，12 张 = 3x4）。',
+      theme:
+        '主题描述应该具体且有多样性潜力。好的主题：描述一类事物的多种变体、不同角度或不同场景。避免过于具体的单一描述。',
+      imageCount:
+        '1-16 张，会自动计算最优网格布局（如 9 张 = 3x3，12 张 = 3x4）。',
       imageSize: '建议使用 16x9 横向比例，生成更大尺寸的图片。',
     },
 
@@ -241,12 +265,21 @@ export const inspirationBoardTool: MCPTool = {
     examples: [
       {
         input: '生成一个可爱香蕉的灵感图',
-        args: { theme: '可爱香蕉的各种形态，包含卡通香蕉、写实香蕉、香蕉角色、香蕉图案等不同风格', imageCount: 9 },
+        args: {
+          theme:
+            '可爱香蕉的各种形态，包含卡通香蕉、写实香蕉、香蕉角色、香蕉图案等不同风格',
+          imageCount: 9,
+        },
         explanation: '生成 3x3 网格，拆分后 9 张等大图片以散落布局插入',
       },
       {
         input: '做个城市街角的 Mood Board',
-        args: { theme: '城市街角，包含不同城市、不同时间、不同天气、不同风格的街角场景', imageCount: 8, imageSize: '16x9' },
+        args: {
+          theme:
+            '城市街角，包含不同城市、不同时间、不同天气、不同风格的街角场景',
+          imageCount: 8,
+          imageSize: '16x9',
+        },
         explanation: '生成 2x4 网格，横向布局更适合展示街景',
       },
     ],
@@ -258,9 +291,15 @@ export const inspirationBoardTool: MCPTool = {
     ],
   },
 
-  execute: async (params: Record<string, unknown>, options?: MCPExecuteOptions): Promise<MCPResult> => {
+  execute: async (
+    params: Record<string, unknown>,
+    options?: MCPExecuteOptions
+  ): Promise<MCPResult> => {
     // taskQueueService 会根据 SW 可用性自动选择正确的服务
-    return executeQueue(params as unknown as InspirationBoardParams, options || {});
+    return executeQueue(
+      params as unknown as InspirationBoardParams,
+      options || {}
+    );
   },
 };
 
@@ -271,8 +310,11 @@ export function createInspirationBoardTask(
   params: InspirationBoardParams,
   options?: Omit<MCPExecuteOptions, 'mode'>
 ): MCPTaskResult {
-  return inspirationBoardTool.execute(params as unknown as Record<string, unknown>, {
-    ...options,
-    mode: 'queue',
-  }) as unknown as MCPTaskResult;
+  return inspirationBoardTool.execute(
+    params as unknown as Record<string, unknown>,
+    {
+      ...options,
+      mode: 'queue',
+    }
+  ) as unknown as MCPTaskResult;
 }

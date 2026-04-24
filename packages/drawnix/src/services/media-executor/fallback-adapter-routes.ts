@@ -19,13 +19,63 @@ import {
   dispatchApiAuthError,
 } from '../../utils/api-auth-error-event';
 import { unifiedCacheService } from '../unified-cache-service';
-import { getAdapterContextFromSettings } from '../model-adapters';
+import {
+  getAdapterContextFromSettings,
+  GPT_IMAGE_EDIT_REQUEST_SCHEMAS,
+  isGPTImageEditRequestSchema,
+} from '../model-adapters';
 import type { ImageModelAdapter, VideoModelAdapter } from '../model-adapters';
 import {
   ensureBase64ForAI,
   cacheRemoteUrl,
   cacheRemoteUrls,
 } from './fallback-utils';
+
+type ImageGenerationMode = 'text_to_image' | 'image_to_image' | 'image_edit';
+type ImageInputFidelity = 'high' | 'low';
+type ImageBackground = 'transparent' | 'opaque' | 'auto';
+type ImageOutputFormat = 'png' | 'jpeg' | 'webp';
+
+function getStringParam(
+  params: { params?: Record<string, unknown> },
+  keys: string[]
+): string | undefined {
+  const rawParams = params as unknown as Record<string, unknown>;
+  const nestedParams = params.params;
+
+  for (const key of keys) {
+    const value = rawParams[key] ?? nestedParams?.[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function resolvePreferredRequestSchema(params: {
+  generationMode?: ImageGenerationMode;
+  maskImage?: string;
+  referenceImages?: string[];
+  params?: Record<string, unknown>;
+  preferredRequestSchema?: string | readonly string[];
+}): string | readonly string[] | undefined {
+  const generationMode =
+    params.generationMode ||
+    getStringParam(params, ['generationMode', 'generation_mode']);
+
+  if (
+    params.referenceImages?.length ||
+    generationMode === 'image_to_image' ||
+    generationMode === 'image_edit' ||
+    params.maskImage ||
+    getStringParam(params, ['maskImage', 'mask_image'])
+  ) {
+    return params.preferredRequestSchema || GPT_IMAGE_EDIT_REQUEST_SCHEMAS;
+  }
+
+  return params.preferredRequestSchema;
+}
 
 /**
  * 通过专用 adapter 生成图片（mj-imagine 等非 gemini 模型）
@@ -39,15 +89,24 @@ export async function executeImageViaAdapter(
     model: string;
     modelRef?: ModelRef | null;
     size?: string;
+    resolution?: '1k' | '2k' | '4k';
     quality?: string;
     count?: number;
     referenceImages?: string[];
+    generationMode?: ImageGenerationMode;
+    maskImage?: string;
+    inputFidelity?: ImageInputFidelity;
+    background?: ImageBackground;
+    outputFormat?: ImageOutputFormat;
+    outputCompression?: number;
     params?: Record<string, unknown>;
+    preferredRequestSchema?: string | readonly string[];
   },
   options?: ExecutionOptions,
   startTime?: number
 ): Promise<void> {
   const logStartTime = startTime || Date.now();
+  const preferredRequestSchema = resolvePreferredRequestSchema(params);
 
   const logId = startLLMApiLog({
     endpoint: `adapter:${adapter.id}`,
@@ -77,14 +136,31 @@ export async function executeImageViaAdapter(
     options?.onProgress?.({ progress: 10, phase: 'submitting' });
 
     const result = await adapter.generateImage(
-      getAdapterContextFromSettings('image', params.modelRef || params.model),
+      getAdapterContextFromSettings('image', params.modelRef || params.model, {
+        preferredRequestSchema,
+      }),
       {
         prompt: params.prompt,
         model: params.model,
         modelRef: params.modelRef || null,
         size: params.size,
+        generationMode:
+          params.generationMode ||
+          (isGPTImageEditRequestSchema(preferredRequestSchema)
+            ? 'image_to_image'
+            : 'text_to_image'),
         referenceImages: processedImages,
-        params: { quality: params.quality, n: params.count, ...params.params },
+        maskImage: params.maskImage,
+        inputFidelity: params.inputFidelity,
+        background: params.background,
+        outputFormat: params.outputFormat,
+        outputCompression: params.outputCompression,
+        params: {
+          resolution: params.resolution,
+          quality: params.quality,
+          n: params.count,
+          ...params.params,
+        },
       }
     );
 
@@ -117,7 +193,11 @@ export async function executeImageViaAdapter(
     const errorMessage = error.message || 'Image generation failed (adapter)';
 
     if (isAuthError(error)) {
-      dispatchApiAuthError({ message: errorMessage, source: 'image', reason: 'invalid' });
+      dispatchApiAuthError({
+        message: errorMessage,
+        source: 'image',
+        reason: 'invalid',
+      });
     }
 
     failLLMApiLog(logId, { duration, errorMessage });
@@ -238,7 +318,11 @@ export async function executeVideoViaAdapter(
     const errorMessage = error.message || 'Video generation failed (adapter)';
 
     if (isAuthError(error)) {
-      dispatchApiAuthError({ message: errorMessage, source: 'video', reason: 'invalid' });
+      dispatchApiAuthError({
+        message: errorMessage,
+        source: 'video',
+        reason: 'invalid',
+      });
     }
 
     failLLMApiLog(logId, { duration, errorMessage });

@@ -45,19 +45,27 @@ export function download(blob: Blob | MediaSource, filename: string): void {
  * await copyToClipboard('Hello, World!');
  */
 export async function copyToClipboard(text: string): Promise<void> {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    await navigator.clipboard.writeText(text);
-  } else {
-    // Fallback for older browsers
-    const textArea = document.createElement('textarea');
-    textArea.value = text;
-    textArea.style.position = 'fixed';
-    textArea.style.left = '-999999px';
-    textArea.style.top = '-999999px';
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+  } catch {
+    // Permission policy or browser restrictions can block Clipboard API; fallback below.
+  }
+
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-999999px';
+  textArea.style.top = '-999999px';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  try {
     document.execCommand('copy');
+  } finally {
     textArea.remove();
   }
 }
@@ -73,7 +81,15 @@ export async function copyToClipboard(text: string): Promise<void> {
  */
 export async function readFromClipboard(): Promise<string> {
   if (navigator.clipboard && navigator.clipboard.readText) {
-    return navigator.clipboard.readText();
+    try {
+      return await navigator.clipboard.readText();
+    } catch (error) {
+      throw new Error(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Clipboard read failed'
+      );
+    }
   }
   throw new Error('Clipboard API not supported');
 }

@@ -1,6 +1,221 @@
 {
   "versions": [
     {
+      "version": "0.6.64",
+      "date": "2026-04-23",
+      "changes": {
+        "features": [
+          "添加CDN恢复探测和详细日志记录"
+        ],
+        "fixes": [
+          "修复 LLM API Logger 的 IDB 连接关闭导致大模型调用失败",
+          "HTML 缓存双 key 存储，导航请求直接命中"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "添加CDN恢复探测和详细日志记录"
+    },
+    {
+      "version": "0.6.60",
+      "date": "2026-04-23",
+      "changes": {
+        "features": [
+          "支持多供应商分组的模型健康状态显示"
+        ],
+        "fixes": [
+          "稳定 service worker 分阶段加载与版本提交协议"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "支持多供应商分组的模型健康状态显示"
+    },
+    {
+      "version": "0.6.59",
+      "date": "2026-04-23",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "增强错误上下文收集并修复资源错误跟踪",
+          "修正 SW 静态资源版本命中与启动页提示",
+          "统一 PostHog 版本上下文",
+          "老用户沿用旧版壳并修正图层锁定失效路径",
+          "将 SW 升级切换改为整包 ready 后再接管",
+          "恢复 Gemini 图片模型的 generateContent 路由策略"
+        ],
+        "improvements": [
+          "更新版本号至0.6.55并刷新构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "增强错误上下文收集并修复资源错误跟踪"
+    },
+    {
+      "version": "0.6.57",
+      "date": "2026-04-23",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "老用户沿用旧版壳并修正图层锁定失效路径"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "老用户沿用旧版壳并修正图层锁定失效路径"
+    },
+    {
+      "version": "0.6.56",
+      "date": "2026-04-23",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "将 SW 升级切换改为整包 ready 后再接管"
+        ],
+        "improvements": [
+          "更新版本号至0.6.55并刷新构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "将 SW 升级切换改为整包 ready 后再接管"
+    },
+    {
+      "version": "0.6.55",
+      "date": "2026-04-23",
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.6.54",
+      "date": "2026-04-22",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修正首屏资源 CDN 回退路径归一化"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修正首屏资源 CDN 回退路径归一化"
+    },
+    {
+      "version": "0.6.53",
+      "date": "2026-04-22",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修正首屏 loading 与 CDN 优先加载链路"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修正首屏 loading 与 CDN 优先加载链路"
+    },
+    {
+      "version": "0.6.46",
+      "date": "2026-04-22",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "关闭页面时兜底恢复画布快照",
+          "前置首屏加载并修复素材库插入画布链路"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "关闭页面时兜底恢复画布快照"
+    },
+    {
+      "version": "0.6.45",
+      "date": "2026-04-22",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "提前显示常驻工具图标",
+          "处理打开文件取消后的空返回"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "提前显示常驻工具图标"
+    },
+    {
+      "version": "0.6.44",
+      "date": "2026-04-22",
+      "changes": {
+        "features": [
+          "增强提示词优化器并修复画布输入框交互"
+        ],
+        "fixes": [
+          "收敛 PostHog error tracking 噪音并补齐运行时容错"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "增强提示词优化器并修复画布输入框交互"
+    },
+    {
+      "version": "0.6.43",
+      "date": "2026-04-21",
+      "changes": {
+        "features": [
+          "add keyboard shortcuts during pen creation",
+          "扩展 gpt-image-2 图片比例支持"
+        ],
+        "fixes": [
+          "修复版本更新后懒加载 chunk 失效白屏"
+        ],
+        "improvements": [
+          "更新版本号至0.6.41并修复错误处理"
+        ]
+      },
+      "type": "patch",
+      "highlights": "add keyboard shortcuts during pen creation"
+    },
+    {
+      "version": "0.6.42",
+      "date": "2026-04-21",
+      "changes": {
+        "features": [],
+        "fixes": [],
+        "improvements": [
+          "更新版本号至0.6.41并修复错误处理"
+        ]
+      },
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.6.41",
+      "date": "2026-04-21",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修复版本更新后懒加载 chunk 失效白屏"
+        ],
+        "improvements": [
+          "补充 PostHog 埋点复盘并收紧模型解析保护"
+        ]
+      },
+      "type": "patch",
+      "highlights": "修复版本更新后懒加载 chunk 失效白屏"
+    },
+    {
+      "version": "0.6.40",
+      "date": "2026-04-21",
+      "changes": {
+        "features": [
+          "增强AI生成任务追踪与模型排序"
+        ],
+        "fixes": [],
+        "improvements": [
+          "Refine boot error handling and idle prefetch defaults"
+        ]
+      },
+      "type": "patch",
+      "highlights": "增强AI生成任务追踪与模型排序"
+    },
+    {
       "version": "0.6.37",
       "date": "2026-04-21",
       "changes": {

@@ -289,6 +289,10 @@ class UnifiedCacheService {
    * 获取单个缓存条目
    */
   private async getItem(url: string): Promise<CachedMedia | undefined> {
+    if (!url) {
+      return undefined;
+    }
+
     const db = await this.initDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(UNIFIED_STORE_NAME, 'readonly');
@@ -317,6 +321,10 @@ class UnifiedCacheService {
    * 删除缓存条目
    */
   private async deleteItem(url: string): Promise<void> {
+    if (!url) {
+      return;
+    }
+
     const db = await this.initDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(UNIFIED_STORE_NAME, 'readwrite');

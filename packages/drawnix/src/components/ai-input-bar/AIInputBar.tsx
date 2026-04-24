@@ -23,7 +23,7 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Sparkles } from 'lucide-react';
 import { MessagePlugin } from 'tdesign-react';
 import { ImageUploadIcon, MediaLibraryIcon } from '../icons';
 import { useBoard } from '@plait-board/react-board';
@@ -109,6 +109,7 @@ import classNames from 'classnames';
 import { InspirationBoard } from '../inspiration-board';
 import { GenerationTypeDropdown } from './GenerationTypeDropdown';
 import { CountDropdown } from './CountDropdown';
+import { PromptOptimizeDialog } from '../shared/PromptOptimizeDialog';
 import './ai-input-bar.scss';
 
 import type {
@@ -232,6 +233,15 @@ function getModelRefFromConfig(model?: ModelConfig | null): ModelRef | null {
   }
 
   return createModelRef(model.sourceProfileId || null, model.id);
+}
+
+function getPromptLengthBucket(length: number): string {
+  if (length <= 0) return '0';
+  if (length <= 20) return '1-20';
+  if (length <= 100) return '21-100';
+  if (length <= 300) return '101-300';
+  if (length <= 800) return '301-800';
+  return '800+';
 }
 
 function findMatchingSelectableModel(
@@ -754,6 +764,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
     // State
     const [prompt, setPrompt] = useState('');
+    const [isPromptOptimizeOpen, setIsPromptOptimizeOpen] = useState(false);
     const [selectedContent, setSelectedContent] = useState<SelectedContent[]>(
       []
     ); // 画布选中内容
@@ -1469,6 +1480,24 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       // 通过 toolWindowService 打开 WinBox 弹窗
       toolWindowService.openTool(tool);
     }, []);
+
+    const handleOpenPromptOptimizer = useCallback(() => {
+      if (
+        generationType !== 'image' &&
+        generationType !== 'video'
+      ) {
+        return;
+      }
+
+      if (!prompt.trim()) {
+        MessagePlugin.warning(
+          language === 'zh' ? '请先输入提示词' : 'Please enter a prompt first'
+        );
+        return;
+      }
+
+      setIsPromptOptimizeOpen(true);
+    }, [generationType, language, prompt]);
 
     // 处理素材库选择
     const handleMediaLibrarySelect = useCallback(async (asset: Asset) => {
@@ -3481,11 +3510,31 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       []
     );
 
+    const sendButtonTrackParams = useMemo(
+      () =>
+        JSON.stringify({
+          generationType,
+          model: selectedModel,
+          profileId: selectedModelRef?.profileId || null,
+          hasAttachedContent: allContent.length > 0,
+          attachedCount: allContent.length,
+          promptLengthBucket: getPromptLengthBucket(prompt.trim().length),
+        }),
+      [
+        allContent.length,
+        generationType,
+        prompt,
+        selectedModel,
+        selectedModelRef?.profileId,
+      ]
+    );
     const canGenerate = prompt.trim().length > 0 || allContent.length > 0;
     const showInspirationBoard = isCanvasEmpty === true;
     const hasSelectedTextContent = selectedContent.some(
       (item) => item.type === 'text' && item.text?.trim()
     );
+    const shouldKeepExpanded =
+      isFocused || allContent.length > 0 || isPromptOptimizeOpen;
 
     return (
       <div
@@ -3517,8 +3566,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
         <div
           className={classNames('ai-input-bar__container', {
-            'ai-input-bar__container--expanded':
-              isFocused || allContent.length > 0,
+            'ai-input-bar__container--expanded': shouldKeepExpanded,
           })}
         >
           <div className="ai-input-bar__bottom-bar">
@@ -3631,6 +3679,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
               onClick={() => handleGenerate()}
               disabled={!canGenerate || isSubmitting}
               data-track="ai_input_click_send"
+              data-track-params={sendButtonTrackParams}
               data-testid="ai-send-btn"
             >
               <Send size={18} />
@@ -3639,7 +3688,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
           <div
             className={classNames('ai-input-bar__input-area', {
-              'ai-input-bar__input-area--expanded': isFocused,
+              'ai-input-bar__input-area--expanded': shouldKeepExpanded,
             })}
           >
             {allContent.length > 0 && (
@@ -3657,6 +3706,28 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             <PromptHistoryPopover
               onSelectPrompt={handleSelectHistoryPrompt}
               language={language}
+              extraActions={
+                shouldKeepExpanded &&
+                (generationType === 'image' || generationType === 'video') ? (
+                  <button
+                    type="button"
+                    className="prompt-history-popover__action-btn"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setIsFocused(true);
+                    }}
+                    onClick={handleOpenPromptOptimizer}
+                    title={language === 'zh' ? '优化提示词' : 'Optimize prompt'}
+                    aria-label={
+                      language === 'zh' ? '优化提示词' : 'Optimize prompt'
+                    }
+                    data-track="ai_input_click_prompt_optimize"
+                  >
+                    <Sparkles size={16} />
+                  </button>
+                ) : null
+              }
             />
 
             <div className="ai-input-bar__rich-input">
@@ -3695,7 +3766,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                         generationType === 'image' ? 'image' : 'video'
                       } you want to create`
                 }
-                rows={isFocused ? 4 : 1}
+                rows={shouldKeepExpanded ? 4 : 1}
                 disabled={isSubmitting}
                 data-testid="ai-input-textarea"
               />
@@ -3712,6 +3783,23 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             onSelect={handleMediaLibrarySelect}
           />
         )}
+
+        <PromptOptimizeDialog
+          open={isPromptOptimizeOpen}
+          onOpenChange={setIsPromptOptimizeOpen}
+          originalPrompt={prompt}
+          language={language}
+          type={generationType === 'video' ? 'video' : 'image'}
+          allowStructuredMode={true}
+          defaultMode="structured"
+          onApply={(optimizedPrompt) => {
+            setPrompt(optimizedPrompt);
+            setIsFocused(true);
+            requestAnimationFrame(() => {
+              inputRef.current?.focus();
+            });
+          }}
+        />
       </div>
     );
   }

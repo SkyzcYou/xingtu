@@ -3,6 +3,7 @@ import type {
   LyricsVersion,
   MusicAnalysisRecord,
 } from './types';
+import { generateUUID } from '../../utils/runtime-helpers';
 import type { MusicAnalysisData } from '../../services/music-analysis-service';
 import type { ModelConfig } from '../../constants/model-config';
 import { createModelRef, type ModelRef } from '../../utils/settings-manager';
@@ -167,7 +168,7 @@ export function createLyricsVersion(
   prompt?: string
 ): LyricsVersion {
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     createdAt: Date.now(),
     label,
     prompt,

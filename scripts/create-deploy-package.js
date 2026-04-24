@@ -336,18 +336,32 @@ function createDeployPackage() {
         const hasIndex = files.some(f => f.includes('index.html'));
         const assetCount = files.filter(f => f.includes('assets/') && (f.endsWith('.js') || f.endsWith('.css'))).length;
         
-        // 检查关键文件模式（文件名是动态生成的，只检查模式）
-        const hasHasIn = files.some(f => f.includes('assets/') && f.includes('hasIn-') && f.endsWith('.js'));
-        const hasHas = files.some(f => f.includes('assets/') && f.includes('has-') && f.endsWith('.js'));
-        const hasToolbox = files.some(f => f.includes('assets/') && f.includes('ToolboxDrawer-') && f.endsWith('.js'));
+        // 检查当前构建产物的关键资源组（文件名哈希是动态的，只检查 chunk 前缀）
+        const hasMainJs = files.some(f => f.includes('assets/') && /\/?assets\/main-[^/]+\.js$/.test(f));
+        const hasMainCss = files.some(f => f.includes('assets/') && /\/?assets\/main-[^/]+\.css$/.test(f));
+        const hasToolRuntimeJs = files.some(f => f.includes('assets/') && /\/?assets\/tool-runtime-[^/]+\.js$/.test(f));
+        const hasToolDrawersJs = files.some(f => f.includes('assets/') && /\/?assets\/tool-drawers-[^/]+\.js$/.test(f));
+        const hasToolDialogsJs = files.some(f => f.includes('assets/') && /\/?assets\/tool-dialogs-[^/]+\.js$/.test(f));
+        const hasExternalSkillsJs = files.some(f => f.includes('assets/') && /\/?assets\/external-skills-[^/]+\.js$/.test(f));
+        const hasAnyAssetJs = files.some(f => f.includes('assets/') && f.endsWith('.js'));
+        const missingCriticalGroups = [];
+
+        if (!hasMainJs) missingCriticalGroups.push('main-*.js');
+        if (!hasMainCss) missingCriticalGroups.push('main-*.css');
+        if (!hasToolRuntimeJs) missingCriticalGroups.push('tool-runtime-*.js');
+        if (!hasToolDrawersJs) missingCriticalGroups.push('tool-drawers-*.js');
+        if (!hasToolDialogsJs) missingCriticalGroups.push('tool-dialogs-*.js');
         
         console.log(`📊 打包统计:`);
         console.log(`   总文件数: ${files.length}`);
         console.log(`   Assets 文件数: ${assetCount}`);
-        console.log(`   关键文件模式检查:`);
-        console.log(`     - hasIn-*.js: ${hasHasIn ? '✅' : '❌'}`);
-        console.log(`     - has-*.js: ${hasHas ? '✅' : '❌'}`);
-        console.log(`     - ToolboxDrawer-*.js: ${hasToolbox ? '✅' : '❌'}`);
+        console.log(`   关键资源组检查:`);
+        console.log(`     - main-*.js: ${hasMainJs ? '✅' : '❌'}`);
+        console.log(`     - main-*.css: ${hasMainCss ? '✅' : '❌'}`);
+        console.log(`     - tool-runtime-*.js: ${hasToolRuntimeJs ? '✅' : '❌'}`);
+        console.log(`     - tool-drawers-*.js: ${hasToolDrawersJs ? '✅' : '❌'}`);
+        console.log(`     - tool-dialogs-*.js: ${hasToolDialogsJs ? '✅' : '❌'}`);
+        console.log(`     - external-skills-*.js: ${hasExternalSkillsJs ? '✅' : 'ℹ️  未生成'}`);
         
         if (!hasAssets) {
           console.warn(`⚠️  警告: 未找到 assets 目录`);
@@ -358,9 +372,11 @@ function createDeployPackage() {
         if (assetCount < 50) {
           console.warn(`⚠️  警告: Assets 文件数量较少 (${assetCount})，可能不完整`);
         }
-        // 只警告，不阻止打包（因为文件名是动态的）
-        if (!hasHasIn || !hasHas || !hasToolbox) {
-          console.warn(`⚠️  警告: 某些关键文件模式未找到，但文件名是动态生成的，可能正常`);
+        if (!hasAnyAssetJs) {
+          console.warn(`⚠️  警告: assets 目录下未找到任何 JS 文件，产物可能不完整`);
+        }
+        if (missingCriticalGroups.length > 0) {
+          console.warn(`⚠️  警告: 缺少关键资源组: ${missingCriticalGroups.join(', ')}`);
         }
       } catch (e) {
         if (e.message === '关键文件缺失') {

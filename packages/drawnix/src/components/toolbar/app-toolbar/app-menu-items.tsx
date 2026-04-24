@@ -78,6 +78,9 @@ export const OpenFile = () => {
       data-track="toolbar_click_menu_open"
       onSelect={() => {
         loadFromJSON(board).then((data) => {
+          if (!data) {
+            return;
+          }
           clearAndLoad(data.elements, data.viewport);
         });
       }}

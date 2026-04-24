@@ -26,7 +26,7 @@ import type { PlaitWorkZone, WorkZoneCreateOptions } from '../types/workzone.typ
 import { DEFAULT_WORKZONE_SIZE } from '../types/workzone.types';
 import type { WorkflowMessageData } from '../types/chat.types';
 import { WorkZoneContent } from '../components/workzone-element/WorkZoneContent';
-import { ToolProviderWrapper } from '../components/toolbox-drawer/ToolProviderWrapper';
+import { ToolProviderWrapper } from '../components/startup/ToolProviderWrapper';
 
 import { LS_KEYS } from '../constants/storage-keys';
 

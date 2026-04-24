@@ -812,3 +812,44 @@ async getPaginatedTasks(params: PaginationParams): Promise<PaginatedResult> {
 
 ---
 
+### Service Worker 版本升级流程
+
+#### 升级时序
+
+```
+主线程 5 分钟定时 registration.update()
+  → 浏览器检测到新 sw.js
+  → 新 SW install（prewarming → 预缓存资源 → markNewVersionReady → upgradeState='ready'）
+  → 新 SW 进入 waiting 状态
+  → 主线程 statechange='installed' → requestSWVersionState
+  → SW 响应 SW_VERSION_STATE（pendingVersion + upgradeState='ready'）
+  → 主线程 dispatch 'sw-update-available'
+  → VersionUpdatePrompt 显示升级提示
+  → 用户点击"立即更新" → COMMIT_UPGRADE → skipWaiting → activate → claim → reload
+```
+
+#### 自然激活（所有旧 tab 关闭）
+
+当所有旧 tab 关闭后，waiting SW 自动变为 active。activate 处理器必须无条件将 `committedVersion` 更新为 `APP_VERSION`，否则新 tab 会用旧版本号打开旧缓存、从网络获取新 `index.html`，导致新 hash 资源用旧版本号请求 CDN → 404。
+
+#### 踩坑记录
+
+1. **waiting SW 的 postmessage-duplex 不可靠**：新 SW 处于 waiting 状态时，`channelManager.sendSWNewVersionReady()` 可能无法到达客户端（channel 未与 waiting worker 建立）。必须依赖原生 `postMessage` + `statechange` 事件作为可靠通知路径。
+
+2. **statechange 通知需要重试**：`requestSWVersionState(newWorker)` 只发一次，如果 SW 仍在预缓存（`waitUntil` 未完成），响应可能丢失。需要 5 秒后重试 + `visibilitychange` 时重新检查。
+
+3. **CDN URL 版本重写陷阱**：`cleanResourcePath` 会剥离 CDN 路径中的版本前缀（`npm/aitu-app@x.y.z/`），`buildCDNUrl` 再用 `committedVersion` 重建。如果 `committedVersion` 与请求 URL 中的版本不一致，会构造出错误的 CDN URL。防御措施：`extractVersionFromCDNPath` 优先使用 URL 中已有的版本号。
+
+4. **activate 必须无条件更新 committedVersion**：原设计只在首次安装和用户确认时更新，自然激活时遗漏。SW 一旦激活就是当前版本，`committedVersion` 必须与 `APP_VERSION` 一致。
+
+#### 关键文件
+
+| 文件 | 职责 |
+|------|------|
+| `apps/web/src/main.tsx` | SW 注册、版本状态监听、升级确认 |
+| `apps/web/src/sw/index.ts` | install/activate 处理、版本状态管理、静态资源拦截 |
+| `apps/web/src/sw/cdn-fallback.ts` | CDN 回退、版本号提取、健康检查 |
+| `packages/drawnix/src/components/version-update/version-update-prompt.tsx` | 升级提示 UI |
+
+---
+

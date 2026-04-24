@@ -146,7 +146,7 @@ function releaseTaskInsertion(taskId: string): void {
 
 function finalizeTaskInsertion(taskId: string): void {
   insertedTaskIds.add(taskId);
-  getTaskQueueService().markAsInserted(taskId);
+  getTaskQueueService().markAsInserted(taskId, 'auto_insert');
 }
 
 function isPoint(value: unknown): value is Point {

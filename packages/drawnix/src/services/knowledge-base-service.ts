@@ -6,6 +6,7 @@
  */
 
 import localforage from 'localforage';
+import { generateUUID } from '../utils/runtime-helpers';
 import { IDB_DATABASES, LS_KEYS } from '../constants/storage-keys';
 import type {
   KBDirectory,
@@ -69,7 +70,7 @@ const noteImagesStore = localforage.createInstance({
 });
 
 function generateId(): string {
-  return crypto.randomUUID();
+  return generateUUID();
 }
 
 /**

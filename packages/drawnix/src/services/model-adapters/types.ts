@@ -43,7 +43,13 @@ export interface ImageGenerationRequest {
   model?: string;
   modelRef?: ModelRef | null;
   size?: string;
+  generationMode?: 'text_to_image' | 'image_to_image' | 'image_edit';
   referenceImages?: string[];
+  maskImage?: string;
+  inputFidelity?: 'high' | 'low';
+  background?: 'transparent' | 'opaque' | 'auto';
+  outputFormat?: 'png' | 'jpeg' | 'webp';
+  outputCompression?: number;
   params?: Record<string, unknown>;
 }
 

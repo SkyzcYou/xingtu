@@ -27,11 +27,57 @@ try {
 const IDLE_PREFETCH_GROUPS = [
   'ai-chat',
   'tool-windows',
+  'diagram-engines',
   'office-data',
   'external-skills',
 ] as const;
 
+const IDLE_PREFETCH_DEFAULTS = ['tool-windows'] as const;
+
 type IdlePrefetchGroup = (typeof IDLE_PREFETCH_GROUPS)[number];
+
+function normalizePathForChunking(id: string): string {
+  return id.replace(/\\/g, '/');
+}
+
+function resolveIdlePrefetchGroup(id: string): IdlePrefetchGroup | undefined {
+  const normalizedId = normalizePathForChunking(id);
+
+  if (
+    normalizedId.includes('/packages/drawnix/src/components/startup/DrawnixDeferredRuntime.tsx') ||
+    normalizedId.includes('/packages/drawnix/src/components/startup/DeferredMediaLibraryModal.tsx') ||
+    normalizedId.includes('/packages/drawnix/src/components/startup/DeferredSyncSettings.tsx') ||
+    normalizedId.includes('/packages/drawnix/src/services/asset-integration-service') ||
+    normalizedId.includes('/packages/drawnix/src/services/font-manager-service') ||
+    normalizedId.includes('/packages/drawnix/src/utils/model-pricing-service') ||
+    normalizedId.includes('/packages/drawnix/src/hooks/useTaskStorage') ||
+    normalizedId.includes('/packages/drawnix/src/hooks/useTaskExecutor') ||
+    normalizedId.includes('/packages/drawnix/src/hooks/useAutoInsertToCanvas') ||
+    normalizedId.includes('/packages/drawnix/src/hooks/useImageGenerationAnchorSync') ||
+    normalizedId.includes('/packages/drawnix/src/hooks/useBeforeUnload') ||
+    normalizedId.includes('/packages/drawnix/src/hooks/useProviderProfiles') ||
+    normalizedId.includes('/packages/drawnix/src/components/toolbox-drawer/') ||
+    normalizedId.includes('/packages/drawnix/src/components/project-drawer/') ||
+    normalizedId.includes('/packages/drawnix/src/components/toolbar/minimized-tools-bar/') ||
+    normalizedId.includes('/packages/drawnix/src/services/tool-window-service') ||
+    normalizedId.includes('/packages/drawnix/src/tools/') ||
+    normalizedId.includes('/packages/drawnix/src/components/backup-restore/') ||
+    normalizedId.includes('/packages/drawnix/src/components/performance-panel/') ||
+    normalizedId.includes('/packages/drawnix/src/components/version-update/') ||
+    normalizedId.includes('/packages/drawnix/src/components/command-palette/') ||
+    normalizedId.includes('/packages/drawnix/src/components/canvas-search/')
+  ) {
+    return 'tool-windows';
+  }
+
+  if (
+    normalizedId.includes('/packages/drawnix/src/generated/external-skills-bundle.json')
+  ) {
+    return 'external-skills';
+  }
+
+  return undefined;
+}
 
 /**
  * Vite 插件：生成 precache-manifest.json
@@ -48,14 +94,7 @@ function precacheManifestPlugin(): Plugin {
         const outDir = path.resolve(__dirname, '../../dist/apps/web');
 
         // 需要预缓存的文件扩展名
-        const PRECACHE_EXTENSIONS = [
-          '.js',
-          '.css',
-          '.html',
-          '.json',
-          '.svg',
-          '.ico',
-        ];
+        const PRECACHE_EXTENSIONS = ['.js', '.css', '.json', '.svg', '.ico'];
         // 排除的文件模式
         const EXCLUDE_PATTERNS = [
           /stats\.html$/, // Vite visualizer
@@ -110,8 +149,8 @@ function precacheManifestPlugin(): Plugin {
 
               // 检查是否是需要预缓存的文件类型
               const shouldInclude =
-                PRECACHE_EXTENSIONS.includes(ext) ||
-                ALWAYS_INCLUDE.includes(url);
+                ALWAYS_INCLUDE.includes(url) ||
+                (ext !== '.html' && PRECACHE_EXTENSIONS.includes(ext));
 
               if (shouldInclude) {
                 // 计算文件哈希作为 revision
@@ -207,7 +246,7 @@ function idlePrefetchManifestPlugin(): Plugin {
             {
               version: appVersion,
               timestamp: new Date().toISOString(),
-              defaults: [],
+              defaults: [...IDLE_PREFETCH_DEFAULTS],
               groups,
             },
             null,
@@ -215,6 +254,187 @@ function idlePrefetchManifestPlugin(): Plugin {
           )
         );
         console.log('[IdlePrefetch] Generated idle-prefetch-manifest.json');
+      },
+    },
+  };
+}
+
+function deferEntryAssetsPlugin(): Plugin {
+  return {
+    name: 'defer-entry-assets',
+    apply: 'build',
+    closeBundle: {
+      sequential: true,
+      order: 'post',
+      async handler() {
+        const outDir = path.resolve(__dirname, '../../dist/apps/web');
+        const indexHtmlPath = path.join(outDir, 'index.html');
+
+        if (!fs.existsSync(indexHtmlPath)) {
+          return;
+        }
+
+        const html = fs.readFileSync(indexHtmlPath, 'utf8');
+        const deferredTags: string[] = [];
+        const assetTagPattern =
+          /^[ \t]*(<script\b[^>]*type="module"[^>]*src="\.\/assets\/[^"]+"[^>]*><\/script>|<link\b[^>]*rel="stylesheet"[^>]*href="\.\/assets\/[^"]+"[^>]*>)\s*$/gm;
+
+        const strippedHtml = html.replace(assetTagPattern, (match, tag) => {
+          deferredTags.push(tag.trim());
+          return '';
+        });
+
+        if (deferredTags.length === 0) {
+          return;
+        }
+
+        const injection = `  ${deferredTags.join('\n  ')}\n`;
+        const nextHtml = strippedHtml.replace('</body>', `${injection}</body>`);
+
+        fs.writeFileSync(indexHtmlPath, nextHtml);
+        console.log(
+          `[EntryAssets] Deferred ${deferredTags.length} entry asset tag(s) to body end`
+        );
+      },
+    },
+  };
+}
+
+function rewriteEntryAssetsToCDNPlugin(): Plugin {
+  return {
+    name: 'rewrite-entry-assets-to-cdn',
+    apply: 'build',
+    closeBundle: {
+      sequential: true,
+      order: 'post',
+      async handler() {
+        const outDir = path.resolve(__dirname, '../../dist/apps/web');
+        const indexHtmlPath = path.join(outDir, 'index.html');
+
+        if (!fs.existsSync(indexHtmlPath)) {
+          return;
+        }
+
+        const html = fs.readFileSync(indexHtmlPath, 'utf8');
+        const cdnBaseUrl = `https://cdn.jsdelivr.net/npm/aitu-app@${appVersion}`;
+        let rewrittenCount = 0;
+
+        const rewriteAssetUrl = (localPath: string) => {
+          const [pathname, suffix = ''] = localPath.split(/([?#].*)/, 2);
+          return `${cdnBaseUrl}/${pathname.replace(/^\.\//, '')}${suffix}`;
+        };
+
+        const rewriteManagedLinkTag = (
+          beforeHref: string,
+          localHref: string,
+          afterHref: string
+        ) => {
+          const hasSelfClosingSlash = /\/\s*$/.test(afterHref);
+          const normalizedAfterHref = afterHref.replace(/\/\s*$/, '');
+          rewrittenCount += 1;
+          return `<link${beforeHref}href="${rewriteAssetUrl(
+            localHref
+          )}" data-local-href="${localHref}" data-cdn-fallback-managed="1"${normalizedAfterHref} onerror="window.__OPENTU_BOOT_ASSET_FALLBACK__&&window.__OPENTU_BOOT_ASSET_FALLBACK__(this)"${
+            hasSelfClosingSlash ? ' /' : ''
+          }>`;
+        };
+
+        let nextHtml = html.replace(
+          /<script\b([^>]*\btype="module"[^>]*)\bsrc="(\.\/assets\/[^"]+)"([^>]*)><\/script>/g,
+          (_match, beforeSrc, localSrc, afterSrc) => {
+            rewrittenCount += 1;
+            return `<script${beforeSrc}src="${rewriteAssetUrl(
+              localSrc
+            )}" data-local-src="${localSrc}" data-cdn-fallback-managed="1"${afterSrc} onerror="window.__OPENTU_BOOT_ASSET_FALLBACK__&&window.__OPENTU_BOOT_ASSET_FALLBACK__(this)"></script>`;
+          }
+        );
+
+        nextHtml = nextHtml.replace(
+          /<link\b([^>]*\brel="stylesheet"[^>]*)\bhref="(\.\/assets\/[^"]+)"([^>]*)>/g,
+          (_match, beforeHref, localHref, afterHref) =>
+            rewriteManagedLinkTag(beforeHref, localHref, afterHref)
+        );
+
+        nextHtml = nextHtml.replace(
+          /<link\b([^>]*\brel="(?:manifest|icon|apple-touch-icon)"[^>]*)\bhref="(\.\/[^"]+)"([^>]*)>/g,
+          (_match, beforeHref, localHref, afterHref) =>
+            rewriteManagedLinkTag(beforeHref, localHref, afterHref)
+        );
+
+        if (rewrittenCount === 0) {
+          return;
+        }
+
+        fs.writeFileSync(indexHtmlPath, nextHtml);
+        console.log(
+          `[EntryAssets] Rewrote ${rewrittenCount} entry asset tag(s) to prefer CDN`
+        );
+      },
+    },
+  };
+}
+
+function rewriteManifestAssetsToCDNPlugin(): Plugin {
+  return {
+    name: 'rewrite-manifest-assets-to-cdn',
+    apply: 'build',
+    closeBundle: {
+      sequential: true,
+      order: 'post',
+      async handler() {
+        const outDir = path.resolve(__dirname, '../../dist/apps/web');
+        const manifestPath = path.join(outDir, 'manifest.json');
+
+        if (!fs.existsSync(manifestPath)) {
+          return;
+        }
+
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        const cdnBaseUrl = `https://cdn.jsdelivr.net/npm/aitu-app@${appVersion}`;
+        let rewrittenCount = 0;
+
+        const rewriteManifestAssetUrl = (assetUrl: string) => {
+          if (
+            typeof assetUrl !== 'string' ||
+            !assetUrl ||
+            /^https?:\/\//.test(assetUrl)
+          ) {
+            return assetUrl;
+          }
+
+          rewrittenCount += 1;
+          return `${cdnBaseUrl}/${assetUrl.replace(/^\.\//, '')}`;
+        };
+
+        if (Array.isArray(manifest.icons)) {
+          manifest.icons = manifest.icons.map((icon: Record<string, unknown>) => ({
+            ...icon,
+            src: rewriteManifestAssetUrl(String(icon.src || '')),
+          }));
+        }
+
+        if (Array.isArray(manifest.shortcuts)) {
+          manifest.shortcuts = manifest.shortcuts.map(
+            (shortcut: Record<string, unknown>) => ({
+              ...shortcut,
+              icons: Array.isArray(shortcut.icons)
+                ? shortcut.icons.map((icon: Record<string, unknown>) => ({
+                    ...icon,
+                    src: rewriteManifestAssetUrl(String(icon.src || '')),
+                  }))
+                : shortcut.icons,
+            })
+          );
+        }
+
+        if (rewrittenCount === 0) {
+          return;
+        }
+
+        fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+        console.log(
+          `[ManifestAssets] Rewrote ${rewrittenCount} manifest asset url(s) to prefer CDN`
+        );
       },
     },
   };
@@ -267,9 +487,16 @@ export default defineConfig({
       gzipSize: true,
       brotliSize: true,
     }),
+    deferEntryAssetsPlugin(),
+    rewriteEntryAssetsToCDNPlugin(),
+    rewriteManifestAssetsToCDNPlugin(),
     precacheManifestPlugin(),
     idlePrefetchManifestPlugin(),
   ],
+
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
 
   // Uncomment this if you are using workers.
   // worker: {
@@ -285,6 +512,13 @@ export default defineConfig({
     modulePreload: false,
     commonjsOptions: {
       transformMixedEsModules: true,
+    },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          return resolveIdlePrefetchGroup(id);
+        },
+      },
     },
   },
 });

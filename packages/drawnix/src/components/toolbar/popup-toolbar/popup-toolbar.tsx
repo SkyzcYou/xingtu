@@ -49,6 +49,7 @@ import { PopupFillButton } from './fill-button';
 import { PopupCornerRadiusButton } from './corner-radius-button';
 import { SizeInput } from './size-input';
 import { isWhite, removeHexAlpha, NO_COLOR, trimCanvasWhiteAndTransparentBorderWithInfo } from '@aitu/utils';
+import { copyToClipboard } from '../../../utils/runtime-helpers';
 import { Freehand } from '../../../plugins/freehand/type';
 import { PenPath } from '../../../plugins/pen/type';
 import { getStrokeColorByElement as getStrokeColorByFreehandElement } from '../../../plugins/freehand/utils';
@@ -524,7 +525,7 @@ export const PopupToolbar = () => {
     const text = `${title}${body}`.trim();
     try {
       console.info('[CardCopy] Copy text from card', { source, id: cardElement.id });
-      await navigator.clipboard.writeText(text);
+      await copyToClipboard(text);
       MessagePlugin.success(language === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard', 2000);
     } catch (err) {
       MessagePlugin.error(language === 'zh' ? '复制失败' : 'Copy failed', 2000);

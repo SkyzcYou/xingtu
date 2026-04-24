@@ -6,7 +6,10 @@
 
 import type { MCPExecuteOptions, MCPTaskResult } from '../../mcp/types';
 import type { LayoutStyle, GridConfig } from '../../types/photo-wall.types';
-import { GRID_IMAGE_DEFAULTS, GRID_IMAGE_PROMPT_TEMPLATE } from '../../types/photo-wall.types';
+import {
+  GRID_IMAGE_DEFAULTS,
+  GRID_IMAGE_PROMPT_TEMPLATE,
+} from '../../types/photo-wall.types';
 import { taskQueueService } from '../task-queue';
 import { TaskType } from '../../types/task.types';
 import { geminiSettings } from '../../utils/settings-manager';
@@ -27,7 +30,7 @@ export interface GridImageParams {
   layoutStyle?: LayoutStyle;
   /** 图片尺寸（默认 1x1） */
   imageSize?: string;
-  /** 图片质量（默认 2k） */
+  /** 分辨率档位（默认 2k） */
   imageQuality?: '1k' | '2k' | '4k';
   /** 参考图片 URL 列表 */
   referenceImages?: string[];
@@ -40,7 +43,11 @@ export interface GridImageParams {
  */
 function getCurrentImageModel(): string {
   const settings = geminiSettings.get();
-  return settings.imageModelName || getPreferredModels('image')[0]?.id || getDefaultImageModel();
+  return (
+    settings.imageModelName ||
+    getPreferredModels('image')[0]?.id ||
+    getDefaultImageModel()
+  );
 }
 
 /**
@@ -112,11 +119,20 @@ export function createGridImageTask(
           prompt,
           size: imageSize,
           model: actualModel,
-          uploadedImages: uploadedImages && uploadedImages.length > 0 ? uploadedImages : undefined,
+          uploadedImages:
+            uploadedImages && uploadedImages.length > 0
+              ? uploadedImages
+              : undefined,
+          params: {
+            resolution: params.imageQuality || GRID_IMAGE_DEFAULTS.imageQuality,
+          },
           // 宫格图特有参数
           gridImageRows: validRows,
           gridImageCols: validCols,
-          gridImageLayoutStyle: layoutStyle as 'scattered' | 'grid' | 'circular',
+          gridImageLayoutStyle: layoutStyle as
+            | 'scattered'
+            | 'grid'
+            | 'circular',
           originalTheme: theme,
           batchId: options?.batchId,
           globalIndex: options?.globalIndex || 1,

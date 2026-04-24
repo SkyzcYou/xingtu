@@ -51,6 +51,7 @@ import { compareModelsByDisplayPriority } from '../../utils/model-sort';
 import {
   createModelRef,
   createRouteConfig,
+  DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
   DEFAULT_INVOCATION_PRESET_ID,
   geminiSettings,
   getRouteModelId,
@@ -60,8 +61,10 @@ import {
   providerCatalogsSettings,
   providerProfilesSettings,
   TUZI_MIX_PROVIDER_PROFILE_ID,
+  TUZI_CODEX_PROVIDER_PROFILE_ID,
   TUZI_ORIGINAL_PROVIDER_PROFILE_ID,
   TUZI_PROVIDER_DEFAULT_BASE_URL,
+  type ImageApiCompatibility,
   type InvocationPreset,
   type ModelRef,
   type ProviderProfile,
@@ -85,6 +88,7 @@ import { TtsSettingsPanel } from '../project-drawer/TtsSettingsPanel';
 import { openModelBenchmarkTool } from '../../services/model-benchmark-launcher';
 import { modelBenchmarkService } from '../../services/model-benchmark-service';
 import { HoverTip } from '../shared';
+import { createProviderProfileDraft } from './provider-profile-draft';
 
 export { IMAGE_MODEL_GROUPED_SELECT_OPTIONS as IMAGE_MODEL_GROUPED_OPTIONS } from '../../constants/model-config';
 export { VIDEO_MODEL_SELECT_OPTIONS as VIDEO_MODEL_OPTIONS } from '../../constants/model-config';
@@ -116,6 +120,13 @@ const AUTH_TYPE_OPTIONS: ProviderProfile['authType'][] = [
   'header',
   'query',
   'custom',
+];
+
+const IMAGE_API_COMPATIBILITY_OPTIONS: ImageApiCompatibility[] = [
+  'auto',
+  'openai-gpt-image',
+  'tuzi-gpt-image',
+  'openai-compatible-basic',
 ];
 
 const ROUTE_LABELS: Record<ModelType, string> = {
@@ -213,6 +224,79 @@ const AUTH_TYPE_META: Record<ProviderProfile['authType'], { label: string }> = {
     label: '手动拼装',
   },
 };
+
+const IMAGE_API_COMPATIBILITY_META: Record<
+  ImageApiCompatibility,
+  { label: string }
+> = {
+  auto: {
+    label: '自动',
+  },
+  'openai-gpt-image': {
+    label: 'OpenAI GPT Image',
+  },
+  'tuzi-gpt-image': {
+    label: 'Tuzi GPT 兼容',
+  },
+  'openai-compatible-basic': {
+    label: 'OpenAI-compatible 通用兼容（兜底）',
+  },
+};
+
+function normalizeImageApiCompatibilityForDisplay(
+  value?: ImageApiCompatibility | string | null
+): ImageApiCompatibility {
+  if (
+    value === 'auto' ||
+    value === 'openai-gpt-image' ||
+    value === 'tuzi-gpt-image' ||
+    value === 'openai-compatible-basic'
+  ) {
+    return value;
+  }
+
+  if (value === 'tuzi-compatible') {
+    return 'tuzi-gpt-image';
+  }
+
+  return 'auto';
+}
+
+function resolveAutoImageApiCompatibilityForDisplay(
+  profile: Pick<ProviderProfile, 'baseUrl'>
+): Exclude<ImageApiCompatibility, 'auto'> {
+  const normalizedBaseUrl = profile.baseUrl.trim().toLowerCase();
+
+  if (normalizedBaseUrl.includes('api.openai.com')) {
+    return 'openai-gpt-image';
+  }
+
+  if (normalizedBaseUrl.includes('api.tu-zi.com')) {
+    return 'tuzi-gpt-image';
+  }
+
+  return 'openai-compatible-basic';
+}
+
+function getImageApiCompatibilityHint(
+  profile: Pick<ProviderProfile, 'baseUrl' | 'imageApiCompatibility'>
+): string {
+  const storedCompatibility = normalizeImageApiCompatibilityForDisplay(
+    profile.imageApiCompatibility
+  );
+
+  if (storedCompatibility === 'auto') {
+    const resolvedCompatibility =
+      resolveAutoImageApiCompatibilityForDisplay(profile);
+    return `默认推荐显式选择 OpenAI GPT Image；如果保留自动模式，GPT Image 模型当前会解析为 ${IMAGE_API_COMPATIBILITY_META[resolvedCompatibility].label}。`;
+  }
+
+  if (storedCompatibility === 'openai-gpt-image') {
+    return '默认推荐模式。适用于官方 GPT Image 请求格式，也便于后续继续扩展官方图生图能力。';
+  }
+
+  return `同一个图片模型在不同 API Key 或网关下可能需要不同接口格式；当前已固定为 ${IMAGE_API_COMPATIBILITY_META[storedCompatibility].label}。`;
+}
 
 const PROVIDER_AVATAR_THEMES = [
   'amber',
@@ -347,25 +431,7 @@ function createId(prefix: string): string {
 }
 
 function createProfile(index: number): ProviderProfile {
-  const providerType: ProviderProfile['providerType'] = 'openai-compatible';
-  return {
-    id: createId('profile'),
-    name: `供应商 ${index}`,
-    iconUrl: '',
-    providerType,
-    baseUrl: '',
-    apiKey: '',
-    authType: inferAuthTypeForProviderType(providerType),
-    enabled: true,
-    capabilities: {
-      supportsModelsEndpoint: true,
-      supportsText: true,
-      supportsImage: true,
-      supportsVideo: true,
-      supportsAudio: true,
-      supportsTools: true,
-    },
-  };
+  return createProviderProfileDraft(index, createId('profile'));
 }
 
 function readPendingProviderNavigationIntent(): ProviderNavigationIntent | null {
@@ -399,7 +465,8 @@ function isManagedProviderProfile(profileId: string): boolean {
   return (
     profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID ||
     profileId === TUZI_ORIGINAL_PROVIDER_PROFILE_ID ||
-    profileId === TUZI_MIX_PROVIDER_PROFILE_ID
+    profileId === TUZI_MIX_PROVIDER_PROFILE_ID ||
+    profileId === TUZI_CODEX_PROVIDER_PROFILE_ID
   );
 }
 
@@ -580,6 +647,9 @@ export const SettingsDialog = ({
     profilesDraft.find((profile) => profile.id === selectedProfileId) ||
     profilesDraft[0] ||
     null;
+  const selectedImageApiCompatibilityHint = selectedProfile
+    ? getImageApiCompatibilityHint(selectedProfile)
+    : '同一个图片模型在不同 API Key 或网关下可能需要不同接口格式；不确定时使用自动。';
   const selectedPreset =
     presetsDraft.find((preset) => preset.id === selectedPresetId) ||
     presetsDraft[0] ||
@@ -1851,6 +1921,35 @@ export const SettingsDialog = ({
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="settings-dialog__field settings-dialog__field--column settings-dialog__field--full">
+              <label className="settings-dialog__label settings-dialog__label--stacked">
+                图片接口格式
+              </label>
+              <select
+                className="settings-dialog__select"
+                value={
+                  selectedProfile.imageApiCompatibility ||
+                  DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY
+                }
+                onChange={(event) =>
+                  updateProfile(selectedProfile.id, (profile) => ({
+                    ...profile,
+                    imageApiCompatibility: event.target
+                      .value as ImageApiCompatibility,
+                  }))
+                }
+              >
+                {IMAGE_API_COMPATIBILITY_OPTIONS.map((compatibility) => (
+                  <option key={compatibility} value={compatibility}>
+                    {IMAGE_API_COMPATIBILITY_META[compatibility].label}
+                  </option>
+                ))}
+              </select>
+              <span className="settings-dialog__field-hint">
+                {selectedImageApiCompatibilityHint}
+              </span>
             </div>
 
             <div className="settings-dialog__field settings-dialog__field--column settings-dialog__field--full">

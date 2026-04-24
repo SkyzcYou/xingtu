@@ -1,6 +1,6 @@
-# PostHog Web Vitals 和 Page Report 监控
+# PostHog 监控与 AI 生成埋点复盘
 
-本文档说明了如何在 Opentu 项目中使用 PostHog 上报 Web Vitals 数据和 Page Report 数据。
+本文档说明了如何在 Opentu 项目中使用 PostHog 上报 Web Vitals、Page Report，以及 AI 生成功能的业务分析数据。
 
 ## 功能概述
 
@@ -264,6 +264,149 @@ event = 'page_performance' AND properties.page_path = '/'
 1. 某些指标依赖 Navigation Timing API Level 2，检查浏览器兼容性
 2. 在本地开发环境，某些指标可能不准确
 3. 确认在页面完全加载后才收集数据
+
+## AI 生成埋点改造复盘
+
+### 本轮目标
+
+这次改造优先解决“数据口径不准”，而不是继续堆零散事件。
+
+执行顺序如下：
+
+1. 修复声明式埋点参数丢失
+2. 补齐 PostHog LLM starter 依赖的标准事件
+3. 补足结果类与恢复类事件
+4. 建业务看板验证链路是否闭环
+
+### 关键实现
+
+#### 1. 修复 `data-track-params` 解析缺失
+
+此前组件上已经大量写了 `data-track-params`，但底层只读取旧字段 `track-params`，导致声明式点击事件缺少上下文参数。
+
+- 相关文件：
+  - `packages/drawnix/src/services/tracking/tracking-utils.ts`
+  - `packages/drawnix/src/services/tracking/tracking-service.ts`
+  - `packages/drawnix/src/types/tracking.types.ts`
+- 改造结果：
+  - 优先解析 `data-track-params`
+  - 继续兼容旧字段 `track-params`
+
+#### 2. 在中央层补齐 `$ai_generation`
+
+项目里原本有 `image_generation_success`、`chat_generation_failed` 这类业务事件，但 PostHog LLM starter 主要依赖 `$ai_generation`、`$ai_model`、`$ai_latency`、`$ai_is_error`。这就是 starter 面板过去几乎没法用的核心原因。
+
+- 相关文件：
+  - `packages/drawnix/src/utils/posthog-analytics.ts`
+- 本轮统一补充：
+  - 公共属性：`route_name`、`hostname`、`deployment_env`
+  - 标准事件：`$ai_generation`
+  - 标准字段：`$ai_model`、`$ai_latency`、`$ai_is_error`
+  - 兼容业务字段：`task_id`、`task_type`、`status`、`model`、`duration_ms`、`error`
+
+#### 3. 结果事件收敛到任务服务层
+
+结果动作不应只依赖按钮点击，而应在任务状态真正落地时上报。
+
+- 相关文件：
+  - `packages/drawnix/src/services/task-queue-service.ts`
+  - `packages/drawnix/src/hooks/useAutoInsertToCanvas.ts`
+  - `packages/drawnix/src/components/task-queue/TaskQueuePanel.tsx`
+- 本轮新增事件：
+  - `generation_result_insert_canvas`
+  - `generation_result_download`
+  - `generation_retry_after_failure`
+  - `task_recovered_after_reload`
+- 额外区分：
+  - `markAsInserted(taskId, 'manual' | 'auto_insert')`
+
+#### 4. 关键入口补足上下文参数
+
+为后续按模型、生成类型、素材来源拆分分析补齐上下文。
+
+- `ai_input_click_send`
+  - `generationType`
+  - `model`
+  - `profileId`
+  - `attachedCount`
+  - `promptLengthBucket`
+- `task_click_download` / `task_click_insert` / `task_click_retry`
+  - `taskId`
+  - `taskType`
+  - `taskStatus`
+- `inspector_use_asset` / `inspector_download` / `inspector_delete`
+  - `assetId`
+  - `assetType`
+  - `assetSource`
+
+### 当前看板
+
+已新增业务看板：
+
+- `AI 生成业务转化看板`
+- 地址：`https://us.posthog.com/project/263621/dashboard/1492218`
+
+看板包含两类内容：
+
+1. 复用现有 LLM starter insight
+   - `Generation calls`
+   - `AI Errors`
+   - `Generation latency by model (median)`
+2. 新增业务 insight
+   - `AI 输入发送量（14d）`
+   - `任务关键动作点击（14d）`
+   - `生成结果完成动作（14d）`
+   - `失败恢复信号（14d）`
+
+### 当前数据结论
+
+以 2026-04-21 创建看板时的 14 天窗口为准：
+
+- `ai_input_click_send` 共 5161 次
+- `task_click_retry` 明显高于 `task_click_insert`
+- `task_click_download` 很低，下载不是主消费路径
+- `$ai_generation` 仍为 0
+- `generation_result_insert_canvas` / `generation_result_download` 仍为 0
+
+可得出两个阶段性判断：
+
+1. 当前不是没人用，而是用户更常进入“失败后重试”
+2. 新补的标准事件和结果事件还需要正式发版后的真实流量验证
+
+### 经验总结
+
+#### 1. 先修口径，再补数量
+
+参数解析都不对时，继续补更多事件只会放大脏数据。`data-track-params` 解析 bug 的优先级高于继续加按钮埋点。
+
+#### 2. 标准事件应在中央层统一补
+
+`$ai_generation` 这种标准事件应该收敛在 `posthog-analytics.ts` 统一发出，而不是散落在多个业务组件中，否则字段口径很难长期一致。
+
+#### 3. 结果事件应贴近真实业务状态
+
+“插入画布”“下载”“重试”“恢复”更适合在任务服务层上报，而不是只统计点击。这样更接近真实转化，也更利于后续做成功率分析。
+
+#### 4. 没有稳定关联键时，不要强做严格漏斗
+
+当前还缺稳定的 `workflow_id` / `task_chain_id` 一类关联键。此时硬做 funnel 容易失真，先用趋势看板更稳。
+
+#### 5. 命名统一比补新事件更重要
+
+当前存在命名分裂，例如：
+
+- `toolbar_click_ai_image`
+- `toolbar_click_ai-image`
+
+这会直接造成口径分叉，后续应优先统一。
+
+### 推荐下一步
+
+1. 发布当前代码，观察看板 24 小时
+2. 验证 `$ai_generation` 是否开始进入 LLM starter insight
+3. 统一事件命名，优先清理横杠/下划线混用
+4. 补稳定关联键，再升级为真实任务漏斗
+5. 规范失败原因字段，避免 `error` 文本不可聚合
 
 ## 测试
 

@@ -349,6 +349,15 @@ export function createLogEntry(log, isExpanded = false, onToggle = null, isBookm
           <pre>${log.url}</pre>
         </div>
       ` : ''}
+      ${log.resourceSource || log.resourceFetchTarget ? `
+        <div class="detail-section">
+          <h4>静态资源来源</h4>
+          <pre>${[
+            log.resourceSource ? `来源: ${log.resourceSource}` : null,
+            log.resourceFetchTarget ? `实际拉取: ${log.resourceFetchTarget}` : null
+          ].filter(Boolean).join('\n')}</pre>
+        </div>
+      ` : ''}
       ${log.headers && Object.keys(log.headers).length > 0 ? `
         <div class="detail-section">
           <h4>请求头 (Request Headers)</h4>

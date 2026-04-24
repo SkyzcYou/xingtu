@@ -125,6 +125,52 @@ function getModelPreferenceKey(
   return modelId;
 }
 
+function getEnumOptionValues(param?: { options?: Array<{ value: string }> }): Set<string> {
+  return new Set(param?.options?.map((option) => option.value) || []);
+}
+
+function migrateLegacyGPTImageQualityParam(
+  compatibleParams: ReturnType<typeof getCompatibleParams>,
+  persistedParams: PersistedParams
+): PersistedParams {
+  const resolutionParam = compatibleParams.find((param) => param.id === 'resolution');
+  const qualityParam = compatibleParams.find((param) => param.id === 'quality');
+  const resolutionOptions = getEnumOptionValues(resolutionParam);
+  const qualityOptions = getEnumOptionValues(qualityParam);
+
+  const hasGPTResolutionOptions =
+    resolutionOptions.has('1k') &&
+    resolutionOptions.has('2k') &&
+    resolutionOptions.has('4k');
+  const hasOfficialGPTQualityOptions =
+    qualityOptions.has('auto') &&
+    qualityOptions.has('low') &&
+    qualityOptions.has('medium') &&
+    qualityOptions.has('high');
+
+  if (!hasGPTResolutionOptions || !hasOfficialGPTQualityOptions) {
+    return persistedParams;
+  }
+
+  const nextParams = { ...persistedParams };
+  const persistedResolution = nextParams.resolution;
+  const persistedQuality = nextParams.quality;
+
+  if (
+    persistedQuality &&
+    resolutionOptions.has(persistedQuality) &&
+    !resolutionOptions.has(persistedResolution)
+  ) {
+    nextParams.resolution = persistedQuality;
+  }
+
+  if (persistedQuality && !qualityOptions.has(persistedQuality)) {
+    delete nextParams.quality;
+  }
+
+  return nextParams;
+}
+
 function sanitizeSelectedParams(
   modelId: string,
   rawParams: unknown,
@@ -132,7 +178,10 @@ function sanitizeSelectedParams(
 ): PersistedParams {
   const compatibleParams = getCompatibleParams(modelId);
   const excludeParamIds = new Set(options?.excludeParamIds || []);
-  const persistedParams = asRecord(rawParams);
+  const persistedParams = migrateLegacyGPTImageQualityParam(
+    compatibleParams,
+    asRecord(rawParams)
+  );
   const nextParams: PersistedParams = {};
 
   const sizeParam = compatibleParams.find(param => param.id === 'size');
@@ -167,6 +216,16 @@ function sanitizeSelectedParams(
   });
 
   return applyForcedSunoParams(modelId, nextParams);
+}
+
+export function sanitizeImageToolExtraParams(
+  modelId: string,
+  rawParams: unknown
+): PersistedParams {
+  return sanitizeSelectedParams(modelId, rawParams, {
+    excludeParamIds: modelId.startsWith('mj') ? [] : ['size'],
+    keepDefaultSize: false,
+  });
 }
 
 function getDefaultModelForGenerationType(type: GenerationType): string {
@@ -304,10 +363,7 @@ export function loadAIImageToolPreferences(fallbackModel: string): AIImageToolPr
   return {
     currentModel,
     currentSelectionKey,
-    extraParams: sanitizeSelectedParams(currentModel, stored.extraParams, {
-      excludeParamIds: currentModel.startsWith('mj') ? [] : ['size'],
-      keepDefaultSize: false,
-    }),
+    extraParams: sanitizeImageToolExtraParams(currentModel, stored.extraParams),
     aspectRatio: sanitizeAspectRatio(currentModel, stored.aspectRatio),
   };
 }
@@ -439,10 +495,10 @@ export function loadScopedAIImageToolPreferences(
   const scoped = stored.scopedPreferences?.[preferenceKey];
 
   return {
-    extraParams: sanitizeSelectedParams(modelId, scoped?.extraParams ?? stored.extraParams, {
-      excludeParamIds: modelId.startsWith('mj') ? [] : ['size'],
-      keepDefaultSize: false,
-    }),
+    extraParams: sanitizeImageToolExtraParams(
+      modelId,
+      scoped?.extraParams ?? stored.extraParams
+    ),
     aspectRatio: sanitizeAspectRatio(modelId, scoped?.aspectRatio ?? stored.aspectRatio),
   };
 }

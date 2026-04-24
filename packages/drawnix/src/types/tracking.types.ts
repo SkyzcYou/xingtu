@@ -45,7 +45,7 @@ export interface TrackEvent {
   /** Event name (manually specified or auto-generated) */
   eventName: string;
 
-  /** Event parameters (from track-params attribute, optional) */
+  /** Event parameters (from `data-track-params` / legacy `track-params`, optional) */
   params?: Record<string, any>;
 
   /** Metadata (auto-injected) */

@@ -6,6 +6,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
+import { copyToClipboard } from '../../utils/runtime-helpers';
 import { Button, MessagePlugin, Loading } from 'tdesign-react';
 import { DeleteIcon, CopyIcon, UserIcon } from 'tdesign-icons-react';
 import type { SoraCharacter } from '../../types/character.types';
@@ -48,7 +49,7 @@ export const CharacterCard: React.FC<CharacterCardProps> = ({
 
       const mention = `@${character.username}`;
       try {
-        await navigator.clipboard.writeText(mention);
+        await copyToClipboard(mention);
         MessagePlugin.success(`已复制: ${mention}`);
       } catch (err) {
         console.error('Failed to copy:', err);

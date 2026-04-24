@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { generateUUID } from '../../../utils/runtime-helpers';
 import type { CreationMode, MusicAnalysisRecord } from '../types';
 import { formatMusicAnalysisMarkdown } from '../types';
 import { ModelDropdown } from '../../ai-input-bar/ModelDropdown';
@@ -319,7 +320,7 @@ export const CreatePage: React.FC<CreatePageProps> = ({
     try {
       // 先创建 record
       const record: MusicAnalysisRecord = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         createdAt: Date.now(),
         source: 'scratch',
         sourceLabel: creationPrompt.slice(0, 30) || '从零创作',

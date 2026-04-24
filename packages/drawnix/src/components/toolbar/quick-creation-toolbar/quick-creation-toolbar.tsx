@@ -58,7 +58,12 @@ export interface QuickCreationToolbarProps {
   position: [number, number] | null; // 屏幕坐标
   visible: boolean;
   onClose: () => void;
-  onOpenMediaLibrary?: () => void;
+  onOpenMediaLibrary?: (config?: {
+    mode?: SelectionMode;
+    filterType?: AssetType;
+    onSelect?: (asset: Asset) => void | Promise<void>;
+    selectButtonText?: string;
+  }) => void;
 }
 
 enum PopupKey {
@@ -190,16 +195,6 @@ export const QuickCreationToolbar: React.FC<QuickCreationToolbarProps> = ({
     onClose();
   };
 
-  const handleMediaLibraryClick = () => {
-    resetAllPopovers();
-    if (onOpenMediaLibrary) {
-      onOpenMediaLibrary();
-      onClose();
-      return;
-    }
-    setMediaLibraryOpen(true);
-  };
-
   const handleImageClick = () => {
     resetAllPopovers();
     addImage(board);
@@ -234,6 +229,20 @@ export const QuickCreationToolbar: React.FC<QuickCreationToolbarProps> = ({
         t('toolbar.assetInsertFailed' as any) || '插入素材失败'
       );
     }
+  };
+
+  const handleMediaLibraryClick = () => {
+    resetAllPopovers();
+    if (onOpenMediaLibrary) {
+      onOpenMediaLibrary({
+        mode: SelectionMode.SELECT,
+        onSelect: handleInsertAsset,
+        selectButtonText: t('toolbar.insert' as any) || '插入',
+      });
+      onClose();
+      return;
+    }
+    setMediaLibraryOpen(true);
   };
 
   // 保存最后选择的画笔类型

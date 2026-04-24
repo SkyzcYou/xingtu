@@ -94,8 +94,8 @@ const PATH_PATTERNS: PathPattern[] = [
   {
     test: (p) => /\/images\/edits/i.test(p),
     hint: () => ({
-      protocol: 'openai.images.generations',
-      requestSchema: 'openai.image.basic-json',
+      protocol: 'openai.images.edits',
+      requestSchema: 'openai.image.gpt-edit-form',
       responseSchema: 'openai.image.data',
       submitPath: '/images/edits',
     }),

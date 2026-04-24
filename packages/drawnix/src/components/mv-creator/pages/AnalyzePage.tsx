@@ -4,6 +4,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { generateUUID } from '../../../utils/runtime-helpers';
 import type { MVRecord, GeneratedClip } from '../types';
 import { TaskType, TaskStatus } from '../../../types/task.types';
 import { addRecord, updateRecord } from '../storage';
@@ -182,7 +183,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
     if (!record) {
       const sourceLabel = clip.title || clip.prompt?.slice(0, 20) || '已有音频';
       record = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         createdAt: Date.now(),
         creationPrompt: creationPrompt.trim() || clip.prompt || '',
         sourceLabel,

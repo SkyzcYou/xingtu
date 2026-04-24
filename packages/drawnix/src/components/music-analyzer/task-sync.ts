@@ -1,3 +1,4 @@
+import { generateUUID } from '../../utils/runtime-helpers';
 import type { Task } from '../../types/task.types';
 import { TaskType } from '../../types/task.types';
 import type {
@@ -98,7 +99,7 @@ export async function syncMusicAnalyzerTask(task: Task): Promise<{
     ).trim();
 
     const record: MusicAnalysisRecord = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       createdAt: Date.now(),
       source: 'upload',
       sourceLabel,

@@ -95,6 +95,75 @@ describe('provider routing', () => {
     expect(plan.provider.profileId).toBe('provider-a');
   });
 
+  it('uses preferred request schema when a model has generation and edit bindings', () => {
+    const planner = new InvocationPlanner(
+      createRepositories({
+        profiles: [
+          {
+            id: 'provider-a',
+            name: 'Provider A',
+            providerType: 'openai-compatible',
+            baseUrl: 'https://api.openai.com/v1',
+            apiKey: 'key-a',
+            authType: 'bearer',
+          },
+        ],
+        bindings: [
+          {
+            id: 'gpt-generation',
+            profileId: 'provider-a',
+            modelId: 'gpt-image-2',
+            operation: 'image',
+            protocol: 'openai.images.generations',
+            requestSchema: 'openai.image.gpt-generation-json',
+            responseSchema: 'openai.image.data',
+            submitPath: '/images/generations',
+            priority: 320,
+            confidence: 'high',
+            source: 'template',
+          },
+          {
+            id: 'gpt-edit',
+            profileId: 'provider-a',
+            modelId: 'gpt-image-2',
+            operation: 'image',
+            protocol: 'openai.images.edits',
+            requestSchema: 'openai.image.gpt-edit-form',
+            responseSchema: 'openai.image.data',
+            submitPath: '/images/edits',
+            priority: 319,
+            confidence: 'high',
+            source: 'template',
+          },
+        ],
+      })
+    );
+
+    const editPlan = planner.plan({
+      operation: 'image',
+      modelRef: {
+        profileId: 'provider-a',
+        modelId: 'gpt-image-2',
+      },
+      preferredRequestSchema: [
+        'missing.schema',
+        'openai.image.gpt-edit-form',
+      ],
+    });
+    const fallbackPlan = planner.plan({
+      operation: 'image',
+      modelRef: {
+        profileId: 'provider-a',
+        modelId: 'gpt-image-2',
+      },
+      preferredRequestSchema: 'missing.schema',
+    });
+
+    expect(editPlan.binding.id).toBe('gpt-edit');
+    expect(editPlan.binding.submitPath).toBe('/images/edits');
+    expect(fallbackPlan.binding.id).toBe('gpt-generation');
+  });
+
   it('keeps same model ids separate across different providers', () => {
     const planner = new InvocationPlanner(
       createRepositories({
@@ -298,7 +367,89 @@ describe('provider routing', () => {
     ).toBe('trim-v1');
   });
 
-  it('routes tuzi gemini image models to images generations only', () => {
+  it('routes the same GPT Image model by profile image compatibility', () => {
+    const model: ModelConfig = {
+      id: 'gpt-image-2',
+      label: 'GPT Image 2',
+      type: 'image',
+      vendor: ModelVendor.GPT,
+    };
+
+    const officialBindings = inferBindingsForProviderModel(
+      {
+        id: 'provider-openai',
+        name: 'OpenAI',
+        providerType: 'openai-compatible',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'openai-key',
+        authType: 'bearer',
+        imageApiCompatibility: 'auto',
+      },
+      model
+    );
+    const tuziBindings = inferBindingsForProviderModel(
+      {
+        id: 'provider-tuzi',
+        name: 'Tuzi',
+        providerType: 'openai-compatible',
+        baseUrl: 'https://api.tu-zi.com/v1',
+        apiKey: 'tuzi-key',
+        authType: 'bearer',
+        imageApiCompatibility: 'auto',
+      },
+      model
+    );
+    const genericBindings = inferBindingsForProviderModel(
+      {
+        id: 'provider-generic',
+        name: 'Generic',
+        providerType: 'openai-compatible',
+        baseUrl: 'https://gateway.example.com/v1',
+        apiKey: 'generic-key',
+        authType: 'bearer',
+        imageApiCompatibility: 'openai-gpt-image',
+      },
+      model
+    );
+
+    expect(officialBindings.map((binding) => binding.requestSchema)).toEqual([
+      'openai.image.gpt-generation-json',
+      'openai.image.gpt-edit-form',
+    ]);
+    expect(officialBindings[0]?.metadata?.image).toMatchObject({
+      action: 'generation',
+      imageApiCompatibility: 'auto',
+      resolvedImageApiCompatibility: 'openai-gpt-image',
+    });
+    expect(officialBindings[1]?.metadata?.image).toMatchObject({
+      action: 'edit',
+      maxImageCount: 16,
+      supportsMask: true,
+      imageApiCompatibility: 'auto',
+      resolvedImageApiCompatibility: 'openai-gpt-image',
+    });
+    expect(tuziBindings.map((binding) => binding.requestSchema)).toEqual([
+      'tuzi.image.gpt-generation-json',
+      'tuzi.image.gpt-edit-json',
+    ]);
+    expect(tuziBindings[0]?.metadata?.image).toMatchObject({
+      action: 'generation',
+      imageApiCompatibility: 'auto',
+      resolvedImageApiCompatibility: 'tuzi-gpt-image',
+    });
+    expect(tuziBindings[1]?.metadata?.image).toMatchObject({
+      action: 'edit',
+      maxImageCount: 16,
+      supportsMask: false,
+      imageApiCompatibility: 'auto',
+      resolvedImageApiCompatibility: 'tuzi-gpt-image',
+    });
+    expect(genericBindings[0]?.requestSchema).toBe(
+      'openai.image.gpt-generation-json'
+    );
+  });
+
+  it('routes tuzi gemini image models through generateContent', () => {
     const profile = {
       id: 'provider-b',
       name: 'Provider B',
@@ -330,13 +481,55 @@ describe('provider routing', () => {
     });
 
     expect(bindings.map((binding) => binding.protocol)).toEqual([
-      'openai.images.generations',
+      'google.generateContent',
     ]);
-    expect(plan.binding.protocol).toBe('openai.images.generations');
-    expect(plan.binding.submitPath).toBe('/images/generations');
+    expect(plan.binding.protocol).toBe('google.generateContent');
+    expect(plan.binding.submitPath).toBe(
+      '/v1beta/models/{model}:generateContent'
+    );
   });
 
-  it('keeps discovered generateContent bindings below template image bindings for tuzi-compatible endpoints', () => {
+  it('keeps third-party tuzi gemini image models on generateContent', () => {
+    const profile = {
+      id: 'provider-c',
+      name: 'Provider C',
+      providerType: 'gemini-compatible' as const,
+      baseUrl: 'https://business.tu-zi.com/v1',
+      apiKey: 'key-c',
+      authType: 'bearer' as const,
+    };
+    const model: ModelConfig = {
+      id: 'gemini-3-pro-image-preview',
+      label: 'Gemini Image',
+      type: 'image',
+      vendor: ModelVendor.GEMINI,
+    };
+    const bindings = inferBindingsForProviderModel(profile, model);
+    const planner = new InvocationPlanner(
+      createRepositories({
+        profiles: [profile],
+        bindings,
+      })
+    );
+
+    const plan = planner.plan({
+      operation: 'image',
+      modelRef: {
+        profileId: profile.id,
+        modelId: model.id,
+      },
+    });
+
+    expect(bindings.map((binding) => binding.protocol)).toEqual([
+      'google.generateContent',
+    ]);
+    expect(plan.binding.protocol).toBe('google.generateContent');
+    expect(plan.binding.submitPath).toBe(
+      '/v1beta/models/{model}:generateContent'
+    );
+  });
+
+  it('keeps discovered generateContent bindings below template image bindings for tuzi-gpt-image endpoints', () => {
     const profile = {
       id: 'provider-b',
       name: 'Provider B',
@@ -376,6 +569,35 @@ describe('provider routing', () => {
     );
     expect(plan.binding.protocol).toBe('openai.images.generations');
     expect(plan.binding.submitPath).toBe('/images/generations');
+  });
+
+  it('does not infer discovered official GPT edit bindings for non-official compatibility profiles', () => {
+    const profile = {
+      id: 'provider-tuzi',
+      name: 'Provider Tuzi',
+      providerType: 'openai-compatible' as const,
+      baseUrl: 'https://api.tu-zi.com/v1',
+      apiKey: 'key-b',
+      authType: 'bearer' as const,
+      imageApiCompatibility: 'tuzi-gpt-image' as const,
+    };
+    const model: ModelConfig = {
+      id: 'gpt-image-2',
+      label: 'GPT Image 2',
+      type: 'image',
+      vendor: ModelVendor.GPT,
+    };
+
+    const bindings = inferBindingsForProviderModel(profile, model, {
+      edit: {
+        path: '/images/edits',
+      } as any,
+    });
+
+    expect(bindings.map((binding) => binding.requestSchema)).toEqual([
+      'tuzi.image.gpt-generation-json',
+      'tuzi.image.gpt-edit-json',
+    ]);
   });
 
   it('infers multiple candidate bindings for multi-interface video models', () => {
@@ -466,17 +688,23 @@ describe('provider routing', () => {
     expect(binding?.protocol).toBe('kling.video');
     expect(binding?.requestSchema).toBe('kling.video.auto-action-json');
     expect(binding?.submitPath).toBe('/kling/v1/videos/{action}');
-    expect(binding?.pollPathTemplate).toBe('/kling/v1/videos/{action}/{taskId}');
+    expect(binding?.pollPathTemplate).toBe(
+      '/kling/v1/videos/{action}/{taskId}'
+    );
     expect(binding?.metadata?.video?.versionField).toBe('model_name');
     expect(binding?.metadata?.video?.defaultVersion).toBe('kling-v1-6');
-    expect(binding?.metadata?.video?.versionOptionsByAction?.text2video).toEqual([
+    expect(
+      binding?.metadata?.video?.versionOptionsByAction?.text2video
+    ).toEqual([
       'kling-v3',
       'kling-v2-6',
       'kling-v2-1',
       'kling-v1-6',
       'kling-v1-5',
     ]);
-    expect(binding?.metadata?.video?.versionOptionsByAction?.image2video).toEqual([
+    expect(
+      binding?.metadata?.video?.versionOptionsByAction?.image2video
+    ).toEqual([
       'kling-v3',
       'kling-v2-6',
       'kling-v2-1',

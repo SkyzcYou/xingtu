@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { copyToClipboard } from '../../utils/runtime-helpers';
 import { Button, Tabs, MessagePlugin, Input, Checkbox } from 'tdesign-react';
 import {
   DeleteIcon,
@@ -25,6 +26,7 @@ import { useTaskQueue } from '../../hooks/useTaskQueue';
 import { Task, TaskType, TaskStatus } from '../../types/task.types';
 import { unifiedCacheService } from '../../services/unified-cache-service';
 import { taskStorageReader } from '../../services/task-storage-reader';
+import { taskQueueService } from '../../services/task-queue';
 import { useDrawnix, DialogType } from '../../hooks/use-drawnix';
 import { insertImageFromUrl } from '../../data/image';
 import { insertVideoFromUrl } from '../../data/video';
@@ -59,6 +61,7 @@ import {
 } from '../../utils/lyrics-task-utils';
 import { resolveAudioResultUrls } from '../../services/audio-task-result-utils';
 import { ConfirmDialog } from '../dialog/ConfirmDialog';
+import { analytics } from '../../utils/posthog-analytics';
 import './task-queue.scss';
 import { HoverTip } from '../shared';
 
@@ -74,6 +77,31 @@ export interface TaskQueuePanelProps {
   onClose?: () => void;
   /** Callback when a task action is performed */
   onTaskAction?: (action: string, taskId: string) => void;
+}
+
+function getTaskResultCount(task: Task): number {
+  if (Array.isArray(task.result?.urls) && task.result.urls.length > 0) {
+    return task.result.urls.length;
+  }
+  if (task.result?.url || task.result?.chatResponse || isLyricsTask(task)) {
+    return 1;
+  }
+  return 0;
+}
+
+function buildTaskAnalyticsPayload(task: Task): Record<string, unknown> {
+  const resultCount = getTaskResultCount(task);
+  return {
+    taskId: task.id,
+    taskType: task.type,
+    taskStatus: task.status,
+    model:
+      typeof task.params.model === 'string' && task.params.model.trim()
+        ? task.params.model
+        : undefined,
+    resultCount: resultCount || undefined,
+    hasMultipleResults: resultCount > 1,
+  };
 }
 
 /**
@@ -494,6 +522,11 @@ export const TaskQueuePanel: React.FC<TaskQueuePanelProps> = ({
             : '下载成功'
         );
       }
+      analytics.track('generation_result_download', {
+        ...buildTaskAnalyticsPayload(task),
+        downloadedCount: result.downloadedCount,
+        openedCount: result.openedCount,
+      });
       onTaskAction?.('download', taskId);
     } catch (error) {
       console.error('Download failed:', error);
@@ -514,13 +547,8 @@ export const TaskQueuePanel: React.FC<TaskQueuePanelProps> = ({
       return;
     }
 
-    if (!navigator.clipboard?.writeText) {
-      MessagePlugin.warning('当前环境不支持复制');
-      return;
-    }
-
     try {
-      await navigator.clipboard.writeText(text);
+      await copyToClipboard(text);
       MessagePlugin.success('歌词已复制');
       onTaskAction?.('copy', taskId);
     } catch (error) {
@@ -556,6 +584,7 @@ export const TaskQueuePanel: React.FC<TaskQueuePanelProps> = ({
           ],
         });
         MessagePlugin.success('文本已插入到白板');
+        taskQueueService.markAsInserted(taskId, 'manual');
         onTaskAction?.('insert', taskId);
         return;
       }
@@ -607,6 +636,7 @@ export const TaskQueuePanel: React.FC<TaskQueuePanelProps> = ({
             ],
           });
           MessagePlugin.success('歌词已插入到白板');
+          taskQueueService.markAsInserted(taskId, 'manual');
           onTaskAction?.('insert', taskId);
           return;
         }
@@ -686,6 +716,7 @@ export const TaskQueuePanel: React.FC<TaskQueuePanelProps> = ({
         });
         MessagePlugin.success('文本已插入到白板');
       }
+      taskQueueService.markAsInserted(taskId, 'manual');
       onTaskAction?.('insert', taskId);
     } catch (error) {
       console.error('Failed to insert to board:', error);

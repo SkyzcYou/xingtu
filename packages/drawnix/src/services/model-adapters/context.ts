@@ -12,11 +12,17 @@ import type { ModelType } from '../../constants/model-config';
 import { resolveInvocationPlanFromRoute } from '../provider-routing';
 import type { AdapterContext } from './types';
 
+interface AdapterContextRouteOptions {
+  bindingId?: string | null;
+  preferredRequestSchema?: string | readonly string[] | null;
+}
+
 export const getAdapterContextFromSettings = (
   routeType: ModelType,
-  modelId?: string | ModelRef | null
+  modelId?: string | ModelRef | null,
+  options: AdapterContextRouteOptions = {}
 ): AdapterContext => {
-  const plan = resolveInvocationPlanFromRoute(routeType, modelId);
+  const plan = resolveInvocationPlanFromRoute(routeType, modelId, options);
   if (plan) {
     return {
       baseUrl: plan.provider.baseUrl,

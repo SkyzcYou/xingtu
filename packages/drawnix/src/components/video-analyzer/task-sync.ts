@@ -1,3 +1,4 @@
+import { generateUUID } from '../../utils/runtime-helpers';
 import type { Task } from '../../types/task.types';
 import type { AnalysisRecord, AnalysisSourceSnapshot, VideoAnalysisData } from './types';
 import { addRecord, loadRecords, updateRecord } from './storage';
@@ -88,7 +89,7 @@ export async function syncVideoAnalyzerTask(task: Task): Promise<{
     );
 
     const record: AnalysisRecord = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       createdAt: Date.now(),
       source,
       sourceLabel,

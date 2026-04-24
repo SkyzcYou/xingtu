@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
+import { generateUUID } from '../../utils/runtime-helpers';
 import { createPortal } from 'react-dom';
 import 'winbox/dist/css/winbox.min.css';
 import './winbox-custom.scss';
@@ -181,7 +182,7 @@ export const WinBoxWindow: React.FC<WinBoxWindowProps> = ({
   minimizeTargetSelector,
   onActivate,
 }) => {
-  const windowIdRef = useRef(id || `winbox-${crypto.randomUUID()}`);
+  const windowIdRef = useRef(id || `winbox-${generateUUID()}`);
   const winboxRef = useRef<any>(null);
   const winboxElementRef = useRef<HTMLDivElement | null>(null); // WinBox 窗口的 DOM 元素
   const onCloseRef = useRef(onClose);

@@ -22,8 +22,15 @@ export interface ImageGenerationOptions {
   model?: string;
   modelRef?: ModelRef | null;
   size?: string;
-  quality?: '1k' | '2k' | '4k';
+  resolution?: '1k' | '2k' | '4k';
+  quality?: 'auto' | 'low' | 'medium' | 'high' | '1k' | '2k' | '4k';
+  generationMode?: 'text_to_image' | 'image_to_image' | 'image_edit';
   referenceImages?: string[];
+  maskImage?: string;
+  inputFidelity?: 'high' | 'low';
+  background?: 'transparent' | 'opaque' | 'auto';
+  outputFormat?: 'png' | 'jpeg' | 'webp';
+  outputCompression?: number;
   uploadedImages?: Array<{ url?: string; base64?: string }>;
   count?: number;
   /** 透传给具体适配器的额外参数（如 seedream_quality、aspect_ratio） */

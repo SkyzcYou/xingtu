@@ -124,10 +124,18 @@ function toRouteType(kind: ModelKind): ModelType {
 export function resolveAdapterForInvocation(
   kind: ModelKind,
   modelId?: string | null,
-  modelRef?: ModelRef | null
+  modelRef?: ModelRef | null,
+  options: {
+    bindingId?: string | null;
+    preferredRequestSchema?: string | readonly string[] | null;
+  } = {}
 ): ModelAdapter | undefined {
   const routeModel = modelRef || modelId || null;
-  const plan = resolveInvocationPlanFromRoute(toRouteType(kind), routeModel);
+  const plan = resolveInvocationPlanFromRoute(
+    toRouteType(kind),
+    routeModel,
+    options
+  );
 
   if (plan) {
     const adapter = resolveAdapterForBinding(plan.binding, kind);

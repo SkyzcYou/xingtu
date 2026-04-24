@@ -14,8 +14,21 @@ import type {
   VideoGenerationParams,
   AIAnalyzeParams,
 } from '../media-executor/types';
+import type { ImageModelAdapter } from '../model-adapters/types';
 
 describe('Media Executor Module', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock('../media-executor/task-storage-writer');
+    vi.doUnmock('../../utils/settings-manager');
+    vi.doUnmock('../sw-channel/client');
+    vi.doUnmock('../task-storage-reader');
+    vi.doUnmock('../media-executor/llm-api-logger');
+    vi.doUnmock('../unified-cache-service');
+    vi.doUnmock('../../utils/api-auth-error-event');
+    vi.doUnmock('../model-adapters');
+  });
+
   describe('IMediaExecutor Interface', () => {
     it('should define correct interface structure', () => {
       // 验证接口类型定义存在
@@ -89,15 +102,28 @@ describe('Media Executor Module', () => {
           failTask: async () => {},
         },
       }));
-
-      vi.doMock('../../utils/settings-manager', () => ({
-        geminiSettings: {
-          get: () => ({
-            apiKey: 'test-key',
-            baseUrl: 'https://api.example.com',
-          }),
+      vi.doMock('../unified-cache-service', () => ({
+        unifiedCacheService: {
+          getImageForAI: vi.fn(),
+          isCached: vi.fn(async () => false),
+          cacheMediaFromBlob: vi.fn(async () => {}),
         },
       }));
+
+      vi.doMock('../../utils/settings-manager', async (importOriginal) => {
+        const actual = await importOriginal<
+          typeof import('../../utils/settings-manager')
+        >();
+        return {
+          ...actual,
+          geminiSettings: {
+            get: () => ({
+              apiKey: 'test-key',
+              baseUrl: 'https://api.example.com',
+            }),
+          },
+        };
+      });
 
       const { FallbackMediaExecutor } = await import(
         '../media-executor/fallback-executor'
@@ -105,7 +131,7 @@ describe('Media Executor Module', () => {
       const executor = new FallbackMediaExecutor();
 
       expect(executor.name).toBe('FallbackMediaExecutor');
-    });
+    }, 15000);
 
     it('should implement IMediaExecutor interface', async () => {
       vi.doMock('../media-executor/task-storage-writer', () => ({
@@ -117,15 +143,28 @@ describe('Media Executor Module', () => {
           failTask: async () => {},
         },
       }));
-
-      vi.doMock('../../utils/settings-manager', () => ({
-        geminiSettings: {
-          get: () => ({
-            apiKey: 'test-key',
-            baseUrl: 'https://api.example.com',
-          }),
+      vi.doMock('../unified-cache-service', () => ({
+        unifiedCacheService: {
+          getImageForAI: vi.fn(),
+          isCached: vi.fn(async () => false),
+          cacheMediaFromBlob: vi.fn(async () => {}),
         },
       }));
+
+      vi.doMock('../../utils/settings-manager', async (importOriginal) => {
+        const actual = await importOriginal<
+          typeof import('../../utils/settings-manager')
+        >();
+        return {
+          ...actual,
+          geminiSettings: {
+            get: () => ({
+              apiKey: 'test-key',
+              baseUrl: 'https://api.example.com',
+            }),
+          },
+        };
+      });
 
       const { FallbackMediaExecutor } = await import(
         '../media-executor/fallback-executor'
@@ -138,7 +177,99 @@ describe('Media Executor Module', () => {
       expect(typeof executor.generateVideo).toBe('function');
       expect(typeof executor.aiAnalyze).toBe('function');
       expect(typeof executor.generateText).toBe('function');
-    });
+    }, 15000);
+
+    it('passes GPT Image edit schema through fallback adapter routes', async () => {
+      vi.doMock('../media-executor/llm-api-logger', () => ({
+        startLLMApiLog: vi.fn(() => 'log-id'),
+        completeLLMApiLog: vi.fn(),
+        failLLMApiLog: vi.fn(),
+      }));
+      vi.doMock('../media-executor/task-storage-writer', () => ({
+        taskStorageWriter: {
+          completeTask: vi.fn(async () => {}),
+          failTask: vi.fn(async () => {}),
+        },
+      }));
+      vi.doMock('../unified-cache-service', () => ({
+        unifiedCacheService: {
+          getImageForAI: vi.fn(async () => ({
+            type: 'image',
+            value: 'data:image/png;base64,abc',
+          })),
+          isCached: vi.fn(async () => false),
+          cacheMediaFromBlob: vi.fn(async () => {}),
+        },
+      }));
+      vi.doMock('../../utils/api-auth-error-event', () => ({
+        isAuthError: vi.fn(() => false),
+        dispatchApiAuthError: vi.fn(),
+      }));
+      vi.doMock('../model-adapters', async (importOriginal) => {
+        const actual = await importOriginal<
+          typeof import('../model-adapters')
+        >();
+
+        return {
+          ...actual,
+          getAdapterContextFromSettings: vi.fn(() => ({
+            baseUrl: 'https://api.openai.com/v1',
+            apiKey: 'test-key',
+            authType: 'bearer',
+            binding: {
+              requestSchema: 'openai.image.gpt-edit-form',
+              submitPath: '/images/edits',
+            },
+          })),
+        };
+      });
+
+      const modelAdapters = await import('../model-adapters');
+      const { executeImageViaAdapter } = await import(
+        '../media-executor/fallback-adapter-routes'
+      );
+      const adapter: ImageModelAdapter = {
+        id: 'gpt-image-adapter',
+        label: 'GPT Image',
+        kind: 'image',
+        async generateImage() {
+          return {
+            url: 'https://example.com/out.png',
+            format: 'png',
+          };
+        },
+      };
+      const generateSpy = vi.spyOn(adapter, 'generateImage');
+
+      await executeImageViaAdapter('task-1', adapter, {
+        prompt: 'Edit this',
+        model: 'gpt-image-2',
+        referenceImages: ['data:image/png;base64,source'],
+        generationMode: 'image_to_image',
+        maskImage: 'data:image/png;base64,mask',
+        outputFormat: 'png',
+      });
+
+      expect(modelAdapters.getAdapterContextFromSettings).toHaveBeenCalledWith(
+        'image',
+        'gpt-image-2',
+        {
+          preferredRequestSchema: [
+            'openai.image.gpt-edit-form',
+            'tuzi.image.gpt-edit-json',
+          ],
+        }
+      );
+      expect(generateSpy).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          generationMode: 'image_to_image',
+          referenceImages: ['data:image/png;base64,abc'],
+          maskImage: 'data:image/png;base64,mask',
+          outputFormat: 'png',
+        })
+      );
+    }, 15000);
   });
 
   describe('ExecutorFactory', () => {
@@ -159,20 +290,33 @@ describe('Media Executor Module', () => {
           isAvailable: async () => true,
         },
       }));
-
-      vi.doMock('../../utils/settings-manager', () => ({
-        geminiSettings: {
-          get: () => ({
-            apiKey: 'test-key',
-            baseUrl: 'https://api.example.com',
-          }),
+      vi.doMock('../unified-cache-service', () => ({
+        unifiedCacheService: {
+          getImageForAI: vi.fn(),
+          isCached: vi.fn(async () => false),
+          cacheMediaFromBlob: vi.fn(async () => {}),
         },
       }));
+
+      vi.doMock('../../utils/settings-manager', async (importOriginal) => {
+        const actual = await importOriginal<
+          typeof import('../../utils/settings-manager')
+        >();
+        return {
+          ...actual,
+          geminiSettings: {
+            get: () => ({
+              apiKey: 'test-key',
+              baseUrl: 'https://api.example.com',
+            }),
+          },
+        };
+      });
 
       const { executorFactory } = await import('../media-executor/factory');
 
       expect(typeof executorFactory.getExecutor).toBe('function');
-    });
+    }, 15000);
   });
 
   describe('Task Polling Types', () => {

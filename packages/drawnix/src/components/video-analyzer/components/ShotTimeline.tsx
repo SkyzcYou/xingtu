@@ -13,15 +13,16 @@ interface ShotTimelineProps {
 
 export const ShotTimeline: React.FC<ShotTimelineProps> = ({ shots, totalDuration }) => (
   <div className="va-timeline">
-    {shots.map(shot => (
+    {shots.filter(Boolean).map((shot) => (
       <div
         key={shot.id}
         className="va-timeline-segment"
         style={{
-          flex: (shot.endTime - shot.startTime) / totalDuration,
-          backgroundColor: SHOT_TYPE_COLORS[shot.type] || SHOT_TYPE_COLORS.other,
+          flex: Math.max(((shot.endTime ?? 0) - (shot.startTime ?? 0)) / Math.max(totalDuration, 1), 0),
+          backgroundColor:
+            (shot.type && SHOT_TYPE_COLORS[shot.type]) || SHOT_TYPE_COLORS.other,
         }}
-        title={`${shot.label} ${shot.startTime}s-${shot.endTime}s`}
+        title={`${shot.label || '未命名镜头'} ${shot.startTime ?? 0}s-${shot.endTime ?? 0}s`}
       />
     ))}
   </div>

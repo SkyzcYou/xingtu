@@ -102,6 +102,18 @@ export interface GenerationParams {
   height?: number;
   /** Size parameter for API (e.g., '16x9', '1x1') */
   size?: string;
+  /** Image generation mode for providers that distinguish generation/edit */
+  generationMode?: 'text_to_image' | 'image_to_image' | 'image_edit';
+  /** Image edit mask URL or data URL */
+  maskImage?: string;
+  /** Image edit input fidelity */
+  inputFidelity?: 'high' | 'low';
+  /** Image output background mode */
+  background?: 'transparent' | 'opaque' | 'auto';
+  /** Image output format */
+  outputFormat?: 'png' | 'jpeg' | 'webp';
+  /** Image output compression, 0-100 */
+  outputCompression?: number;
   /** Video duration in seconds (video only) */
   duration?: number;
   /** Audio title */

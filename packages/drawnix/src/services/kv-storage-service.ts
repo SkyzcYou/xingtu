@@ -49,6 +49,10 @@ function openDatabase(): Promise<IDBDatabase> {
  * 获取存储的值
  */
 async function get<T>(key: string): Promise<T | null> {
+  if (!key) {
+    return null;
+  }
+
   try {
     const db = await openDatabase();
     return new Promise((resolve, reject) => {
@@ -80,6 +84,10 @@ async function get<T>(key: string): Promise<T | null> {
  * 设置存储的值
  */
 async function set<T>(key: string, value: T): Promise<void> {
+  if (!key) {
+    return;
+  }
+
   try {
     const db = await openDatabase();
     return new Promise((resolve, reject) => {
@@ -117,6 +125,10 @@ async function set<T>(key: string, value: T): Promise<void> {
  * 删除存储的值
  */
 async function remove(key: string): Promise<void> {
+  if (!key) {
+    return;
+  }
+
   try {
     const db = await openDatabase();
     return new Promise((resolve, reject) => {

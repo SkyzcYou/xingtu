@@ -29,6 +29,15 @@
     return window[CDN_GLOBAL_KEY] || window[LEGACY_CDN_GLOBAL_KEY] || null;
   }
 
+  function isSupportedCDNName(name) {
+    for (var i = 0; i < CDN_SOURCES.length; i++) {
+      if (CDN_SOURCES[i].name === name) {
+        return true;
+      }
+    }
+    return name === 'local';
+  }
+
   function setCDNApi(api) {
     window[CDN_API_GLOBAL_KEY] = api;
     window[LEGACY_CDN_API_GLOBAL_KEY] = api;
@@ -62,16 +71,11 @@
     cacheExpiry: 3600000, // 缓存过期时间（1小时）
   };
 
-  // CDN 源列表
+  // 运行时 CDN 候选：主 CDN 优先，备用 CDN 兜底
   var CDN_SOURCES = [
     {
       name: 'jsdelivr',
       baseUrl: 'https://cdn.jsdelivr.net/npm/' + CONFIG.packageName,
-      testPath: '/version.json',
-    },
-    {
-      name: 'unpkg',
-      baseUrl: 'https://unpkg.com/' + CONFIG.packageName,
       testPath: '/version.json',
     },
   ];
@@ -120,9 +124,16 @@
         localStorage.getItem(LEGACY_STORAGE_KEY);
       if (cached) {
         var data = JSON.parse(cached);
-        if (Date.now() - data.timestamp < CONFIG.cacheExpiry) {
+        if (
+          Date.now() - data.timestamp < CONFIG.cacheExpiry &&
+          isSupportedCDNName(data.cdn)
+        ) {
           setCDNPreference(data);
           return Promise.resolve(data);
+        }
+
+        if (!isSupportedCDNName(data.cdn)) {
+          clearCDNCache();
         }
       }
     } catch (e) {

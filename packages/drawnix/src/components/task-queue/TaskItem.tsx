@@ -5,7 +5,7 @@
  * Shows input parameters (prompt) and output results when completed.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Button, Tag, Checkbox } from 'tdesign-react';
 import {
   ImageIcon,
@@ -329,6 +329,16 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
     const mediaCount = isLyricsTask
       ? 0
       : task.result?.urls?.length || (task.result?.url ? 1 : 0);
+    const actionTrackParams = useMemo(
+      () =>
+        JSON.stringify({
+          taskId: task.id,
+          taskType: task.type,
+          taskStatus: task.status,
+          hasMultipleResults: mediaCount > 1,
+        }),
+      [mediaCount, task.id, task.status, task.type]
+    );
     const previewMediaUrl = isAudioTask
       ? isLyricsTask
         ? undefined
@@ -811,6 +821,8 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
                         size="small"
                         variant="text"
                         icon={<DownloadIcon />}
+                        data-track="task_click_download"
+                        data-track-params={actionTrackParams}
                         onClick={(e) => {
                           e.stopPropagation();
                           onDownload?.(task.id);
@@ -885,6 +897,7 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
                       theme="primary"
                       className="task-item__primary-action"
                       data-track="task_click_insert"
+                      data-track-params={actionTrackParams}
                       onClick={(e) => {
                         e.stopPropagation();
                         onInsert?.(task.id);
@@ -900,6 +913,7 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
                     theme="primary"
                     className="task-item__primary-action"
                     data-track="task_click_retry"
+                    data-track-params={actionTrackParams}
                     onClick={(e) => {
                       e.stopPropagation();
                       onRetry?.(task.id);

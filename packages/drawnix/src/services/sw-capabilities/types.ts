@@ -174,7 +174,14 @@ export interface ImageGenerationParams {
   prompt: string;
   size?: string;
   referenceImages?: string[];
-  quality?: '1k' | '2k' | '4k';
+  generationMode?: 'text_to_image' | 'image_to_image' | 'image_edit';
+  maskImage?: string;
+  inputFidelity?: 'high' | 'low';
+  background?: 'transparent' | 'opaque' | 'auto';
+  outputFormat?: 'png' | 'jpeg' | 'webp';
+  outputCompression?: number;
+  resolution?: '1k' | '2k' | '4k';
+  quality?: 'auto' | 'low' | 'medium' | 'high' | '1k' | '2k' | '4k';
   model?: string;
   count?: number;
   /** 批次 ID（批量生成时） */

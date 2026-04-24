@@ -65,6 +65,10 @@ class WorkflowStorageWriter {
    * 获取工作流
    */
   async getWorkflow(workflowId: string): Promise<Workflow | null> {
+    if (!workflowId) {
+      return null;
+    }
+
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(WORKFLOWS_STORE, 'readonly');
@@ -80,6 +84,10 @@ class WorkflowStorageWriter {
    * 删除工作流
    */
   async deleteWorkflow(workflowId: string): Promise<void> {
+    if (!workflowId) {
+      return;
+    }
+
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(WORKFLOWS_STORE, 'readwrite');

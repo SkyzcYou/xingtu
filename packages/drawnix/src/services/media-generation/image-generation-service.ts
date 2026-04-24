@@ -27,6 +27,65 @@ import {
   TaskExecutionPhase,
 } from '../../types/task.types';
 
+function buildStoredImageAdapterParams(
+  options: ImageGenerationOptions
+): Record<string, unknown> | undefined {
+  const adapterParams: Record<string, unknown> = {
+    ...(options.params || {}),
+  };
+
+  if (
+    options.resolution !== undefined &&
+    adapterParams.resolution === undefined
+  ) {
+    adapterParams.resolution = options.resolution;
+  }
+
+  if (options.quality !== undefined && adapterParams.quality === undefined) {
+    adapterParams.quality = options.quality;
+  }
+
+  if (
+    typeof options.count === 'number' &&
+    Number.isFinite(options.count) &&
+    adapterParams.n === undefined
+  ) {
+    adapterParams.n = options.count;
+  }
+
+  return Object.keys(adapterParams).length > 0 ? adapterParams : undefined;
+}
+
+function buildStoredImageTaskParams(
+  prompt: string,
+  options: ImageGenerationOptions
+) {
+  return {
+    prompt,
+    model: options.model,
+    modelRef: options.modelRef || null,
+    size: options.size,
+    resolution: options.resolution,
+    quality: options.quality,
+    generationMode: options.generationMode,
+    referenceImages:
+      options.referenceImages && options.referenceImages.length > 0
+        ? options.referenceImages
+        : undefined,
+    maskImage: options.maskImage,
+    inputFidelity: options.inputFidelity,
+    background: options.background,
+    outputFormat: options.outputFormat,
+    outputCompression: options.outputCompression,
+    uploadedImages:
+      options.uploadedImages && options.uploadedImages.length > 0
+        ? options.uploadedImages
+        : undefined,
+    count: options.count,
+    params: buildStoredImageAdapterParams(options),
+  };
+}
+
 /**
  * 生成图片
  *
@@ -57,24 +116,18 @@ export async function generateImage(
   // 创建任务记录
   const taskId = generateTaskId();
   const now = Date.now();
-  await taskStorageWriter.createTask(taskId, 'image', {
-    prompt: sanitizedParams.prompt,
-    model: options.model,
-    modelRef: options.modelRef || null,
-    size: options.size,
-  });
+  const persistedTaskParams = buildStoredImageTaskParams(
+    sanitizedParams.prompt,
+    options
+  );
+  await taskStorageWriter.createTask(taskId, 'image', persistedTaskParams);
 
   // 注册到 TaskQueueService 内存 Map，确保任务队列 UI 和重试功能可用
   taskQueueService.trackExternalTask({
     id: taskId,
     type: TaskType.IMAGE,
     status: QueueTaskStatus.PROCESSING,
-    params: {
-      prompt: sanitizedParams.prompt,
-      model: options.model,
-      modelRef: options.modelRef || null,
-      size: options.size,
-    },
+    params: persistedTaskParams,
     createdAt: now,
     updatedAt: now,
     startedAt: now,
@@ -91,8 +144,15 @@ export async function generateImage(
     model: options.model,
     modelRef: options.modelRef || null,
     size: options.size,
+    resolution: options.resolution,
+    generationMode: options.generationMode,
     quality: options.quality,
     referenceImages: options.referenceImages,
+    maskImage: options.maskImage,
+    inputFidelity: options.inputFidelity,
+    background: options.background,
+    outputFormat: options.outputFormat,
+    outputCompression: options.outputCompression,
     uploadedImages: options.uploadedImages,
     count: options.count,
     params: options.params,

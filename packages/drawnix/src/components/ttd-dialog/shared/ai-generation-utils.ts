@@ -163,6 +163,7 @@ export interface PromptOptimizationRequestOptions {
   optimizationRequirements?: string;
   language: 'zh' | 'en';
   type: 'image' | 'video';
+  mode?: 'polish' | 'structured';
 }
 
 export const buildPromptOptimizationRequest = ({
@@ -170,6 +171,7 @@ export const buildPromptOptimizationRequest = ({
   optimizationRequirements,
   language,
   type,
+  mode = 'polish',
 }: PromptOptimizationRequestOptions): string => {
   const trimmedPrompt = originalPrompt.trim();
   const trimmedRequirements = optimizationRequirements?.trim() || '';
@@ -189,6 +191,77 @@ export const buildPromptOptimizationRequest = ({
       : type === 'image'
       ? 'Improve subject detail, composition, style, lighting, materials, and visual detail.'
       : 'Improve subject motion, camera language, camera movement, timing, transitions, and continuity.';
+  const isStructuredMode = mode === 'structured';
+
+  if (isStructuredMode) {
+    if (language === 'zh') {
+      return [
+        `你是一名专业的${modalityLabel}结构化提示词设计师。`,
+        '请把原始需求整理成适合复杂场景生成的 JSON 结构化提示词。',
+        '',
+        '目标：',
+        '1. 保留用户原始意图，不要擅自改题。',
+        '2. 将复杂场景拆解为稳定、可复用、可继续编辑的结构字段。',
+        '3. 如果原文中有明确的布局、数量、标题、区域、主体、材质、风格、时间线、图例、标注等信息，尽量显式结构化。',
+        `4. ${domainFocus}`,
+        '5. 只输出一个合法 JSON 对象，不要解释、不要标题、不要 Markdown 代码块。',
+        '',
+        'JSON 结构要求：',
+        '1. 顶层优先包含这些键：type、instruction、style、layout。',
+        '2. style 是对象，放背景、主体风格、材质、镜头或质感等。',
+        '3. layout 是对象，放标题、分区、数量、位置、图例、时间轴、主体布局等。',
+        '4. 对复杂主体区域，优先使用 centerpiece、focal_point、sections、annotations、timeline、legends 等语义化字段。',
+        '5. 数量必须用数字，枚举信息尽量使用数组。',
+        '6. 不确定的扩展项可以补充 defaults、constraints、notes，但保持简洁。',
+        '7. 如果用户已经给了某种 JSON 雏形，要在其基础上补全，而不是完全推翻重写。',
+        '',
+        '输出风格要求：',
+        '1. value 尽量写成可直接给生图/生视频模型使用的短句或短段落。',
+        '2. 字段命名保持英文 snake_case 或 lowerCamelCase 二选一，但同一份 JSON 内保持一致。',
+        '3. 内容语言尽量与原始提示词一致。',
+        '',
+        '【原始提示词】',
+        trimmedPrompt,
+        '',
+        '【补充要求】',
+        trimmedRequirements ||
+          '将其整理成适合复杂结构场景的 JSON 提示词，便于后续继续扩写与复用。',
+      ].join('\n');
+    }
+
+    return [
+      `You are a professional ${modalityLabel} prompt architect for structured prompts.`,
+      'Transform the original request into a JSON-based structured prompt for complex scenes.',
+      '',
+      'Goals:',
+      '1. Preserve the original intent without changing the subject.',
+      '2. Decompose the scene into stable, reusable, and editable fields.',
+      '3. Explicitly structure layout, counts, titles, regions, subjects, materials, style, timeline, legends, labels, and annotations whenever present.',
+      `4. ${domainFocus}`,
+      '5. Output exactly one valid JSON object. No explanation, no title, no Markdown code fence.',
+      '',
+      'JSON structure rules:',
+      '1. Prefer these top-level keys: type, instruction, style, layout.',
+      '2. style should be an object for background, subject style, materials, camera, rendering, or texture.',
+      '3. layout should be an object for title, sections, counts, positions, legends, timelines, and composition.',
+      '4. For the main subject area, prefer semantic fields such as centerpiece, focal_point, sections, annotations, timeline, or legends.',
+      '5. Use numbers for counts and arrays for enumerations whenever possible.',
+      '6. Add defaults, constraints, or notes only when useful, and keep them concise.',
+      '7. If the user already provided a JSON draft, extend and normalize it instead of replacing it entirely.',
+      '',
+      'Output style rules:',
+      '1. Values should be concise and directly usable for downstream generation.',
+      '2. Use either snake_case or lowerCamelCase field names, but stay consistent within the same JSON.',
+      '3. Keep the language aligned with the original prompt as much as possible.',
+      '',
+      '[Original Prompt]',
+      trimmedPrompt,
+      '',
+      '[Additional Requirements]',
+      trimmedRequirements ||
+        'Restructure it into a reusable JSON prompt for a complex visual scene.',
+    ].join('\n');
+  }
 
   if (language === 'zh') {
     return [

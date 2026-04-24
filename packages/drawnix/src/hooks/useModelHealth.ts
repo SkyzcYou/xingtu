@@ -6,8 +6,13 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { geminiSettings } from '../utils/settings-manager';
 import {
+    geminiSettings,
+    providerProfilesSettings,
+    type ProviderProfile,
+} from '../utils/settings-manager';
+import {
+    buildModelHealthKey,
     modelHealthFetcher,
     buildHealthMap,
     isTuziApiUrl,
@@ -25,13 +30,17 @@ export interface UseModelHealthResult {
     shouldShowHealth: boolean;
     /** 手动刷新数据 */
     refresh: () => Promise<void>;
-    /** 根据模型 ID 获取健康状态 */
-    getHealthStatus: (modelId: string) => ModelHealthStatus | undefined;
+    /** 根据模型 ID 和供应商获取健康状态 */
+    getHealthStatus: (modelId: string, profileId?: string | null) => ModelHealthStatus | undefined;
 }
 
 // UI 刷新间隔（5 分钟）- 用于定时器
 // 注意：实际 API 调用频率由 modelHealthFetcher 单例控制（最小 1 分钟）
 const UI_REFRESH_INTERVAL = 5 * 60 * 1000;
+
+function hasTuziProvider(profiles: ProviderProfile[]): boolean {
+    return profiles.some((profile) => profile.enabled && isTuziApiUrl(profile.baseUrl || ''));
+}
 
 /**
  * 模型健康状态 Hook
@@ -46,12 +55,17 @@ export function useModelHealth(): UseModelHealthResult {
     const [error, setError] = useState<string | null>(null);
     const [shouldShowHealth, setShouldShowHealth] = useState(false);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(
+        () => providerProfilesSettings.get()
+    );
 
     // 检查是否应该显示健康状态
     const checkShouldShow = useCallback(() => {
         const settings = geminiSettings.get();
-        const show = isTuziApiUrl(settings.baseUrl || '');
+        const profiles = providerProfilesSettings.get();
+        const show = isTuziApiUrl(settings.baseUrl || '') || hasTuziProvider(profiles);
         setShouldShowHealth(show);
+        setProviderProfiles(profiles);
         return show;
     }, []);
 
@@ -85,9 +99,29 @@ export function useModelHealth(): UseModelHealthResult {
     }, [fetchData]);
 
     // 获取特定模型的健康状态
-    const getHealthStatus = useCallback((modelId: string): ModelHealthStatus | undefined => {
-        return healthMap.get(modelId);
-    }, [healthMap]);
+    const getHealthStatus = useCallback((modelId: string, profileId?: string | null): ModelHealthStatus | undefined => {
+        const profile =
+            typeof profileId === 'string' && profileId
+                ? providerProfiles.find((item) => item.id === profileId) || null
+                : null;
+
+        if (profile) {
+            if (!isTuziApiUrl(profile.baseUrl || '')) {
+                return undefined;
+            }
+
+            return healthMap.get(
+                buildModelHealthKey(modelId, profile.pricingGroup || 'default')
+            );
+        }
+
+        const settings = geminiSettings.get();
+        if (!isTuziApiUrl(settings.baseUrl || '')) {
+            return undefined;
+        }
+
+        return healthMap.get(buildModelHealthKey(modelId, 'default'));
+    }, [healthMap, providerProfiles]);
 
     // 初始化和定时刷新
     useEffect(() => {
@@ -120,9 +154,11 @@ export function useModelHealth(): UseModelHealthResult {
         };
 
         geminiSettings.addListener(handleSettingsChange);
+        providerProfilesSettings.addListener(handleSettingsChange);
 
         return () => {
             geminiSettings.removeListener(handleSettingsChange);
+            providerProfilesSettings.removeListener(handleSettingsChange);
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
             }

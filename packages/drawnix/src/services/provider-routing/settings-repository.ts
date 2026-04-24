@@ -9,6 +9,7 @@ import {
   type ModelType,
 } from '../../constants/model-config';
 import {
+  DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
   TUZI_DEFAULT_PROVIDER_NAME,
   TUZI_PROVIDER_DEFAULT_BASE_URL,
@@ -36,6 +37,8 @@ import type {
 export interface SettingsInvocationPlannerOptions {
   includeLegacyProfile?: boolean;
   manualBindings?: ProviderModelBinding[];
+  bindingId?: string | null;
+  preferredRequestSchema?: string | readonly string[] | null;
 }
 
 function inferProviderTypeFromBaseUrl(
@@ -88,6 +91,7 @@ function toProviderProfileSnapshot(
     | 'baseUrl'
     | 'apiKey'
     | 'authType'
+    | 'imageApiCompatibility'
     | 'extraHeaders'
   >
 ): ProviderProfileSnapshot {
@@ -102,6 +106,9 @@ function toProviderProfileSnapshot(
       profile.providerType,
       profile.authType
     ),
+    imageApiCompatibility:
+      profile.imageApiCompatibility ||
+      DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
     extraHeaders: profile.extraHeaders,
   };
 }
@@ -177,6 +184,9 @@ function buildLegacyProfileSnapshot(): ProviderProfileSnapshot {
       providerType,
       existingLegacyProfile?.authType
     ),
+    imageApiCompatibility:
+      existingLegacyProfile?.imageApiCompatibility ||
+      DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
   };
 }
 
@@ -329,6 +339,8 @@ export function resolveInvocationPlanFromRoute(
       {
         operation,
         modelRef,
+        bindingId: options.bindingId,
+        preferredRequestSchema: options.preferredRequestSchema,
       },
       options
     );

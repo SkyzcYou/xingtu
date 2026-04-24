@@ -9,6 +9,7 @@
  * - div / span 等：使用 window.getSelection() API
  */
 
+import { copyToClipboard } from '../utils/runtime-helpers';
 import { useEffect, useRef, RefObject } from 'react';
 
 interface UseTextSelectionOptions {
@@ -159,18 +160,10 @@ export function useTextSelection(
         const selectedText = getSelectedText(element);
 
         if (selectedText) {
-          // 使用 Clipboard API 复制
-          navigator.clipboard.writeText(selectedText).then(() => {
+          copyToClipboard(selectedText).then(() => {
             // console.log(`Text ${isCutShortcut ? 'cut' : 'copied'} via keyboard shortcut:`, selectedText);
           }).catch(err => {
             console.error('Failed to copy text:', err);
-            // 降级：使用 document.execCommand (已废弃但仍然有效)
-            // eslint-disable-next-line deprecation/deprecation
-            try {
-              document.execCommand('copy');
-            } catch (execError) {
-              console.error('execCommand copy also failed:', execError);
-            }
           });
         }
 

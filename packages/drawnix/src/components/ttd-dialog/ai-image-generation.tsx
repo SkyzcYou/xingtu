@@ -43,6 +43,7 @@ import { DialogTaskList } from '../task-queue/DialogTaskList';
 import { LS_KEYS } from '../../constants/storage-keys';
 import {
   loadScopedAIImageToolPreferences,
+  sanitizeImageToolExtraParams,
   saveAIImageToolPreferences,
 } from '../../services/ai-generation-preferences-service';
 import {
@@ -493,6 +494,16 @@ const AIImageGeneration = ({
   // 处理任务编辑（从弹窗内的任务列表点击编辑）
   const handleEditTask = (task: any) => {
     // console.log('Image handleEditTask - task params:', task.params);
+    const taskModel = task.params.model || currentModel;
+    const taskExtraParams = {
+      ...(task.params.params || {}),
+      ...(task.params.resolution !== undefined
+        ? { resolution: task.params.resolution }
+        : {}),
+      ...(task.params.quality !== undefined
+        ? { quality: task.params.quality }
+        : {}),
+    };
 
     // 标记为手动编辑模式,防止 props 的 useEffect 覆盖我们的更改
     setIsManualEdit(true);
@@ -500,7 +511,11 @@ const AIImageGeneration = ({
 
     // 直接更新表单状态
     setPrompt(task.params.prompt || '');
-    setMjSelectedParams({});
+    setMjSelectedParams(
+      Object.keys(taskExtraParams).length > 0
+        ? sanitizeImageToolExtraParams(taskModel, taskExtraParams)
+        : {}
+    );
     setWidth(task.params.width || 1024);
     setHeight(task.params.height || 1024);
 

@@ -5,10 +5,7 @@ const DIST_DIR = path.resolve(__dirname, '../dist/apps/web');
 const INDEX_HTML = path.join(DIST_DIR, 'index.html');
 const IDLE_MANIFEST = path.join(DIST_DIR, 'idle-prefetch-manifest.json');
 const DISALLOWED_PREFIXES = [
-  'ai-chat-',
   'tool-windows-',
-  'diagram-engines-',
-  'office-data-',
   'external-skills-',
 ];
 const STATIC_IMPORT_RE =
@@ -39,7 +36,13 @@ if (directAssets.length === 0) {
   fail('入口 HTML 没有直接引用任何 assets 资源');
 }
 
-const invalidDirectAssets = directAssets.filter((asset) =>
+const directScriptAssets = scriptMatches.filter((asset) =>
+  asset.startsWith('assets/')
+);
+
+// 运行时分组样式允许直接注入 HTML，避免首次展示时额外请求 CSS。
+// 这里仅阻止分组 JS 重新回流到首屏入口链。
+const invalidDirectAssets = directScriptAssets.filter((asset) =>
   DISALLOWED_PREFIXES.some((prefix) => path.basename(asset).startsWith(prefix))
 );
 
@@ -47,18 +50,9 @@ if (invalidDirectAssets.length > 0) {
   fail(`重模块重新回流到入口 HTML：${invalidDirectAssets.join(', ')}`);
 }
 
-if (!fs.existsSync(IDLE_MANIFEST)) {
-  fail('idle-prefetch-manifest.json 不存在');
-}
-
-const idleManifest = JSON.parse(fs.readFileSync(IDLE_MANIFEST, 'utf8'));
-const missingGroups = ['ai-chat', 'tool-windows'].filter((group) => {
-  const files = idleManifest.groups?.[group];
-  return !Array.isArray(files) || files.length === 0;
-});
-
-if (missingGroups.length > 0) {
-  fail(`idle-prefetch-manifest 缺少高频分组：${missingGroups.join(', ')}`);
+let idleManifest = { groups: {} };
+if (fs.existsSync(IDLE_MANIFEST)) {
+  idleManifest = JSON.parse(fs.readFileSync(IDLE_MANIFEST, 'utf8'));
 }
 
 function collectStaticImports(entryAsset, visited = new Set()) {

@@ -80,4 +80,27 @@ describe('model-sort', () => {
       'gemini-3-pro-image-preview',
     ]);
   });
+
+  it('推荐分优先于跨系列名称和版本排序', () => {
+    const models = [
+      createImageModel('gpt-4o-image', {
+        vendor: ModelVendor.GPT,
+        recommendedScore: -999,
+      }),
+      createImageModel('gpt-image-2', {
+        vendor: ModelVendor.GPT,
+        recommendedScore: 95,
+      }),
+      createImageModel('gpt-image-1', {
+        vendor: ModelVendor.GPT,
+        recommendedScore: 87,
+      }),
+    ];
+
+    expect(sortModelsByDisplayPriority(models).map((model) => model.id)).toEqual([
+      'gpt-image-2',
+      'gpt-image-1',
+      'gpt-4o-image',
+    ]);
+  });
 });

@@ -6,6 +6,7 @@
  */
 
 import React, { useMemo, useRef, useEffect, useCallback } from 'react';
+import { copyToClipboard } from '../../utils/runtime-helpers';
 import type { Message } from '@llamaindex/chat-ui';
 import { ServiceIcon, LayersIcon, ImageIcon, BulletpointIcon } from 'tdesign-icons-react';
 import './user-message-bubble.scss';
@@ -149,7 +150,7 @@ export const UserMessageBubble: React.FC<UserMessageBubbleProps> = ({
       const selection = window.getSelection();
       const selectedText = selection?.toString();
       if (selectedText) {
-        navigator.clipboard.writeText(selectedText).catch(err => {
+        copyToClipboard(selectedText).catch(err => {
           console.error('Failed to copy text:', err);
         });
         e.stopPropagation();

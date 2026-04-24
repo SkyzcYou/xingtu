@@ -482,7 +482,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                       <TypeIcon type={model.type} />
                       {getTypeLabel(model.type)}
                     </span>
-                    <ModelHealthBadge modelId={model.id} />
+                    <ModelHealthBadge
+                      modelId={model.id}
+                      profileId={model.sourceProfileId || null}
+                    />
                   </div>
                   <div className="ai-model-selector__item-desc">
                     {model.description}

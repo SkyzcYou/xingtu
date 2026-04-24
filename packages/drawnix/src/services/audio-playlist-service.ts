@@ -1,4 +1,5 @@
 import localforage from 'localforage';
+import { generateUUID } from '../utils/runtime-helpers';
 import {
   AUDIO_PLAYLIST_FAVORITES_ID,
   createAudioPlaylistItem,
@@ -113,7 +114,7 @@ class AudioPlaylistService {
     }
     const now = this.getNow();
     const playlist: AudioPlaylist = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name: trimmedName,
       createdAt: now,
       updatedAt: now,

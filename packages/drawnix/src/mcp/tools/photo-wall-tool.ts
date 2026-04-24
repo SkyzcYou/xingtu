@@ -5,9 +5,18 @@
  * 复用 generate_image 工具的任务队列能力
  */
 
-import type { MCPTool, MCPResult, MCPExecuteOptions, MCPTaskResult } from '../types';
+import type {
+  MCPTool,
+  MCPResult,
+  MCPExecuteOptions,
+  MCPTaskResult,
+} from '../types';
 import type { LayoutStyle, GridConfig } from '../../types/photo-wall.types';
-import { LAYOUT_STYLES, GRID_IMAGE_DEFAULTS, GRID_IMAGE_PROMPT_TEMPLATE } from '../../types/photo-wall.types';
+import {
+  LAYOUT_STYLES,
+  GRID_IMAGE_DEFAULTS,
+  GRID_IMAGE_PROMPT_TEMPLATE,
+} from '../../types/photo-wall.types';
 import { taskQueueService } from '../../services/task-queue';
 import { TaskType } from '../../types/task.types';
 import { getCurrentImageModel } from './image-generation';
@@ -26,7 +35,7 @@ export interface GridImageToolParams {
   layoutStyle?: LayoutStyle;
   /** 图片尺寸（默认 1x1） */
   imageSize?: string;
-  /** 图片质量（默认 2k） */
+  /** 分辨率档位（默认 2k） */
   imageQuality?: '1k' | '2k' | '4k';
   /** 参考图片 URL 列表 */
   referenceImages?: string[];
@@ -34,12 +43,13 @@ export interface GridImageToolParams {
   model?: string;
 }
 
-
 /**
  * 获取布局风格描述
  */
 function getLayoutStyleDescription(): string {
-  return LAYOUT_STYLES.map(s => `- ${s.style}（${s.labelZh}）：${s.description}`).join('\n');
+  return LAYOUT_STYLES.map(
+    (s) => `- ${s.style}（${s.labelZh}）：${s.description}`
+  ).join('\n');
 }
 
 /**
@@ -54,7 +64,10 @@ function buildGridImagePrompt(theme: string, gridConfig: GridConfig): string {
  * 创建宫格图任务（queue 模式）
  * 复用图片生成的任务队列，添加宫格图特有参数
  */
-function executeQueue(params: GridImageToolParams, options: MCPExecuteOptions): MCPTaskResult {
+function executeQueue(
+  params: GridImageToolParams,
+  options: MCPExecuteOptions
+): MCPTaskResult {
   const {
     theme,
     rows = GRID_IMAGE_DEFAULTS.gridConfig.rows,
@@ -122,11 +135,20 @@ function executeQueue(params: GridImageToolParams, options: MCPExecuteOptions): 
           size: imageSize,
           model: actualModel,
           // 参考图片
-          uploadedImages: uploadedImages && uploadedImages.length > 0 ? uploadedImages : undefined,
+          uploadedImages:
+            uploadedImages && uploadedImages.length > 0
+              ? uploadedImages
+              : undefined,
+          params: {
+            resolution: imageQuality,
+          },
           // 宫格图特有参数，用于任务完成后的处理
           gridImageRows: validRows,
           gridImageCols: validCols,
-          gridImageLayoutStyle: layoutStyle as 'scattered' | 'grid' | 'circular',
+          gridImageLayoutStyle: layoutStyle as
+            | 'scattered'
+            | 'grid'
+            | 'circular',
           // 保存原始主题，用于显示
           originalTheme: theme,
           // 批量参数
@@ -195,7 +217,8 @@ ${getLayoutStyleDescription()}
     properties: {
       theme: {
         type: 'string',
-        description: '宫格图主题描述，如"孟菲斯风格餐具"、"可爱猫咪表情包"、"复古相机收藏"等',
+        description:
+          '宫格图主题描述，如"孟菲斯风格餐具"、"可爱猫咪表情包"、"复古相机收藏"等',
       },
       rows: {
         type: 'number',
@@ -243,13 +266,16 @@ ${getLayoutStyleDescription()}
   supportedModes: ['queue'],
 
   promptGuidance: {
-    whenToUse: '当用户想要生成多个相关主题的图片并以宫格图/拼贴画形式展示时使用。关键词：宫格图、九宫格、图片墙、表情包、产品展示、拼贴画、系列图片。',
+    whenToUse:
+      '当用户想要生成多个相关主题的图片并以宫格图/拼贴画形式展示时使用。关键词：宫格图、九宫格、图片墙、表情包、产品展示、拼贴画、系列图片。',
 
     parameterGuidance: {
-      theme: '主题描述应该具体且有多样性潜力。好的主题：描述一类事物的多种变体（如"不同品种的可爱猫咪"、"各种颜色的马卡龙"）。避免：过于具体的单一描述（如"一只橘猫"）。',
+      theme:
+        '主题描述应该具体且有多样性潜力。好的主题：描述一类事物的多种变体（如"不同品种的可爱猫咪"、"各种颜色的马卡龙"）。避免：过于具体的单一描述（如"一只橘猫"）。',
       rows: '根据内容数量决定：表情包通常3x3或4x4，产品展示2x3或3x4，大型展示4x4或5x5。',
       cols: '建议与rows相同创建正方形网格，或cols略大于rows创建横向布局。',
-      layoutStyle: 'scattered（散落）适合艺术感展示；grid（网格）适合产品目录；circular（环形）适合突出中心主题。',
+      layoutStyle:
+        'scattered（散落）适合艺术感展示；grid（网格）适合产品目录；circular（环形）适合突出中心主题。',
     },
 
     bestPractices: [
@@ -262,22 +288,46 @@ ${getLayoutStyleDescription()}
     examples: [
       {
         input: '生成一个猫咪表情包',
-        args: { theme: '可爱猫咪表情包，包含开心、惊讶、生气、困惑、得意、卖萌等各种有趣表情，卡通风格', rows: 4, cols: 4, layoutStyle: 'grid' },
+        args: {
+          theme:
+            '可爱猫咪表情包，包含开心、惊讶、生气、困惑、得意、卖萌等各种有趣表情，卡通风格',
+          rows: 4,
+          cols: 4,
+          layoutStyle: 'grid',
+        },
         explanation: '表情包适合用网格布局，主题描述了多种表情变体',
       },
       {
         input: '做一个孟菲斯风格的餐具宫格图',
-        args: { theme: '孟菲斯风格餐具，包含碗、盘、杯、勺等不同类型，色彩鲜艳，几何图案装饰，白色背景', rows: 3, cols: 3, layoutStyle: 'scattered' },
+        args: {
+          theme:
+            '孟菲斯风格餐具，包含碗、盘、杯、勺等不同类型，色彩鲜艳，几何图案装饰，白色背景',
+          rows: 3,
+          cols: 3,
+          layoutStyle: 'scattered',
+        },
         explanation: '散落布局增加艺术感，主题明确了风格和物品多样性',
       },
       {
         input: '创建花卉插画集',
-        args: { theme: '水彩风格花卉插画，包含玫瑰、向日葵、郁金香、樱花、薰衣草等不同种类的花朵，柔和色彩', rows: 4, cols: 4, layoutStyle: 'scattered' },
+        args: {
+          theme:
+            '水彩风格花卉插画，包含玫瑰、向日葵、郁金香、樱花、薰衣草等不同种类的花朵，柔和色彩',
+          rows: 4,
+          cols: 4,
+          layoutStyle: 'scattered',
+        },
         explanation: '4x4网格提供更多展示空间，主题列举了多种花卉种类',
       },
       {
         input: '做个美食九宫格',
-        args: { theme: '精致甜点美食摄影，包含蛋糕、马卡龙、泡芙、冰淇淋等各式甜品，俯视角度，浅色背景', rows: 3, cols: 3, layoutStyle: 'grid' },
+        args: {
+          theme:
+            '精致甜点美食摄影，包含蛋糕、马卡龙、泡芙、冰淇淋等各式甜品，俯视角度，浅色背景',
+          rows: 3,
+          cols: 3,
+          layoutStyle: 'grid',
+        },
         explanation: '美食九宫格用网格布局更整齐，俯视角度适合食物展示',
       },
     ],
@@ -289,13 +339,18 @@ ${getLayoutStyleDescription()}
     ],
   },
 
-  execute: async (params: Record<string, unknown>, options?: MCPExecuteOptions): Promise<MCPResult> => {
+  execute: async (
+    params: Record<string, unknown>,
+    options?: MCPExecuteOptions
+  ): Promise<MCPResult> => {
     // 宫格图只支持 queue 模式，因为需要任务完成后的后处理
     // taskQueueService 会根据 SW 可用性自动选择正确的服务
-    return executeQueue(params as unknown as GridImageToolParams, options || {});
+    return executeQueue(
+      params as unknown as GridImageToolParams,
+      options || {}
+    );
   },
 };
-
 
 /**
  * 便捷方法：创建宫格图任务
@@ -309,4 +364,3 @@ export function createGridImageTask(
     mode: 'queue',
   }) as unknown as MCPTaskResult;
 }
-

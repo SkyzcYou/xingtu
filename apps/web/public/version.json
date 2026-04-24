@@ -1,6 +1,10 @@
 {
-  "version": "0.6.39",
-  "buildTime": "2026-04-21T03:10:27.168Z",
+  "version": "0.6.64",
+  "buildTime": "2026-04-23T14:43:18.159Z",
   "gitCommit": "unknown",
-  "changelog": []
+  "changelog": [
+    "修复 LLM API Logger 的 IDB 连接关闭导致大模型调用失败",
+    "HTML 缓存双 key 存储，导航请求直接命中",
+    "添加CDN恢复探测和详细日志记录"
+  ]
 }

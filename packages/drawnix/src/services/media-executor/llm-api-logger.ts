@@ -104,36 +104,34 @@ async function saveLogToDB(log: LLMApiLog): Promise<void> {
 
     store.put(log);
 
-    // 清理旧日志
-    const countRequest = store.count();
-    countRequest.onsuccess = () => {
-      const count = countRequest.result;
-      if (count > MAX_DB_LOGS) {
-        const index = store.index('timestamp');
-        const deleteCount = count - MAX_DB_LOGS;
-        let deleted = 0;
-
-        index.openCursor().onsuccess = (e) => {
-          const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
-          if (cursor && deleted < deleteCount) {
-            cursor.delete();
-            deleted++;
-            cursor.continue();
-          }
-        };
-      }
-    };
-
     await new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => {
-        db.close();
-        resolve();
-      };
-      tx.onerror = () => {
-        db.close();
-        reject(tx.error);
-      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
     });
+
+    // 清理旧日志在独立 transaction 中执行，失败不影响写入
+    try {
+      const cleanTx = db.transaction(STORE_NAME, 'readwrite');
+      const cleanStore = cleanTx.objectStore(STORE_NAME);
+      const countReq = cleanStore.count();
+      countReq.onsuccess = () => {
+        if (countReq.result > MAX_DB_LOGS) {
+          const idx = cleanStore.index('timestamp');
+          const deleteCount = countReq.result - MAX_DB_LOGS;
+          let deleted = 0;
+          idx.openCursor().onsuccess = (e) => {
+            const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+            if (cursor && deleted < deleteCount) {
+              cursor.delete();
+              deleted++;
+              cursor.continue();
+            }
+          };
+        }
+      };
+    } catch {
+      // 清理失败不影响主流程
+    }
   } catch (error) {
     console.warn('[LLMApiLogger:Fallback] Failed to save log:', error);
   }

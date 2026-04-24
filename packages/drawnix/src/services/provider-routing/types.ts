@@ -1,11 +1,16 @@
 import type { ModelType } from '../../constants/model-config';
-import type { ModelRef, ProviderProfile } from '../../utils/settings-manager';
+import type {
+  ImageApiCompatibility,
+  ModelRef,
+  ProviderProfile,
+} from '../../utils/settings-manager';
 
 export type ProviderOperation = ModelType;
 
 export type ProviderProtocol =
   | 'openai.chat.completions'
   | 'openai.images.generations'
+  | 'openai.images.edits'
   | 'openai.async.media'
   | 'openai.async.video'
   | 'tuzi.suno.music'
@@ -51,8 +56,17 @@ export interface ProviderTextBindingMetadata {
   capabilityConfidence?: ProviderBindingConfidence;
 }
 
+export interface ProviderImageBindingMetadata {
+  imageApiCompatibility?: ImageApiCompatibility;
+  resolvedImageApiCompatibility?: Exclude<ImageApiCompatibility, 'auto'>;
+  action?: 'generation' | 'edit';
+  maxImageCount?: number;
+  supportsMask?: boolean;
+}
+
 export interface ProviderBindingMetadata {
   text?: ProviderTextBindingMetadata;
+  image?: ProviderImageBindingMetadata;
   video?: ProviderVideoBindingMetadata;
   audio?: ProviderAudioBindingMetadata;
   [key: string]: unknown;
@@ -75,7 +89,13 @@ export interface ProviderAudioBindingMetadata {
 export interface ProviderProfileSnapshot
   extends Pick<
     ProviderProfile,
-    'id' | 'name' | 'providerType' | 'baseUrl' | 'apiKey' | 'extraHeaders'
+    | 'id'
+    | 'name'
+    | 'providerType'
+    | 'baseUrl'
+    | 'apiKey'
+    | 'imageApiCompatibility'
+    | 'extraHeaders'
   > {
   authType: ProviderAuthStrategy;
 }
@@ -137,6 +157,7 @@ export interface InvocationPlanRequest {
   modelRef?: ModelRef | null;
   fallbackModelRef?: ModelRef | null;
   bindingId?: string | null;
+  preferredRequestSchema?: string | readonly string[] | null;
 }
 
 export interface InvocationPlannerRepositories {

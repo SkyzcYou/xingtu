@@ -14,6 +14,8 @@ import { HoverTip } from './hover';
 export interface ModelHealthBadgeProps {
   /** 模型 ID */
   modelId: string;
+  /** 供应商 ID */
+  profileId?: string | null;
   /** 自定义类名 */
   className?: string;
 }
@@ -23,6 +25,7 @@ export interface ModelHealthBadgeProps {
  */
 export const ModelHealthBadge: React.FC<ModelHealthBadgeProps> = ({
   modelId,
+  profileId,
   className = '',
 }) => {
   const { shouldShowHealth, getHealthStatus } = useModelHealthContext();
@@ -32,7 +35,7 @@ export const ModelHealthBadge: React.FC<ModelHealthBadgeProps> = ({
     return null;
   }
 
-  const status = getHealthStatus(modelId);
+  const status = getHealthStatus(modelId, profileId);
 
   // 如果没有该模型的健康数据，不显示
   if (!status) {

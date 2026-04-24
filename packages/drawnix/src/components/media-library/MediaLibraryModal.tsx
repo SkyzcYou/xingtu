@@ -51,7 +51,16 @@ export function MediaLibraryModal({
   );
   const [showMobileInspector, setShowMobileInspector] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isSelecting, setIsSelecting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // 加载素材和检查配额
   useEffect(() => {
@@ -104,24 +113,42 @@ export function MediaLibraryModal({
 
   // 处理双击插入
   const handleDoubleClick = useCallback(
-    (asset: Asset) => {
-      if (onSelect) {
-        onSelect(asset);
+    async (asset: Asset) => {
+      if (!onSelect || isSelecting) {
+        return;
+      }
+
+      try {
+        setIsSelecting(true);
+        await onSelect(asset);
         onClose();
+      } finally {
+        if (isMountedRef.current) {
+          setIsSelecting(false);
+        }
       }
     },
-    [onSelect, onClose],
+    [isSelecting, onClose, onSelect],
   );
 
   // 处理"使用"按钮点击
   const handleUseAsset = useCallback(
-    (asset: Asset) => {
-      if (onSelect) {
-        onSelect(asset);
+    async (asset: Asset) => {
+      if (!onSelect || isSelecting) {
+        return;
+      }
+
+      try {
+        setIsSelecting(true);
+        await onSelect(asset);
         onClose();
+      } finally {
+        if (isMountedRef.current) {
+          setIsSelecting(false);
+        }
       }
     },
-    [onSelect, onClose],
+    [isSelecting, onClose, onSelect],
   );
 
   const handleDownloadAsset = useCallback(async (asset: Asset) => {
@@ -327,6 +354,7 @@ export function MediaLibraryModal({
                 onDownload={handleDownloadAsset}
                 onSelect={showSelectButton ? handleUseAsset : undefined}
                 showSelectButton={showSelectButton}
+                selecting={isSelecting}
                 selectButtonText={selectButtonText}
               />
             </div>
@@ -352,6 +380,7 @@ export function MediaLibraryModal({
             onDownload={handleDownloadAsset}
             onSelect={showSelectButton ? handleUseAsset : undefined}
             showSelectButton={showSelectButton}
+            selecting={isSelecting}
             selectButtonText={selectButtonText}
           />
         </Drawer>

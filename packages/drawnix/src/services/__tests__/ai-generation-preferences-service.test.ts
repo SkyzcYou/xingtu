@@ -122,6 +122,93 @@ describe('ai-generation-preferences-service', () => {
     });
   });
 
+  it('将 GPT Image 的旧 quality 档位偏好迁移到 resolution', async () => {
+    localStorage.setItem(
+      'aitu_ai_image_tool_preferences',
+      JSON.stringify({
+        value: {
+          currentModel: 'gpt-image-2',
+          currentSelectionKey: 'provider-a::gpt-image-2',
+          extraParams: {
+            quality: '2k',
+          },
+          aspectRatio: '16:9',
+          scopedPreferences: {
+            'provider-a::gpt-image-2': {
+              modelId: 'gpt-image-2',
+              selectionKey: 'provider-a::gpt-image-2',
+              extraParams: {
+                quality: '2k',
+              },
+              aspectRatio: '16:9',
+            },
+          },
+        },
+        updatedAt: Date.now(),
+      })
+    );
+
+    const { loadScopedAIImageToolPreferences } = await import(
+      '../ai-generation-preferences-service'
+    );
+
+    expect(
+      loadScopedAIImageToolPreferences(
+        'gpt-image-2',
+        'provider-a::gpt-image-2'
+      )
+    ).toMatchObject({
+      extraParams: {
+        resolution: '2k',
+        quality: 'auto',
+      },
+      aspectRatio: '16:9',
+    });
+  });
+
+  it('保留 Gemini preview 的旧 quality 档位语义', async () => {
+    localStorage.setItem(
+      'aitu_ai_image_tool_preferences',
+      JSON.stringify({
+        value: {
+          currentModel: 'gemini-3-pro-image-preview',
+          currentSelectionKey: 'provider-a::gemini-3-pro-image-preview',
+          extraParams: {
+            quality: '4k',
+          },
+          aspectRatio: '1:1',
+          scopedPreferences: {
+            'provider-a::gemini-3-pro-image-preview': {
+              modelId: 'gemini-3-pro-image-preview',
+              selectionKey: 'provider-a::gemini-3-pro-image-preview',
+              extraParams: {
+                quality: '4k',
+              },
+              aspectRatio: '1:1',
+            },
+          },
+        },
+        updatedAt: Date.now(),
+      })
+    );
+
+    const { loadScopedAIImageToolPreferences } = await import(
+      '../ai-generation-preferences-service'
+    );
+
+    expect(
+      loadScopedAIImageToolPreferences(
+        'gemini-3-pro-image-preview',
+        'provider-a::gemini-3-pro-image-preview'
+      )
+    ).toMatchObject({
+      extraParams: {
+        quality: '4k',
+      },
+      aspectRatio: '1:1',
+    });
+  });
+
   it('按模型作用域恢复视频工具偏好', async () => {
     const {
       loadScopedAIVideoToolPreferences,

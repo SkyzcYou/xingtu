@@ -28,6 +28,7 @@ import {
 } from './task-queue/utils/message-bus';
 import {
   fetchFromCDNWithFallback,
+  extractVersionFromCDNPath,
   getCDNStatusReport,
   resetCDNStatus,
   performHealthCheck,
@@ -246,6 +247,12 @@ const SW_CACHE_CREATED_AT_HEADER = 'sw-cache-created-at';
 const STATIC_SOURCE_HEADER = 'x-sw-source';
 const STATIC_REVISION_HEADER = 'x-sw-revision';
 const STATIC_APP_VERSION_HEADER = 'x-sw-app-version';
+const STATIC_FETCH_TARGET_HEADER = 'x-sw-fetch-target';
+const SERVICE_WORKER_DB_NAME = 'ServiceWorkerDB';
+const SERVICE_WORKER_DB_VERSION = 2;
+const FAILED_DOMAINS_STORE = 'failedDomains';
+const VERSION_STATE_STORE = 'versionState';
+const VERSION_STATE_KEY = 'app-version-state';
 
 // 缓存 URL 前缀 - 用于合并视频、图片等本地缓存资源
 const CACHE_URL_PREFIX = '/__aitu_cache__/';
@@ -264,6 +271,16 @@ interface CorsDomain {
   hostname: string;
   pathPattern: string;
   fallbackDomain: string;
+}
+
+type SWUpgradeState = 'idle' | 'prewarming' | 'ready' | 'committing';
+
+interface SWVersionState {
+  committedVersion: string;
+  pendingVersion: string | null;
+  pendingReadyAt: number | null;
+  upgradeState: SWUpgradeState;
+  updatedAt: number;
 }
 
 // 允许跨域处理的域名配置 - 仅拦截需要CORS处理的域名
@@ -449,6 +466,8 @@ interface DebugLogEntry {
   responseHeaders?: Record<string, string>;
   size?: number;
   details?: string;
+  resourceSource?: string;
+  resourceFetchTarget?: string;
   // 控制台日志专用字段
   logLevel?: 'log' | 'info' | 'warn' | 'error' | 'debug';
   logMessage?: string;
@@ -903,37 +922,173 @@ function isGenerateContentRequest(url: URL): boolean {
   );
 }
 
+function getStaticCacheName(version: string): string {
+  return `drawnix-static-v${version}`;
+}
+
+function createDefaultVersionState(): SWVersionState {
+  return {
+    committedVersion: APP_VERSION,
+    pendingVersion: null,
+    pendingReadyAt: null,
+    upgradeState: 'idle',
+    updatedAt: Date.now(),
+  };
+}
+
+function normalizeVersionState(value: unknown): SWVersionState {
+  const raw = (value || {}) as Partial<SWVersionState>;
+  const committedVersion =
+    typeof raw.committedVersion === 'string' && raw.committedVersion
+      ? raw.committedVersion
+      : APP_VERSION;
+  const pendingVersion =
+    typeof raw.pendingVersion === 'string' && raw.pendingVersion
+      ? raw.pendingVersion
+      : null;
+  const pendingReadyAt =
+    typeof raw.pendingReadyAt === 'number' && Number.isFinite(raw.pendingReadyAt)
+      ? raw.pendingReadyAt
+      : null;
+  const upgradeState: SWUpgradeState =
+    raw.upgradeState === 'prewarming' ||
+    raw.upgradeState === 'ready' ||
+    raw.upgradeState === 'committing'
+      ? raw.upgradeState
+      : 'idle';
+
+  return {
+    committedVersion,
+    pendingVersion,
+    pendingReadyAt,
+    upgradeState,
+    updatedAt:
+      typeof raw.updatedAt === 'number' && Number.isFinite(raw.updatedAt)
+        ? raw.updatedAt
+        : Date.now(),
+  };
+}
+
+function openServiceWorkerDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(
+      SERVICE_WORKER_DB_NAME,
+      SERVICE_WORKER_DB_VERSION
+    );
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(FAILED_DOMAINS_STORE)) {
+        db.createObjectStore(FAILED_DOMAINS_STORE, { keyPath: 'domain' });
+      }
+      if (!db.objectStoreNames.contains(VERSION_STATE_STORE)) {
+        db.createObjectStore(VERSION_STATE_STORE, { keyPath: 'key' });
+      }
+    };
+  });
+}
+
+async function readVersionState(): Promise<SWVersionState> {
+  try {
+    const db = await openServiceWorkerDB();
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction([VERSION_STATE_STORE], 'readonly');
+      const store = transaction.objectStore(VERSION_STATE_STORE);
+      const request = store.get(VERSION_STATE_KEY);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const result = request.result;
+        resolve(
+          normalizeVersionState(result?.state || createDefaultVersionState())
+        );
+      };
+    });
+  } catch (error) {
+    console.warn('Service Worker: 无法读取版本状态:', error);
+    return createDefaultVersionState();
+  }
+}
+
+async function writeVersionState(state: SWVersionState): Promise<SWVersionState> {
+  const normalized = normalizeVersionState(state);
+  try {
+    const db = await openServiceWorkerDB();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction([VERSION_STATE_STORE], 'readwrite');
+      const store = transaction.objectStore(VERSION_STATE_STORE);
+      store.put({
+        key: VERSION_STATE_KEY,
+        state: normalized,
+      });
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } catch (error) {
+    console.warn('Service Worker: 无法写入版本状态:', error);
+  }
+
+  return normalized;
+}
+
+async function updateVersionState(
+  patch:
+    | Partial<SWVersionState>
+    | ((current: SWVersionState) => Partial<SWVersionState>)
+): Promise<SWVersionState> {
+  const current = await readVersionState();
+  const nextPatch = typeof patch === 'function' ? patch(current) : patch;
+  return writeVersionState({
+    ...current,
+    ...nextPatch,
+    updatedAt: Date.now(),
+  });
+}
+
+async function postVersionState(
+  target?: Client | ServiceWorker | null
+): Promise<SWVersionState> {
+  const state = await readVersionState();
+  const payload = {
+    type: 'SW_VERSION_STATE' as const,
+    ...state,
+    swVersion: APP_VERSION,
+  };
+
+  if (target) {
+    target.postMessage(payload);
+    return state;
+  }
+
+  const clients = await sw.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  });
+
+  for (const client of clients) {
+    client.postMessage(payload);
+  }
+
+  return state;
+}
+
 // 从IndexedDB恢复失败域名列表
 async function loadFailedDomains(): Promise<void> {
   try {
-    const request = indexedDB.open('ServiceWorkerDB', 1);
+    const db = await openServiceWorkerDB();
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction([FAILED_DOMAINS_STORE], 'readonly');
+      const store = transaction.objectStore(FAILED_DOMAINS_STORE);
+      const getAllRequest = store.getAll();
 
-    return new Promise((resolve, reject) => {
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        const db = request.result;
-        if (db.objectStoreNames.contains('failedDomains')) {
-          const transaction = db.transaction(['failedDomains'], 'readonly');
-          const store = transaction.objectStore('failedDomains');
-          const getAllRequest = store.getAll();
-
-          getAllRequest.onsuccess = () => {
-            const domains = getAllRequest.result;
-            domains.forEach((item: any) => failedDomains.add(item.domain));
-            // console.log('Service Worker: 恢复失败域名列表:', Array.from(failedDomains));
-            resolve();
-          };
-          getAllRequest.onerror = () => reject(getAllRequest.error);
-        } else {
-          resolve();
-        }
+      getAllRequest.onsuccess = () => {
+        const domains = getAllRequest.result;
+        domains.forEach((item: any) => failedDomains.add(item.domain));
+        resolve();
       };
-      request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains('failedDomains')) {
-          db.createObjectStore('failedDomains', { keyPath: 'domain' });
-        }
-      };
+      getAllRequest.onerror = () => reject(getAllRequest.error);
     });
   } catch (error) {
     console.warn('Service Worker: 无法加载失败域名列表:', error);
@@ -943,28 +1098,14 @@ async function loadFailedDomains(): Promise<void> {
 // 保存失败域名到IndexedDB
 async function saveFailedDomain(domain: string): Promise<void> {
   try {
-    const request = indexedDB.open('ServiceWorkerDB', 1);
+    const db = await openServiceWorkerDB();
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction([FAILED_DOMAINS_STORE], 'readwrite');
+      const store = transaction.objectStore(FAILED_DOMAINS_STORE);
 
-    return new Promise((resolve, reject) => {
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        const db = request.result;
-        const transaction = db.transaction(['failedDomains'], 'readwrite');
-        const store = transaction.objectStore('failedDomains');
-
-        store.put({ domain: domain, timestamp: Date.now() });
-        transaction.oncomplete = () => {
-          // console.log('Service Worker: 已保存失败域名到数据库:', domain);
-          resolve();
-        };
-        transaction.onerror = () => reject(transaction.error);
-      };
-      request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains('failedDomains')) {
-          db.createObjectStore('failedDomains', { keyPath: 'domain' });
-        }
-      };
+      store.put({ domain: domain, timestamp: Date.now() });
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
     });
   } catch (error) {
     console.warn('Service Worker: 无法保存失败域名:', error);
@@ -975,21 +1116,30 @@ async function saveFailedDomain(domain: string): Promise<void> {
 
 // 标记新版本已准备好，等待用户确认
 // isUpdate: 是否是版本更新（有旧版本存在）
-function markNewVersionReady(isUpdate: boolean) {
-  // console.log(`Service Worker: 新版本 v${APP_VERSION} 已准备好，isUpdate=${isUpdate}`);
-
-  // 只有在版本更新时才通知客户端显示升级提示
-  // 首次安装不需要显示，因为没有"旧版本"可更新
+async function markNewVersionReady(isUpdate: boolean): Promise<void> {
   if (!isUpdate) {
-    // console.log('Service Worker: 首次安装，不显示更新提示');
+    await updateVersionState({
+      committedVersion: APP_VERSION,
+      pendingVersion: null,
+      pendingReadyAt: null,
+      upgradeState: 'idle',
+    });
+    await postVersionState();
     return;
   }
 
-  // 使用 channelManager 通知客户端有新版本可用
+  await updateVersionState((current) => ({
+    committedVersion: current.committedVersion || APP_VERSION,
+    pendingVersion: APP_VERSION,
+    pendingReadyAt: Date.now(),
+    upgradeState: 'ready',
+  }));
+
   const cm = getChannelManager();
   if (cm) {
     cm.sendSWNewVersionReady(APP_VERSION);
   }
+  await postVersionState();
 }
 
 // 清理旧的缓存条目以释放空间（基于LRU策略）
@@ -1065,6 +1215,55 @@ interface IdlePrefetchManifest {
   timestamp: string;
   defaults?: string[];
   groups: Record<string, Array<{ url: string; revision: string }>>;
+}
+
+const IDLE_PREFETCH_CONCURRENCY = 2;
+const IDLE_PREFETCH_RECENT_FETCH_WINDOW_MS = 1500;
+let lastObservedClientFetchAt = 0;
+const completedIdlePrefetchEntries = new Set<string>();
+const activeIdlePrefetchEntries = new Set<string>();
+const completedIdlePrefetchGroups = new Set<string>();
+let installingVersionIsUpdate = false;
+let shouldClaimClientsOnActivate = false;
+
+function logSWDebug(message: string, detail?: unknown): void {
+  if (detail === undefined) {
+    console.info(`[SWDebug] ${message}`);
+    return;
+  }
+
+  console.info(`[SWDebug] ${message}`, detail);
+}
+
+function getUnavailableCDNSnapshot(): Array<{
+  name: string;
+  failCount: number;
+  remainingCooldownMs: number;
+  lastFailureReason?: string;
+}> {
+  return getCDNStatusReport()
+    .filter((item) => item.remainingCooldownMs > 0 && !item.status.isHealthy)
+    .map((item) => ({
+      name: item.name,
+      failCount: item.status.failCount,
+      remainingCooldownMs: item.remainingCooldownMs,
+      lastFailureReason: item.status.lastFailureReason,
+    }));
+}
+
+function logStatic503Decision(
+  stage: string,
+  request: Request,
+  detail?: Record<string, unknown>
+): void {
+  console.warn('[SW Static 503]', {
+    stage,
+    requestUrl: request.url,
+    destination: request.destination,
+    mode: request.mode,
+    unavailableCDNs: getUnavailableCDNSnapshot(),
+    ...detail,
+  });
 }
 
 type SWBootProgressPhase =
@@ -1180,6 +1379,66 @@ async function getIdlePrefetchManifest(): Promise<IdlePrefetchManifest | null> {
   return idlePrefetchManifestPromise;
 }
 
+async function broadcastIdlePrefetchStatus(
+  target?: Client | null
+): Promise<void> {
+  const payload = {
+    type: 'SW_IDLE_PREFETCH_STATUS' as const,
+    completedGroups: Array.from(completedIdlePrefetchGroups),
+    version: APP_VERSION,
+    updatedAt: Date.now(),
+  };
+
+  if (target) {
+    logSWDebug('broadcast idle prefetch status to target client', {
+      clientId: target.id,
+      completedGroups: payload.completedGroups,
+    });
+    target.postMessage(payload);
+    return;
+  }
+
+  const clients = await sw.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  });
+
+  for (const client of clients) {
+    client.postMessage(payload);
+  }
+
+  logSWDebug('broadcast idle prefetch status to all clients', {
+    clientCount: clients.length,
+    completedGroups: payload.completedGroups,
+  });
+}
+
+function createIdlePrefetchEntryKey(url: string, revision: string): string {
+  return `${url}@${revision}`;
+}
+
+function shouldDeferIdlePrefetch(): boolean {
+  if (lastObservedClientFetchAt === 0) {
+    return false;
+  }
+
+  return (
+    Date.now() - lastObservedClientFetchAt < IDLE_PREFETCH_RECENT_FETCH_WINDOW_MS
+  );
+}
+
+function waitForIdlePrefetchWindow(): Promise<void> {
+  if (lastObservedClientFetchAt === 0) {
+    return Promise.resolve();
+  }
+
+  const elapsed = Date.now() - lastObservedClientFetchAt;
+  const waitMs = Math.max(0, IDLE_PREFETCH_RECENT_FETCH_WINDOW_MS - elapsed) + 100;
+  return new Promise((resolve) => {
+    setTimeout(resolve, waitMs);
+  });
+}
+
 function isOriginFirstStaticPath(pathname: string): boolean {
   return (
     pathname === '/' ||
@@ -1215,6 +1474,27 @@ function isVersionedStaticResource(request: Request, url: URL): boolean {
   );
 }
 
+function resolveStaticResourceFetchTargets(inputUrl: string): {
+  requestUrl: URL;
+  resourcePath: string;
+  cacheKey: string;
+  originFetchUrl: string;
+} {
+  const requestUrl = new URL(inputUrl, self.location.origin);
+  const normalizedResourceUrl = new URL(
+    `${requestUrl.pathname}${requestUrl.search}`,
+    self.location.origin
+  );
+
+  return {
+    requestUrl,
+    resourcePath: `${requestUrl.pathname}${requestUrl.search}`,
+    cacheKey: normalizedResourceUrl.href,
+    // 源站兜底始终回到当前 origin，避免被上游传入的绝对 URL 带偏。
+    originFetchUrl: normalizedResourceUrl.href,
+  };
+}
+
 function isStaticHtmlFallbackResponse(
   request: Request,
   url: URL,
@@ -1230,12 +1510,20 @@ function isStaticHtmlFallbackResponse(
 
 function decorateStaticCacheResponse(
   response: Response,
-  metadata: { source: string; revision: string }
+  metadata: {
+    source: string;
+    revision: string;
+    fetchTarget?: string;
+    appVersion?: string;
+  }
 ): Response {
   const headers = new Headers(response.headers);
   headers.set(STATIC_SOURCE_HEADER, metadata.source);
   headers.set(STATIC_REVISION_HEADER, metadata.revision);
-  headers.set(STATIC_APP_VERSION_HEADER, APP_VERSION);
+  headers.set(STATIC_APP_VERSION_HEADER, metadata.appVersion || APP_VERSION);
+  if (metadata.fetchTarget) {
+    headers.set(STATIC_FETCH_TARGET_HEADER, metadata.fetchTarget);
+  }
   headers.set('x-sw-cached-at', new Date().toISOString());
 
   return new Response(response.body, {
@@ -1249,7 +1537,12 @@ async function cacheStaticResponse(
   cache: Cache,
   request: RequestInfo | URL,
   response: Response,
-  metadata: { source: string; revision: string }
+  metadata: {
+    source: string;
+    revision: string;
+    fetchTarget?: string;
+    appVersion?: string;
+  }
 ): Promise<Response> {
   const cachedResponse = decorateStaticCacheResponse(response, metadata);
   await cache.put(request, cachedResponse.clone());
@@ -1295,8 +1588,10 @@ async function cacheFile(
   source?: string;
 }> {
   try {
+    const targets = resolveStaticResourceFetchTargets(url);
+
     // 检查缓存中是否已有相同 revision 的文件
-    const cachedResponse = await cache.match(url);
+    const cachedResponse = await cache.match(targets.cacheKey);
 
     if (cachedResponse) {
       const cachedRevision = cachedResponse.headers.get(STATIC_REVISION_HEADER);
@@ -1311,12 +1606,12 @@ async function cacheFile(
 
     let response: Response | null = null;
     let source = 'server';
-    const requestUrl = new URL(url, self.location.origin);
-    const syntheticRequest = new Request(requestUrl.href, { method: 'GET' });
+    let fetchTarget = targets.originFetchUrl;
+    const syntheticRequest = new Request(targets.cacheKey, { method: 'GET' });
 
-    if (isVersionedStaticResource(syntheticRequest, requestUrl)) {
+    if (isVersionedStaticResource(syntheticRequest, targets.requestUrl)) {
       const cdnResult = await fetchFromCDNWithFallback(
-        url.startsWith('/') ? url.slice(1) : url,
+        targets.resourcePath,
         APP_VERSION,
         location.origin
       );
@@ -1324,17 +1619,23 @@ async function cacheFile(
       if (cdnResult?.response.ok) {
         response = cdnResult.response;
         source = cdnResult.source;
+        fetchTarget = cdnResult.targetUrl;
       }
     }
 
     if (!response) {
-      response = await fetch(url, { cache: 'reload' });
+      response = await fetch(targets.originFetchUrl, { cache: 'reload' });
       source = 'server';
+      fetchTarget = targets.originFetchUrl;
     }
 
     if (
       response.ok &&
-      isStaticHtmlFallbackResponse(syntheticRequest, requestUrl, response)
+      isStaticHtmlFallbackResponse(
+        syntheticRequest,
+        targets.requestUrl,
+        response
+      )
     ) {
       return {
         url,
@@ -1345,12 +1646,22 @@ async function cacheFile(
     }
 
     if (response.ok) {
-      // 使用完整 URL 作为缓存 key，确保与运行时请求匹配
-      const fullUrl = new URL(url, self.location.origin).href;
-      await cacheStaticResponse(cache, fullUrl, response, {
+      await cacheStaticResponse(cache, targets.cacheKey, response, {
         source,
         revision,
+        fetchTarget,
+        appVersion: APP_VERSION,
       });
+
+      // index.html 额外存一份 '/' 的 key，导航请求直接命中无需回退查找
+      if (targets.resourcePath === '/index.html') {
+        const rootUrl = new URL('/', self.location.origin).href;
+        const rootResponse = await cache.match(targets.cacheKey);
+        if (rootResponse) {
+          await cache.put(rootUrl, rootResponse.clone());
+        }
+      }
+
       return { url, success: true, source };
     }
     return { url, success: false, status: response.status };
@@ -1436,45 +1747,140 @@ async function precacheStaticFiles(
   ).length;
 }
 
-async function prefetchIdleGroups(groupNames: string[]): Promise<void> {
+async function prefetchIdleGroups(groupNames: string[]): Promise<string[]> {
+  logSWDebug('prefetchIdleGroups start', { groupNames });
+
   if (groupNames.length === 0) {
-    return;
+    return [];
   }
 
   const manifest = await getIdlePrefetchManifest();
   if (!manifest) {
-    return;
+    logSWDebug('prefetchIdleGroups aborted: manifest missing');
+    return [];
   }
 
   const files = new Map<string, { url: string; revision: string }>();
   for (const groupName of groupNames) {
     const entries = manifest.groups[groupName] || [];
     for (const entry of entries) {
-      files.set(entry.url, entry);
+      const entryKey = createIdlePrefetchEntryKey(entry.url, entry.revision);
+      if (
+        completedIdlePrefetchEntries.has(entryKey) ||
+        activeIdlePrefetchEntries.has(entryKey)
+      ) {
+        continue;
+      }
+
+      files.set(entryKey, entry);
     }
   }
 
   if (files.size === 0) {
-    return;
+    const alreadyCompletedGroups = groupNames.filter((groupName) => {
+      const entries = manifest.groups[groupName] || [];
+      return (
+        entries.length > 0 &&
+        entries.every((entry) =>
+          completedIdlePrefetchEntries.has(
+            createIdlePrefetchEntryKey(entry.url, entry.revision)
+          )
+        )
+      );
+    });
+    alreadyCompletedGroups.forEach((groupName) =>
+      completedIdlePrefetchGroups.add(groupName)
+    );
+    logSWDebug('prefetchIdleGroups no pending files', {
+      groupNames,
+      alreadyCompletedGroups,
+    });
+    return alreadyCompletedGroups;
   }
 
   const cache = await caches.open(STATIC_CACHE_NAME);
-  const queue = Array.from(files.values());
-  const CONCURRENCY = 2;
+  const queue = Array.from(files.entries());
 
-  for (let index = 0; index < queue.length; index += CONCURRENCY) {
-    const batch = queue.slice(index, index + CONCURRENCY);
-    await Promise.allSettled(
-      batch.map(({ url, revision }) => cacheFile(cache, url, revision))
+  logSWDebug('prefetchIdleGroups queue prepared', {
+    groupNames,
+    totalCandidates: files.size,
+    queuedEntries: queue.length,
+  });
+
+  for (let index = 0; index < queue.length; index += IDLE_PREFETCH_CONCURRENCY) {
+    while (shouldDeferIdlePrefetch()) {
+      await waitForIdlePrefetchWindow();
+    }
+
+    const batch = queue.slice(index, index + IDLE_PREFETCH_CONCURRENCY);
+    batch.forEach(([entryKey]) => activeIdlePrefetchEntries.add(entryKey));
+    const results = await Promise.allSettled(
+      batch.map(([, { url, revision }]) => cacheFile(cache, url, revision))
     );
+    results.forEach((result, batchIndex) => {
+      const [entryKey] = batch[batchIndex];
+      activeIdlePrefetchEntries.delete(entryKey);
+
+      if (result.status === 'fulfilled' && result.value.success) {
+        completedIdlePrefetchEntries.add(entryKey);
+      }
+    });
   }
+
+  const newlyCompletedGroups = groupNames.filter((groupName) => {
+    const entries = manifest.groups[groupName] || [];
+    return (
+      entries.length > 0 &&
+      entries.every((entry) =>
+        completedIdlePrefetchEntries.has(
+          createIdlePrefetchEntryKey(entry.url, entry.revision)
+        )
+      )
+    );
+  });
+
+  newlyCompletedGroups.forEach((groupName) =>
+    completedIdlePrefetchGroups.add(groupName)
+  );
+
+  logSWDebug('prefetchIdleGroups finished', {
+    groupNames,
+    newlyCompletedGroups,
+    completedEntries: completedIdlePrefetchEntries.size,
+  });
+
+  return newlyCompletedGroups;
+}
+
+async function prefetchDefaultIdleGroups(): Promise<void> {
+  const manifest = await getIdlePrefetchManifest();
+  const defaultGroups = manifest?.defaults?.filter(
+    (group): group is string => typeof group === 'string' && group.length > 0
+  );
+
+  if (!defaultGroups || defaultGroups.length === 0) {
+    logSWDebug('prefetchDefaultIdleGroups skipped: no default groups');
+    return;
+  }
+
+  logSWDebug('prefetchDefaultIdleGroups start', { defaultGroups });
+  const completedGroups = await prefetchIdleGroups(defaultGroups);
+  if (completedGroups.length > 0) {
+    await broadcastIdlePrefetchStatus();
+  }
+  logSWDebug('prefetchDefaultIdleGroups done', { completedGroups });
 }
 
 sw.addEventListener('install', (event: ExtendableEvent) => {
-  // 立即 skipWaiting，不等待 precache 完成
-  // 这样 SW 可以尽快进入 activate → claim，拦截后续的 JS/CSS 请求
-  // precache 在后台继续执行，cache miss 时走 CDN 回退
-  sw.skipWaiting();
+  logSWDebug('install event received', { version: APP_VERSION });
+  installingVersionIsUpdate = Boolean(sw.registration.active);
+  shouldClaimClientsOnActivate = !installingVersionIsUpdate;
+
+  // 首次安装：允许尽快接管页面，提升新用户首次访问的缓存命中率。
+  // 版本更新：保持 waiting，不打断当前正在运行的旧版本，等后台整包准备完成后再提示升级。
+  if (!installingVersionIsUpdate) {
+    sw.skipWaiting();
+  }
 
   setSWBootProgress({
     phase: 'installing',
@@ -1489,6 +1895,13 @@ sw.addEventListener('install', (event: ExtendableEvent) => {
   event.waitUntil(
     (async () => {
       await loadFailedDomains();
+      await updateVersionState((current) => ({
+        committedVersion: current.committedVersion || APP_VERSION,
+        pendingVersion: installingVersionIsUpdate ? APP_VERSION : null,
+        pendingReadyAt: null,
+        upgradeState: installingVersionIsUpdate ? 'prewarming' : 'idle',
+      }));
+      await postVersionState();
       try {
         const files = await loadPrecacheManifest();
         if (files && files.length > 0) {
@@ -1504,7 +1917,17 @@ sw.addEventListener('install', (event: ExtendableEvent) => {
             message: '开发模式下跳过静态预缓存',
           });
         }
+
+        // 更新场景下，直到整包资源写入成功后才通知主线程可以提示升级。
+        await markNewVersionReady(installingVersionIsUpdate);
       } catch (err) {
+        await updateVersionState((current) => ({
+          committedVersion: current.committedVersion || APP_VERSION,
+          pendingVersion: null,
+          pendingReadyAt: null,
+          upgradeState: 'idle',
+        }));
+        await postVersionState();
         setSWBootProgress({
           phase: 'error',
           message: `启动资源预热失败：${getSafeErrorMessage(err)}`,
@@ -1516,7 +1939,7 @@ sw.addEventListener('install', (event: ExtendableEvent) => {
 });
 
 sw.addEventListener('activate', (event: ExtendableEvent) => {
-  // console.log('Service Worker activated');
+  logSWDebug('activate event received', { version: APP_VERSION });
 
   setSWBootProgress({
     phase: 'activating',
@@ -1524,10 +1947,20 @@ sw.addEventListener('activate', (event: ExtendableEvent) => {
     message: '启动缓存服务正在接管页面...',
   });
 
-  // 立即接管所有页面，不等待缓存清理
-  // 这样可以确保 SW 尽快生效，拦截后续请求（如下载失败的 JS/CSS）
   event.waitUntil(
     (async () => {
+      const versionStateBeforeActivate = await readVersionState();
+      // SW 一旦激活，committedVersion 就应该是当前版本。
+      // 无论是首次安装、用户确认升级、还是所有旧 tab 关闭后自然激活，
+      // 都需要更新，否则新 tab 会用旧版本号请求新 hash 资源导致 404。
+      await updateVersionState({
+        committedVersion: APP_VERSION,
+        pendingVersion: null,
+        pendingReadyAt: null,
+        upgradeState: 'idle',
+      });
+      await postVersionState();
+
       // 预热 CDN 偏好，后续静态资源请求可以直接复用
       // 失败仅影响优先级排序，不影响激活
       try {
@@ -1536,11 +1969,27 @@ sw.addEventListener('activate', (event: ExtendableEvent) => {
       } catch (error) {
         console.warn('Failed to load persisted CDN preference:', error);
       }
-      await sw.clients.claim();
+
+      if (shouldClaimClientsOnActivate) {
+        logSWDebug('activate: before clients.claim');
+        await sw.clients.claim();
+        logSWDebug('activate: after clients.claim');
+      } else {
+        logSWDebug('activate: skip clients.claim for staged update');
+      }
+
+      // 激活后自动消费 idle-prefetch manifest 的默认分组。
+      // prefetchIdleGroups 会在最近有客户端请求时自动延后，避免抢占首屏。
+      setTimeout(() => {
+        logSWDebug('activate: scheduling default idle prefetch');
+        void prefetchDefaultIdleGroups();
+      }, 800);
+
       // 使用 channelManager 通知所有客户端 SW 已更新
       const cm = getChannelManager();
       if (cm) {
         cm.sendSWActivated(APP_VERSION);
+        logSWDebug('activate: sent sw:activated broadcast');
       }
       setSWBootProgress({
         phase: 'activated',
@@ -1593,9 +2042,15 @@ sw.addEventListener('activate', (event: ExtendableEvent) => {
       }
 
       // 找出旧版本的静态资源缓存（但不立即删除）
+      const currentVersionState = await readVersionState();
+      const committedStaticCacheName = getStaticCacheName(
+        currentVersionState.committedVersion || APP_VERSION
+      );
       const oldStaticCaches = cacheNames.filter(
         (name) =>
-          name.startsWith('drawnix-static-v') && name !== STATIC_CACHE_NAME
+          name.startsWith('drawnix-static-v') &&
+          name !== STATIC_CACHE_NAME &&
+          name !== committedStaticCacheName
       );
 
       const oldAppCaches = cacheNames.filter(
@@ -1660,7 +2115,8 @@ function broadcastPostMessageLog(entry: PostMessageLogEntry): void {
 async function tryFetchStaticResourceFromCDN(
   cache: Cache,
   request: Request,
-  resourcePath: string
+  resourcePath: string,
+  appVersion: string
 ): Promise<Response | null> {
   if (isDevelopment) {
     return null;
@@ -1669,11 +2125,21 @@ async function tryFetchStaticResourceFromCDN(
   try {
     const cdnResult = await fetchFromCDNWithFallback(
       resourcePath,
-      APP_VERSION,
-      location.origin
+      appVersion,
+      location.origin,
+      {
+        // 运行时 hash 资源优先走 CDN，失败后再回源站兜底。
+        preferLocal: false,
+      }
     );
 
     if (!cdnResult?.response.ok) {
+      console.warn('[SW CDN] Static resource unavailable from all fallback sources', {
+        requestUrl: request.url,
+        resourcePath,
+        appVersion,
+        unavailableCDNs: getUnavailableCDNSnapshot(),
+      });
       return null;
     }
 
@@ -1685,6 +2151,8 @@ async function tryFetchStaticResourceFromCDN(
     return await cacheStaticResponse(cache, request, cdnResult.response, {
       source: cdnResult.source,
       revision: 'runtime',
+      fetchTarget: cdnResult.targetUrl,
+      appVersion,
     });
   } catch (cdnError) {
     console.warn('[SW CDN] CDN fallback failed:', cdnError);
@@ -1692,9 +2160,24 @@ async function tryFetchStaticResourceFromCDN(
   }
 }
 
+function getStaticDebugMetadata(response: Response): {
+  resourceSource?: string;
+  resourceFetchTarget?: string;
+} {
+  const resourceSource = response.headers.get(STATIC_SOURCE_HEADER) || undefined;
+  const resourceFetchTarget =
+    response.headers.get(STATIC_FETCH_TARGET_HEADER) || undefined;
+
+  return {
+    resourceSource,
+    resourceFetchTarget,
+  };
+}
+
 function isSuspiciousStaticCacheResponse(
   request: Request,
-  response: Response
+  response: Response,
+  expectedVersion = APP_VERSION
 ): boolean {
   const sourceHeader = response.headers.get(STATIC_SOURCE_HEADER);
   const revisionHeader = response.headers.get(STATIC_REVISION_HEADER);
@@ -1704,7 +2187,7 @@ function isSuspiciousStaticCacheResponse(
     return true;
   }
 
-  if (versionHeader !== APP_VERSION) {
+  if (versionHeader !== expectedVersion) {
     return true;
   }
 
@@ -1822,7 +2305,24 @@ sw.addEventListener('message', (event: ExtendableMessageEvent) => {
 
   if (event.data && event.data.type === 'SW_BOOT_PROGRESS_GET') {
     const client = event.source as Client | null;
+    logSWDebug('message: SW_BOOT_PROGRESS_GET', { clientId: client?.id ?? null });
     void broadcastSWBootProgress(client);
+    return;
+  }
+
+  if (event.data && event.data.type === 'GET_VERSION_STATE') {
+    const client = event.source as Client | null;
+    logSWDebug('message: GET_VERSION_STATE', { clientId: client?.id ?? null });
+    event.waitUntil(postVersionState(client));
+    return;
+  }
+
+  if (event.data && event.data.type === 'SW_IDLE_PREFETCH_STATUS_GET') {
+    const client = event.source as Client | null;
+    logSWDebug('message: SW_IDLE_PREFETCH_STATUS_GET', {
+      clientId: client?.id ?? null,
+    });
+    void broadcastIdlePrefetchStatus(client);
     return;
   }
 
@@ -1832,31 +2332,63 @@ sw.addEventListener('message', (event: ExtendableMessageEvent) => {
           (group: unknown): group is string => typeof group === 'string'
         )
       : [];
-    event.waitUntil(prefetchIdleGroups(groups));
+    logSWDebug('message: SW_PREFETCH_GROUPS', { groups });
+    event.waitUntil(
+      prefetchIdleGroups(groups).then((completedGroups) => {
+        if (completedGroups.length > 0) {
+          return broadcastIdlePrefetchStatus();
+        }
+        return Promise.resolve();
+      })
+    );
     return;
   }
 
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    // 主线程请求立即升级（用户主动触发）
-    // console.log('Service Worker: 收到主线程的 SKIP_WAITING 请求');
+  if (
+    event.data &&
+    (event.data.type === 'COMMIT_UPGRADE' ||
+      event.data.type === 'SKIP_WAITING')
+  ) {
+    const client = event.source as Client | null;
+    logSWDebug('message: COMMIT_UPGRADE', { clientId: client?.id ?? null });
+    event.waitUntil(
+      (async () => {
+        shouldClaimClientsOnActivate = true;
+        await updateVersionState({
+          committedVersion: APP_VERSION,
+          pendingVersion: null,
+          pendingReadyAt: null,
+          upgradeState: 'committing',
+        });
+        await postVersionState(client);
+        sw.skipWaiting();
 
-    // 直接调用 skipWaiting
-    sw.skipWaiting();
-
-    // 使用 channelManager 通知客户端 SW 已更新
-    const cm = getChannelManager();
-    if (cm) {
-      cm.sendSWUpdated(APP_VERSION);
-    }
+        const cm = getChannelManager();
+        if (cm) {
+          cm.sendSWUpdated(APP_VERSION);
+        }
+      })()
+    );
   } else if (event.data && event.data.type === 'FORCE_UPGRADE') {
     // 主线程强制升级
-    sw.skipWaiting();
+    event.waitUntil(
+      (async () => {
+        shouldClaimClientsOnActivate = true;
+        await updateVersionState({
+          committedVersion: APP_VERSION,
+          pendingVersion: null,
+          pendingReadyAt: null,
+          upgradeState: 'committing',
+        });
+        await postVersionState(event.source as Client | null);
+        sw.skipWaiting();
 
-    // 使用 channelManager 通知客户端 SW 已更新
-    const cm = getChannelManager();
-    if (cm) {
-      cm.sendSWUpdated(APP_VERSION);
-    }
+        const cm = getChannelManager();
+        if (cm) {
+          cm.sendSWUpdated(APP_VERSION);
+        }
+      })()
+    );
   } else if (event.data && event.data.type === 'DELETE_CACHE') {
     // 删除单个缓存
     const { url } = event.data;
@@ -2657,6 +3189,8 @@ sw.addEventListener('fetch', (event: FetchEvent) => {
     return;
   }
 
+  lastObservedClientFetchAt = startTime;
+
   // 拦截缓存 URL 请求 (/__aitu_cache__/{type}/{taskId}.{ext})
   if (
     url.pathname.startsWith(CACHE_URL_PREFIX) ||
@@ -3014,11 +3548,28 @@ sw.addEventListener('fetch', (event: FetchEvent) => {
       event.respondWith(
         handleStaticRequest(event.request)
           .then((response) => {
+            const staticMetadata = getStaticDebugMetadata(response);
             updateDebugLog(debugId, {
               status: response.status,
               statusText: response.statusText,
               responseType: response.type,
               duration: Date.now() - startTime,
+              resourceSource: staticMetadata.resourceSource,
+              resourceFetchTarget: staticMetadata.resourceFetchTarget,
+              details:
+                isNavigationRequest
+                  ? 'Navigation request'
+                  : [
+                      `Static resource (${event.request.destination})`,
+                      staticMetadata.resourceSource
+                        ? `来源: ${staticMetadata.resourceSource}`
+                        : null,
+                      staticMetadata.resourceFetchTarget
+                        ? `实际拉取: ${staticMetadata.resourceFetchTarget}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join('\n'),
             });
             return response;
           })
@@ -3941,7 +4492,10 @@ async function handleStaticRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const isHtmlRequest =
     request.mode === 'navigate' || url.pathname.endsWith('.html');
-  const cache = await caches.open(STATIC_CACHE_NAME);
+  const versionState = await readVersionState();
+  const committedVersion = versionState.committedVersion || APP_VERSION;
+  const committedStaticCacheName = getStaticCacheName(committedVersion);
+  const cache = await caches.open(committedStaticCacheName);
 
   // ===========================================
   // Development Mode: Network First (for hot reload / live updates)
@@ -4011,106 +4565,72 @@ async function handleStaticRequest(request: Request): Promise<Response> {
   // Production Mode: Optimized strategies
   // ===========================================
 
-  // Strategy 1: HTML/Navigation - Network First with fast fallback
+  // Strategy 1: HTML/Navigation - Cache first for already-controlled clients.
+  // This keeps existing users on the old shell while the new worker prewarms
+  // its own versioned cache in the background, and only switches after the
+  // user explicitly confirms the upgrade.
   if (isHtmlRequest) {
+    let cachedResponse = await cache.match(request);
+
+    if (!cachedResponse) {
+      cachedResponse = await cache.match('/');
+    }
+    if (!cachedResponse) {
+      cachedResponse = await cache.match('/index.html');
+    }
+
+    if (!cachedResponse) {
+      const allCacheNames = await caches.keys();
+      for (const cacheName of allCacheNames) {
+        if (cacheName.startsWith('drawnix-static-v')) {
+          try {
+            const oldCache = await caches.open(cacheName);
+            cachedResponse =
+              (await oldCache.match(request)) ||
+              (await oldCache.match('/')) ||
+              (await oldCache.match('/index.html'));
+            if (cachedResponse) {
+              break;
+            }
+          } catch {
+            // Ignore broken legacy caches and continue fallback lookup.
+          }
+        }
+      }
+    }
+
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
     try {
-      // Try network first (no retries for connection errors - fail fast)
+      // No cached shell available (typically first visit), fetch from network.
       const response = await fetchQuick(request, {
         cache: 'reload' as RequestCache,
       });
 
-      // Cache successful responses
+      // 只有 committed 版本与当前 worker 版本一致时，才回写到当前 cache。
+      // staged update 期间避免把网络上的新壳写进旧版本 cache。
       if (
         response &&
         response.status === 200 &&
-        request.url.startsWith('http')
+        request.url.startsWith('http') &&
+        committedVersion === APP_VERSION
       ) {
         cache.put(request, response.clone());
-        return response;
-      }
-
-      // If server returns error response (4xx, 5xx), try cache first
-      if (!response.ok) {
-        // console.warn(`Service Worker: Server returned ${response.status} for ${request.url}, trying cache`);
-        let cachedResponse = await cache.match(request);
-
-        // For SPA, any route should fall back to index.html
-        if (!cachedResponse) {
-          cachedResponse = await cache.match('/');
+        // 同时存 '/' 和 '/index.html'，确保后续导航请求直接命中
+        const reqUrl = new URL(request.url);
+        if (reqUrl.pathname === '/' || reqUrl.pathname.endsWith('/index.html')) {
+          const rootUrl = new URL('/', reqUrl.origin).href;
+          const indexUrl = new URL('/index.html', reqUrl.origin).href;
+          if (request.url !== rootUrl) cache.put(rootUrl, response.clone());
+          if (request.url !== indexUrl) cache.put(indexUrl, response.clone());
         }
-        if (!cachedResponse) {
-          cachedResponse = await cache.match('/index.html');
-        }
-
-        // If not in current cache, try older static caches
-        if (!cachedResponse) {
-          const allCacheNames = await caches.keys();
-          for (const cacheName of allCacheNames) {
-            if (cacheName.startsWith('drawnix-static-v')) {
-              try {
-                const oldCache = await caches.open(cacheName);
-                cachedResponse =
-                  (await oldCache.match(request)) ||
-                  (await oldCache.match('/')) ||
-                  (await oldCache.match('/index.html'));
-                if (cachedResponse) {
-                  // console.log(`Service Worker: Found navigation fallback in ${cacheName}`);
-                  break;
-                }
-              } catch (e) {
-                // Ignore
-              }
-            }
-          }
-        }
-
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-
-        // No cache available, return the error response
         return response;
       }
 
       return response;
-    } catch (networkError) {
-      // Network failed - immediately try cache (no waiting)
-      let cachedResponse = await cache.match(request);
-
-      // For SPA, any route should fall back to index.html
-      if (!cachedResponse) {
-        cachedResponse = await cache.match('/');
-      }
-      if (!cachedResponse) {
-        cachedResponse = await cache.match('/index.html');
-      }
-
-      // If not in current cache, try older static caches
-      if (!cachedResponse) {
-        const allCacheNames = await caches.keys();
-        for (const cacheName of allCacheNames) {
-          if (cacheName.startsWith('drawnix-static-v')) {
-            try {
-              const oldCache = await caches.open(cacheName);
-              cachedResponse =
-                (await oldCache.match(request)) ||
-                (await oldCache.match('/')) ||
-                (await oldCache.match('/index.html'));
-              if (cachedResponse) {
-                // console.log(`Service Worker: Found navigation fallback in ${cacheName} after network failure`);
-                break;
-              }
-            } catch (e) {
-              // Ignore
-            }
-          }
-        }
-      }
-
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
+    } catch {
       // No cache - return offline page
       return createOfflinePage();
     }
@@ -4119,7 +4639,9 @@ async function handleStaticRequest(request: Request): Promise<Response> {
   // Strategy 2: Static Resources - Cache First (fast offline)
   const cachedResponse = await cache.match(request);
   if (cachedResponse) {
-    if (!isSuspiciousStaticCacheResponse(request, cachedResponse)) {
+    if (
+      !isSuspiciousStaticCacheResponse(request, cachedResponse, committedVersion)
+    ) {
       return cachedResponse;
     }
 
@@ -4131,20 +4653,31 @@ async function handleStaticRequest(request: Request): Promise<Response> {
   const isSmartCDNResource = isVersionedStaticResource(request, url);
 
   if (isSmartCDNResource) {
-    const smartResponse = await tryFetchStaticResourceFromCDN(
-      cache,
-      request,
-      resourcePath
-    );
-    if (smartResponse) {
-      return smartResponse;
-    }
-
     const oldCachedResponse = await findStaticResponseInOldCaches(request);
     if (oldCachedResponse) {
       return oldCachedResponse;
     }
 
+    // 请求 URL 中已包含 CDN 版本号时优先使用，避免版本重写导致 404
+    const embeddedVersion = extractVersionFromCDNPath(url.pathname);
+    const cdnVersion = embeddedVersion || committedVersion;
+
+    const smartResponse = await tryFetchStaticResourceFromCDN(
+      cache,
+      request,
+      resourcePath,
+      cdnVersion
+    );
+    if (smartResponse) {
+      return smartResponse;
+    }
+
+    logStatic503Decision('smart-cdn-resource-failed', request, {
+      resourcePath,
+      committedVersion,
+      hasEmbeddedVersion: Boolean(embeddedVersion),
+      attemptedVersion: cdnVersion,
+    });
     return new Response('Resource unavailable offline', {
       status: 503,
       statusText: 'Service Unavailable',
@@ -4180,10 +4713,16 @@ async function handleStaticRequest(request: Request): Promise<Response> {
     }
 
     // Cache successful responses
-    if (response && response.status === 200 && request.url.startsWith('http')) {
+    if (
+      response &&
+      response.status === 200 &&
+      request.url.startsWith('http') &&
+      committedVersion === APP_VERSION
+    ) {
       return await cacheStaticResponse(cache, request, response, {
         source: 'server',
         revision: 'runtime',
+        appVersion: committedVersion,
       });
     }
 
@@ -4207,6 +4746,10 @@ async function handleStaticRequest(request: Request): Promise<Response> {
       return oldCachedResponse;
     }
 
+    logStatic503Decision('origin-fetch-exception', request, {
+      resourcePath,
+      committedVersion,
+    });
     // 所有来源都失败了
     return new Response('Resource unavailable offline', {
       status: 503,

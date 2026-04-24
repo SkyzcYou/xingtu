@@ -13,6 +13,7 @@ import {
   Copy,
 } from 'lucide-react';
 import { isDataURL, normalizeImageDataUrl } from '@aitu/utils';
+import { copyToClipboard } from '../../utils/runtime-helpers';
 import { formatDate, formatFileSize } from '../../utils/asset-utils';
 import { useAssetSize } from '../../hooks/useAssetSize';
 import { isCacheUrl, countElementsByAssetUrls } from '../../utils/asset-cleanup';
@@ -57,6 +58,7 @@ export function MediaLibraryInspector({
   onDownload,
   onSelect,
   showSelectButton,
+  selecting = false,
   selectButtonText = '使用',
 }: MediaLibraryInspectorProps) {
   const [isRenaming, setIsRenaming] = useState(false);
@@ -76,6 +78,17 @@ export function MediaLibraryInspector({
     const count = isCache ? countElementsByAssetUrls(board, asset.dedupeUrls || [asset.url]) : 0;
     return { isCacheAsset: isCache, canvasElementCount: count };
   }, [asset, board]);
+  const inspectorTrackParams = useMemo(() => {
+    if (!asset) {
+      return undefined;
+    }
+
+    return JSON.stringify({
+      assetId: asset.id,
+      assetType: asset.type,
+      assetSource: asset.source,
+    });
+  }, [asset]);
 
   // 开始重命名
   const handleStartRename = useCallback(() => {
@@ -145,16 +158,16 @@ export function MediaLibraryInspector({
 
   // 使用到画板
   const handleSelect = useCallback(() => {
-    if (asset && onSelect) {
+    if (asset && onSelect && !selecting) {
       onSelect(asset);
     }
-  }, [asset, onSelect]);
+  }, [asset, onSelect, selecting]);
 
   // 复制提示词
   const handleCopyPrompt = useCallback(async () => {
     if (asset?.prompt) {
       try {
-        await navigator.clipboard.writeText(asset.prompt);
+        await copyToClipboard(asset.prompt);
         MessagePlugin.success('提示词已复制');
       } catch {
         MessagePlugin.error('复制失败');
@@ -308,7 +321,10 @@ export function MediaLibraryInspector({
             block
             icon={<CheckCircle size={16} />}
             onClick={handleSelect}
+            loading={selecting}
+            disabled={selecting}
             data-track="inspector_use_asset"
+            data-track-params={inspectorTrackParams}
             className="inspector-btn-select"
           >
             {selectButtonText}
@@ -320,6 +336,7 @@ export function MediaLibraryInspector({
           icon={<Download size={16} />}
           onClick={handleDownload}
           data-track="inspector_download"
+          data-track-params={inspectorTrackParams}
           className="inspector-btn-download"
         >
           下载
@@ -331,6 +348,7 @@ export function MediaLibraryInspector({
           icon={<Trash2 size={16} />}
           onClick={handleOpenDeleteDialog}
           data-track="inspector_delete"
+          data-track-params={inspectorTrackParams}
           className="inspector-btn-delete"
         >
           删除

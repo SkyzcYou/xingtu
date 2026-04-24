@@ -381,6 +381,24 @@ export class WorkflowEngine {
           modelRef: (step.args.modelRef as ModelRef | null | undefined) || null,
           size: step.args.size as string | undefined,
           referenceImages: step.args.referenceImages as string[] | undefined,
+          generationMode: step.args.generationMode as
+            | 'text_to_image'
+            | 'image_to_image'
+            | 'image_edit'
+            | undefined,
+          maskImage: step.args.maskImage as string | undefined,
+          inputFidelity: step.args.inputFidelity as 'high' | 'low' | undefined,
+          background: step.args.background as
+            | 'transparent'
+            | 'opaque'
+            | 'auto'
+            | undefined,
+          outputFormat: step.args.outputFormat as
+            | 'png'
+            | 'jpeg'
+            | 'webp'
+            | undefined,
+          outputCompression: step.args.outputCompression as number | undefined,
           count: step.args.count as number | undefined,
           params: step.args.params as Record<string, unknown> | undefined,
           forceMainThread: this.options.forceFallbackExecutor,
@@ -441,8 +459,7 @@ export class WorkflowEngine {
             model: step.args.model as string | undefined,
             modelRef:
               (step.args.modelRef as ModelRef | null | undefined) || null,
-            referenceImages:
-              step.args.referenceImages as string[] | undefined,
+            referenceImages: step.args.referenceImages as string[] | undefined,
             params: step.args.params as Record<string, unknown> | undefined,
           },
           { signal }

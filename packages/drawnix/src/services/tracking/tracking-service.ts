@@ -299,7 +299,7 @@ export class TrackingService {
       return;
     }
 
-    // Parse track-params if present
+    // Parse data-track-params (and legacy track-params) if present
     const params = parseTrackParams(element);
 
     // Create tracking event

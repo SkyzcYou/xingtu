@@ -240,12 +240,15 @@ export function getElementSelector(element: Element): string {
 }
 
 /**
- * Parse track-params attribute
+ * Parse tracking params attribute
+ * Supports both `data-track-params` and legacy `track-params`
  * @param element - DOM element
  * @returns Parsed params object or null if invalid JSON
  */
 export function parseTrackParams(element: Element): Record<string, any> | null {
-  const paramsAttr = element.getAttribute('track-params');
+  const paramsAttr =
+    element.getAttribute('data-track-params') ||
+    element.getAttribute('track-params');
   if (!paramsAttr) {
     return null;
   }
@@ -253,7 +256,7 @@ export function parseTrackParams(element: Element): Record<string, any> | null {
   try {
     return JSON.parse(paramsAttr);
   } catch (error) {
-    console.warn(`Invalid track-params JSON on element:`, element, error);
+    console.warn(`Invalid track params JSON on element:`, element, error);
     return null;
   }
 }

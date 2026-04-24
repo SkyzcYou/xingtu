@@ -1,6 +1,9 @@
 export type IdlePrefetchGroup =
   | 'ai-chat'
-  | 'tool-windows'
+  | 'tool-runtime'
+  | 'tool-drawers'
+  | 'tool-dialogs'
+  | 'tool-commanding'
   | 'diagram-engines'
   | 'office-data'
   | 'external-skills';

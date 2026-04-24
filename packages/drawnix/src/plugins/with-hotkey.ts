@@ -168,6 +168,19 @@ export const buildDrawnixHotkeyPlugin = (
 
         // Note: 复制图片粘贴功能由 with-image.tsx 中的 insertFragment 方法处理
         // 不需要在这里手动处理 Ctrl+V，让 Plait 框架的原生粘贴机制工作
+        if (
+          !event.altKey &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          isHotkey(['shift+p'], { byKey: true })(event)
+        ) {
+          setCreationMode(board, BoardCreationMode.drawing);
+          BoardTransforms.updatePointerType(board, PenShape.pen);
+          updateAppState({ pointer: PenShape.pen });
+          event.preventDefault();
+          return;
+        }
+
         if (!event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
           if (event.key === 'l') {
             setCreationMode(board, BoardCreationMode.drawing);
@@ -208,17 +221,10 @@ export const buildDrawnixHotkeyPlugin = (
             updateAppState({ pointer: FreehandShape.eraser });
           }
           if (event.key === 'p') {
-            if (event.shiftKey) {
-              // Shift+P for vector pen tool
-              setCreationMode(board, BoardCreationMode.drawing);
-              BoardTransforms.updatePointerType(board, PenShape.pen);
-              updateAppState({ pointer: PenShape.pen });
-            } else {
-              // P for freehand pen
-              setCreationMode(board, BoardCreationMode.drawing);
-              BoardTransforms.updatePointerType(board, FreehandShape.feltTipPen);
-              updateAppState({ pointer: FreehandShape.feltTipPen });
-            }
+            // P for freehand pen
+            setCreationMode(board, BoardCreationMode.drawing);
+            BoardTransforms.updatePointerType(board, FreehandShape.feltTipPen);
+            updateAppState({ pointer: FreehandShape.feltTipPen });
           }
           if (event.key === 'a' && !isHotkey(['mod+a'])(event)) {
             // will trigger editing text

@@ -50,6 +50,124 @@ export class SWChannelClient {
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   private constructor() {}
 
+  private log(...args: unknown[]): void {
+    console.info('[SWChannelClient]', ...args);
+  }
+
+  private async collectSWDebugState(): Promise<Record<string, unknown>> {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+      return { supported: false };
+    }
+
+    const registration = await navigator.serviceWorker
+      .getRegistration()
+      .catch(() => undefined);
+
+    return {
+      supported: true,
+      controller: navigator.serviceWorker.controller
+        ? {
+            scriptURL: navigator.serviceWorker.controller.scriptURL,
+            state: navigator.serviceWorker.controller.state,
+          }
+        : null,
+      registration: registration
+        ? {
+            scope: registration.scope,
+            active: registration.active
+              ? {
+                  scriptURL: registration.active.scriptURL,
+                  state: registration.active.state,
+                }
+              : null,
+            waiting: registration.waiting
+              ? {
+                  scriptURL: registration.waiting.scriptURL,
+                  state: registration.waiting.state,
+                }
+              : null,
+            installing: registration.installing
+              ? {
+                  scriptURL: registration.installing.scriptURL,
+                  state: registration.installing.state,
+                }
+              : null,
+          }
+        : null,
+      readyState: document.readyState,
+      visibilityState: document.visibilityState,
+      url: location.href,
+    };
+  }
+
+  private async waitForUsableServiceWorker(
+    attempt: number
+  ): Promise<ServiceWorker> {
+    const currentController = navigator.serviceWorker?.controller;
+    if (currentController) {
+      this.log(`attempt ${attempt}: using existing controller`, {
+        scriptURL: currentController.scriptURL,
+        state: currentController.state,
+      });
+      return currentController;
+    }
+
+    const readyWorker = await Promise.race<ServiceWorker | null>([
+      navigator.serviceWorker.ready
+        .then((registration) => registration.active || null)
+        .catch(() => null),
+      new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), 10000);
+      }),
+    ]);
+
+    if (readyWorker) {
+      this.log(`attempt ${attempt}: using ready.active worker without controller`, {
+        scriptURL: readyWorker.scriptURL,
+        state: readyWorker.state,
+      });
+      return readyWorker;
+    }
+
+    this.log(
+      `attempt ${attempt}: no controller and no ready.active worker, waiting for controllerchange`
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error('SW activation timeout')),
+        10000
+      );
+
+      if (navigator.serviceWorker.controller) {
+        clearTimeout(timeout);
+        resolve();
+        return;
+      }
+
+      navigator.serviceWorker.addEventListener(
+        'controllerchange',
+        () => {
+          clearTimeout(timeout);
+          this.log(`attempt ${attempt}: received controllerchange`);
+          resolve();
+        },
+        { once: true }
+      );
+    });
+
+    const nextController = navigator.serviceWorker.controller;
+    if (!nextController) {
+      throw new Error('SW controller unavailable after controllerchange');
+    }
+
+    this.log(`attempt ${attempt}: using controller after controllerchange`, {
+      scriptURL: nextController.scriptURL,
+      state: nextController.state,
+    });
+    return nextController;
+  }
+
   /**
    * 获取单例实例
    */
@@ -94,24 +212,8 @@ export class SWChannelClient {
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        // 等待 Service Worker 就绪
-        const sw = navigator.serviceWorker?.controller;
-        if (!sw) {
-          await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('SW activation timeout')), 10000);
-            
-            if (navigator.serviceWorker.controller) {
-              clearTimeout(timeout);
-              resolve();
-              return;
-            }
-            
-            navigator.serviceWorker.addEventListener('controllerchange', () => {
-              clearTimeout(timeout);
-              resolve();
-            }, { once: true });
-          });
-        }
+        this.log(`initialize attempt ${attempt + 1}/${this.maxRetries + 1} started`);
+        await this.waitForUsableServiceWorker(attempt + 1);
 
         // 创建客户端通道
         // postmessage-duplex 1.1.0 配合 SW 的 enableGlobalRouting 自动创建 channel
@@ -123,15 +225,27 @@ export class SWChannelClient {
           log: { log: () => {}, warn: () => {}, error: () => {} },
         } as any);  // log 属性在 PageChannelOptions 中不存在，但 BaseChannel 支持
 
+        this.log(`attempt ${attempt + 1}: channel created`, {
+          isReady: this.channel?.isReady,
+        });
+
         // 设置事件订阅
         this.setupEventSubscriptions();
 
         this.initialized = true;
+        this.log(`attempt ${attempt + 1}: initialize success`);
         return true;
 
       } catch (error) {
         lastError = error as Error;
-        console.error(`[SWChannelClient] Attempt ${attempt + 1} failed:`, error);
+        const debugState = await this.collectSWDebugState().catch(() => ({
+          debugStateError: true,
+        }));
+        console.error(
+          `[SWChannelClient] Attempt ${attempt + 1} failed:`,
+          error,
+          debugState
+        );
 
         // 清理失败的通道
         this.channel = null;
@@ -145,7 +259,10 @@ export class SWChannelClient {
       }
     }
 
-    console.error('[SWChannelClient] All attempts failed, lastError:', lastError);
+    const finalState = await this.collectSWDebugState().catch(() => ({
+      debugStateError: true,
+    }));
+    console.error('[SWChannelClient] All attempts failed, lastError:', lastError, finalState);
     return false;
   }
 

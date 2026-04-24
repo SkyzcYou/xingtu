@@ -150,22 +150,36 @@ export const saveAsJSON = async (
     type: MIME_TYPES.drawnix,
   });
 
-  const fileHandle = await fileSave(blob, {
-    name,
-    extension: 'drawnix',
-    description: 'Drawnix file',
-  });
-  return { fileHandle };
+  try {
+    const fileHandle = await fileSave(blob, {
+      name,
+      extension: 'drawnix',
+      description: 'Drawnix file',
+    });
+    return { fileHandle };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { fileHandle: null };
+    }
+    throw error;
+  }
 };
 
 export const loadFromJSON = async (board: PlaitBoard) => {
-  const file = await fileOpen({
-    description: 'Drawnix files',
-    // ToDo: Be over-permissive until https://bugs.webkit.org/show_bug.cgi?id=34442
-    // gets resolved. Else, iOS users cannot open `.drawnix` files.
-    // extensions: ["json", "drawnix", "png", "svg"],
-  });
-  return loadFromBlob(board, await normalizeFile(file));
+  try {
+    const file = await fileOpen({
+      description: 'Drawnix files',
+      // ToDo: Be over-permissive until https://bugs.webkit.org/show_bug.cgi?id=34442
+      // gets resolved. Else, iOS users cannot open `.drawnix` files.
+      // extensions: ["json", "drawnix", "png", "svg"],
+    });
+    return loadFromBlob(board, await normalizeFile(file));
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return null;
+    }
+    throw error;
+  }
 };
 
 export const isValidDrawnixData = (data?: any): data is DrawnixExportedData => {

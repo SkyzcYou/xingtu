@@ -6,6 +6,7 @@ import type {
   VideoShot,
   VideoCharacter,
 } from './types';
+import { generateUUID } from '../../utils/runtime-helpers';
 import { computeSegmentPlan } from '../../utils/segment-plan';
 import { getVideoModelConfig } from '../../constants/video-model-config';
 import {
@@ -182,7 +183,7 @@ export function createScriptVersion(
   prompt?: string
 ): ScriptVersion {
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     createdAt: Date.now(),
     label,
     prompt,

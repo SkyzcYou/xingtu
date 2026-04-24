@@ -186,6 +186,10 @@ export abstract class BaseStorageReader<TCache> {
    * 通过 ID 获取单条记录
    */
   protected async getById<T>(storeName: string, id: string): Promise<T | null> {
+    if (!id) {
+      return null;
+    }
+
     const db = await this.getDB();
     const transaction = db.transaction([storeName], 'readonly');
     const store = transaction.objectStore(storeName);

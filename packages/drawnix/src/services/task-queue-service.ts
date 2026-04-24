@@ -30,6 +30,7 @@ import { taskStorageReader } from './task-storage-reader';
 import { executorFactory, waitForTaskCompletion } from './media-executor';
 import { hasInvocationRouteCredentials } from '../utils/settings-manager';
 import { DEFAULT_AUDIO_MODEL_ID } from '../constants/model-config';
+import { analytics } from '../utils/posthog-analytics';
 import {
   getAdapterContextFromSettings,
   resolveAdapterForInvocation,
@@ -78,8 +79,65 @@ const MUSIC_REWRITE_SIMULATED_DURATION_MS = 2 * 60 * 1000;
 const MUSIC_REWRITE_SIMULATED_INTERVAL_MS = 2000;
 const MUSIC_REWRITE_SIMULATED_START_PROGRESS = 20;
 const MUSIC_REWRITE_SIMULATED_END_PROGRESS = 95;
+const STRIPPED_TASK_PARAM_KEYS = [
+  'referenceImages',
+  'uploadedImages',
+  'videoData',
+  'audioData',
+] as const;
 
-function normalizeImageDataUrl(value: string, fallbackMimeType = 'image/png'): string {
+type InsertionSource = 'manual' | 'auto_insert';
+type StrippedTaskParamKey = (typeof STRIPPED_TASK_PARAM_KEYS)[number];
+
+function getTaskResultCount(task: Task): number {
+  if (Array.isArray(task.result?.urls) && task.result.urls.length > 0) {
+    return task.result.urls.length;
+  }
+  if (
+    task.result?.url ||
+    task.result?.chatResponse ||
+    task.result?.lyricsText
+  ) {
+    return 1;
+  }
+  return 0;
+}
+
+function buildTaskAnalyticsPayload(task: Task): Record<string, unknown> {
+  return {
+    taskId: task.id,
+    taskType: task.type,
+    taskStatus: task.status,
+    model:
+      typeof task.params.model === 'string' && task.params.model.trim()
+        ? task.params.model
+        : undefined,
+    executionPhase: task.executionPhase,
+    hasRemoteId: Boolean(task.remoteId),
+    resultCount: getTaskResultCount(task) || undefined,
+    hasReferenceImage: Boolean(
+      task.params.referenceImages?.length ||
+        task.params.uploadedImages?.length ||
+        task.params.uploadedImage
+    ),
+  };
+}
+
+function trackTaskAnalytics(
+  eventName: string,
+  task: Task,
+  extras?: Record<string, unknown>
+): void {
+  analytics.track(eventName, {
+    ...buildTaskAnalyticsPayload(task),
+    ...(extras || {}),
+  });
+}
+
+function normalizeImageDataUrl(
+  value: string,
+  fallbackMimeType = 'image/png'
+): string {
   const trimmed = value.trim();
 
   if (
@@ -103,6 +161,38 @@ function normalizeImageDataUrl(value: string, fallbackMimeType = 'image/png'): s
   return `data:${fallbackMimeType};base64,${normalized}`;
 }
 
+function hasAnyPersistedLargeTaskParams(
+  params?: Record<string, unknown> | null
+): boolean {
+  if (!params) {
+    return false;
+  }
+
+  return STRIPPED_TASK_PARAM_KEYS.some((key) => params[key] !== undefined);
+}
+
+function mergePersistedLargeTaskParams(
+  params: GenerationParams,
+  persistedParams?: Record<string, unknown> | null
+): GenerationParams {
+  if (!persistedParams) {
+    return params;
+  }
+
+  let nextParams: GenerationParams | null = null;
+
+  STRIPPED_TASK_PARAM_KEYS.forEach((key: StrippedTaskParamKey) => {
+    if (params[key] === undefined && persistedParams[key] !== undefined) {
+      if (!nextParams) {
+        nextParams = { ...params };
+      }
+      nextParams[key] = persistedParams[key];
+    }
+  });
+
+  return nextParams || params;
+}
+
 async function cacheAudioCoverUrl(
   coverUrl: string | undefined,
   taskId: string,
@@ -122,7 +212,10 @@ async function cacheAudioCoverUrl(
       { forceRemoteCache: true }
     );
   } catch (error) {
-    console.warn('[TaskQueueService] Audio cover cache failed, using original URL:', error);
+    console.warn(
+      '[TaskQueueService] Audio cover cache failed, using original URL:',
+      error
+    );
     return coverUrl;
   }
 }
@@ -137,6 +230,7 @@ class TaskQueueService {
   private taskUpdates$: Subject<TaskEvent>;
   private executingTasks = new Set<string>();
   private blockedTaskIds = new Set<string>();
+  private tasksWithStrippedParams = new Set<string>();
 
   private constructor() {
     this.tasks = new Map();
@@ -170,10 +264,15 @@ class TaskQueueService {
    * Persist task to IndexedDB (async, fire-and-forget)
    */
   private persistTask(task: Task): void {
-    const swTask = this.convertToSWTask(task);
-    taskStorageWriter.saveTask(swTask).catch((error) => {
+    this.persistTaskInternal(task).catch((error) => {
       console.error('[TaskQueueService] Failed to persist task:', error);
     });
+  }
+
+  private async persistTaskInternal(task: Task): Promise<void> {
+    const persistableTask = await this.restoreStrippedTaskParams(task);
+    const swTask = this.convertToSWTask(persistableTask);
+    await taskStorageWriter.saveTask(swTask);
     // Invalidate reader cache after write
     taskStorageReader.invalidateCache();
   }
@@ -199,7 +298,9 @@ class TaskQueueService {
   private async executeTask(task: Task): Promise<void> {
     // 防止同一任务被重复执行（双重调用防护）
     if (this.executingTasks.has(task.id)) {
-      console.warn(`[TaskQueueService] Task ${task.id} is already executing, skipping duplicate`);
+      console.warn(
+        `[TaskQueueService] Task ${task.id} is already executing, skipping duplicate`
+      );
       return;
     }
     this.executingTasks.add(task.id);
@@ -227,6 +328,8 @@ class TaskQueueService {
         });
         return;
       }
+
+      task = await this.restoreStrippedTaskParams(task);
 
       if (task.type === TaskType.AUDIO) {
         const requestedModel = task.params.model as string | undefined;
@@ -279,7 +382,8 @@ class TaskQueueService {
         );
 
         // 缓存音频 URL 到 Cache Storage，防止远程链接过期
-        const fmt = result.format || (result.resultKind === 'lyrics' ? 'lyrics' : 'mp3');
+        const fmt =
+          result.format || (result.resultKind === 'lyrics' ? 'lyrics' : 'mp3');
         let cachedUrl = result.url;
         let cachedUrls = result.urls;
         let cachedPreviewImageUrl = result.imageUrl;
@@ -289,12 +393,26 @@ class TaskQueueService {
           try {
             const audioMeta = {
               extraMetadata: {
-                name: result.title || task.params.title || task.params.prompt?.substring(0, 30) || 'AI音频',
+                name:
+                  result.title ||
+                  task.params.title ||
+                  task.params.prompt?.substring(0, 30) ||
+                  'AI音频',
                 providerTaskId: result.providerTaskId || task.remoteId,
-                duration: typeof result.duration === 'number' ? result.duration : undefined,
+                duration:
+                  typeof result.duration === 'number'
+                    ? result.duration
+                    : undefined,
               },
             };
-            cachedUrl = await cacheRemoteUrl(result.url, task.id, 'audio', fmt, undefined, audioMeta);
+            cachedUrl = await cacheRemoteUrl(
+              result.url,
+              task.id,
+              'audio',
+              fmt,
+              undefined,
+              audioMeta
+            );
             if (result.imageUrl) {
               cachedPreviewImageUrl = await cacheAudioCoverUrl(
                 result.imageUrl,
@@ -306,10 +424,18 @@ class TaskQueueService {
                 result.clips.map(async (clip, index) => {
                   const clipMeta = {
                     extraMetadata: {
-                      name: clip.title || result.title || task.params.title || task.params.prompt?.substring(0, 30) || 'AI音频',
+                      name:
+                        clip.title ||
+                        result.title ||
+                        task.params.title ||
+                        task.params.prompt?.substring(0, 30) ||
+                        'AI音频',
                       clipId: clip.clipId || clip.id,
                       providerTaskId: result.providerTaskId || task.remoteId,
-                      duration: typeof clip.duration === 'number' ? clip.duration : undefined,
+                      duration:
+                        typeof clip.duration === 'number'
+                          ? clip.duration
+                          : undefined,
                     },
                   };
                   const cachedAudioUrl = await cacheRemoteUrl(
@@ -366,11 +492,13 @@ class TaskQueueService {
             }
             if (!cachedPreviewImageUrl) {
               cachedPreviewImageUrl =
-                cachedClips?.[0]?.imageLargeUrl ||
-                cachedClips?.[0]?.imageUrl;
+                cachedClips?.[0]?.imageLargeUrl || cachedClips?.[0]?.imageUrl;
             }
           } catch (cacheError) {
-            console.warn('[TaskQueueService] Audio cache failed, using original URLs:', cacheError);
+            console.warn(
+              '[TaskQueueService] Audio cache failed, using original URLs:',
+              cacheError
+            );
           }
         }
 
@@ -435,8 +563,26 @@ class TaskQueueService {
       // Execute based on task type
       switch (task.type) {
         case TaskType.IMAGE: {
-          // 从 params.params 中提取额外参数（如 quality）
-          const extraParams = (task.params as any).params || {};
+          // 从 params.params 中提取额外参数，并补齐新图像契约字段
+          const extraParams = {
+            ...(((task.params as any).params || {}) as Record<string, unknown>),
+          };
+          if (task.params.resolution !== undefined) {
+            extraParams.resolution = task.params.resolution;
+          }
+          if (
+            task.params.quality !== undefined &&
+            extraParams.quality === undefined
+          ) {
+            extraParams.quality = task.params.quality;
+          }
+          if (
+            typeof task.params.count === 'number' &&
+            Number.isFinite(task.params.count) &&
+            extraParams.n === undefined
+          ) {
+            extraParams.n = task.params.count;
+          }
           await executor.generateImage(
             {
               taskId: task.id,
@@ -444,14 +590,50 @@ class TaskQueueService {
               model: task.params.model,
               modelRef: task.params.modelRef || null,
               size: task.params.size,
+              resolution: task.params.resolution as
+                | '1k'
+                | '2k'
+                | '4k'
+                | undefined,
+              generationMode: task.params.generationMode as
+                | 'text_to_image'
+                | 'image_to_image'
+                | 'image_edit'
+                | undefined,
               referenceImages: task.params.referenceImages as
                 | string[]
+                | undefined,
+              maskImage: task.params.maskImage as string | undefined,
+              inputFidelity: task.params.inputFidelity as
+                | 'high'
+                | 'low'
+                | undefined,
+              background: task.params.background as
+                | 'transparent'
+                | 'opaque'
+                | 'auto'
+                | undefined,
+              outputFormat: task.params.outputFormat as
+                | 'png'
+                | 'jpeg'
+                | 'webp'
+                | undefined,
+              outputCompression: task.params.outputCompression as
+                | number
                 | undefined,
               count: task.params.count as number | undefined,
               uploadedImages: task.params.uploadedImages as
                 | Array<{ url?: string }>
                 | undefined,
-              quality: extraParams.quality as '1k' | '2k' | '4k' | undefined,
+              quality: (task.params.quality ?? extraParams.quality) as
+                | 'auto'
+                | 'low'
+                | 'medium'
+                | 'high'
+                | '1k'
+                | '2k'
+                | '4k'
+                | undefined,
               params: extraParams,
             },
             executionOptions
@@ -496,32 +678,53 @@ class TaskQueueService {
           break;
         }
         case TaskType.CHAT: {
-          if ((task.params as { videoAnalyzerAction?: string }).videoAnalyzerAction === 'analyze') {
+          if (
+            (task.params as { videoAnalyzerAction?: string })
+              .videoAnalyzerAction === 'analyze'
+          ) {
             await this.executeVideoAnalyzerAnalyzeTask(task);
             break;
           }
 
-          if ((task.params as { videoAnalyzerAction?: string }).videoAnalyzerAction === 'rewrite') {
+          if (
+            (task.params as { videoAnalyzerAction?: string })
+              .videoAnalyzerAction === 'rewrite'
+          ) {
             await this.executeVideoAnalyzerRewriteTask(task, executionOptions);
             break;
           }
 
-          if ((task.params as { musicAnalyzerAction?: string }).musicAnalyzerAction === 'analyze') {
+          if (
+            (task.params as { musicAnalyzerAction?: string })
+              .musicAnalyzerAction === 'analyze'
+          ) {
             await this.executeMusicAnalyzerAnalyzeTask(task);
             break;
           }
 
-          if ((task.params as { musicAnalyzerAction?: string }).musicAnalyzerAction === 'rewrite') {
+          if (
+            (task.params as { musicAnalyzerAction?: string })
+              .musicAnalyzerAction === 'rewrite'
+          ) {
             await this.executeMusicAnalyzerRewriteTask(task, executionOptions);
             break;
           }
 
-          if ((task.params as { musicAnalyzerAction?: string }).musicAnalyzerAction === 'lyrics-gen') {
-            await this.executeMusicAnalyzerLyricsGenTask(task, executionOptions);
+          if (
+            (task.params as { musicAnalyzerAction?: string })
+              .musicAnalyzerAction === 'lyrics-gen'
+          ) {
+            await this.executeMusicAnalyzerLyricsGenTask(
+              task,
+              executionOptions
+            );
             break;
           }
 
-          if ((task.params as { mvCreatorAction?: string }).mvCreatorAction === 'storyboard') {
+          if (
+            (task.params as { mvCreatorAction?: string }).mvCreatorAction ===
+            'storyboard'
+          ) {
             await this.executeMVStoryboardTask(task, executionOptions);
             break;
           }
@@ -718,7 +921,8 @@ class TaskQueueService {
         throw new Error(result.error || '视频分析失败');
       }
 
-      const analysis = (result.data as { analysis: VideoAnalysisData }).analysis;
+      const analysis = (result.data as { analysis: VideoAnalysisData })
+        .analysis;
       const formattedText = formatShotsMarkdown(analysis.shots || [], analysis);
       await this.finalizeChatTask(task, {
         title: '视频分析结果',
@@ -792,11 +996,12 @@ class TaskQueueService {
 
       const recordId = String(params.videoAnalyzerRecordId || '').trim();
       const targetRecord = recordId
-        ? (await loadRecords()).find(record => record.id === recordId) || null
+        ? (await loadRecords()).find((record) => record.id === recordId) || null
         : null;
 
       const updates = parseRewriteShotUpdates(text);
-      const baseShots = targetRecord?.editedShots || targetRecord?.analysis.shots || [];
+      const baseShots =
+        targetRecord?.editedShots || targetRecord?.analysis.shots || [];
       const editedShots = applyRewriteShotUpdates(baseShots, updates);
       const formattedText =
         targetRecord && editedShots.length > 0
@@ -884,7 +1089,10 @@ class TaskQueueService {
       const result = await executeMusicAnalysis({
         audioData,
         mimeType,
-        prompt: params.musicAnalyzerPrompt || params.prompt || DEFAULT_MUSIC_ANALYSIS_PROMPT,
+        prompt:
+          params.musicAnalyzerPrompt ||
+          params.prompt ||
+          DEFAULT_MUSIC_ANALYSIS_PROMPT,
         model: params.model,
         modelRef: params.modelRef || null,
       });
@@ -893,7 +1101,8 @@ class TaskQueueService {
         throw new Error(result.error || '音频分析失败');
       }
 
-      const analysis = (result.data as { analysis: MusicAnalysisData }).analysis;
+      const analysis = (result.data as { analysis: MusicAnalysisData })
+        .analysis;
       const formattedText = formatMusicAnalysisMarkdown(analysis);
       await this.finalizeChatTask(task, {
         title: '音频分析结果',
@@ -967,7 +1176,8 @@ class TaskQueueService {
 
       const recordId = String(params.musicAnalyzerRecordId || '').trim();
       const targetRecord = recordId
-        ? (await loadMusicRecords()).find((record) => record.id === recordId) || null
+        ? (await loadMusicRecords()).find((record) => record.id === recordId) ||
+          null
         : null;
       const rewriteResult = parseLyricsRewriteResult(text);
       const formattedText =
@@ -1062,7 +1272,8 @@ class TaskQueueService {
 
       const recordId = String(params.musicAnalyzerRecordId || '').trim();
       const targetRecord = recordId
-        ? (await loadMusicRecords()).find((record) => record.id === recordId) || null
+        ? (await loadMusicRecords()).find((record) => record.id === recordId) ||
+          null
         : null;
       const lyricsResult = parseLyricsRewriteResult(text);
       const formattedText =
@@ -1133,7 +1344,9 @@ class TaskQueueService {
     if (params.audioCacheUrl) {
       const blob =
         (await unifiedCacheService.getCachedBlob(params.audioCacheUrl)) ||
-        (await fetch(params.audioCacheUrl).then(r => r.ok ? r.blob() : null));
+        (await fetch(params.audioCacheUrl).then((r) =>
+          r.ok ? r.blob() : null
+        ));
       if (blob) {
         const file = new File([blob], 'mv-audio.mp3', {
           type: blob.type || audioMimeType,
@@ -1469,6 +1682,11 @@ class TaskQueueService {
 
     // Reset task for retry - set to PROCESSING for immediate execution
     const now = Date.now();
+    trackTaskAnalytics('generation_retry_after_failure', task, {
+      previousStatus: task.status,
+      previousErrorCode: task.error?.code,
+      previousErrorMessage: task.error?.message,
+    });
     this.blockedTaskIds.delete(taskId);
     this.updateTaskStatus(taskId, TaskStatus.PROCESSING, {
       error: undefined,
@@ -1511,6 +1729,7 @@ class TaskQueueService {
 
     this.blockedTaskIds.add(taskId);
     this.tasks.delete(taskId);
+    this.tasksWithStrippedParams.delete(taskId);
 
     // Delete from IndexedDB
     this.persistDelete(taskId);
@@ -1615,19 +1834,35 @@ class TaskQueueService {
           : { ...task };
 
       // 剥离大字段（base64 参考图等），减少内存占用
-      if (restoredTask.params?.referenceImages || restoredTask.params?.uploadedImages) {
+      if (
+        restoredTask.params?.referenceImages ||
+        restoredTask.params?.uploadedImages ||
+        restoredTask.params?.videoData ||
+        restoredTask.params?.audioData
+      ) {
+        this.tasksWithStrippedParams.add(restoredTask.id);
         restoredTask = {
           ...restoredTask,
           params: {
             ...restoredTask.params,
             referenceImages: undefined,
             uploadedImages: undefined,
+            videoData: undefined,
+            audioData: undefined,
           },
         };
       }
 
       this.blockedTaskIds.delete(restoredTask.id);
       this.tasks.set(restoredTask.id, restoredTask);
+      if (
+        restoredTask.status === TaskStatus.PENDING ||
+        restoredTask.status === TaskStatus.PROCESSING
+      ) {
+        trackTaskAnalytics('task_recovered_after_reload', restoredTask, {
+          restoredAgeMs: Math.max(0, Date.now() - restoredTask.createdAt),
+        });
+      }
       restoredCount++;
     });
 
@@ -1680,12 +1915,21 @@ class TaskQueueService {
    * Marks a task as inserted to canvas
    * @param taskId - The task ID to mark as inserted
    */
-  markAsInserted(taskId: string): void {
+  markAsInserted(taskId: string, source: InsertionSource = 'manual'): void {
     const task = this.tasks.get(taskId);
     if (!task) {
       console.warn(`[TaskQueueService] Task ${taskId} not found`);
       return;
     }
+
+    if (task.insertedToCanvas) {
+      return;
+    }
+
+    trackTaskAnalytics('generation_result_insert_canvas', task, {
+      source,
+      insertedToCanvas: true,
+    });
 
     this.updateTaskStatus(taskId, task.status, {
       insertedToCanvas: true,
@@ -1721,6 +1965,7 @@ class TaskQueueService {
     for (let i = 0; i < Math.min(toArchiveCount, terminalTasks.length); i++) {
       const task = terminalTasks[i];
       this.tasks.delete(task.id);
+      this.tasksWithStrippedParams.delete(task.id);
       archiveIds.push(task.id);
     }
 
@@ -1744,7 +1989,13 @@ class TaskQueueService {
     const task = this.tasks.get(taskId);
     if (!task?.params) return;
     const params = task.params as Record<string, unknown>;
-    if (params.referenceImages || params.uploadedImages || params.videoData || params.audioData) {
+    if (
+      params.referenceImages ||
+      params.uploadedImages ||
+      params.videoData ||
+      params.audioData
+    ) {
+      this.tasksWithStrippedParams.add(taskId);
       this.tasks.set(taskId, {
         ...task,
         params: {
@@ -1756,6 +2007,34 @@ class TaskQueueService {
         },
       });
     }
+  }
+
+  private async restoreStrippedTaskParams(task: Task): Promise<Task> {
+    if (!this.tasksWithStrippedParams.has(task.id)) {
+      return task;
+    }
+
+    const storedTask = await taskStorageWriter
+      .getTask(task.id)
+      .catch(() => null);
+    const persistedParams = storedTask?.params as Record<string, unknown> | null;
+
+    if (!hasAnyPersistedLargeTaskParams(persistedParams)) {
+      return task;
+    }
+
+    const mergedParams = mergePersistedLargeTaskParams(
+      task.params,
+      persistedParams
+    );
+    if (mergedParams === task.params) {
+      return task;
+    }
+
+    return {
+      ...task,
+      params: mergedParams,
+    };
   }
 
   /**

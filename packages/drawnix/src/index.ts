@@ -20,6 +20,12 @@ export type {
   CachedMedia,
   CacheStatus,
 } from './services/unified-cache-service';
+export {
+  analytics,
+  getAnalyticsReleaseContext,
+  registerAnalyticsSuperProperties,
+} from './utils/posthog-analytics';
+export type { AnalyticsReleaseContext } from './utils/posthog-analytics';
 
 // Export SW channel client
 export { swChannelClient } from './services/sw-channel/client';

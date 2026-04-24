@@ -72,13 +72,6 @@ function extractVersionCandidates(text: string): VersionVector[] {
       continue;
     }
 
-    const suffixedVersion = token.match(/^(\d+)(?:o|omni|mini)$/);
-    if (suffixedVersion) {
-      pushNumericRun();
-      candidates.push([Number(suffixedVersion[1])]);
-      continue;
-    }
-
     pushNumericRun();
   }
 
@@ -206,21 +199,6 @@ export function compareModelsByDisplayPriority(
     }
   }
 
-  const leftNameKey = getModelNameOrderKey(left);
-  const rightNameKey = getModelNameOrderKey(right);
-  const nameKeyDiff = leftNameKey.localeCompare(rightNameKey, 'zh-Hans-CN');
-  if (nameKeyDiff !== 0) {
-    return nameKeyDiff;
-  }
-
-  const versionDiff = compareVersionVectorsDesc(
-    getBestVersionVector(left),
-    getBestVersionVector(right)
-  );
-  if (versionDiff !== 0) {
-    return versionDiff;
-  }
-
   const leftRecommendedScore = getRecommendedScore(left);
   const rightRecommendedScore = getRecommendedScore(right);
   if (
@@ -238,6 +216,21 @@ export function compareModelsByDisplayPriority(
   const rightIsNew = hasNewTag(right);
   if (leftIsNew !== rightIsNew) {
     return leftIsNew ? -1 : 1;
+  }
+
+  const leftNameKey = getModelNameOrderKey(left);
+  const rightNameKey = getModelNameOrderKey(right);
+  const nameKeyDiff = leftNameKey.localeCompare(rightNameKey, 'zh-Hans-CN');
+  if (nameKeyDiff !== 0) {
+    return nameKeyDiff;
+  }
+
+  const versionDiff = compareVersionVectorsDesc(
+    getBestVersionVector(left),
+    getBestVersionVector(right)
+  );
+  if (versionDiff !== 0) {
+    return versionDiff;
   }
 
   const tierDiff = getTierWeight(right) - getTierWeight(left);

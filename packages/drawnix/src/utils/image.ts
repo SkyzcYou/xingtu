@@ -110,11 +110,18 @@ export const saveAsImage = (board: PlaitBoard, isTransparent: boolean) => {
 };
 
 export const addImage = async (board: PlaitBoard) => {
-  const imageFile = await fileOpen({
-    description: 'Image',
-    extensions: Object.keys(
-      IMAGE_MIME_TYPES
-    ) as (keyof typeof IMAGE_MIME_TYPES)[],
-  });
-  insertImage(board, imageFile);
+  try {
+    const imageFile = await fileOpen({
+      description: 'Image',
+      extensions: Object.keys(
+        IMAGE_MIME_TYPES
+      ) as (keyof typeof IMAGE_MIME_TYPES)[],
+    });
+    insertImage(board, imageFile);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return;
+    }
+    throw error;
+  }
 };

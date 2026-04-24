@@ -14,6 +14,10 @@ import { analytics } from '../utils/posthog-analytics';
  * Page report event category
  */
 const PAGE_REPORT_CATEGORY = 'page_report';
+const APP_PAGE_VIEW_EVENT = 'app_page_view';
+
+let pageReportInitialized = false;
+let lastTrackedHref = '';
 
 /**
  * Page view data interface
@@ -181,7 +185,13 @@ export function trackPageView(): void {
 
   const pageViewData = collectPageViewData();
 
-  analytics.track('page_view', {
+  if (pageViewData.page_url === lastTrackedHref) {
+    return;
+  }
+
+  lastTrackedHref = pageViewData.page_url;
+
+  analytics.track(APP_PAGE_VIEW_EVENT, {
     category: PAGE_REPORT_CATEGORY,
     ...pageViewData,
   });
@@ -246,6 +256,11 @@ export function trackPageUnload(): void {
  */
 export function initPageReport(): void {
   try {
+    if (pageReportInitialized) {
+      return;
+    }
+    pageReportInitialized = true;
+
     // Track initial page view
     trackPageView();
 
@@ -295,19 +310,12 @@ export function initPageReport(): void {
       }, 100); // Small delay to ensure URL has changed
     });
 
-    // Intercept pushState and replaceState for SPA navigation
+    // Intercept pushState for explicit SPA navigation.
+    // replaceState is often used for transient URL cleanup and should not count as a page view.
     const originalPushState = history.pushState;
-    const originalReplaceState = history.replaceState;
 
     history.pushState = function (...args) {
       originalPushState.apply(this, args);
-      setTimeout(() => {
-        trackPageView();
-      }, 100);
-    };
-
-    history.replaceState = function (...args) {
-      originalReplaceState.apply(this, args);
       setTimeout(() => {
         trackPageView();
       }, 100);

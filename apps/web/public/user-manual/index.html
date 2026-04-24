@@ -3,7 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>首页 - Opentu 用户手册</title>
+  <title>Opentu 用户手册首页 | AI 应用平台、画布工作区、流程图与思维导图</title>
+  <meta name="description" content="Opentu 用户手册首页，了解 AI 应用平台、画布工作区、AI 绘图、AI 视频生成、流程图、思维导图、素材库与任务工作流的核心用法。" />
+  <meta name="keywords" content="Opentu，首页，用户手册，教程，AI 应用平台，画布工作区" />
+  <meta name="robots" content="index,follow,max-image-preview:large" />
+  <link rel="canonical" href="https://opentu.ai/user-manual/index.html" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Opentu 用户手册" />
+  <meta property="og:title" content="Opentu 用户手册首页 | AI 应用平台、画布工作区、流程图与思维导图" />
+  <meta property="og:description" content="Opentu 用户手册首页，了解 AI 应用平台、画布工作区、AI 绘图、AI 视频生成、流程图、思维导图、素材库与任务工作流的核心用法。" />
+  <meta property="og:url" content="https://opentu.ai/user-manual/index.html" />
+  <meta property="og:image" content="https://opentu.ai/product_showcase/aitu-01.png" />
+  <meta property="og:image:alt" content="首页" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Opentu 用户手册首页 | AI 应用平台、画布工作区、流程图与思维导图" />
+  <meta name="twitter:description" content="Opentu 用户手册首页，了解 AI 应用平台、画布工作区、AI 绘图、AI 视频生成、流程图、思维导图、素材库与任务工作流的核心用法。" />
+  <meta name="twitter:image" content="https://opentu.ai/product_showcase/aitu-01.png" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","headline":"首页","name":"首页","description":"Opentu 用户手册首页，了解 AI 应用平台、画布工作区、AI 绘图、AI 视频生成、流程图、思维导图、素材库与任务工作流的核心用法。","inLanguage":"zh-CN","url":"https://opentu.ai/user-manual/index.html","image":"https://opentu.ai/product_showcase/aitu-01.png","isPartOf":{"@type":"WebSite","name":"Opentu 用户手册","url":"https://opentu.ai/user-manual/index.html"},"publisher":{"@type":"Organization","name":"Opentu","url":"https://opentu.ai","logo":{"@type":"ImageObject","url":"https://opentu.ai/icons/android-chrome-512x512.png"}},"about":["首页","AI 应用平台","画布工作区","流程图","思维导图"]}</script>
   <style>
     :root {
       --primary-color: #F39C12;
@@ -251,6 +268,9 @@
 <li><a href="advanced-troubleshooting.html">问题排查</a></li>
 <li><a href="advanced-image-preview-edit.html">图片预览与编辑</a></li>
 <li><a href="advanced-toolbox.html">工具箱</a></li>
+<li><a href="advanced-knowledge-base.html">知识库</a></li>
+<li><a href="advanced-task-queue.html">任务队列</a></li>
+<li><a href="advanced-command-palette.html">命令面板</a></li>
 </ul>
 </nav>
 <main class="main-content">
@@ -259,11 +279,13 @@
 <h1>欢迎使用 Opentu（开图）</h1>
 
 <strong>Opentu（开图）</strong> 是一个以浏览器为入口的 AI 应用平台，强化了模型、知识、素材与工具的协作能力。
-
-平台以<strong>画布工作区</strong>为运行底座，用户在同一个画布中发起 AI 生成指令、撰写知识卡、调用插件工具、管理任务队列，并通过多模型路由完成图像、视频、文本等交付。
+<p>
+平台以<strong>画布工作区</strong>为运行底座，用户在同一个画布中发起 AI 生成指令、撰写知识卡、调用插件工具、管理任务队列，并通过多模型路由完成图像、视频、文本等交付。\
+这让创作者不用在多个应用间切换，就能在一个开放工作区内完成从灵感到交付的全链路。
+</p>
 
 <p>
-这让创作者不用在多个应用间切换，就能在一个开放工作区内完成从灵感到交付的全链路。
+所有数据都存储在当前浏览器中，无需额外安装。只要打开浏览器，就能继续未完成的“项目”，因为 Opentu 把画布状态、素材、提示词历史和设置都保存在本地。
 </p>
 
 <div class="note"><strong>注意：</strong><strong>重要提示：</strong> 您的所有数据（项目、素材、提示词历史）都保存在<strong>当前浏览器</strong>的本地存储中，不会上传到服务器。这意味着：
@@ -275,12 +297,15 @@
 
 <h2>Opentu 平台概览</h2>
 
-<ul><li><strong>AI 应用</strong> - 在底部 AI 输入栏发起图片、视频、灵感板的生成请求，或通过 Agent/Skill 调用多模型能力</li>
-<li><strong>知识与素材</strong> - 知识库、灵感板、素材库都与画布互联，生成内容可一键插入工作区并被任务队列追踪</li>
-<li><strong>工具与工作流</strong> - 命令面板、工具箱与工作流系统贯穿整个平台，支持多步骤执行与任务重试</li>
-<li><strong>开放与扩展</strong> - 插件架构、API 配置与同步能力让 Opentu 适合作为高频 AI 工作空间</li>
-</ul>
+<p>
+Opentu 将“画布工作区”定位为统一的执行与协作界面，围绕它构建以下能力：
+</p>
 
+<ul><li><strong>AI 应用</strong>：在底部 AI 输入栏发起图片、视频、灵感板的生成请求，或通过内置 Agent/Skill 调用多模型能力；</li>
+<li><strong>知识与素材</strong>：知识库、灵感板、素材库都与画布互联，生成的内容可一键插入工作区并被任务队列追踪；</li>
+<li><strong>工具与工作流</strong>：命令面板、技能、工具箱、工作流系统贯穿整个平台，支持多步骤执行与任务重试；</li>
+<li><strong>开放与扩展</strong>：插件架构、API 配置、同步能力让 Opentu 适合作为团队或个人的高频 AI 工作空间。</li>
+</ul>
 <h2>产品展示</h2>
 
 <h3>智能拆分图片</h3>
@@ -309,12 +334,12 @@
 
 <h2>我能用它做什么？</h2>
 
-<h3>平台能力 🔥</h3>
+<h3>AI 创作能力 🔥</h3>
 
 <ul><li><strong>AI 生成图片</strong> - 支持多种图片生成模型</li>
 </ul>  - nano-banana - 快速生图
 <p>
-- nano-banana-2 - 高质量生图，支持 HD/2K/4K 分辨率
+- nano-banana-pro - 高质量生图，支持 HD/2K/4K 分辨率
 - 支持文本转图片、图片参考生成、批量生成
 </p>
 
@@ -329,7 +354,13 @@
 <ul><li><strong>模型自由切换</strong> - 在生成对话框中即时切换不同的 AI 模型</li>
 <li><strong>任务队列管理</strong> - 异步任务处理，支持批量生成、任务重试、历史记录、媒体缓存</li>
 </ul>
-<h3>画布工作区与可视化</h3>
+<h3>效率工具</h3>
+
+<ul><li><strong>知识库</strong> - 目录 + 标签管理，支持笔记检索与导入导出</li>
+<li><strong>Skill/Agent</strong> - 面向场景的技能选择与自定义工作流</li>
+<li><strong>命令面板</strong> - 快速搜索并执行常用操作（Cmd+K）</li>
+</ul>
+<h3>白板与可视化</h3>
 
 <ul><li><strong>思维导图</strong> - 快速整理思路，支持 Markdown 转换</li>
 <li><strong>流程图</strong> - 绘制流程图，支持 Mermaid 语法</li>
@@ -382,7 +413,7 @@
 
 <h2>界面介绍</h2>
 
-<img class="step-screenshot" src="https://unpkg.com/aitu-app@0.5.59/user-manual/screenshots/ai-step-0.png" alt="主界面" loading="lazy" />
+<img class="step-screenshot" src="screenshots/ai-step-0.png" alt="主界面" loading="lazy" />
 
 <ul><li><strong>顶部工具栏</strong> - 各种绘图工具和编辑功能</li>
 <li><strong>底部输入框</strong> - AI 创作入口，输入描述生成图片/视频</li>
@@ -454,8 +485,8 @@
   </article>
   
   <footer class="footer">
-    <p>Opentu 用户手册 v0.5.59</p>
-    <p>生成时间: 2026/1/26 23:58:02</p>
+    <p>Opentu 用户手册 v0.6.62</p>
+    <p>生成时间: 2026/4/23 21:13:50</p>
   </footer>
 </main>
 </body>

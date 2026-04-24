@@ -38,6 +38,7 @@ interface Config {
 // 页面元数据
 interface PageMeta {
   title: string;
+  description?: string;
   category?: string;
   order?: number;
 }
@@ -50,6 +51,18 @@ interface Page {
   content: string;
   html: string;
 }
+
+const SITE_URL = 'https://opentu.ai';
+const SITE_NAME = 'Opentu';
+const MANUAL_PATH = '/user-manual';
+const MANUAL_BASE_URL = `${SITE_URL}${MANUAL_PATH}`;
+const DEFAULT_OG_IMAGE = `${SITE_URL}/product_showcase/aitu-01.png`;
+
+const PAGE_OG_IMAGES: Record<string, string> = {
+  'ai-generation-image-generation': `${SITE_URL}/product_showcase/aitu-01.png`,
+  'drawing-flowchart': `${SITE_URL}/product_showcase/流程图.gif`,
+  'drawing-mindmap': `${SITE_URL}/product_showcase/思维导图.gif`,
+};
 
 // 读取配置文件
 function readConfig(configPath: string): Config {
@@ -191,14 +204,188 @@ function markdownToHtml(markdown: string, screenshotsDir: string): string {
   return result;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function extractSummaryFromMarkdown(markdown: string): string {
+  const blocks = markdown.split(/\n\s*\n/);
+  let inCodeBlock = false;
+
+  for (const block of blocks) {
+    const lines = block
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (lines.length === 0) {
+      continue;
+    }
+
+    const cleanedLines: string[] = [];
+    let isValidParagraph = true;
+
+    for (const line of lines) {
+      if (line.startsWith('```')) {
+        inCodeBlock = !inCodeBlock;
+        isValidParagraph = false;
+        break;
+      }
+      if (
+        inCodeBlock ||
+        line.startsWith('#') ||
+        line.startsWith('<') ||
+        line.startsWith('![') ||
+        line.startsWith('|') ||
+        line.startsWith(':::') ||
+        /^[-*]\s/.test(line) ||
+        /^\d+\.\s/.test(line)
+      ) {
+        isValidParagraph = false;
+        break;
+      }
+
+      cleanedLines.push(line.replace(/[*`_~]/g, ''));
+    }
+
+    if (!isValidParagraph || cleanedLines.length === 0) {
+      continue;
+    }
+
+    return normalizeWhitespace(cleanedLines.join(' ')).slice(0, 96);
+  }
+
+  return '';
+}
+
+function getPageTitle(page: Page, siteTitle: string): string {
+  if (page.slug === 'index') {
+    return `${siteTitle}首页 | AI 应用平台、画布工作区、流程图与思维导图`;
+  }
+  return `${page.meta.title} | ${siteTitle}`;
+}
+
+function getPageDescription(page: Page, siteDescription: string): string {
+  if (page.meta.description) {
+    return normalizeWhitespace(page.meta.description).slice(0, 160);
+  }
+
+  if (page.slug === 'index') {
+    return 'Opentu 用户手册首页，了解 AI 应用平台、画布工作区、AI 绘图、AI 视频生成、流程图、思维导图、素材库与任务工作流的核心用法。';
+  }
+
+  const summary = extractSummaryFromMarkdown(page.content);
+  if (summary) {
+    const normalizedSummary = summary.slice(0, 120).replace(/[。！？.!?]+$/u, '');
+    return `${normalizedSummary}。查看 ${page.meta.title} 的操作步骤、使用技巧与常见问题。`.slice(0, 160);
+  }
+
+  return `${page.meta.title} 使用指南。${siteDescription}`.slice(0, 160);
+}
+
+function getPageKeywords(page: Page, config: Config): string {
+  const categoryName = page.meta.category ? config.categories[page.meta.category]?.name : '';
+  const values = [
+    'Opentu',
+    page.meta.title,
+    categoryName,
+    '用户手册',
+    '教程',
+    'AI 应用平台',
+    '画布工作区',
+  ].filter(Boolean);
+
+  return Array.from(new Set(values)).join('，');
+}
+
+function getCanonicalUrl(page: Page): string {
+  return page.slug === 'index'
+    ? `${MANUAL_BASE_URL}/index.html`
+    : `${MANUAL_BASE_URL}/${page.slug}.html`;
+}
+
+function getOgImage(page: Page): string {
+  return PAGE_OG_IMAGES[page.slug] || DEFAULT_OG_IMAGE;
+}
+
+function generateStructuredData(page: Page, description: string, canonicalUrl: string, config: Config): string {
+  const pageType = page.slug === 'index' ? 'CollectionPage' : 'TechArticle';
+  const payload = {
+    '@context': 'https://schema.org',
+    '@type': pageType,
+    headline: page.meta.title,
+    name: page.meta.title,
+    description,
+    inLanguage: 'zh-CN',
+    url: canonicalUrl,
+    image: getOgImage(page),
+    isPartOf: {
+      '@type': 'WebSite',
+      name: config.site.title,
+      url: `${MANUAL_BASE_URL}/index.html`,
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: SITE_NAME,
+      url: SITE_URL,
+      logo: {
+        '@type': 'ImageObject',
+        url: `${SITE_URL}/icons/android-chrome-512x512.png`,
+      },
+    },
+    about: [
+      page.meta.title,
+      'AI 应用平台',
+      '画布工作区',
+      '流程图',
+      '思维导图',
+    ],
+  };
+
+  return JSON.stringify(payload);
+}
+
 // 生成 HTML 头部和样式
-function generateHtmlHead(title: string, siteTitle: string): string {
+function generateHtmlHead(page: Page, config: Config): string {
+  const title = getPageTitle(page, config.site.title);
+  const description = getPageDescription(page, config.site.description);
+  const canonicalUrl = getCanonicalUrl(page);
+  const ogImage = getOgImage(page);
+  const keywords = getPageKeywords(page, config);
+  const structuredData = generateStructuredData(page, description, canonicalUrl, config);
+
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} - ${siteTitle}</title>
+  <title>${escapeHtml(title)}</title>
+  <meta name="description" content="${escapeHtml(description)}" />
+  <meta name="keywords" content="${escapeHtml(keywords)}" />
+  <meta name="robots" content="index,follow,max-image-preview:large" />
+  <link rel="canonical" href="${canonicalUrl}" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta property="og:type" content="${page.slug === 'index' ? 'website' : 'article'}" />
+  <meta property="og:site_name" content="${escapeHtml(config.site.title)}" />
+  <meta property="og:title" content="${escapeHtml(title)}" />
+  <meta property="og:description" content="${escapeHtml(description)}" />
+  <meta property="og:url" content="${canonicalUrl}" />
+  <meta property="og:image" content="${ogImage}" />
+  <meta property="og:image:alt" content="${escapeHtml(page.meta.title)}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapeHtml(title)}" />
+  <meta name="twitter:description" content="${escapeHtml(description)}" />
+  <meta name="twitter:image" content="${ogImage}" />
+  <script type="application/ld+json">${structuredData}</script>
   <style>
     :root {
       --primary-color: #F39C12;
@@ -479,7 +666,7 @@ function generateSidebar(pages: Page[], config: Config, currentSlug: string): st
 
 // 生成单个页面
 function generatePage(page: Page, allPages: Page[], config: Config, version: string): string {
-  let html = generateHtmlHead(page.meta.title, config.site.title);
+  let html = generateHtmlHead(page, config);
   
   html += `
 <body>

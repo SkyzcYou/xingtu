@@ -10,6 +10,7 @@
  */
 
 import type { KBNoteImage, KBNoteContent } from '../types/knowledge-base.types';
+import { generateUUID } from '../utils/runtime-helpers';
 import { _getStoreInstances } from './knowledge-base-service';
 
 // ==================== Hash 计算 ====================
@@ -123,7 +124,7 @@ export async function saveImage(
   }
 
   // 不存在，创建新图片记录
-  const id = crypto.randomUUID();
+  const id = generateUUID();
   const image: KBNoteImage = {
     id,
     noteId,

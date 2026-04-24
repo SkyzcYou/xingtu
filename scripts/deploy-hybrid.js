@@ -25,6 +25,8 @@
  */
 
 const fs = require('fs');
+const http = require('http');
+const https = require('https');
 const path = require('path');
 const { execSync } = require('child_process');
 
@@ -41,6 +43,7 @@ const CONFIG = {
     unpkg: 'https://unpkg.com/aitu-app@{version}',
     jsdelivr: 'https://cdn.jsdelivr.net/npm/aitu-app@{version}',
   },
+  runtimeCdnProvider: 'jsdelivr',
   // 只在服务器的文件
   serverOnlyFiles: [
     'index.html',
@@ -169,6 +172,169 @@ function shouldUploadToCDN(filename) {
 
 function shouldKeepOnServer(filename) {
   return CONFIG.serverOnlyFiles.some(f => filename === f || filename.endsWith(f));
+}
+
+function requestUrl(url, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https:') ? https : http;
+    const request = client.get(url, (response) => {
+      const chunks = [];
+      response.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
+      response.on('end', () => {
+        resolve({
+          statusCode: response.statusCode || 0,
+          headers: response.headers,
+          body: Buffer.concat(chunks),
+        });
+      });
+    });
+
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error(`timeout:${timeoutMs}`));
+    });
+    request.on('error', reject);
+  });
+}
+
+async function isRemoteAssetReady(url) {
+  try {
+    const response = await requestUrl(url, 10000);
+    if (response.statusCode !== 200) {
+      return {
+        ok: false,
+        reason: `status:${response.statusCode}`,
+      };
+    }
+
+    const contentType = String(response.headers['content-type'] || '');
+    const body = response.body;
+    const isTextAsset =
+      url.endsWith('.js') || url.endsWith('.css') || url.endsWith('.json');
+    const looksLikeHtml =
+      isTextAsset &&
+      body.length > 0 &&
+      body
+        .subarray(0, Math.min(body.length, 200))
+        .toString('utf8')
+        .match(/<!DOCTYPE|<html|<HTML|Not Found|404/);
+
+    if (looksLikeHtml) {
+      return { ok: false, reason: 'html-fallback' };
+    }
+
+    if (isTextAsset && body.length > 0 && body.length < 50) {
+      return { ok: false, reason: `body-too-small:${body.length}` };
+    }
+
+    if (!contentType) {
+      return { ok: true };
+    }
+
+    if (
+      url.endsWith('.js') &&
+      !contentType.includes('javascript') &&
+      !contentType.includes('ecmascript')
+    ) {
+      return { ok: false, reason: `invalid-content-type:${contentType}` };
+    }
+
+    if (url.endsWith('.css') && !contentType.includes('css')) {
+      return { ok: false, reason: `invalid-content-type:${contentType}` };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error.message || String(error),
+    };
+  }
+}
+
+function getCriticalCdnAssets() {
+  const indexHtmlPath = path.join(CONFIG.outputServer, 'index.html');
+  const precacheManifestPath = path.join(CONFIG.outputCDN, 'precache-manifest.json');
+
+  if (!fs.existsSync(indexHtmlPath)) {
+    return { ok: false, reason: 'server/index.html 不存在' };
+  }
+
+  if (!fs.existsSync(precacheManifestPath)) {
+    return { ok: false, reason: 'cdn/precache-manifest.json 不存在' };
+  }
+
+  const html = fs.readFileSync(indexHtmlPath, 'utf-8');
+  const manifest = JSON.parse(fs.readFileSync(precacheManifestPath, 'utf-8'));
+  const manifestUrls = new Set((manifest.files || []).map((file) => file.url));
+
+  const scriptMatches = Array.from(
+    html.matchAll(/<script[^>]+src="\.\/([^"]+)"[^>]*><\/script>/g)
+  ).map((match) => `/${match[1]}`);
+  const styleMatches = Array.from(
+    html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\.\/([^"]+)"[^>]*>/g)
+  ).map((match) => `/${match[1]}`);
+
+  const assets = [...scriptMatches, ...styleMatches]
+    .filter((asset) => asset.startsWith('/assets/'))
+    .filter((asset) => manifestUrls.has(asset));
+
+  if (assets.length === 0) {
+    return { ok: false, reason: '未找到入口关键静态资源' };
+  }
+
+  return { ok: true, assets };
+}
+
+async function waitForRuntimeCdnAssetsReady(version) {
+  const runtimeCdnBaseUrl = CONFIG.cdnTemplates[CONFIG.runtimeCdnProvider].replace('{version}', version);
+  const criticalAssetsResult = getCriticalCdnAssets();
+
+  if (!criticalAssetsResult.ok) {
+    return criticalAssetsResult;
+  }
+
+  const criticalAssets = criticalAssetsResult.assets.slice(0, 6);
+  const timeoutMs = 10 * 60 * 1000;
+  const intervalMs = 5000;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const checks = await Promise.all(
+      criticalAssets.map(async (assetPath) => {
+        const url = `${runtimeCdnBaseUrl}${assetPath}`;
+        const result = await isRemoteAssetReady(url);
+        return {
+          assetPath,
+          ...result,
+        };
+      })
+    );
+
+    const failed = checks.filter((item) => !item.ok);
+    if (failed.length === 0) {
+      return {
+        ok: true,
+        assets: criticalAssets,
+      };
+    }
+
+    const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+    log(
+      `    运行时 CDN 关键资源未就绪，${elapsedSec}s 后重试：${failed
+        .slice(0, 3)
+        .map((item) => `${item.assetPath} (${item.reason})`)
+        .join(', ')}`,
+      'gray'
+    );
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  return {
+    ok: false,
+    reason: `等待 ${CONFIG.runtimeCdnProvider} 关键资源就绪超时`,
+  };
 }
 
 /**
@@ -397,7 +563,7 @@ function loadEnvConfig() {
 // ============================================
 
 function stepBuild(version) {
-  logStep(1, 7, '构建项目');
+  logStep(1, 8, '构建项目');
   
   // 显式跳过
   if (skipBuild) {
@@ -413,6 +579,10 @@ function stepBuild(version) {
       log(`    CDN: ${buildCheck.details.cdnFileCount} 个文件，Server: ${buildCheck.details.serverFileCount} 个文件`, 'gray');
       log(`    构建时间: ${buildCheck.details.timestamp}`, 'gray');
     }
+    if (!exec('node scripts/validate-startup-bundle.js', { cwd: path.resolve(__dirname, '..') })) {
+      logError('启动边界校验失败');
+      return false;
+    }
     return { skipped: true };
   } else {
     log(`    需要构建: ${buildCheck.reason}`, 'gray');
@@ -425,6 +595,11 @@ function stepBuild(version) {
     logError('构建失败');
     return false;
   }
+
+  if (!exec('node scripts/validate-startup-bundle.js', { cwd: path.resolve(__dirname, '..') })) {
+    logError('启动边界校验失败');
+    return false;
+  }
   
   logSuccess('构建完成');
   return true;
@@ -435,7 +610,7 @@ function stepBuild(version) {
 // ============================================
 
 function stepE2ETest() {
-  logStep(2, 7, 'E2E 冒烟测试');
+  logStep(2, 8, 'E2E 冒烟测试');
   
   if (skipE2E) {
     logWarning('跳过 E2E 测试（--skip-e2e 参数）');
@@ -464,7 +639,7 @@ function stepE2ETest() {
 // ============================================
 
 function stepSeparateFiles(version, cdnBaseUrl, buildSkipped = false) {
-  logStep(3, 7, '准备部署文件');
+  logStep(3, 8, '准备部署文件');
   
   // 如果构建被跳过，文件已经准备好了
   if (buildSkipped) {
@@ -575,7 +750,7 @@ function stepSeparateFiles(version, cdnBaseUrl, buildSkipped = false) {
 // ============================================
 
 function stepPublishNpm(version) {
-  logStep(5, 7, '发布静态资源到 npm CDN');
+  logStep(5, 8, '发布静态资源到 npm CDN');
   
   if (skipNpm) {
     logWarning('跳过 npm 发布');
@@ -628,12 +803,35 @@ function stepPublishNpm(version) {
   return true;
 }
 
+async function stepWaitForCdnReady(version) {
+  logStep(6, 8, '等待运行时 CDN 关键资源就绪');
+
+  if (skipNpm) {
+    logWarning('跳过 CDN 就绪等待（未发布 npm 资源）');
+    return true;
+  }
+
+  if (isDryRun) {
+    log(`    [DRY RUN] 将等待 ${CONFIG.runtimeCdnProvider} 关键资源 ready`, 'yellow');
+    return true;
+  }
+
+  const result = await waitForRuntimeCdnAssetsReady(version);
+  if (!result.ok) {
+    logError(result.reason || '运行时 CDN 关键资源未就绪');
+    return false;
+  }
+
+  logSuccess(`${CONFIG.runtimeCdnProvider} 关键资源已就绪`);
+  return true;
+}
+
 // ============================================
 // 步骤 5: 部署到服务器（复用 create-deploy-package.js）
 // ============================================
 
 function stepDeployServer(version) {
-  logStep(6, 7, '打包并部署到服务器');
+  logStep(7, 8, '打包并部署到服务器');
   
   if (skipServer) {
     logWarning('跳过服务器部署');
@@ -666,7 +864,7 @@ function stepDeployServer(version) {
 // ============================================
 
 function stepGenerateManual(version) {
-  logStep(4, 7, '生成用户手册');
+  logStep(4, 8, '生成用户手册');
   const startTime = Date.now();
   
   if (skipManual) {
@@ -851,7 +1049,7 @@ function copyDirRecursive(src, dest) {
 // ============================================
 
 function stepVerify(version) {
-  logStep(7, 7, '部署完成');
+  logStep(8, 8, '部署完成');
   
   log('\n📋 部署摘要', 'cyan');
   log('═'.repeat(50), 'cyan');
@@ -890,7 +1088,7 @@ function stepVerify(version) {
   
   log('\n🔄 加载顺序:', 'cyan');
   log('   1. Service Worker 缓存（最快）');
-  log('   2. CDN unpkg/jsdelivr（节约流量）');
+  log(`   2. CDN ${CONFIG.runtimeCdnProvider}（运行时静态资源主链路）`);
   log('   3. 自有服务器（兜底保障）');
   
   if (isDryRun) {
@@ -970,12 +1168,13 @@ async function main() {
     () => stepSeparateFiles(version, cdnBaseUrl, buildSkipped),
     () => stepGenerateManual(version),  // 必须在 npm 发布之前，确保截图被包含在 CDN
     () => stepPublishNpm(version),
+    () => stepWaitForCdnReady(version),
     () => stepDeployServer(version),
     () => stepVerify(version),
   ];
   
   for (const step of steps) {
-    if (!step()) {
+    if (!(await step())) {
       log('\n❌ 部署失败\n', 'red');
       process.exit(1);
     }

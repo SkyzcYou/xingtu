@@ -5,6 +5,7 @@
  */
 
 import localforage from 'localforage';
+import { generateUUID } from '../utils/runtime-helpers';
 import { CHAT_STORAGE_KEYS, CHAT_CONSTANTS } from '../constants/CHAT_CONSTANTS';
 import type { ChatSession, ChatMessage, DrawerState } from '../types/chat.types';
 
@@ -21,7 +22,7 @@ const messagesStore = localforage.createInstance({
 
 /** Generate UUID v4 */
 function generateId(): string {
-  return crypto.randomUUID();
+  return generateUUID();
 }
 
 /** Generate session title from first message */

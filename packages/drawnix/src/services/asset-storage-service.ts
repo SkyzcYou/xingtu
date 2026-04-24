@@ -8,6 +8,7 @@
  */
 
 import localforage from 'localforage';
+import { generateUUID } from '../utils/runtime-helpers';
 import { ASSET_CONSTANTS } from '../constants/ASSET_CONSTANTS';
 import {
   validateAssetName,
@@ -317,7 +318,7 @@ class AssetStorageService {
 
     try {
       // 生成稳定的素材 URL
-      const assetId = crypto.randomUUID();
+      const assetId = generateUUID();
       const assetUrl = this.generateAssetUrl(contentHash, data.mimeType);
       // console.log('[AssetStorageService] Generated asset URL:', assetUrl);
 

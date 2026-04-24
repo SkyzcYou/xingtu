@@ -168,6 +168,10 @@ class TaskStorageWriter {
    * 获取任务
    */
   async getTask(taskId: string): Promise<SWTask | null> {
+    if (!taskId) {
+      return null;
+    }
+
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(TASKS_STORE, 'readonly');
@@ -294,6 +298,10 @@ class TaskStorageWriter {
    * 删除任务
    */
   async deleteTask(taskId: string): Promise<void> {
+    if (!taskId) {
+      return;
+    }
+
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(TASKS_STORE, 'readwrite');

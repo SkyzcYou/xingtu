@@ -236,7 +236,8 @@ export const CreationToolbar: React.FC<ToolbarSectionProps> = ({
   embedded = false,
   iconMode = false,
   onOpenMediaLibrary,
-  deferredFeaturesEnabled = false,
+  minimizedToolsBarEnabled = false,
+  onEnableToolWindows,
 }) => {
   const board = useBoard();
   const { appState, openDialog } = useDrawnix();
@@ -284,20 +285,6 @@ export const CreationToolbar: React.FC<ToolbarSectionProps> = ({
   // 素材库状态
   const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false);
 
-  // 打开素材库
-  const handleOpenMediaLibrary = useCallback(() => {
-    if (onOpenMediaLibrary) {
-      onOpenMediaLibrary();
-      return;
-    }
-    setMediaLibraryOpen(true);
-  }, [onOpenMediaLibrary]);
-
-  // 关闭素材库
-  const handleCloseMediaLibrary = useCallback(() => {
-    setMediaLibraryOpen(false);
-  }, []);
-
   // 插入素材到画板
   const handleInsertAsset = useCallback(
     async (asset: Asset) => {
@@ -325,6 +312,24 @@ export const CreationToolbar: React.FC<ToolbarSectionProps> = ({
     },
     [board]
   );
+
+  // 打开素材库
+  const handleOpenMediaLibrary = useCallback(() => {
+    if (onOpenMediaLibrary) {
+      onOpenMediaLibrary({
+        mode: SelectionMode.SELECT,
+        onSelect: handleInsertAsset,
+        selectButtonText: '插入',
+      });
+      return;
+    }
+    setMediaLibraryOpen(true);
+  }, [handleInsertAsset, onOpenMediaLibrary]);
+
+  // 关闭素材库
+  const handleCloseMediaLibrary = useCallback(() => {
+    setMediaLibraryOpen(false);
+  }, []);
 
   // 统一重置所有 Popover
   const resetAllPopovers = () => {
@@ -896,9 +901,9 @@ export const CreationToolbar: React.FC<ToolbarSectionProps> = ({
         )}
       <MoreToolsButton embedded={embedded} />
       {/* 最小化工具栏 - 显示最小化和常驻的工具图标 */}
-      {embedded && deferredFeaturesEnabled && (
+      {embedded && minimizedToolsBarEnabled && (
         <Suspense fallback={null}>
-          <MinimizedToolsBar />
+          <MinimizedToolsBar ensureToolWindowsEnabled={onEnableToolWindows} />
         </Suspense>
       )}
     </Stack.Row>

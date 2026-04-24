@@ -1,3 +1,222 @@
+## 0.6.64 (2026-04-23)
+
+### 🚀 Features
+
+- 添加CDN恢复探测和详细日志记录 ([7559e132](https://github.com/ljquan/aitu/commit/7559e132))
+
+### 🩹 Fixes
+
+- 修复 LLM API Logger 的 IDB 连接关闭导致大模型调用失败 ([f13d842a](https://github.com/ljquan/aitu/commit/f13d842a))
+- HTML 缓存双 key 存储，导航请求直接命中 ([2ee82aea](https://github.com/ljquan/aitu/commit/2ee82aea))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.60 (2026-04-23)
+
+### 🚀 Features
+
+- 支持多供应商分组的模型健康状态显示 ([f0eef23c](https://github.com/ljquan/aitu/commit/f0eef23c))
+
+### 🩹 Fixes
+
+- 稳定 service worker 分阶段加载与版本提交协议 ([8051cd18](https://github.com/ljquan/aitu/commit/8051cd18))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.59 (2026-04-23)
+
+### 🩹 Fixes
+
+- 增强错误上下文收集并修复资源错误跟踪 ([b1825467](https://github.com/ljquan/aitu/commit/b1825467))
+- 修正 SW 静态资源版本命中与启动页提示 ([497703c5](https://github.com/ljquan/aitu/commit/497703c5))
+- 统一 PostHog 版本上下文 ([f10d11b8](https://github.com/ljquan/aitu/commit/f10d11b8))
+- 老用户沿用旧版壳并修正图层锁定失效路径 ([6e88c9d4](https://github.com/ljquan/aitu/commit/6e88c9d4))
+- 将 SW 升级切换改为整包 ready 后再接管 ([12bdc930](https://github.com/ljquan/aitu/commit/12bdc930))
+- 恢复 Gemini 图片模型的 generateContent 路由策略 ([d70f9d72](https://github.com/ljquan/aitu/commit/d70f9d72))
+
+### 🔧 Chores
+
+- bump version to 0.6.58 ([91a0747b](https://github.com/ljquan/aitu/commit/91a0747b))
+- bump version to 0.6.57 ([be81f306](https://github.com/ljquan/aitu/commit/be81f306))
+- 更新应用版本至0.6.56并同步构建时间 ([54253348](https://github.com/ljquan/aitu/commit/54253348))
+- bump version to 0.6.56 ([f75b4289](https://github.com/ljquan/aitu/commit/f75b4289))
+- 更新版本号至0.6.55并刷新构建时间 ([159f2ebf](https://github.com/ljquan/aitu/commit/159f2ebf))
+- bump version to 0.6.55 ([43a6cdb5](https://github.com/ljquan/aitu/commit/43a6cdb5))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+- gongchengtu <1817063960@qq.com>
+
+## 0.6.57 (2026-04-23)
+
+### 🩹 Fixes
+
+- 老用户沿用旧版壳并修正图层锁定失效路径 ([2aed8ef9](https://github.com/ljquan/aitu/commit/2aed8ef9))
+
+### 🔧 Chores
+
+- 更新应用版本至0.6.56并同步构建时间 ([90210e78](https://github.com/ljquan/aitu/commit/90210e78))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.56 (2026-04-23)
+
+### 🩹 Fixes
+
+- 将 SW 升级切换改为整包 ready 后再接管 ([6c482936](https://github.com/ljquan/aitu/commit/6c482936))
+
+### 🔧 Chores
+
+- 更新版本号至0.6.55并刷新构建时间 ([7610ed5e](https://github.com/ljquan/aitu/commit/7610ed5e))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.55 (2026-04-23)
+
+### 🔧 Chores
+
+- refactor(service-worker): 移除未使用的SW启动进度查询逻辑 ([406f021f](https://github.com/ljquan/aitu/commit/406f021f))
+- docs: 沉淀旧入口与悬空 hash 资源经验 ([150371c6](https://github.com/ljquan/aitu/commit/150371c6))
+- docs: 沉淀首屏 CDN 回退与加载自愈经验 ([85ed2213](https://github.com/ljquan/aitu/commit/85ed2213))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.54 (2026-04-22)
+
+### 🩹 Fixes
+
+- 修正首屏资源 CDN 回退路径归一化 ([2d3da03e](https://github.com/ljquan/aitu/commit/2d3da03e))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.53 (2026-04-22)
+
+### 🩹 Fixes
+
+- 修正首屏 loading 与 CDN 优先加载链路 ([1b898a46](https://github.com/ljquan/aitu/commit/1b898a46))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.46 (2026-04-22)
+
+### 🩹 Fixes
+
+- 关闭页面时兜底恢复画布快照 ([99c67048](https://github.com/ljquan/aitu/commit/99c67048))
+- 前置首屏加载并修复素材库插入画布链路 ([862b95ef](https://github.com/ljquan/aitu/commit/862b95ef))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.45 (2026-04-22)
+
+### 🩹 Fixes
+
+- 提前显示常驻工具图标 ([0fb45300](https://github.com/ljquan/aitu/commit/0fb45300))
+- 处理打开文件取消后的空返回 ([c069814e](https://github.com/ljquan/aitu/commit/c069814e))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.44 (2026-04-22)
+
+### 🚀 Features
+
+- 增强提示词优化器并修复画布输入框交互 ([6cbbe5dc](https://github.com/ljquan/aitu/commit/6cbbe5dc))
+
+### 🩹 Fixes
+
+- 收敛 PostHog error tracking 噪音并补齐运行时容错 ([a0392a2f](https://github.com/ljquan/aitu/commit/a0392a2f))
+
+### 🔧 Chores
+
+- docs: 补充多 CDN 加载与发布稳定性经验总结 ([8d92b401](https://github.com/ljquan/aitu/commit/8d92b401))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.43 (2026-04-21)
+
+### 🚀 Features
+
+- add keyboard shortcuts during pen creation ([141a8d35](https://github.com/ljquan/aitu/commit/141a8d35))
+- 扩展 gpt-image-2 图片比例支持 ([26436ce5](https://github.com/ljquan/aitu/commit/26436ce5))
+
+### 🩹 Fixes
+
+- 修复版本更新后懒加载 chunk 失效白屏 ([de9e370f](https://github.com/ljquan/aitu/commit/de9e370f))
+
+### 🔧 Chores
+
+- bump version to 0.6.42 ([03f28821](https://github.com/ljquan/aitu/commit/03f28821))
+- 更新版本号至0.6.41并修复错误处理 ([a5c1e0a9](https://github.com/ljquan/aitu/commit/a5c1e0a9))
+- bump version to 0.6.41 ([d8d36ff6](https://github.com/ljquan/aitu/commit/d8d36ff6))
+- docs: 更新网站元数据、SEO配置与用户手册内容 ([ff696ac3](https://github.com/ljquan/aitu/commit/ff696ac3))
+- refactor: 调整视频模型默认配置与选择器排序 ([6308cfd5](https://github.com/ljquan/aitu/commit/6308cfd5))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+- SaulgoodMan-C <271131037+SaulgoodMan-C@users.noreply.github.com>
+- gongchengtu <1817063960@qq.com>
+
+## 0.6.42 (2026-04-21)
+
+### 🔧 Chores
+
+- 更新版本号至0.6.41并修复错误处理 ([5d4b4758](https://github.com/ljquan/aitu/commit/5d4b4758))
+- refactor: 调整视频模型默认配置与选择器排序 ([6d8397d0](https://github.com/ljquan/aitu/commit/6d8397d0))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.41 (2026-04-21)
+
+### 🩹 Fixes
+
+- 修复版本更新后懒加载 chunk 失效白屏 ([03bda70c](https://github.com/ljquan/aitu/commit/03bda70c))
+
+### 🔧 Chores
+
+- 补充 PostHog 埋点复盘并收紧模型解析保护 ([cfdac73e](https://github.com/ljquan/aitu/commit/cfdac73e))
+- docs: 更新文档索引并补充PostHog监控与埋点改造复盘 ([b0b685c6](https://github.com/ljquan/aitu/commit/b0b685c6))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.40 (2026-04-21)
+
+### 🚀 Features
+
+- 增强AI生成任务追踪与模型排序 ([dd462bae](https://github.com/ljquan/aitu/commit/dd462bae))
+
+### 🔧 Chores
+
+- Refine boot error handling and idle prefetch defaults ([7049af8b](https://github.com/ljquan/aitu/commit/7049af8b))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
 ## 0.6.37 (2026-04-21)
 
 ### 🚀 Features

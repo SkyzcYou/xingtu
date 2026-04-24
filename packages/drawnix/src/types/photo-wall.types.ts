@@ -222,6 +222,7 @@ export const INSPIRATION_BOARD_DEFAULTS = {
   maxWidthRatio: 1.4,
   maxRotation: 8,
   gap: 15,
+  imageQuality: '2k' as const,
 };
 
 /**

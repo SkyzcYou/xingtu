@@ -5,6 +5,7 @@
  * This file contains all type definitions for the media library feature.
  * Based on data-model.md specifications.
  */
+import { generateUUID } from '../utils/runtime-helpers';
 
 /**
  * Asset Type Enum
@@ -171,7 +172,7 @@ export enum SelectionMode {
 export interface MediaLibraryConfig {
   mode: SelectionMode;
   filterType?: AssetType; // 限制显示的类型（SELECT模式）
-  onSelect?: (asset: Asset) => void; // 选择回调（SELECT模式）
+  onSelect?: (asset: Asset) => void | Promise<void>; // 选择回调（SELECT模式）
 }
 
 /**
@@ -288,7 +289,7 @@ export interface MediaLibraryModalProps {
   onClose: () => void;
   mode?: SelectionMode;
   filterType?: AssetType;
-  onSelect?: (asset: Asset) => void;
+  onSelect?: (asset: Asset) => void | Promise<void>;
   /** 自定义选择按钮文本，默认为"使用到画板" */
   selectButtonText?: string;
 }
@@ -322,8 +323,9 @@ export interface MediaLibraryInspectorProps {
   onRename: (assetId: string, newName: string) => void;
   onDelete: (assetId: string) => void;
   onDownload: (asset: Asset) => void;
-  onSelect?: (asset: Asset) => void;
+  onSelect?: (asset: Asset) => void | Promise<void>;
   showSelectButton: boolean;
+  selecting?: boolean;
   /** 自定义选择按钮文本，默认为"使用到画板" */
   selectButtonText?: string;
 }
@@ -364,7 +366,7 @@ export function createAsset(params: {
   modelName?: string;
 }): Asset {
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     type: params.type,
     source: params.source,
     url: params.url,

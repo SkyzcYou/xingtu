@@ -54,6 +54,32 @@ const seedreamImageAdapter: ImageModelAdapter = {
   },
 };
 
+const gptImageAdapter: ImageModelAdapter = {
+  id: 'gpt-image',
+  label: 'GPT Image',
+  kind: 'image',
+  matchRequestSchemas: [
+    'openai.image.gpt-generation-json',
+    'openai.image.gpt-edit-form',
+  ],
+  async generateImage() {
+    throw new Error('not implemented');
+  },
+};
+
+const tuziGptImageAdapter: ImageModelAdapter = {
+  id: 'tuzi-gpt-image',
+  label: 'Tuzi GPT Image',
+  kind: 'image',
+  matchRequestSchemas: [
+    'tuzi.image.gpt-generation-json',
+    'tuzi.image.gpt-edit-json',
+  ],
+  async generateImage() {
+    throw new Error('not implemented');
+  },
+};
+
 const seedanceVideoAdapter: VideoModelAdapter = {
   id: 'seedance-video',
   label: 'Seedance Video',
@@ -70,6 +96,8 @@ describe('model adapter registry', () => {
     clearModelAdapters();
     registerModelAdapter(genericImageAdapter);
     registerModelAdapter(seedreamImageAdapter);
+    registerModelAdapter(gptImageAdapter);
+    registerModelAdapter(tuziGptImageAdapter);
     registerModelAdapter(seedanceVideoAdapter);
   });
 
@@ -99,6 +127,56 @@ describe('model adapter registry', () => {
     );
 
     expect(adapter?.id).toBe('generic-image');
+  });
+
+  it('routes official GPT Image schemas to the dedicated adapter', () => {
+    const adapter = resolveAdapterForBinding(
+      createBinding({
+        modelId: 'gpt-image-2',
+        requestSchema: 'openai.image.gpt-generation-json',
+      }),
+      'image'
+    );
+
+    expect(adapter?.id).toBe('gpt-image');
+  });
+
+  it('routes official GPT Image edit schemas to the dedicated adapter', () => {
+    const adapter = resolveAdapterForBinding(
+      createBinding({
+        modelId: 'gpt-image-2',
+        protocol: 'openai.images.edits',
+        requestSchema: 'openai.image.gpt-edit-form',
+        submitPath: '/images/edits',
+      }),
+      'image'
+    );
+
+    expect(adapter?.id).toBe('gpt-image');
+  });
+
+  it('routes Tuzi GPT Image schemas to the dedicated Tuzi adapter', () => {
+    const adapter = resolveAdapterForBinding(
+      createBinding({
+        modelId: 'gpt-image-2',
+        requestSchema: 'tuzi.image.gpt-generation-json',
+      }),
+      'image'
+    );
+
+    expect(adapter?.id).toBe('tuzi-gpt-image');
+  });
+
+  it('routes Tuzi GPT Image edit schemas to the dedicated Tuzi adapter', () => {
+    const adapter = resolveAdapterForBinding(
+      createBinding({
+        modelId: 'gpt-image-2',
+        requestSchema: 'tuzi.image.gpt-edit-json',
+      }),
+      'image'
+    );
+
+    expect(adapter?.id).toBe('tuzi-gpt-image');
   });
 
   it('routes seedance bindings to the seedance adapter before generic video handlers', () => {

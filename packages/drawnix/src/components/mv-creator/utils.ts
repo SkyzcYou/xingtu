@@ -1,6 +1,7 @@
 /**
  * 爆款MV生成器 - 工具函数
  */
+import { generateUUID } from '../../utils/runtime-helpers';
 
 import type { MVRecord, StoryboardVersion, VideoShot, VideoCharacter } from './types';
 import { computeSegmentPlan } from '../../utils/segment-plan';
@@ -22,7 +23,7 @@ export function createStoryboardVersion(
   prompt?: string
 ): StoryboardVersion {
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     createdAt: Date.now(),
     label,
     prompt,

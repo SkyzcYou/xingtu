@@ -122,6 +122,12 @@ const CLICK_THROTTLE_INTERVAL = 100;
 /** FPS 采样帧数（每 N 帧计算一次，减少计算频率）*/
 const FPS_SAMPLE_FRAMES = 30;
 
+/** 错误上下文中保留的资源摘要数量 */
+const MAX_RESOURCE_SUMMARY_ITEMS = 8;
+
+/** 错误上下文中的字符串最大长度 */
+const MAX_CONTEXT_STRING_LENGTH = 240;
+
 // ==================== 内部状态 ====================
 
 let snapshotInterval: number | null = null;
@@ -211,6 +217,129 @@ export async function withMemoryTracking<T>(
   } finally {
     end();
   }
+}
+
+declare const __APP_VERSION__: string;
+
+function truncateContextValue(value: string | null | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return value.slice(0, MAX_CONTEXT_STRING_LENGTH);
+}
+
+function getAppVersion(): string {
+  if (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) {
+    return __APP_VERSION__;
+  }
+
+  return (
+    document.querySelector('meta[name="app-version"]')?.getAttribute('content') ||
+    '0.0.0'
+  );
+}
+
+function getServiceWorkerContext(): Record<string, unknown> {
+  if (
+    typeof navigator === 'undefined' ||
+    typeof window === 'undefined' ||
+    !('serviceWorker' in navigator)
+  ) {
+    return {
+      supported: false,
+      readyState: document.readyState,
+      visibilityState: document.visibilityState,
+    };
+  }
+
+  const controller = navigator.serviceWorker.controller;
+
+  return {
+    supported: true,
+    controller: controller
+      ? {
+          scriptURL: truncateContextValue(controller.scriptURL),
+          state: controller.state,
+        }
+      : null,
+    readyState: document.readyState,
+    visibilityState: document.visibilityState,
+  };
+}
+
+function getLoadedResourceSummary(): Record<string, unknown> {
+  const scriptUrls = Array.from(document.scripts)
+    .map((script) => truncateContextValue(sanitizeUrl(script.src)))
+    .filter(Boolean)
+    .slice(-MAX_RESOURCE_SUMMARY_ITEMS);
+
+  const stylesheetUrls = Array.from(
+    document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')
+  )
+    .map((link) => truncateContextValue(sanitizeUrl(link.href)))
+    .filter(Boolean)
+    .slice(-MAX_RESOURCE_SUMMARY_ITEMS);
+
+  const modulePreloadUrls = Array.from(
+    document.querySelectorAll<HTMLLinkElement>('link[rel="modulepreload"]')
+  )
+    .map((link) => truncateContextValue(sanitizeUrl(link.href)))
+    .filter(Boolean)
+    .slice(-MAX_RESOURCE_SUMMARY_ITEMS);
+
+  return {
+    scripts: scriptUrls,
+    stylesheets: stylesheetUrls,
+    modulePreloads: modulePreloadUrls,
+  };
+}
+
+function getEventTargetContext(target: EventTarget | null): Record<string, unknown> | undefined {
+  if (!(target instanceof HTMLElement)) {
+    return undefined;
+  }
+
+  const assetTarget = target as HTMLElement & {
+    src?: string;
+    currentSrc?: string;
+    href?: string;
+    rel?: string;
+    crossOrigin?: string | null;
+  };
+
+  return {
+    tagName: target.tagName.toLowerCase(),
+    id: truncateContextValue(target.id || undefined),
+    className:
+      typeof target.className === 'string'
+        ? truncateContextValue(target.className)
+        : undefined,
+    src: truncateContextValue(
+      assetTarget.currentSrc || assetTarget.src
+        ? sanitizeUrl(assetTarget.currentSrc || assetTarget.src || '')
+        : undefined
+    ),
+    href: truncateContextValue(
+      assetTarget.href ? sanitizeUrl(assetTarget.href) : undefined
+    ),
+    rel: truncateContextValue(assetTarget.rel),
+    crossOrigin: truncateContextValue(assetTarget.crossOrigin || undefined),
+  };
+}
+
+function buildErrorDiagnosticContext(
+  overrides?: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    appVersion: getAppVersion(),
+    recentActions: userActions.slice(-10),
+    recentErrors: consoleErrors.slice(-5),
+    recentNetworkErrors: networkErrors.slice(-5),
+    serviceWorker: getServiceWorkerContext(),
+    loadedResources: getLoadedResourceSummary(),
+    ...overrides,
+  };
 }
 
 // ==================== 工具函数 ====================
@@ -488,6 +617,13 @@ export function stopPeriodicSnapshots(): void {
 export function setupErrorCapture(): void {
   // JavaScript 未捕获错误
   window.addEventListener('error', (event) => {
+    if (
+      event.error instanceof DOMException &&
+      (event.error.name === 'AbortError' || event.error.name === 'NotAllowedError')
+    ) {
+      return;
+    }
+
     const snapshot: CrashSnapshot = {
       id: `error-${Date.now()}`,
       timestamp: Date.now(),
@@ -500,12 +636,12 @@ export function setupErrorCapture(): void {
       memory: getMemoryInfo(),
       userAgent: navigator.userAgent,
       url: location.href,
-      customData: {
-        recentActions: userActions.slice(-10),
+      customData: buildErrorDiagnosticContext({
         filename: event.filename,
         lineno: event.lineno,
         colno: event.colno,
-      },
+        eventTarget: getEventTargetContext(event.target),
+      }),
     };
 
     sendSnapshotToSW(snapshot);
@@ -517,6 +653,16 @@ export function setupErrorCapture(): void {
     const reason = event.reason;
     const errorMessage = reason?.message || String(reason) || '';
     const errorStack = reason?.stack || '';
+
+    if (
+      reason instanceof DOMException &&
+      (reason.name === 'AbortError' ||
+        reason.name === 'NotAllowedError' ||
+        (reason.name === 'DataError' &&
+          errorMessage.includes('No key or key range specified')))
+    ) {
+      return;
+    }
     
     // 过滤监控服务相关的错误（PostHog, Sentry）
     if (errorMessage.includes('posthog.com') ||
@@ -538,9 +684,7 @@ export function setupErrorCapture(): void {
       memory: getMemoryInfo(),
       userAgent: navigator.userAgent,
       url: location.href,
-      customData: {
-        recentActions: userActions.slice(-10),
-      },
+      customData: buildErrorDiagnosticContext(),
     };
 
     sendSnapshotToSW(snapshot);
@@ -1025,6 +1169,27 @@ export function setupResourceErrorTracking(): void {
         const tagName = target.tagName?.toLowerCase();
         
         recordUserAction('resource_error', tagName, url?.slice(0, 100));
+
+        const snapshot: CrashSnapshot = {
+          id: `resource-error-${Date.now()}`,
+          timestamp: Date.now(),
+          type: 'error',
+          error: {
+            message: `Resource load failed: ${tagName || 'unknown'}`,
+            type: 'resourceError',
+          },
+          memory: getMemoryInfo(),
+          userAgent: navigator.userAgent,
+          url: location.href,
+          customData: buildErrorDiagnosticContext({
+            resourceUrl: truncateContextValue(
+              url ? sanitizeUrl(url) : undefined
+            ),
+            eventTarget: getEventTargetContext(target),
+          }),
+        };
+
+        sendSnapshotToSW(snapshot);
       }
     }
   }, { capture: true });

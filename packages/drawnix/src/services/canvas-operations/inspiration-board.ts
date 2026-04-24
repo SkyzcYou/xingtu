@@ -5,7 +5,10 @@
  */
 
 import type { MCPExecuteOptions, MCPTaskResult } from '../../mcp/types';
-import { INSPIRATION_BOARD_DEFAULTS, INSPIRATION_BOARD_PROMPT_TEMPLATE } from '../../types/photo-wall.types';
+import {
+  INSPIRATION_BOARD_DEFAULTS,
+  INSPIRATION_BOARD_PROMPT_TEMPLATE,
+} from '../../types/photo-wall.types';
 import { taskQueueService } from '../task-queue';
 import { TaskType } from '../../types/task.types';
 import { geminiSettings } from '../../utils/settings-manager';
@@ -22,7 +25,7 @@ export interface InspirationBoardParams {
   imageCount?: number;
   /** 图片尺寸比例（默认 16x9 横向） */
   imageSize?: string;
-  /** 图片质量（默认 2k） */
+  /** 分辨率档位（默认 2k） */
   imageQuality?: '1k' | '2k' | '4k';
   /** 参考图片 URL 列表 */
   referenceImages?: string[];
@@ -35,13 +38,20 @@ export interface InspirationBoardParams {
  */
 function getCurrentImageModel(): string {
   const settings = geminiSettings.get();
-  return settings.imageModelName || getPreferredModels('image')[0]?.id || getDefaultImageModel();
+  return (
+    settings.imageModelName ||
+    getPreferredModels('image')[0]?.id ||
+    getDefaultImageModel()
+  );
 }
 
 /**
  * 构建灵感图生图提示词
  */
-function buildInspirationBoardPrompt(theme: string, imageCount: number): string {
+function buildInspirationBoardPrompt(
+  theme: string,
+  imageCount: number
+): string {
   const template = INSPIRATION_BOARD_PROMPT_TEMPLATE.zh;
   return template(theme, imageCount);
 }
@@ -102,7 +112,14 @@ export function createInspirationBoardTask(
           prompt,
           size: imageSize,
           model: actualModel,
-          uploadedImages: uploadedImages && uploadedImages.length > 0 ? uploadedImages : undefined,
+          uploadedImages:
+            uploadedImages && uploadedImages.length > 0
+              ? uploadedImages
+              : undefined,
+          params: {
+            resolution:
+              params.imageQuality || INSPIRATION_BOARD_DEFAULTS.imageQuality,
+          },
           // 灵感图特有参数
           isInspirationBoard: true,
           inspirationBoardImageCount: validImageCount,

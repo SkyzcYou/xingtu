@@ -4,6 +4,7 @@
  * 管理工具箱工具以弹窗形式打开的状态。
  * 支持多实例窗口、最小化、常驻工具栏、位置记忆等能力。
  */
+import { generateUUID } from '../utils/runtime-helpers';
 
 import { BehaviorSubject, Observable } from 'rxjs';
 import {
@@ -11,6 +12,7 @@ import {
   ToolWindowLaunchMode,
   ToolWindowState,
 } from '../types/toolbox.types';
+import { toolboxService } from './toolbox-service';
 
 /** localStorage key for pinned tools */
 const PINNED_TOOLS_STORAGE_KEY = 'aitu-pinned-tools';
@@ -584,6 +586,20 @@ class ToolWindowService {
       return undefined;
     }
 
+    const fullTool = toolboxService.getToolById(toolId);
+    if (fullTool) {
+      return {
+        instanceId: `${LAUNCHER_INSTANCE_PREFIX}${toolId}`,
+        toolId,
+        instanceIndex: 0,
+        tool: fullTool,
+        status: 'closed',
+        activationOrder: 0,
+        isPinned: true,
+        isLauncher: true,
+      };
+    }
+
     const info = this.pinnedToolInfos.get(toolId);
     if (!info) {
       return undefined;
@@ -655,12 +671,7 @@ class ToolWindowService {
   }
 
   private generateInstanceId(toolId: string): string {
-    const suffix =
-      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-
-    return `${toolId}:${suffix}`;
+    return `${toolId}:${generateUUID()}`;
   }
 
   private notify(): void {

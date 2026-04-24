@@ -1,0 +1,212 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ModelVendor, type ModelConfig } from '../../constants/model-config';
+import { fluxImageAdapter } from '../model-adapters/flux-adapter';
+import { gptImageAdapter } from '../model-adapters/gpt-image-adapter';
+import { mjImageAdapter } from '../model-adapters/mj-image-adapter';
+import {
+  clearModelAdapters,
+  registerModelAdapter,
+  resolveAdapterForBinding,
+} from '../model-adapters/registry';
+import { seedreamImageAdapter } from '../model-adapters/seedream-adapter';
+import { tuziGPTImageAdapter } from '../model-adapters/tuzi-gpt-image-adapter';
+import type { ImageModelAdapter } from '../model-adapters/types';
+import { inferBindingsForProviderModel } from '../provider-routing';
+import type { ProviderProfileSnapshot } from '../provider-routing';
+
+const defaultBasicImageAdapter: ImageModelAdapter = {
+  id: 'gemini-image-adapter',
+  label: 'Default Image',
+  kind: 'image',
+  matchProtocols: ['openai.images.generations'],
+  matchRequestSchemas: ['openai.image.basic-json'],
+  async generateImage() {
+    throw new Error('not implemented');
+  },
+};
+
+const openaiProfile: ProviderProfileSnapshot = {
+  id: 'openai',
+  name: 'OpenAI',
+  providerType: 'openai-compatible',
+  baseUrl: 'https://api.openai.com/v1',
+  apiKey: 'openai-key',
+  authType: 'bearer',
+  imageApiCompatibility: 'auto',
+};
+
+const tuziProfile: ProviderProfileSnapshot = {
+  id: 'tuzi',
+  name: 'Tuzi',
+  providerType: 'openai-compatible',
+  baseUrl: 'https://api.tu-zi.com/v1',
+  apiKey: 'tuzi-key',
+  authType: 'bearer',
+  imageApiCompatibility: 'auto',
+};
+
+function firstImageBinding(
+  profile: ProviderProfileSnapshot,
+  model: ModelConfig
+) {
+  const binding = inferBindingsForProviderModel(profile, model).find(
+    (entry) => entry.operation === 'image'
+  );
+  if (!binding) {
+    throw new Error(`No image binding for ${model.id}`);
+  }
+  return binding;
+}
+
+function imageBindingBySchema(
+  profile: ProviderProfileSnapshot,
+  model: ModelConfig,
+  requestSchema: string
+) {
+  const binding = inferBindingsForProviderModel(profile, model).find(
+    (entry) =>
+      entry.operation === 'image' && entry.requestSchema === requestSchema
+  );
+  if (!binding) {
+    throw new Error(`No ${requestSchema} image binding for ${model.id}`);
+  }
+  return binding;
+}
+
+describe('image routing to default registered adapters', () => {
+  beforeEach(() => {
+    clearModelAdapters();
+    registerModelAdapter(gptImageAdapter);
+    registerModelAdapter(tuziGPTImageAdapter);
+    registerModelAdapter(defaultBasicImageAdapter);
+    registerModelAdapter(mjImageAdapter);
+    registerModelAdapter(fluxImageAdapter);
+    registerModelAdapter(seedreamImageAdapter);
+  });
+
+  afterEach(() => {
+    clearModelAdapters();
+  });
+
+  it('routes official GPT Image schema to the dedicated adapter', () => {
+    const binding = firstImageBinding(openaiProfile, {
+      id: 'gpt-image-2',
+      label: 'GPT Image 2',
+      type: 'image',
+      vendor: ModelVendor.GPT,
+    });
+
+    expect(binding.requestSchema).toBe('openai.image.gpt-generation-json');
+    expect(resolveAdapterForBinding(binding, 'image')?.id).toBe(
+      'gpt-image-adapter'
+    );
+  });
+
+  it('routes official GPT Image edit schema to the dedicated adapter', () => {
+    const binding = imageBindingBySchema(
+      openaiProfile,
+      {
+        id: 'gpt-image-2',
+        label: 'GPT Image 2',
+        type: 'image',
+        vendor: ModelVendor.GPT,
+      },
+      'openai.image.gpt-edit-form'
+    );
+
+    expect(binding.protocol).toBe('openai.images.edits');
+    expect(binding.submitPath).toBe('/images/edits');
+    expect(resolveAdapterForBinding(binding, 'image')?.id).toBe(
+      'gpt-image-adapter'
+    );
+  });
+
+  it('routes Tuzi GPT Image compatibility to the dedicated adapter', () => {
+    const binding = firstImageBinding(tuziProfile, {
+      id: 'gpt-image-2',
+      label: 'GPT Image 2',
+      type: 'image',
+      vendor: ModelVendor.GPT,
+    });
+
+    expect(binding.requestSchema).toBe('tuzi.image.gpt-generation-json');
+    expect(resolveAdapterForBinding(binding, 'image')?.id).toBe(
+      'tuzi-gpt-image-adapter'
+    );
+  });
+
+  it('routes Tuzi GPT Image edit compatibility to the dedicated adapter', () => {
+    const binding = imageBindingBySchema(
+      tuziProfile,
+      {
+        id: 'gpt-image-2',
+        label: 'GPT Image 2',
+        type: 'image',
+        vendor: ModelVendor.GPT,
+      },
+      'tuzi.image.gpt-edit-json'
+    );
+
+    expect(binding.protocol).toBe('openai.images.generations');
+    expect(binding.submitPath).toBe('/images/generations');
+    expect(resolveAdapterForBinding(binding, 'image')?.id).toBe(
+      'tuzi-gpt-image-adapter'
+    );
+  });
+
+  it('keeps generic non-GPT OpenAI-compatible image models on the default adapter', () => {
+    const binding = firstImageBinding(tuziProfile, {
+      id: 'qwen-image-2.0',
+      label: 'Qwen Image 2.0',
+      type: 'image',
+      vendor: ModelVendor.QWEN,
+    });
+
+    expect(binding.requestSchema).toBe('openai.image.basic-json');
+    expect(resolveAdapterForBinding(binding, 'image')?.id).toBe(
+      'gemini-image-adapter'
+    );
+  });
+
+  it('keeps MJ, Flux, and Seedream on their dedicated adapters', () => {
+    const cases: Array<{
+      model: ModelConfig;
+      adapterId: string;
+    }> = [
+      {
+        model: {
+          id: 'mj-imagine',
+          label: 'Midjourney',
+          type: 'image',
+          vendor: ModelVendor.MIDJOURNEY,
+          tags: ['mj'],
+        },
+        adapterId: 'mj-image-adapter',
+      },
+      {
+        model: {
+          id: 'bfl-flux-2-pro',
+          label: 'Flux 2 Pro',
+          type: 'image',
+          vendor: ModelVendor.FLUX,
+        },
+        adapterId: 'flux-image-adapter',
+      },
+      {
+        model: {
+          id: 'doubao-seedream-5-0-260128',
+          label: 'Seedream 5',
+          type: 'image',
+          vendor: ModelVendor.DOUBAO,
+          tags: ['seedream'],
+        },
+        adapterId: 'seedream-image-adapter',
+      },
+    ];
+
+    cases.forEach(({ model, adapterId }) => {
+      const binding = firstImageBinding(tuziProfile, model);
+      expect(resolveAdapterForBinding(binding, 'image')?.id).toBe(adapterId);
+    });
+  });
+});
