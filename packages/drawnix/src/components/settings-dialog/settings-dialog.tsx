@@ -1912,17 +1912,61 @@ export const SettingsDialog = ({
                       <div style={{ fontSize: 14, color: '#333' }}>
                         扫码获取 API Key 支持
                       </div>
-                      <img
-                        src="./logo/wechat-qr.jpg"
-                        alt="获取 API Key 二维码"
+                      <div
                         style={{
-                          width: 220,
-                          height: 220,
-                          objectFit: 'contain',
-                          borderRadius: 12,
-                          background: '#fff',
+                          display: 'flex',
+                          gap: 12,
+                          alignItems: 'flex-start',
+                          justifyContent: 'center',
                         }}
-                      />
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: 8,
+                          }}
+                        >
+                          <img
+                            src="./logo/wechat-qr.jpg"
+                            alt="微信 API Key 支持二维码"
+                            style={{
+                              width: 220,
+                              height: 220,
+                              objectFit: 'contain',
+                              borderRadius: 12,
+                              background: '#fff',
+                            }}
+                          />
+                          <div style={{ fontSize: 12, color: '#666' }}>
+                            微信扫码咨询
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: 8,
+                          }}
+                        >
+                          <img
+                            src="./logo/goodfish-qr.jpg"
+                            alt="Goodfish API Key 支持二维码"
+                            style={{
+                              width: 220,
+                              height: 220,
+                              objectFit: 'contain',
+                              borderRadius: 12,
+                              background: '#fff',
+                            }}
+                          />
+                          <div style={{ fontSize: 12, color: '#666' }}>
+                            闲鱼扫码咨询
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   }
                   placement="top"
