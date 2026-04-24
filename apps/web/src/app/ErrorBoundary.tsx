@@ -215,9 +215,8 @@ export const ErrorFallbackUI: React.FC<ErrorFallbackProps> = (props) => {
         <div style={styles.helpSection}>
           <div style={styles.helpRow}>
             {/* 二维码 */}
-            <img src="https://nav.ourzhishi.top/api/dynamic-image/qr-code"
-              alt="企业微信二维码" style={styles.qrcode}
-              referrerPolicy="no-referrer" />
+            <img src="./logo/wechat-qr.jpg"
+              alt="企业微信二维码" style={styles.qrcode} />
             {/* 右侧文字 + 按钮 */}
             <div style={styles.helpText}>
               <p style={styles.helpTitle}>需要帮助？</p>
