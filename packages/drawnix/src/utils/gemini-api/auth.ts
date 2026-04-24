@@ -41,28 +41,32 @@ export function promptForApiKey(): Promise<string | null> {
 
     dialog.innerHTML = `
       <h3 style="margin: 0 0 16px 0; color: #333; font-size: 18px;">配置 API Key</h3>
-      <p style="margin: 0 0 16px 0; color: #666; line-height: 1.5;">
+      <p style="margin: 0 0 12px 0; color: #666; line-height: 1.5;">
         请输入您的 API Key，输入后将自动保存到本地存储中。
       </p>
-      <p style="margin: 0 0 8px 0; color: #666; line-height: 1.5;">
-        您可以从以下地址获取 API Key（新建令牌渠道分组选择default）:
-        <a href="https://api.tu-zi.com/token" target="_blank" rel="noopener noreferrer" 
-           style="color: #0052d9; text-decoration: none;">
-          https://api.tu-zi.com/token
-        </a>
+      <p style="margin: 0 0 16px 0; color: #666; line-height: 1.5;">
+        如果您还没有可用的 API Key，可以扫码通过以下渠道咨询获取支持。
       </p>
-      <a href="https://www.bilibili.com/video/BV1k4PqzPEKz/" target="_blank" rel="noopener noreferrer"
-         style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: #fb7299; color: #fff; border-radius: 4px; font-size: 14px; text-decoration: none; margin-bottom: 16px;">
-        ▶ 观看视频教程 (B站)
-      </a>
-      <input type="text" id="apiKeyInput" placeholder="请输入 API Key" 
+      <div style="display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <img src="./logo/wechat-qr.jpg" alt="微信咨询二维码"
+               style="width: 150px; height: 150px; object-fit: contain; border-radius: 12px; background: #fff;" />
+          <div style="font-size: 12px; color: #666;">微信扫码咨询</div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <img src="./logo/goodfish-qr.jpg" alt="闲鱼咨询二维码"
+               style="width: 150px; height: 150px; object-fit: contain; border-radius: 12px; background: #fff;" />
+          <div style="font-size: 12px; color: #666;">闲鱼扫码咨询</div>
+        </div>
+      </div>
+      <input type="text" id="apiKeyInput" placeholder="请输入 API Key"
              style="width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 16px;" />
       <div style="display: flex; gap: 8px; justify-content: flex-end;">
-        <button id="cancelBtn" 
+        <button id="cancelBtn"
                 style="padding: 8px 16px; border: 1px solid #d9d9d9; border-radius: 4px; background: white; color: #333; cursor: pointer; font-size: 14px;">
           取消
         </button>
-        <button id="confirmBtn" 
+        <button id="confirmBtn"
                 style="padding: 8px 16px; border: 1px solid #0052d9; border-radius: 4px; background: #0052d9; color: white; cursor: pointer; font-size: 14px;">
           确认
         </button>

@@ -2065,10 +2065,10 @@ export const SettingsDialog = ({
             <div className="settings-dialog__compat-card">
               <div className="settings-dialog__compat-title">兼容默认模型</div>
               <div className="settings-dialog__compat-meta">
-                <span>图片：{imageModelName || getDefaultImageModel()}</span>
-                <span>视频：{videoModelName || getDefaultVideoModel()}</span>
-                <span>音频：{audioModelName || getDefaultAudioModel()}</span>
-                <span>文本：{textModelName || getDefaultTextModel()}</span>
+                <span>图片：{getDefaultImageModel()}</span>
+                <span>视频：{getDefaultVideoModel()}</span>
+                <span>音频：{getDefaultAudioModel()}</span>
+                <span>文本：{getDefaultTextModel()}</span>
               </div>
             </div>
           </div>
