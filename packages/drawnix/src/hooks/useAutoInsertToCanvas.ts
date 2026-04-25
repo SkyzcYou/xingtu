@@ -17,6 +17,7 @@ import { getTaskQueueService } from '../services/task-queue';
 import { workflowCompletionService } from '../services/workflow-completion-service';
 import { resolveAudioResultUrls } from '../services/audio-task-result-utils';
 import { Task, TaskStatus, TaskType } from '../types/task.types';
+import type { MCPResult } from '../mcp/types';
 import {
   type CanvasInsertionResultData,
   type ContentType,
@@ -147,6 +148,24 @@ function releaseTaskInsertion(taskId: string): void {
 function finalizeTaskInsertion(taskId: string): void {
   insertedTaskIds.add(taskId);
   getTaskQueueService().markAsInserted(taskId, 'auto_insert');
+}
+
+function getInsertionStatus(taskId: string) {
+  return (
+    workflowCompletionService.getPostProcessingStatus(taskId)?.status ?? null
+  );
+}
+
+function isInsertionSettled(task: Task): boolean {
+  return (
+    Boolean(task.insertedToCanvas) || getInsertionStatus(task.id) === 'completed'
+  );
+}
+
+function assertInsertionSucceeded(result: MCPResult): void {
+  if (!result.success) {
+    throw new Error(result.error || 'Canvas insertion failed');
+  }
 }
 
 function isPoint(value: unknown): value is Point {
@@ -436,15 +455,19 @@ export function useAutoInsertToCanvas(
      */
     const flushPendingInserts = async () => {
       // console.log('[AutoInsert] flushPendingInserts called');
-      const board = getCanvasBoard();
-      if (!board || !isActive) {
-        // console.log(`[AutoInsert] flushPendingInserts aborted: board=${!!board}, isActive=${isActive}`);
+      if (!isActive) {
         return;
       }
 
       const pendingMap = pendingInsertsRef.current;
       if (pendingMap.size === 0) {
         // console.log('[AutoInsert] flushPendingInserts: no pending tasks');
+        return;
+      }
+
+      const board = getCanvasBoard();
+      if (!board) {
+        scheduleFlush();
         return;
       }
 
@@ -652,6 +675,7 @@ export function useAutoInsertToCanvas(
                 })),
                 resolvedInsertionPoint
               );
+              assertInsertionSucceeded(insertionResult);
               const insertionGeometry = getInsertionResultGeometry(
                 insertionResult,
                 resolvedInsertionPoint,
@@ -677,6 +701,7 @@ export function useAutoInsertToCanvas(
                 resolvedInsertionPoint,
                 dimensions
               );
+              assertInsertionSucceeded(insertionResult);
               const insertionGeometry = getInsertionResultGeometry(
                 insertionResult,
                 resolvedInsertionPoint,
@@ -700,6 +725,7 @@ export function useAutoInsertToCanvas(
                 ],
                 startPoint: resolvedInsertionPoint,
               });
+              assertInsertionSucceeded(insertionResult);
               insertedPoint = getInsertionResultPoint(
                 insertionResult,
                 resolvedInsertionPoint
@@ -736,6 +762,7 @@ export function useAutoInsertToCanvas(
                 })),
                 startPoint: resolvedInsertionPoint,
               });
+              assertInsertionSucceeded(insertionResult);
               insertedPoint = getInsertionResultPoint(
                 insertionResult,
                 resolvedInsertionPoint
@@ -762,6 +789,7 @@ export function useAutoInsertToCanvas(
                 dimensions,
                 metadata
               );
+              assertInsertionSucceeded(insertionResult);
               if (type === 'image') {
                 const insertionGeometry = getInsertionResultGeometry(
                   insertionResult,
@@ -921,6 +949,7 @@ export function useAutoInsertToCanvas(
                 })),
                 resolvedInsertionPoint
               );
+              assertInsertionSucceeded(insertionResult);
               if (type === 'image') {
                 const insertionGeometry = getInsertionResultGeometry(
                   insertionResult,
@@ -955,6 +984,7 @@ export function useAutoInsertToCanvas(
                   resolvedInsertionPoint,
                   dimensions
                 );
+                assertInsertionSucceeded(insertionResult);
                 const insertionGeometry = getInsertionResultGeometry(
                   insertionResult,
                   resolvedInsertionPoint,
@@ -980,6 +1010,7 @@ export function useAutoInsertToCanvas(
                   })),
                   startPoint: resolvedInsertionPoint,
                 });
+                assertInsertionSucceeded(insertionResult);
                 insertedPoint = getInsertionResultPoint(
                   insertionResult,
                   resolvedInsertionPoint
@@ -996,6 +1027,7 @@ export function useAutoInsertToCanvas(
                   })),
                   startPoint: resolvedInsertionPoint,
                 });
+                assertInsertionSucceeded(insertionResult);
                 insertedPoint = getInsertionResultPoint(
                   insertionResult,
                   resolvedInsertionPoint
@@ -1008,6 +1040,7 @@ export function useAutoInsertToCanvas(
                     resolvedInsertionPoint,
                     dimensions
                   );
+                  assertInsertionSucceeded(insertionResult);
                   insertedPoint = getInsertionResultPoint(
                     insertionResult,
                     resolvedInsertionPoint
@@ -1114,6 +1147,11 @@ export function useAutoInsertToCanvas(
       }
     };
 
+    const hasPendingInsert = (taskId: string) =>
+      Array.from(pendingInsertsRef.current.values()).some((inserts) =>
+        inserts.some(({ task }) => task.id === taskId)
+      );
+
     /**
      * 处理任务完成事件
      */
@@ -1131,17 +1169,19 @@ export function useAutoInsertToCanvas(
         return;
       }
 
-      // 检查是否已经插入过（内存中的记录）
-      if (insertedTaskIds.has(task.id)) {
-        // console.log(`[AutoInsert] Task ${task.id} skipped: already in insertedTaskIds (memory)`);
+      if (isInsertionSettled(task)) {
+        insertedTaskIds.add(task.id);
         return;
       }
 
-      // 检查是否已经插入过（持久化的标记）
-      if (task.insertedToCanvas) {
-        // console.log(`[AutoInsert] Task ${task.id} skipped: insertedToCanvas flag is true (persisted)`);
-        insertedTaskIds.add(task.id);
-        return;
+      if (insertedTaskIds.has(task.id)) {
+        if (
+          hasPendingInsert(task.id) ||
+          getInsertionStatus(task.id) === 'processing'
+        ) {
+          return;
+        }
+        releaseTaskInsertion(task.id);
       }
 
       // 只处理图片、视频、音频和文本任务
@@ -1184,7 +1224,8 @@ export function useAutoInsertToCanvas(
             },
           ],
         })
-          .then(() => {
+          .then((result) => {
+            assertInsertionSucceeded(result);
             workflowCompletionService.completePostProcessing(task.id, 1);
             finalizeTaskInsertion(task.id);
           })
@@ -1249,6 +1290,13 @@ export function useAutoInsertToCanvas(
 
     // 订阅任务更新事件
     const taskQueueService = getTaskQueueService();
+    const replayRestoredCompletedTasks = () => {
+      taskQueueService.getAllTasks().forEach((task) => {
+        if (task.status === TaskStatus.COMPLETED) {
+          handleTaskCompleted(task);
+        }
+      });
+    };
     // console.log('[AutoInsert] Subscribing to task updates');
     const subscription = taskQueueService
       .observeTaskUpdates()
@@ -1259,6 +1307,11 @@ export function useAutoInsertToCanvas(
         }
 
         // console.log(`[AutoInsert] Received event: ${event.type}, task: ${event.task.id}, status: ${event.task.status}`);
+
+        if (event.type === 'taskCreated') {
+          replayRestoredCompletedTasks();
+          return;
+        }
 
         if (event.type === 'taskUpdated' || event.type === 'taskCompleted') {
           if (event.task.status === TaskStatus.COMPLETED) {
@@ -1321,6 +1374,8 @@ export function useAutoInsertToCanvas(
         }
       });
 
+    const replayTimer = window.setTimeout(replayRestoredCompletedTasks, 0);
+
     const handleAnchorRetry = (rawEvent: Event) => {
       const event = rawEvent as CustomEvent<{ taskId?: string }>;
       const taskId = event.detail?.taskId;
@@ -1362,6 +1417,7 @@ export function useAutoInsertToCanvas(
       isActive = false;
       subscription.unsubscribe();
       completionSub.unsubscribe();
+      window.clearTimeout(replayTimer);
       window.removeEventListener(
         IMAGE_GENERATION_ANCHOR_RETRY_EVENT,
         handleAnchorRetry as EventListener
