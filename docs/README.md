@@ -12,6 +12,7 @@
 ### 📋 项目开发文档
 - **[VERSION_CONTROL.md](./VERSION_CONTROL.md)** - 版本控制和缓存管理文档
 - **[POSTHOG_MONITORING.md](./POSTHOG_MONITORING.md)** - PostHog 监控说明与 AI 生成埋点改造复盘
+- **[POSTHOG_PPT_PROMPT_ANALYTICS.md](./POSTHOG_PPT_PROMPT_ANALYTICS.md)** - PPT 与提示词能力 PostHog 报表配置和优化方向
 - **[POSTHOG_SEO_LESSONS.md](./POSTHOG_SEO_LESSONS.md)** - 埋点观测与 SEO 优化方法论总结
 - **[POSTHOG_ERROR_TRACKING_LESSONS.md](./POSTHOG_ERROR_TRACKING_LESSONS.md)** - Error tracking 修复、降噪与关单标准复盘
 - **[PPT_STYLE_CONSISTENCY_LESSONS.md](./PPT_STYLE_CONSISTENCY_LESSONS.md)** - PPT 整页生图风格一致性与重生成经验总结

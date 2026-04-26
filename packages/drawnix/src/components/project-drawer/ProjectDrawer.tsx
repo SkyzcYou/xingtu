@@ -360,9 +360,7 @@ const ProjectDrawerContent: React.FC<{
         // 重命名成功，关闭编辑状态
         setEditingId(null);
       } catch (error: any) {
-        // 重命名失败（如验证错误），保持编辑状态让用户修改
-        // 错误提示已在 handleRename 中显示
-        console.log('Rename failed, keeping edit mode active');
+        void error;
       }
     },
     [editingName, onRename]
@@ -683,10 +681,7 @@ const ProjectDrawerContent: React.FC<{
   };
 
   // Render board node
-  const renderBoardNode = (
-    node: BoardTreeNode,
-    level = 0
-  ): React.ReactNode => {
+  const renderBoardNode = (node: BoardTreeNode, level = 0): React.ReactNode => {
     const { data: board } = node;
     const isActive = board.id === currentBoard?.id;
     const isEditing = editingId === board.id;

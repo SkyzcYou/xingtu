@@ -22,10 +22,8 @@
     "jotai": "^2.18.0",
     "katex": "^0.16.27",
     "localforage": "^1.10.0",
-    "mobile-detect": "^1.4.5",
     "open-color": "^1.9.1",
     "postmessage-duplex": "^1.2.0",
-    "prismjs": "^1.30.0",
     "pptxgenjs": "^4.0.1",
     "web-vitals": "^5.1.0"
   },

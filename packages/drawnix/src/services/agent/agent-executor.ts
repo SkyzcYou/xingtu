@@ -11,8 +11,16 @@ import {
   buildImagePartsFromUrls,
   hasImageParts,
 } from '../../utils/gemini-api/message-utils';
-import type { AgentResult, AgentExecuteOptions, ToolCall, AgentExecutionContext } from '../../mcp/types';
-import { generateSystemPrompt, generateReferenceImagesPrompt } from './system-prompts';
+import type {
+  AgentResult,
+  AgentExecuteOptions,
+  ToolCall,
+  AgentExecutionContext,
+} from '../../mcp/types';
+import {
+  generateSystemPrompt,
+  generateReferenceImagesPrompt,
+} from './system-prompts';
 import { parseToolCalls, extractTextContent } from './tool-parser';
 import { geminiSettings } from '../../utils/settings-manager';
 import { analytics } from '../../utils/posthog-analytics';
@@ -59,7 +67,9 @@ function replacePlaceholdersWithUrls(
  *
  * @exported for use in workflow-converter.ts to build messages for SW ai_analyze
  */
-export function buildStructuredUserMessage(context: AgentExecutionContext): string {
+export function buildStructuredUserMessage(
+  context: AgentExecutionContext
+): string {
   const parts: string[] = [];
 
   // 1. 模型和参数信息
@@ -67,7 +77,11 @@ export function buildStructuredUserMessage(context: AgentExecutionContext): stri
   parts.push('');
   const modelStatus = context.model.isExplicit ? '(用户指定)' : '(默认)';
   // 根据模式类型生成不同的描述
-  const typeLabels: Record<string, string> = { text: 'Agent 智能模式', image: '图片生成', video: '视频生成' };
+  const typeLabels: Record<string, string> = {
+    text: 'Agent 智能模式',
+    image: '图片生成',
+    video: '视频生成',
+  };
   const typeLabel = typeLabels[context.model.type] || 'Agent 智能模式';
   parts.push(`- **模式**: ${typeLabel}`);
   // Agent 模式下显示文本模型，图片/视频模式显示当前模型
@@ -92,7 +106,9 @@ export function buildStructuredUserMessage(context: AgentExecutionContext): stri
   // 始终传递配置的尺寸，但标注为默认值，让 AI 判断是否使用
   // 优先级：用户指令中的尺寸描述 > 下拉框选择的尺寸 > 模型默认尺寸
   if (context.params.size) {
-    parts.push(`- **尺寸**: ${context.params.size}（默认值，如用户指令中有尺寸描述则优先使用用户的）`);
+    parts.push(
+      `- **尺寸**: ${context.params.size}（默认值，如用户指令中有尺寸描述则优先使用用户的）`
+    );
   }
   if (context.params.duration) {
     parts.push(`- **时长**: ${context.params.duration}秒`);
@@ -118,7 +134,9 @@ export function buildStructuredUserMessage(context: AgentExecutionContext): stri
   }
 
   // 4. 参考素材
-  const hasImages = context.selection.images.length > 0 || context.selection.graphics.length > 0;
+  const hasImages =
+    context.selection.images.length > 0 ||
+    context.selection.graphics.length > 0;
   const hasVideos = context.selection.videos.length > 0;
 
   if (hasImages || hasVideos) {
@@ -127,21 +145,30 @@ export function buildStructuredUserMessage(context: AgentExecutionContext): stri
 
     // 图片（包括图形转换的图片）
     if (hasImages) {
-      const allImages = [...context.selection.images, ...context.selection.graphics];
+      const allImages = [
+        ...context.selection.images,
+        ...context.selection.graphics,
+      ];
       const placeholders = allImages.map((_, i) => `[图片${i + 1}]`).join('、');
       parts.push(`- **参考图片**: ${placeholders}`);
     }
 
     // 视频
     if (hasVideos) {
-      const placeholders = context.selection.videos.map((_, i) => `[视频${i + 1}]`).join('、');
+      const placeholders = context.selection.videos
+        .map((_, i) => `[视频${i + 1}]`)
+        .join('、');
       parts.push(`- **参考视频**: ${placeholders}`);
     }
     parts.push('');
   }
 
   // 5. 最终 prompt（如果没有用户指令和选中文本，则显示默认 prompt）
-  if (!context.userInstruction && context.selection.texts.length === 0 && context.finalPrompt) {
+  if (
+    !context.userInstruction &&
+    context.selection.texts.length === 0 &&
+    context.finalPrompt
+  ) {
     parts.push('## 生成提示词');
     parts.push('');
     parts.push(context.finalPrompt);
@@ -161,10 +188,13 @@ function replaceToolCallPlaceholders(
   const newArgs: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(toolCall.arguments)) {
-    if ((key === 'referenceImages' || key === 'inputReferences') && Array.isArray(value)) {
+    if (
+      (key === 'referenceImages' || key === 'inputReferences') &&
+      Array.isArray(value)
+    ) {
       // referenceImages 或 inputReferences 数组，将占位符替换为真实 URL
       const replacedUrls = value
-        .map(item => {
+        .map((item) => {
           if (typeof item === 'string') {
             // 检查是否是占位符格式
             const zhMatch = item.match(/^\[图片(\d+)\]$/);
@@ -196,14 +226,26 @@ function replaceToolCallPlaceholders(
           return item;
         })
         .filter(Boolean);
-      newArgs[key] = replacedUrls.length > 0 ? (key === 'referenceImages' ? replacedUrls.map(u => typeof u === 'string' ? u : (u as any).url) : replacedUrls) : imageUrls;
-    } else if ((key === 'referenceImage' || key === 'inputReference') && typeof value === 'string') {
+      newArgs[key] =
+        replacedUrls.length > 0
+          ? key === 'referenceImages'
+            ? replacedUrls.map((u) =>
+                typeof u === 'string' ? u : (u as any).url
+              )
+            : replacedUrls
+          : imageUrls;
+    } else if (
+      (key === 'referenceImage' || key === 'inputReference') &&
+      typeof value === 'string'
+    ) {
       // 字符串参数，替换占位符
       newArgs[key] = replacePlaceholdersWithUrls(value, imageUrls);
     } else if (Array.isArray(value)) {
       // 其他数组参数，递归替换
-      newArgs[key] = value.map(item =>
-        typeof item === 'string' ? replacePlaceholdersWithUrls(item, imageUrls) : item
+      newArgs[key] = value.map((item) =>
+        typeof item === 'string'
+          ? replacePlaceholdersWithUrls(item, imageUrls)
+          : item
       );
     } else {
       newArgs[key] = value;
@@ -211,13 +253,19 @@ function replaceToolCallPlaceholders(
   }
 
   // 如果参数中没有 referenceImages 或 inputReferences 但有图片 URL，自动添加
-  if (!newArgs.referenceImages && !newArgs.inputReferences && imageUrls.length > 0) {
+  if (
+    !newArgs.referenceImages &&
+    !newArgs.inputReferences &&
+    imageUrls.length > 0
+  ) {
     // 同时也为视频接口提供参数兼容性
     newArgs.referenceImages = imageUrls;
-    newArgs.inputReferences = imageUrls.map(url => ({ url }));
+    newArgs.inputReferences = imageUrls.map((url) => ({ url }));
   } else if (newArgs.referenceImages && !newArgs.inputReferences) {
     // 保持同步
-    newArgs.inputReferences = (newArgs.referenceImages as string[]).map(url => ({ url }));
+    newArgs.inputReferences = (newArgs.referenceImages as string[]).map(
+      (url) => ({ url })
+    );
   }
 
   return {
@@ -250,7 +298,10 @@ class AgentExecutor {
    * @param context 完整的执行上下文
    * @param options 执行选项
    */
-  async execute(context: AgentExecutionContext, options: AgentExecuteOptions = {}): Promise<AgentResult> {
+  async execute(
+    context: AgentExecutionContext,
+    options: AgentExecuteOptions = {}
+  ): Promise<AgentResult> {
     const {
       model,
       modelRef,
@@ -275,7 +326,10 @@ class AgentExecutor {
 
     try {
       // 收集所有参考图片 URL
-      const allReferenceImages = [...context.selection.images, ...context.selection.graphics];
+      const allReferenceImages = [
+        ...context.selection.images,
+        ...context.selection.graphics,
+      ];
       const globalSettings = geminiSettings.get();
       const textRouteModel =
         modelRef || model || globalSettings.textModelName || context.model.id;
@@ -292,9 +346,10 @@ class AgentExecutor {
         // 路径 B/C：直接使用外部传入的消息，不调用 generateSystemPrompt()
         messages = externalMessages.map((msg: any) => ({
           role: msg.role,
-          content: typeof msg.content === 'string'
-            ? [{ type: 'text', text: msg.content }]
-            : (msg.content as GeminiMessage['content']),
+          content:
+            typeof msg.content === 'string'
+              ? [{ type: 'text', text: msg.content }]
+              : (msg.content as GeminiMessage['content']),
         }));
       } else {
         // 默认 Agent 路径：内部生成系统提示词
@@ -314,15 +369,11 @@ class AgentExecutor {
         messages = [
           {
             role: 'system',
-            content: [
-              { type: 'text', text: systemPrompt },
-            ],
+            content: [{ type: 'text', text: systemPrompt }],
           },
           {
             role: 'user',
-            content: [
-              { type: 'text', text: userMessage },
-            ],
+            content: [{ type: 'text', text: userMessage }],
           },
         ];
       }
@@ -346,12 +397,8 @@ class AgentExecutor {
         (typeof textRouteModel === 'string'
           ? textRouteModel
           : textRouteModel?.modelId) || globalSettings.textModelName;
-      console.log('[AgentExecutor] 使用文本模型:', textModelName, ', hasApiKey:', !!globalSettings.apiKey);
-
       while (iterations < maxIterations) {
         iterations++;
-        console.log(`[AgentExecutor] 迭代 ${iterations}/${maxIterations}, 即将调用 sendChat...`);
-
         // 调用 LLM，使用指定或全局默认的文本模型
         let fullResponse = '';
         const t0 = Date.now();
@@ -365,15 +412,10 @@ class AgentExecutor {
           signal,
           textRouteModel // 优先使用当前上下文选择的 provider-aware 文本模型
         );
-        console.log(`[AgentExecutor] sendChat 返回, 耗时: ${Date.now() - t0}ms`);
-
         // 获取完整响应
         if (response.choices && response.choices.length > 0) {
           fullResponse = response.choices[0].message.content || fullResponse;
         }
-
-        console.log('[AgentExecutor] LLM 响应长度:', fullResponse.length, ', 前100字:', fullResponse.substring(0, 100));
-
         // 解析工具调用
         const toolCalls = parseToolCalls(fullResponse);
 
@@ -389,19 +431,20 @@ class AgentExecutor {
         // 这样 AIInputBar 可以在 UI 中显示步骤并统一管理执行
         for (const rawToolCall of toolCalls) {
           // 替换占位符为真实图片 URL
-          const toolCall = allReferenceImages.length > 0
-            ? replaceToolCallPlaceholders(rawToolCall, allReferenceImages)
-            : rawToolCall;
+          const toolCall =
+            allReferenceImages.length > 0
+              ? replaceToolCallPlaceholders(rawToolCall, allReferenceImages)
+              : rawToolCall;
 
           // console.log(`[AgentExecutor] Reporting tool call: ${toolCall.name}`, toolCall.arguments);
           toolCallsExecuted.push(toolCall.name);
-          
+
           // 埋点：MCP 工具执行
           analytics.track('mcp_tool_execution', {
             toolName: toolCall.name,
             hasArguments: Object.keys(toolCall.arguments).length > 0,
           });
-          
+
           onToolCall?.(toolCall);
         }
 

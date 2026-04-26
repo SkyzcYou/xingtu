@@ -72,18 +72,6 @@ function logImageAdapterSelection(
         resolvedImageApiCompatibility?: unknown;
       }
     | undefined;
-
-  console.debug('[GenerationAPI] Image adapter selected', {
-    taskId,
-    profileId: context.provider?.profileId || binding?.profileId || null,
-    modelId: binding?.modelId || modelId || null,
-    adapterId: adapter.id,
-    requestSchema: binding?.requestSchema || null,
-    submitPath: binding?.submitPath || null,
-    imageApiCompatibility: imageMetadata?.imageApiCompatibility || null,
-    resolvedImageApiCompatibility:
-      imageMetadata?.resolvedImageApiCompatibility || null,
-  });
 }
 
 function readParamValue(params: GenerationParams, keys: string[]): unknown {

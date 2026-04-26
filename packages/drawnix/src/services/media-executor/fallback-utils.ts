@@ -32,10 +32,7 @@ export const MAX_REFERENCE_IMAGE_BYTES = 1 * 1024 * 1024;
 /** 将 Blob 压缩到 1MB 以内再转 base64（仅图片类型） */
 export async function blobToBase64Under1MB(blob: Blob): Promise<string> {
   let target = blob;
-  if (
-    blob.type.startsWith('image/') &&
-    blob.size > MAX_REFERENCE_IMAGE_BYTES
-  ) {
+  if (blob.type.startsWith('image/') && blob.size > MAX_REFERENCE_IMAGE_BYTES) {
     target = await compressImageBlob(blob, 1);
   }
   return getDataURL(target);
@@ -57,7 +54,8 @@ export async function ensureBase64ForAI(
   }
   if (value.startsWith('http://') || value.startsWith('https://')) {
     const res = await fetch(value, { signal, referrerPolicy: 'no-referrer' });
-    if (!res.ok) throw new Error(`Failed to fetch reference image: ${res.status}`);
+    if (!res.ok)
+      throw new Error(`Failed to fetch reference image: ${res.status}`);
     const blob = await res.blob();
     return blobToBase64Under1MB(blob);
   }
@@ -91,7 +89,6 @@ export async function pollVideoStatus(
   onProgress: (progress: number) => void,
   signal?: AbortSignal
 ): Promise<{ url: string }> {
-  console.log(`[pollVideoStatus] Starting poll for videoId: ${videoId}`);
   const maxAttempts = 120; // 最多轮询 10 分钟
   const interval = 5000; // 5 秒轮询间隔
   const maxConsecutiveErrors = 3; // 连续 HTTP 错误超过此数才放弃
@@ -99,12 +96,8 @@ export async function pollVideoStatus(
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (signal?.aborted) {
-      console.log(`[pollVideoStatus] Polling cancelled for videoId: ${videoId}`);
       throw new Error('Video generation cancelled');
     }
-
-    console.log(`[pollVideoStatus] Polling attempt ${attempt + 1}/${maxAttempts} for videoId: ${videoId}`);
-
     let data: any;
     try {
       const response = await providerTransport.send(
@@ -131,7 +124,9 @@ export async function pollVideoStatus(
           `[pollVideoStatus] HTTP ${response.status} for videoId: ${videoId} (${consecutiveErrors}/${maxConsecutiveErrors} consecutive errors)`
         );
         if (consecutiveErrors >= maxConsecutiveErrors) {
-          throw new Error(`Failed to check video status: ${response.status} (after ${maxConsecutiveErrors} retries)`);
+          throw new Error(
+            `Failed to check video status: ${response.status} (after ${maxConsecutiveErrors} retries)`
+          );
         }
         await new Promise((resolve) => setTimeout(resolve, interval));
         continue;
@@ -157,28 +152,28 @@ export async function pollVideoStatus(
 
     const status = data.status || data.state;
     const progress = data.progress || 0;
-
-    console.log(`[pollVideoStatus] Status for videoId: ${videoId}: ${status}, progress: ${progress}`);
-
     onProgress(progress / 100);
 
     if (status === 'completed' || status === 'succeeded') {
       const inlineUrl = extractInlineVideoUrl(data);
       const url =
         inlineUrl ||
-        (shouldDownloadVideoContent(data.model || config.model, config.binding, data)
+        (shouldDownloadVideoContent(
+          data.model || config.model,
+          config.binding,
+          data
+        )
           ? await downloadVideoContentToLocalUrl({
               videoId,
-              provider:
-                config.provider || {
-                  profileId: 'runtime',
-                  profileName: 'Runtime',
-                  providerType: config.providerType || 'custom',
-                  baseUrl: config.baseUrl,
-                  apiKey: config.apiKey,
-                  authType: config.authType || 'bearer',
-                  extraHeaders: config.extraHeaders,
-                },
+              provider: config.provider || {
+                profileId: 'runtime',
+                profileName: 'Runtime',
+                providerType: config.providerType || 'custom',
+                baseUrl: config.baseUrl,
+                apiKey: config.apiKey,
+                authType: config.authType || 'bearer',
+                extraHeaders: config.extraHeaders,
+              },
               binding: config.binding,
               modelId: data.model || config.model,
               cacheKey: videoId,
@@ -192,10 +187,12 @@ export async function pollVideoStatus(
 
     if (status === 'failed' || status === 'error') {
       // data.error 可能是字符串或对象 { code, message }
-      const errMsg = typeof data.error === 'string'
-        ? data.error
-        : (data.error?.message || data.message || 'Video generation failed');
-      const errCode = typeof data.error === 'object' ? data.error?.code : undefined;
+      const errMsg =
+        typeof data.error === 'string'
+          ? data.error
+          : data.error?.message || data.message || 'Video generation failed';
+      const errCode =
+        typeof data.error === 'object' ? data.error?.code : undefined;
       const error = new Error(errMsg);
       if (errCode) {
         (error as any).code = errCode;
@@ -291,7 +288,10 @@ export async function cacheRemoteUrl(
     return normalizedUrl;
   }
 
-  if (normalizedUrl.startsWith('http://') || normalizedUrl.startsWith('https://')) {
+  if (
+    normalizedUrl.startsWith('http://') ||
+    normalizedUrl.startsWith('https://')
+  ) {
     if (mediaType !== 'audio' && !options?.forceRemoteCache) {
       return normalizedUrl;
     }
@@ -355,7 +355,10 @@ export async function cacheRemoteUrl(
       });
       return localUrl;
     } catch (error) {
-      console.warn('[cacheRemoteUrl] Remote audio cache failed, using original URL:', error);
+      console.warn(
+        '[cacheRemoteUrl] Remote audio cache failed, using original URL:',
+        error
+      );
       return normalizedUrl;
     }
   }
@@ -374,25 +377,36 @@ export async function cacheRemoteUrl(
       const response = await fetch(normalizedUrl);
       const blob = await response.blob();
       if (blob.size === 0) {
-        console.warn('[cacheRemoteUrl] Empty data URL blob, using original URL');
+        console.warn(
+          '[cacheRemoteUrl] Empty data URL blob, using original URL'
+        );
         return normalizedUrl;
       }
       const contentHash = await calculateBlobChecksum(blob);
       const hashedFormat = getFileExtension('', blob.type);
       const contentAddressedUrl =
         mediaType === 'audio'
-          ? `${AI_GENERATED_AUDIO_URL_PREFIX}content-${contentHash}.${hashedFormat !== 'bin' ? hashedFormat : finalFormat}`
-          : `/__aitu_cache__/${mediaType}/content-${contentHash}.${hashedFormat !== 'bin' ? hashedFormat : finalFormat}`;
+          ? `${AI_GENERATED_AUDIO_URL_PREFIX}content-${contentHash}.${
+              hashedFormat !== 'bin' ? hashedFormat : finalFormat
+            }`
+          : `/__aitu_cache__/${mediaType}/content-${contentHash}.${
+              hashedFormat !== 'bin' ? hashedFormat : finalFormat
+            }`;
 
       if (await unifiedCacheService.isCached(contentAddressedUrl)) {
         return contentAddressedUrl;
       }
 
-      await unifiedCacheService.cacheMediaFromBlob(contentAddressedUrl, blob, mediaType, {
-        taskId,
-        ...(mediaType === 'audio' ? { source: 'AI_GENERATED' } : {}),
-        ...options?.extraMetadata,
-      });
+      await unifiedCacheService.cacheMediaFromBlob(
+        contentAddressedUrl,
+        blob,
+        mediaType,
+        {
+          taskId,
+          ...(mediaType === 'audio' ? { source: 'AI_GENERATED' } : {}),
+          ...options?.extraMetadata,
+        }
+      );
       return contentAddressedUrl;
     }
 
@@ -413,6 +427,14 @@ export async function cacheRemoteUrls(
   format: string
 ): Promise<string[]> {
   return Promise.all(
-    urls.map((url, i) => cacheRemoteUrl(url, taskId, mediaType, format, urls.length > 1 ? i : undefined))
+    urls.map((url, i) =>
+      cacheRemoteUrl(
+        url,
+        taskId,
+        mediaType,
+        format,
+        urls.length > 1 ? i : undefined
+      )
+    )
   );
 }

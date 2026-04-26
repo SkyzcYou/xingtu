@@ -10,7 +10,7 @@ import {
   toHostPoint,
   toViewBoxPoint,
 } from '@plait/core';
-import { useEventListener } from 'ahooks';
+import { useEventListener } from './use-event-listener';
 
 const useBoardPluginEvent = (
   board: PlaitBoard,

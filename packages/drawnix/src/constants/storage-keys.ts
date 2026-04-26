@@ -107,6 +107,10 @@ export const LS_KEYS_TO_MIGRATE = {
   IMAGE_PROMPT_HISTORY: 'aitu_image_prompt_history',
   /** 预设提示词设置（置顶/删除状态） */
   PRESET_SETTINGS: 'aitu-prompt-preset-settings',
+  /** 用户删除的提示词内容（用于任务派生提示词资产隐藏） */
+  PROMPT_DELETED_CONTENTS: 'aitu_prompt_deleted_contents',
+  /** 用户编辑的提示词历史展示覆盖值 */
+  PROMPT_HISTORY_OVERRIDES: 'aitu_prompt_history_overrides',
   /** 批量图片生成缓存（包含任务列表和图片数据） */
   BATCH_IMAGE_CACHE: 'batch-image-generation-cache',
   /** 最近使用的文本颜色 */

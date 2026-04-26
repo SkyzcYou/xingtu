@@ -7,7 +7,7 @@
 
 import React, { useMemo, useRef, useEffect, useCallback } from 'react';
 import { copyToClipboard } from '../../utils/runtime-helpers';
-import type { Message } from '@llamaindex/chat-ui';
+import type { Message } from '../../types/chat-ui.types';
 import { ServiceIcon, LayersIcon, ImageIcon, BulletpointIcon } from 'tdesign-icons-react';
 import './user-message-bubble.scss';
 

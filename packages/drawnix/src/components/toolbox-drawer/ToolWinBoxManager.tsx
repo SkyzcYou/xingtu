@@ -30,6 +30,7 @@ export const ToolWinBoxManager: React.FC = () => {
   const { language } = useI18n();
   const { board } = useDrawnix();
   const { isMobile, isTablet, viewportWidth, viewportHeight } = useDeviceType();
+  const promptHistoryStateSignatureRef = useRef('');
 
   useEffect(() => {
     const subscription = toolWindowService.observeToolStates().subscribe(states => {
@@ -38,6 +39,32 @@ export const ToolWinBoxManager: React.FC = () => {
     
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const promptStates = toolStates.filter(
+      (state) => state.toolId === 'prompt-history'
+    );
+    const signature = promptStates
+      .map(
+        (state) =>
+          `${state.instanceId}:${state.status}:${state.activationOrder}:${state.isLauncher}`
+      )
+      .join('|');
+    if (signature === promptHistoryStateSignatureRef.current) {
+      return;
+    }
+    promptHistoryStateSignatureRef.current = signature;
+    console.info('[ToolWinBoxManager] prompt-history states', {
+      states: promptStates.map((state) => ({
+        instanceId: state.instanceId,
+        status: state.status,
+        isLauncher: state.isLauncher,
+        isPinned: state.isPinned,
+        activationOrder: state.activationOrder,
+        componentProps: state.componentProps,
+      })),
+    });
+  }, [toolStates]);
 
   /**
    * 计算窗口尺寸，确保不超出视口

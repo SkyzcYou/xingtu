@@ -248,16 +248,16 @@
 }
 
 .prompt-optimize-dialog__section--result {
-  padding: 12px;
-  border: 1px solid rgba(245, 158, 11, 0.2);
-  border-radius: 12px;
-  background: rgba(245, 158, 11, 0.06);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .prompt-optimize-dialog__result-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
 }
 
@@ -442,11 +442,6 @@
 
   .prompt-optimize-dialog__footer-buttons {
     width: 100%;
-  }
-
-  .prompt-optimize-dialog__result-header {
-    align-items: flex-start;
-    flex-direction: column;
   }
 
   .prompt-optimize-dialog__footer-btn {

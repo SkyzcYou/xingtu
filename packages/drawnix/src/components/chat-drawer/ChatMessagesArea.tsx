@@ -1,15 +1,8 @@
 import React, { useCallback } from 'react';
-import {
-  ChatSection,
-  ChatMessages,
-  ChatMessage,
-  type ChatHandler,
-  type Message,
-} from '@llamaindex/chat-ui';
-import '@llamaindex/chat-ui/styles/pdf.css';
 import { WorkflowMessageBubble } from './WorkflowMessageBubble';
 import { UserMessageBubble } from './UserMessageBubble';
 import type { WorkflowMessageData } from '../../types/chat.types';
+import type { ChatHandler, Message } from '../../types/chat-ui.types';
 import MarkdownEditor from '../MarkdownEditor';
 
 // 工作流消息的特殊标记前缀
@@ -58,10 +51,14 @@ export const ChatMessagesArea: React.FC<ChatMessagesAreaProps> = ({
     return parts.join('');
   }, []);
 
+  const showLoading =
+    handler.status === 'submitted' || handler.status === 'streaming';
+  const showEmpty = handler.messages.length === 0 && !showLoading;
+
   return (
-    <ChatSection handler={handler} className={className}>
-      <ChatMessages className="chat-messages">
-        <ChatMessages.List className="chat-messages-list">
+    <div className={className}>
+      <div className="chat-messages">
+        <div className="chat-messages-list">
           {handler.messages.map((message, index) => {
             // 检查是否为工作流消息
             const workflowMsgId = isWorkflowMessage(message);
@@ -101,14 +98,16 @@ export const ChatMessagesArea: React.FC<ChatMessagesAreaProps> = ({
             }
 
             return (
-              <ChatMessage
+              <div
                 key={message.id}
-                message={message}
-                isLast={index === handler.messages.length - 1}
                 className={messageClass}
+                data-message-id={message.id}
+                data-message-last={index === handler.messages.length - 1}
               >
-                <ChatMessage.Avatar className="chat-message-avatar" />
-                <ChatMessage.Content className="chat-message-content">
+                <div className="chat-message-avatar">
+                  <span>{message.role === 'user' ? '👤' : '🤖'}</span>
+                </div>
+                <div className="chat-message-content">
                   <MarkdownEditor
                     markdown={getMessageMarkdown(message)}
                     readOnly
@@ -116,25 +115,28 @@ export const ChatMessagesArea: React.FC<ChatMessagesAreaProps> = ({
                     initialMode="wysiwyg"
                     className="chat-markdown"
                   />
-                </ChatMessage.Content>
+                </div>
                 {message.role === 'assistant' && !isError && (
-                  <ChatMessage.Actions className="chat-message-actions" />
+                  <div className="chat-message-actions" />
                 )}
-              </ChatMessage>
+              </div>
             );
           })}
-        </ChatMessages.List>
-        <ChatMessages.Loading className="chat-loading">
-          <div className="chat-loading__spinner" />
-          <span>思考中...</span>
-        </ChatMessages.Loading>
-        <ChatMessages.Empty
-          className="chat-empty"
-          heading="开始对话"
-          subheading="输入消息与AI助手交流"
-        />
-      </ChatMessages>
-    </ChatSection>
+          {showLoading && (
+            <div className="chat-loading">
+              <div className="chat-loading__spinner" />
+              <span>思考中...</span>
+            </div>
+          )}
+          {showEmpty && (
+            <div className="chat-empty">
+              <h3>开始对话</h3>
+              <p>输入消息与AI助手交流</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 

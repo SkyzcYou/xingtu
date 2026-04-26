@@ -576,12 +576,6 @@ const logViewportDebug = (
   if (!isViewportDebugEnabled()) {
     return;
   }
-  console.info(`[ViewportRestore] ${stage} ${formatDebugPayload({
-    ...extra,
-    childrenCount: board.children.length,
-    ...summarizeViewport(board.viewport),
-    ...getViewportDomSnapshot(board),
-  })}`);
 };
 
 const formatDebugPayload = (payload: Record<string, unknown>): string => {

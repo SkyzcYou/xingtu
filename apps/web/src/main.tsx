@@ -1,6 +1,5 @@
 import { StrictMode } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import * as Sentry from '@sentry/react';
 import App from './app/app';
 import { ErrorBoundary } from './app/ErrorBoundary';
 import { initCrashLogger } from './crash-logger';
@@ -22,7 +21,6 @@ import {
   getAnalyticsReleaseContext,
   registerAnalyticsSuperProperties,
 } from '@drawnix/drawnix';
-import { sanitizeObject, sanitizeUrl } from '@aitu/utils';
 import { initSWConsoleCapture } from './utils/sw-console-capture';
 
 const isLocalDev =
@@ -33,15 +31,11 @@ const swQueryParam =
   typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('sw')
     : null;
-const isDevServiceWorkerEnabled =
-  import.meta.env.VITE_ENABLE_SW_DEV === '1' || swQueryParam === '1';
 const isServiceWorkerExplicitlyDisabled = swQueryParam === '0';
 const hasServiceWorkerSupport =
   typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
 const shouldUseServiceWorker =
-  hasServiceWorkerSupport &&
-  !isServiceWorkerExplicitlyDisabled &&
-  (!isLocalDev || isDevServiceWorkerEnabled);
+  hasServiceWorkerSupport && !isServiceWorkerExplicitlyDisabled;
 
 // ===== 控制台日志捕获（尽早初始化，确保默认 console 被改写） =====
 // 必须在其他业务代码之前执行，否则后续工具（如 rrweb）可能先改写 console 导致捕获失效
@@ -58,17 +52,6 @@ crashRecoveryService.checkUrlSafeMode();
 // 必须尽早初始化，以捕获启动阶段的内存状态和错误
 initCrashLogger();
 
-// ===== 初始化 Sentry 错误监控 =====
-// 必须在其他代码之前初始化，以捕获所有错误
-
-// 判断是否应该启用上报：
-// - 本地开发环境（localhost/127.0.0.1）默认不上报，除非 URL 带 report=1 参数
-// - 生产环境始终上报
-const forceReport =
-  typeof window !== 'undefined' &&
-  new URLSearchParams(window.location.search).get('report') === '1';
-const shouldEnableReporting =
-  forceReport || (!isLocalDev && import.meta.env.PROD);
 const APP_VERSION =
   import.meta.env.VITE_APP_VERSION ||
   document.querySelector('meta[name="app-version"]')?.getAttribute('content') ||
@@ -232,12 +215,12 @@ function scheduleCDNPreferenceSync(
   }
 }
 
-function cleanupDevelopmentServiceWorker(): void {
+function cleanupDisabledServiceWorker(): void {
   navigator.serviceWorker
     .getRegistration()
     .then((registration) => registration?.unregister())
     .catch((error) => {
-      console.warn('[Main] Development service worker cleanup failed:', error);
+      console.warn('[Main] Disabled service worker cleanup failed:', error);
     });
 }
 
@@ -280,64 +263,6 @@ function scheduleAfterFirstFrameIdle(
     window.requestAnimationFrame(start);
   });
 }
-
-Sentry.init({
-  dsn: 'https://a18e755345995baaa0e1972c4cf24497@o4510700882296832.ingest.us.sentry.io/4510700883869696',
-  // 本地开发环境默认不启用，除非 URL 带 report=1 参数
-  enabled: shouldEnableReporting,
-  // 禁用自动 PII 收集，保护用户隐私
-  sendDefaultPii: false,
-  // 性能监控采样率（降低以减少数据量）
-  tracesSampleRate: 0.1,
-  // beforeSend 钩子：过滤敏感数据
-  beforeSend(event) {
-    // 过滤 extra 数据中的敏感信息
-    if (event.extra) {
-      event.extra = sanitizeObject(event.extra) as Record<string, unknown>;
-    }
-
-    // 过滤 contexts 中的敏感信息
-    if (event.contexts) {
-      event.contexts = sanitizeObject(event.contexts) as typeof event.contexts;
-    }
-
-    // 过滤 breadcrumbs 中的敏感信息
-    if (event.breadcrumbs) {
-      event.breadcrumbs = event.breadcrumbs.map((breadcrumb) => ({
-        ...breadcrumb,
-        data: breadcrumb.data
-          ? (sanitizeObject(breadcrumb.data) as Record<string, unknown>)
-          : undefined,
-        message: breadcrumb.message
-          ? String(sanitizeObject(breadcrumb.message))
-          : undefined,
-      }));
-    }
-
-    // 过滤请求数据中的敏感信息
-    if (event.request) {
-      if (event.request.headers) {
-        event.request.headers = sanitizeObject(event.request.headers) as Record<
-          string,
-          string
-        >;
-      }
-      if (event.request.data) {
-        event.request.data = sanitizeObject(event.request.data);
-      }
-      // 清理 URL 中可能的敏感参数
-      if (event.request.url) {
-        event.request.url = sanitizeUrl(event.request.url);
-      }
-    }
-
-    return event;
-  },
-});
-Sentry.setTag('app_version', APP_VERSION);
-Sentry.setTag('deployment_env', RELEASE_CONTEXT.deployment_env);
-Sentry.setTag('release_channel', RELEASE_CONTEXT.release_channel);
-Sentry.setTag('host', RELEASE_CONTEXT.host || 'unknown');
 
 updateBootStatus({
   tip: '正在初始化启动服务...',
@@ -415,8 +340,8 @@ if (typeof window !== 'undefined') {
   });
 }
 
-if (hasServiceWorkerSupport && isLocalDev && !isDevServiceWorkerEnabled) {
-  cleanupDevelopmentServiceWorker();
+if (hasServiceWorkerSupport && isServiceWorkerExplicitlyDisabled) {
+  cleanupDisabledServiceWorker();
 }
 
 // 注册Service Worker来处理CORS问题和PWA功能
@@ -476,16 +401,22 @@ if (shouldUseServiceWorker) {
     worker.postMessage({ type: 'GET_VERSION_STATE' });
   };
 
+  const claimCurrentClientIfNeeded = (
+    registration?: ServiceWorkerRegistration | null
+  ) => {
+    if (navigator.serviceWorker.controller || !registration?.active) {
+      return;
+    }
+
+    registration.active.postMessage({ type: 'CLAIM_CLIENTS' });
+  };
+
   const scheduleConfirmedUpgradeReload = (reason: string) => {
     if (!userConfirmedUpgrade || upgradeReloadScheduled) {
       return;
     }
 
     upgradeReloadScheduled = true;
-    console.info('[Main] Scheduling reload after service worker takeover:', {
-      reason,
-    });
-
     // 延迟一点，给新 SW 留出接管后收尾时间
     setTimeout(() => {
       void safeReload();
@@ -561,6 +492,12 @@ if (shouldUseServiceWorker) {
       }
 
       swRegistration = registration;
+      claimCurrentClientIfNeeded(registration);
+      navigator.serviceWorker.ready
+        .then(claimCurrentClientIfNeeded)
+        .catch((error) => {
+          console.warn('[Main] Service worker ready check failed:', error);
+        });
       updateBootStatus({
         tip: '启动缓存服务已连接，正在准备资源清单...',
         source: 'phase',

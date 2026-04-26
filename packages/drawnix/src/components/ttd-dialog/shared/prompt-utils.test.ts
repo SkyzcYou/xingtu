@@ -5,21 +5,30 @@ import * as promptUtils from './prompt-utils';
 const {
   mockGetImagePromptHistoryContents,
   mockGetVideoPromptHistoryContents,
+  mockGetHistory,
   mockSortPrompts,
   mockIsPinned,
+  mockResolveContent,
+  mockResolveMetadata,
 } = vi.hoisted(() => ({
   mockGetImagePromptHistoryContents: vi.fn(),
   mockGetVideoPromptHistoryContents: vi.fn(),
+  mockGetHistory: vi.fn(),
   mockSortPrompts: vi.fn(),
   mockIsPinned: vi.fn(),
+  mockResolveContent: vi.fn((content: string) => content.trim()),
+  mockResolveMetadata: vi.fn(),
 }));
 
 vi.mock('../../../services/prompt-storage-service', () => ({
   getImagePromptHistoryContents: mockGetImagePromptHistoryContents,
   getVideoPromptHistoryContents: mockGetVideoPromptHistoryContents,
   promptStorageService: {
+    getHistory: mockGetHistory,
     sortPrompts: mockSortPrompts,
     isPinned: mockIsPinned,
+    resolveContent: mockResolveContent,
+    resolveMetadata: mockResolveMetadata,
   },
 }));
 describe('resolvePromptItemsByGenerationType', () => {
@@ -27,13 +36,36 @@ describe('resolvePromptItemsByGenerationType', () => {
     vi.clearAllMocks();
     mockGetImagePromptHistoryContents.mockReturnValue([]);
     mockGetVideoPromptHistoryContents.mockReturnValue([]);
+    mockGetHistory.mockReturnValue([]);
     mockSortPrompts.mockImplementation((_type, prompts) => prompts);
     mockIsPinned.mockReturnValue(false);
+    mockResolveContent.mockImplementation((content: string) => content.trim());
+    mockResolveMetadata.mockImplementation((content: string) => ({
+      sourceContent: content.trim(),
+      content: content.trim(),
+      title: undefined,
+      tags: undefined,
+      modelType: undefined,
+    }));
   });
 
-  it('图片类型只返回图片来源，不混入视频或通用 AI 输入历史', () => {
+  it('图片类型合并同类我的提示词，不混入视频来源', () => {
     mockGetImagePromptHistoryContents.mockReturnValue(['本地图片历史']);
     mockGetVideoPromptHistoryContents.mockReturnValue(['本地视频历史']);
+    mockGetHistory.mockReturnValue([
+      {
+        id: 'manual-image',
+        content: '我的提示词图片历史',
+        timestamp: 500,
+        modelType: 'image',
+      },
+      {
+        id: 'manual-video',
+        content: '我的提示词视频历史',
+        timestamp: 550,
+        modelType: 'video',
+      },
+    ]);
 
     const resolver = promptUtils.resolvePromptItemsByGenerationType;
 
@@ -89,10 +121,12 @@ describe('resolvePromptItemsByGenerationType', () => {
     );
 
     expect(contents).toContain('本地图片历史');
+    expect(contents).toContain('我的提示词图片历史');
     expect(contents).toContain('任务图片历史');
     expect(contents).toContain(getImagePrompts('zh')[0]);
     expect(contents).not.toContain('本地视频历史');
     expect(contents).not.toContain('任务视频历史');
+    expect(contents).not.toContain('我的提示词视频历史');
     expect(contents).not.toContain('AI 输入图片历史');
     expect(contents).not.toContain('AI 输入视频历史');
     expect(taskImageItem?.previewExamples?.[0]?.src).toBe('/image-task.png');
@@ -104,6 +138,50 @@ describe('resolvePromptItemsByGenerationType', () => {
 
     expect(defaults).toHaveLength(getImagePrompts('zh').length);
     expect(defaults.every((item) => !item.previewExamples?.length)).toBe(true);
+  });
+
+  it('构造 PromptItem 时同步标题、标签和发送提示词元数据', () => {
+    mockResolveMetadata.mockImplementation((content: string) =>
+      content === '文本历史提示'
+        ? {
+            sourceContent: '文本历史提示原始',
+            content: '真正发送的提示词',
+            title: '元数据标题',
+            tags: ['常用', '改写'],
+            modelType: 'text',
+          }
+        : {
+            sourceContent: content.trim(),
+            content: content.trim(),
+            title: undefined,
+            tags: undefined,
+            modelType: undefined,
+          }
+    );
+
+    const items = promptUtils.resolvePromptItemsByGenerationType({
+      generationType: 'text',
+      language: 'zh',
+      aiInputHistory: [
+        {
+          id: 'text-1',
+          content: '文本历史提示',
+          timestamp: 100,
+          modelType: 'text',
+        },
+      ],
+      imageHistory: [],
+      videoHistory: [],
+    });
+
+    const item = items.find(({ content }) => content === '文本历史提示');
+
+    expect(item).toMatchObject({
+      content: '文本历史提示',
+      title: '元数据标题',
+      tags: ['常用', '改写'],
+      sentPrompt: '真正发送的提示词',
+    });
   });
 
   it('同一条图片提示词同时存在本地历史和已完成任务时，真实任务结果预览优先', () => {
@@ -135,6 +213,35 @@ describe('resolvePromptItemsByGenerationType', () => {
     );
   });
 
+  it('图片任务提示词被编辑后，下拉使用编辑后的内容并保留真实预览', () => {
+    mockResolveContent.mockImplementation((content: string) =>
+      content === '原始图片提示词' ? '编辑后的图片提示词' : content.trim()
+    );
+
+    const items = promptUtils.resolvePromptItemsByGenerationType({
+      generationType: 'image',
+      language: 'zh',
+      aiInputHistory: [],
+      imageHistory: [
+        {
+          id: 'task-image-edited',
+          prompt: '原始图片提示词',
+          timestamp: 300,
+          imageUrl: '/edited-preview.png',
+          width: 1024,
+          height: 1024,
+        },
+      ],
+      videoHistory: [],
+    });
+
+    const editedItem = items.find(
+      (item) => item.content === '编辑后的图片提示词'
+    );
+    expect(editedItem?.previewExamples?.[0]?.src).toBe('/edited-preview.png');
+    expect(items.map((item) => item.content)).not.toContain('原始图片提示词');
+  });
+
   it('语言值异常时回退到默认语言，而不是抛出运行时错误', () => {
     expect(() =>
       promptUtils.getDefaultPromptsByGenerationType('image', 'zh-CN' as never)
@@ -152,6 +259,20 @@ describe('resolvePromptItemsByGenerationType', () => {
   it('视频类型只返回视频来源，不混入图片来源', () => {
     mockGetImagePromptHistoryContents.mockReturnValue(['本地图片历史']);
     mockGetVideoPromptHistoryContents.mockReturnValue(['本地视频历史']);
+    mockGetHistory.mockReturnValue([
+      {
+        id: 'manual-video',
+        content: '我的提示词视频历史',
+        timestamp: 500,
+        modelType: 'video',
+      },
+      {
+        id: 'manual-image',
+        content: '我的提示词图片历史',
+        timestamp: 550,
+        modelType: 'image',
+      },
+    ]);
 
     const resolver = promptUtils.resolvePromptItemsByGenerationType;
 
@@ -201,10 +322,12 @@ describe('resolvePromptItemsByGenerationType', () => {
     );
 
     expect(contents).toContain('本地视频历史');
+    expect(contents).toContain('我的提示词视频历史');
     expect(contents).toContain('任务视频历史');
     expect(contents).toContain(getVideoPrompts('zh')[0]);
     expect(contents).not.toContain('本地图片历史');
     expect(contents).not.toContain('任务图片历史');
+    expect(contents).not.toContain('我的提示词图片历史');
     expect(contents).not.toContain('AI 输入视频历史');
     expect(taskVideoItem?.previewExamples?.[0]).toMatchObject({
       kind: 'video',
@@ -319,6 +442,42 @@ describe('resolvePromptItemsByGenerationType', () => {
       src: '/generated/sunrise-task.mp4',
       posterSrc: '/generated/sunrise-task.png',
       playable: true,
+    });
+  });
+
+  it('resolvePresetPromptItems 同步标题、标签和发送提示词元数据', () => {
+    mockResolveMetadata.mockImplementation((content: string) =>
+      content === '原始图片提示词'
+        ? {
+            sourceContent: '原始图片提示词',
+            content: '原始图片提示词',
+            title: '我的标题',
+            tags: ['收藏', '图片'],
+            modelType: 'image',
+          }
+        : {
+            sourceContent: content.trim(),
+            content: content.trim(),
+            title: undefined,
+            tags: undefined,
+            modelType: undefined,
+          }
+    );
+
+    const items = promptUtils.resolvePresetPromptItems({
+      generationType: 'image',
+      language: 'zh',
+      promptContents: ['原始图片提示词'],
+      imageHistory: [],
+      videoHistory: [],
+    });
+
+    expect(items[0]).toMatchObject({
+      content: '原始图片提示词',
+      title: '我的标题',
+      tags: ['收藏', '图片'],
+      sentPrompt: '原始图片提示词',
+      modelType: 'image',
     });
   });
 
@@ -512,5 +671,47 @@ describe('resolvePromptItemsByGenerationType', () => {
     expect(contents).not.toContain('Agent 历史提示');
     expect(getDefaults('ppt-common', 'zh')).toEqual([]);
     expect(items[0]?.previewExamples).toBeUndefined();
+  });
+
+  it('PPT 页面提示词类型只返回页面提示词历史，不进入普通图片列表', () => {
+    const resolver = promptUtils.resolvePromptItemsByGenerationType;
+    const getDefaults = promptUtils.getDefaultPromptsByGenerationType;
+
+    const aiInputHistory = [
+      {
+        id: 'ppt-slide-1',
+        content: 'PPT 页面提示词',
+        timestamp: 100,
+        modelType: 'ppt-slide' as const,
+      },
+      {
+        id: 'image-1',
+        content: '普通图片提示词',
+        timestamp: 200,
+        modelType: 'image' as const,
+      },
+    ];
+
+    const slideItems = resolver({
+      generationType: 'ppt-slide',
+      language: 'zh',
+      aiInputHistory,
+      imageHistory: [],
+      videoHistory: [],
+    });
+    const imageItems = resolver({
+      generationType: 'image',
+      language: 'zh',
+      aiInputHistory,
+      imageHistory: [],
+      videoHistory: [],
+    });
+
+    expect(slideItems.map((item) => item.content)).toEqual(['PPT 页面提示词']);
+    expect(imageItems.map((item) => item.content)).not.toContain(
+      'PPT 页面提示词'
+    );
+    expect(getDefaults('ppt-slide', 'zh')).toEqual([]);
+    expect(slideItems[0]?.modelType).toBe('ppt-slide');
   });
 });

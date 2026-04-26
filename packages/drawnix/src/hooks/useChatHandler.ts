@@ -2,7 +2,7 @@
  * useChatHandler Hook
  *
  * Adapter hook that connects our Gemini API and storage
- * with @llamaindex/chat-ui's ChatHandler interface.
+ * with the local lightweight chat handler interface.
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -10,7 +10,7 @@ import { chatStorageService } from '../services/chat-storage-service';
 import { chatService } from '../services/chat-service';
 import { MessageStatus, MessageRole } from '../types/chat.types';
 import type { ChatMessage, WorkflowMessageData } from '../types/chat.types';
-import type { ChatHandler, Message } from '@llamaindex/chat-ui';
+import type { ChatHandler, Message } from '../types/chat-ui.types';
 import type { ModelRef } from '../utils/settings-manager';
 import { generateSystemPrompt } from '../services/agent';
 import {

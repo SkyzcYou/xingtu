@@ -364,9 +364,6 @@ export function MediaLibraryGrid({
     let mounted = true;
     const handleSyncCompleted = async () => {
       if (mounted) {
-        console.log(
-          '[MediaLibraryGrid] Media sync completed, refreshing synced URLs'
-        );
         await loadSyncedUrls();
       }
     };
@@ -1058,7 +1055,6 @@ export function MediaLibraryGrid({
       });
 
     if (syncableUrls.length === 0) {
-      console.log('[MediaLibraryGrid] No syncable assets found');
       return;
     }
 
@@ -1072,12 +1068,6 @@ export function MediaLibraryGrid({
           setSyncProgress(Math.round((current / total) * 100));
         }
       );
-
-      console.log('[MediaLibraryGrid] Batch sync result:', {
-        succeeded: result.succeeded,
-        failed: result.failed,
-        skipped: result.skipped,
-      });
       setSyncProgress(100);
 
       // 刷新同步状态（更新已同步 URL 列表）

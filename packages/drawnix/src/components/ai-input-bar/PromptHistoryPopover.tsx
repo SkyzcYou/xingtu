@@ -25,12 +25,15 @@ import {
   resolvePromptItemsByGenerationType,
   type ResolvedPromptItem,
 } from '../ttd-dialog/shared/prompt-utils';
+import { analytics } from '../../utils/posthog-analytics';
+import { BUILT_IN_TOOLS } from '../../constants/built-in-tools';
+import { toolWindowService } from '../../services/tool-window-service';
 import './prompt-history-popover.scss';
 
 /** 选择提示词回调的参数类型 */
 export interface PromptSelectInfo {
   content: string;
-  /** 生成类型：image/video/audio/text/agent/ppt-common */
+  /** 生成类型：image/video/audio/text/agent/ppt-common/ppt-slide */
   modelType?: PromptType;
   scene?: string;
 }
@@ -44,6 +47,8 @@ interface PromptHistoryPopoverProps {
   language: 'zh' | 'en';
   /** 附加快捷操作，显示在更多按钮同组区域 */
   extraActions?: React.ReactNode;
+  /** 打开“我的提示词”前确保工具窗口管理器已启用 */
+  onBeforeOpenMyPrompts?: () => void;
 }
 
 export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
@@ -51,6 +56,7 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
   onSelectPrompt,
   language,
   extraActions,
+  onBeforeOpenMyPrompts,
 }) => {
   const { history, removeHistory, refreshHistory } = usePromptHistory({
     deduplicateWithPresets: false,
@@ -66,6 +72,7 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const leaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const promptPanelTitle = language === 'zh' ? '我的提示词' : 'My Prompts';
 
   const promptItems =
     generationType === 'image' || generationType === 'video'
@@ -88,6 +95,13 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
           videoHistory,
         });
 
+  useEffect(() => {
+    return promptStorageService.subscribeChanges(() => {
+      refreshHistory();
+      setRenderVersion((prev) => prev + 1);
+    });
+  }, [refreshHistory]);
+
   // 清理定时器
   useEffect(() => {
     return () => {
@@ -108,9 +122,17 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
       // 打开前刷新历史记录，确保显示最新数据
       refreshHistory();
       setRenderVersion((prev) => prev + 1);
+      if (!isOpen) {
+        analytics.trackPromptAction({
+          action: 'open_panel',
+          surface: 'ai_input_prompt_popover',
+          promptType: generationType,
+          itemCount: promptItems.length,
+        });
+      }
       setIsOpen(true);
     }, 150);
-  }, [refreshHistory]);
+  }, [generationType, isOpen, promptItems.length, refreshHistory]);
 
   // 处理鼠标离开
   const handleMouseLeave = useCallback(() => {
@@ -190,12 +212,63 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
     [generationType, promptItems]
   );
 
+  const handleOpenMyPrompts = useCallback(() => {
+    const tool = BUILT_IN_TOOLS.find((item) => item.id === 'prompt-history');
+    if (!tool) {
+      analytics.trackPromptAction({
+        action: 'open_tool',
+        surface: 'ai_input_prompt_popover',
+        promptType: generationType,
+        status: 'failed',
+        metadata: {
+          tool_id: 'prompt-history',
+          reason: 'tool_not_found',
+        },
+      });
+      return;
+    }
+
+    onBeforeOpenMyPrompts?.();
+    const beforeState = toolWindowService.getToolState('prompt-history');
+    console.info('[PromptHistoryPopover] open my prompts', {
+      generationType,
+      beforeStatus: beforeState?.status,
+      beforeInstanceId: beforeState?.instanceId,
+      beforeIsLauncher: beforeState?.isLauncher,
+      beforeIsPinned: beforeState?.isPinned,
+    });
+
+    analytics.trackPromptAction({
+      action: 'open_tool',
+      surface: 'ai_input_prompt_popover',
+      promptType: generationType,
+      status: 'success',
+      metadata: {
+        tool_id: tool.id,
+      },
+    });
+    setIsOpen(false);
+    toolWindowService.openTool(tool, {
+      componentProps: {
+        initialCategory: generationType,
+      },
+    });
+    const afterState = toolWindowService.getToolState('prompt-history');
+    console.info('[PromptHistoryPopover] requested my prompts open', {
+      generationType,
+      afterStatus: afterState?.status,
+      afterInstanceId: afterState?.instanceId,
+      afterIsLauncher: afterState?.isLauncher,
+      afterIsPinned: afterState?.isPinned,
+    });
+  }, [generationType, onBeforeOpenMyPrompts]);
+
   return (
     <div ref={containerRef} className="prompt-history-popover">
       <div className="prompt-history-popover__actions">
         <button
           className="prompt-history-popover__trigger"
-          title={language === 'zh' ? '提示词' : 'Prompts'}
+          title={promptPanelTitle}
           data-track="ai_input_click_history"
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
@@ -213,13 +286,16 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
           onMouseLeave={handleMouseLeave}
         >
           <PromptListPanel
-            title={language === 'zh' ? '提示词' : 'Prompts'}
+            title={promptPanelTitle}
             items={promptItems}
             onSelect={handleSelectPrompt}
             onTogglePin={handleTogglePin}
             onDelete={handleDelete}
+            onTitleClick={handleOpenMyPrompts}
             language={language}
             showCount={true}
+            analyticsSurface="ai_input_prompt_popover"
+            analyticsPromptType={generationType}
           />
         </div>
       )}

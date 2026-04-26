@@ -23,6 +23,26 @@
     color: #333;
   }
 
+  .ma-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #888;
+    cursor: pointer;
+    transition: background 0.16s ease, color 0.16s ease;
+
+    &:hover {
+      background: rgba(243, 156, 18, 0.1);
+      color: #c97d0a;
+    }
+  }
+
   .ma-muted {
     color: #999;
     font-weight: 400;

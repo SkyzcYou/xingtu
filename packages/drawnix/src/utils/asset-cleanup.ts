@@ -1,6 +1,6 @@
 /**
  * Asset Cleanup Utilities
- * 
+ *
  * 处理虚拟URL资源的清理和元素删除
  */
 
@@ -11,6 +11,58 @@ import {
   CACHE_URL_PREFIX,
   isVirtualMediaUrl,
 } from './virtual-media-url';
+
+const VIRTUAL_IMAGE_ERROR_RETRY_DELAYS = [250, 750, 1500];
+const virtualImageErrorAttempts = new Map<string, number>();
+
+const getVirtualImageErrorKey = (
+  board: PlaitBoard,
+  element: PlaitElement,
+  imageUrl: string
+): string =>
+  `${(board as any).__plait_id || 'board'}:${element.id}:${imageUrl}`;
+
+interface VirtualImageRetry {
+  retryUrl: string;
+  delay: number;
+}
+
+export function clearVirtualUrlImageError(
+  board: PlaitBoard,
+  element: PlaitElement,
+  imageUrl: string
+): void {
+  if (!isVirtualUrl(imageUrl)) {
+    return;
+  }
+  virtualImageErrorAttempts.delete(
+    getVirtualImageErrorKey(board, element, imageUrl)
+  );
+}
+
+function verifyVirtualImageCache(
+  key: string,
+  board: PlaitBoard,
+  element: PlaitElement,
+  imageUrl: string
+): void {
+  void import('../services/unified-cache-service')
+    .then(({ unifiedCacheService }) =>
+      unifiedCacheService.getCachedBlob(imageUrl)
+    )
+    .then((blob) => {
+      if (blob) {
+        virtualImageErrorAttempts.delete(key);
+        return;
+      }
+
+      virtualImageErrorAttempts.delete(key);
+      removeElementFromBoard(board, element);
+    })
+    .catch(() => {
+      virtualImageErrorAttempts.delete(key);
+    });
+}
 
 /**
  * 检查是否为虚拟URL（素材库本地URL）
@@ -35,7 +87,7 @@ export function extractAssetIdFromUrl(url: string): string | null {
   if (!url.startsWith(ASSET_LIBRARY_URL_PREFIX)) {
     return null;
   }
-  
+
   // 移除前缀和扩展名
   const pathPart = url.slice(ASSET_LIBRARY_URL_PREFIX.length);
   const dotIndex = pathPart.lastIndexOf('.');
@@ -55,12 +107,15 @@ export function getAssetUrlPattern(assetId: string): string {
 /**
  * 检查元素的URL是否匹配指定的素材ID
  */
-export function isElementUsingAsset(element: PlaitElement, assetId: string): boolean {
+export function isElementUsingAsset(
+  element: PlaitElement,
+  assetId: string
+): boolean {
   const url = (element as any).url;
   if (!url || typeof url !== 'string') {
     return false;
   }
-  
+
   // 检查URL是否包含素材ID
   const pattern = getAssetUrlPattern(assetId);
   return url.startsWith(pattern);
@@ -69,19 +124,21 @@ export function isElementUsingAsset(element: PlaitElement, assetId: string): boo
 /**
  * 从画布中删除指定的元素
  */
-export function removeElementFromBoard(board: PlaitBoard, element: PlaitElement): boolean {
+export function removeElementFromBoard(
+  board: PlaitBoard,
+  element: PlaitElement
+): boolean {
   try {
-    const elementToRemove = board.children.find((child: any) => child.id === element.id);
+    const elementToRemove = board.children.find(
+      (child: any) => child.id === element.id
+    );
     if (elementToRemove) {
       CoreTransforms.removeElements(board, [elementToRemove]);
-      // console.log(`[AssetCleanup] Successfully removed element: ${element.id}`);
       return true;
     } else {
-      // console.warn(`[AssetCleanup] Element not found in board: ${element.id}`);
       return false;
     }
   } catch (error) {
-    console.error('[AssetCleanup] Failed to remove element:', error);
     return false;
   }
 }
@@ -93,13 +150,29 @@ export function handleVirtualUrlImageError(
   board: PlaitBoard,
   element: PlaitElement,
   imageUrl: string
-): void {
+): VirtualImageRetry | undefined {
   if (!isVirtualUrl(imageUrl)) {
-    return; // 只处理虚拟URL
+    return undefined; // 只处理虚拟URL
   }
 
-  console.warn(`[AssetCleanup] Virtual URL asset not found, removing element: ${imageUrl}`);
-  removeElementFromBoard(board, element);
+  const key = getVirtualImageErrorKey(board, element, imageUrl);
+  const attempt = virtualImageErrorAttempts.get(key) || 0;
+  const delay = VIRTUAL_IMAGE_ERROR_RETRY_DELAYS[attempt];
+
+  if (delay !== undefined) {
+    virtualImageErrorAttempts.set(key, attempt + 1);
+
+    return {
+      retryUrl: `${imageUrl}${
+        imageUrl.includes('?') ? '&' : '?'
+      }_retry=${Date.now()}`,
+      delay,
+    };
+  }
+
+  verifyVirtualImageCache(key, board, element, imageUrl);
+
+  return undefined;
 }
 
 /**
@@ -108,7 +181,10 @@ export function handleVirtualUrlImageError(
  * @param assetId - 素材ID
  * @returns 删除的元素数量
  */
-export function removeElementsByAssetId(board: PlaitBoard, assetId: string): number {
+export function removeElementsByAssetId(
+  board: PlaitBoard,
+  assetId: string
+): number {
   if (!board.children || board.children.length === 0) {
     return 0;
   }
@@ -117,7 +193,10 @@ export function removeElementsByAssetId(board: PlaitBoard, assetId: string): num
 
   for (const element of board.children) {
     // 检查是否为图片元素
-    if (PlaitDrawElement.isDrawElement(element) && PlaitDrawElement.isImage(element)) {
+    if (
+      PlaitDrawElement.isDrawElement(element) &&
+      PlaitDrawElement.isImage(element)
+    ) {
       if (isElementUsingAsset(element, assetId)) {
         elementsToRemove.push(element);
       }
@@ -133,9 +212,7 @@ export function removeElementsByAssetId(board: PlaitBoard, assetId: string): num
   if (elementsToRemove.length > 0) {
     try {
       CoreTransforms.removeElements(board, elementsToRemove);
-      // console.log(`[AssetCleanup] Removed ${elementsToRemove.length} elements using asset: ${assetId}`);
     } catch (error) {
-      console.error('[AssetCleanup] Failed to remove elements:', error);
       return 0;
     }
   }
@@ -149,7 +226,10 @@ export function removeElementsByAssetId(board: PlaitBoard, assetId: string): num
  * @param assetIds - 素材ID数组
  * @returns 删除的元素数量
  */
-export function removeElementsByAssetIds(board: PlaitBoard, assetIds: string[]): number {
+export function removeElementsByAssetIds(
+  board: PlaitBoard,
+  assetIds: string[]
+): number {
   if (!board.children || board.children.length === 0 || assetIds.length === 0) {
     return 0;
   }
@@ -167,9 +247,12 @@ export function removeElementsByAssetIds(board: PlaitBoard, assetIds: string[]):
     const elementAssetId = extractAssetIdFromUrl(url);
     if (elementAssetId && assetIdSet.has(elementAssetId)) {
       // 检查是否为图片或视频元素
-      const isImage = PlaitDrawElement.isDrawElement(element) && PlaitDrawElement.isImage(element);
-      const isVideo = (element as any).type === 'video' || (element as any).isVideo;
-      
+      const isImage =
+        PlaitDrawElement.isDrawElement(element) &&
+        PlaitDrawElement.isImage(element);
+      const isVideo =
+        (element as any).type === 'video' || (element as any).isVideo;
+
       if (isImage || isVideo) {
         elementsToRemove.push(element);
       }
@@ -179,9 +262,7 @@ export function removeElementsByAssetIds(board: PlaitBoard, assetIds: string[]):
   if (elementsToRemove.length > 0) {
     try {
       CoreTransforms.removeElements(board, elementsToRemove);
-      // console.log(`[AssetCleanup] Batch removed ${elementsToRemove.length} elements using ${assetIds.length} assets`);
     } catch (error) {
-      console.error('[AssetCleanup] Failed to batch remove elements:', error);
       return 0;
     }
   }
@@ -208,18 +289,24 @@ function extractCachePath(url: string): string | null {
  * @param assetUrl - 素材 URL
  * @returns 使用该素材的元素数量
  */
-export function countElementsByAssetUrl(board: PlaitBoard, assetUrl: string): number {
+export function countElementsByAssetUrl(
+  board: PlaitBoard,
+  assetUrl: string
+): number {
   if (!board.children || board.children.length === 0) {
     return 0;
   }
 
   // 提取缓存路径用于匹配
   const targetCachePath = extractCachePath(assetUrl);
-  
+
   let count = 0;
 
   for (const element of board.children) {
-    const candidateUrls = [(element as any).url, (element as any).audioUrl].filter(
+    const candidateUrls = [
+      (element as any).url,
+      (element as any).audioUrl,
+    ].filter(
       (value): value is string => typeof value === 'string' && value.length > 0
     );
     if (candidateUrls.length === 0) {
@@ -228,13 +315,20 @@ export function countElementsByAssetUrl(board: PlaitBoard, assetUrl: string): nu
 
     const isMatch = candidateUrls.some((url) => {
       const elementCachePath = extractCachePath(url);
-      return url === assetUrl ||
-        (targetCachePath && elementCachePath && targetCachePath === elementCachePath);
+      return (
+        url === assetUrl ||
+        (targetCachePath &&
+          elementCachePath &&
+          targetCachePath === elementCachePath)
+      );
     });
 
     if (isMatch) {
-      const isImage = PlaitDrawElement.isDrawElement(element) && PlaitDrawElement.isImage(element);
-      const isVideo = (element as any).type === 'video' || (element as any).isVideo;
+      const isImage =
+        PlaitDrawElement.isDrawElement(element) &&
+        PlaitDrawElement.isImage(element);
+      const isVideo =
+        (element as any).type === 'video' || (element as any).isVideo;
       const isAudio = typeof (element as any).audioUrl === 'string';
 
       if (isImage || isVideo || isAudio) {
@@ -246,8 +340,14 @@ export function countElementsByAssetUrl(board: PlaitBoard, assetUrl: string): nu
   return count;
 }
 
-export function countElementsByAssetUrls(board: PlaitBoard, assetUrls: string[]): number {
-  return assetUrls.reduce((total, assetUrl) => total + countElementsByAssetUrl(board, assetUrl), 0);
+export function countElementsByAssetUrls(
+  board: PlaitBoard,
+  assetUrls: string[]
+): number {
+  return assetUrls.reduce(
+    (total, assetUrl) => total + countElementsByAssetUrl(board, assetUrl),
+    0
+  );
 }
 
 /**
@@ -256,7 +356,10 @@ export function countElementsByAssetUrls(board: PlaitBoard, assetUrls: string[])
  * @param assetUrl - 素材 URL
  * @returns 删除的元素数量
  */
-export function removeElementsByAssetUrl(board: PlaitBoard, assetUrl: string): number {
+export function removeElementsByAssetUrl(
+  board: PlaitBoard,
+  assetUrl: string
+): number {
   if (!board.children || board.children.length === 0) {
     return 0;
   }
@@ -267,7 +370,10 @@ export function removeElementsByAssetUrl(board: PlaitBoard, assetUrl: string): n
   const elementsToRemove: PlaitElement[] = [];
 
   for (const element of board.children) {
-    const candidateUrls = [(element as any).url, (element as any).audioUrl].filter(
+    const candidateUrls = [
+      (element as any).url,
+      (element as any).audioUrl,
+    ].filter(
       (value): value is string => typeof value === 'string' && value.length > 0
     );
     if (candidateUrls.length === 0) {
@@ -276,13 +382,20 @@ export function removeElementsByAssetUrl(board: PlaitBoard, assetUrl: string): n
 
     const isMatch = candidateUrls.some((url) => {
       const elementCachePath = extractCachePath(url);
-      return url === assetUrl ||
-        (targetCachePath && elementCachePath && targetCachePath === elementCachePath);
+      return (
+        url === assetUrl ||
+        (targetCachePath &&
+          elementCachePath &&
+          targetCachePath === elementCachePath)
+      );
     });
 
     if (isMatch) {
-      const isImage = PlaitDrawElement.isDrawElement(element) && PlaitDrawElement.isImage(element);
-      const isVideo = (element as any).type === 'video' || (element as any).isVideo;
+      const isImage =
+        PlaitDrawElement.isDrawElement(element) &&
+        PlaitDrawElement.isImage(element);
+      const isVideo =
+        (element as any).type === 'video' || (element as any).isVideo;
       const isAudio = typeof (element as any).audioUrl === 'string';
 
       if (isImage || isVideo || isAudio) {
@@ -295,7 +408,6 @@ export function removeElementsByAssetUrl(board: PlaitBoard, assetUrl: string): n
     try {
       CoreTransforms.removeElements(board, elementsToRemove);
     } catch (error) {
-      console.error('[AssetCleanup] Failed to remove elements by URL:', error);
       return 0;
     }
   }
@@ -303,6 +415,12 @@ export function removeElementsByAssetUrl(board: PlaitBoard, assetUrl: string): n
   return elementsToRemove.length;
 }
 
-export function removeElementsByAssetUrls(board: PlaitBoard, assetUrls: string[]): number {
-  return assetUrls.reduce((total, assetUrl) => total + removeElementsByAssetUrl(board, assetUrl), 0);
+export function removeElementsByAssetUrls(
+  board: PlaitBoard,
+  assetUrls: string[]
+): number {
+  return assetUrls.reduce(
+    (total, assetUrl) => total + removeElementsByAssetUrl(board, assetUrl),
+    0
+  );
 }

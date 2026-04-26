@@ -10,7 +10,14 @@
  * - onUpdateStep: 更新步骤状态
  */
 
-import type { MCPTool, MCPResult, MCPExecuteOptions, AgentExecutionContext, WorkflowStepInfo, AgentExecuteOptions } from '../types';
+import type {
+  MCPTool,
+  MCPResult,
+  MCPExecuteOptions,
+  AgentExecutionContext,
+  WorkflowStepInfo,
+  AgentExecuteOptions,
+} from '../types';
 import { agentExecutor } from '../../services/agent';
 import { geminiSettings, type ModelRef } from '../../utils/settings-manager';
 import type { GeminiMessagePart } from '../../utils/gemini-api/types';
@@ -84,7 +91,8 @@ export const aiAnalyzeTool: MCPTool = {
       },
       messages: {
         type: 'array',
-        description: '预构建的消息数组，传入时直接使用，不再生成默认系统提示词（用于 Skill 角色扮演/精准工具注入）',
+        description:
+          '预构建的消息数组，传入时直接使用，不再生成默认系统提示词（用于 Skill 角色扮演/精准工具注入）',
       },
     },
     required: ['context'],
@@ -92,7 +100,10 @@ export const aiAnalyzeTool: MCPTool = {
 
   supportedModes: ['async'],
 
-  execute: async (params: Record<string, unknown>, options?: MCPExecuteOptions): Promise<MCPResult> => {
+  execute: async (
+    params: Record<string, unknown>,
+    options?: MCPExecuteOptions
+  ): Promise<MCPResult> => {
     const { context, textModel, messages, modelRef } =
       params as unknown as AIAnalyzeParams;
 
@@ -108,13 +119,6 @@ export const aiAnalyzeTool: MCPTool = {
     const generatedSteps: WorkflowStepInfo[] = [];
 
     try {
-      console.log('[AIAnalyzeTool] 开始分析:', {
-        userInstruction: context.userInstruction?.substring(0, 50),
-        model: context.model,
-        textModel,
-        hasCustomMessages: !!messages,
-      });
-
       const result = await agentExecutor.execute(context, {
         model: textModel || context.model.id,
         modelRef: modelRef || null,
@@ -147,7 +151,9 @@ export const aiAnalyzeTool: MCPTool = {
 
           // 创建新的工作流步骤
           const newStep: WorkflowStepInfo = {
-            id: `step-tool-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            id: `step-tool-${Date.now()}-${Math.random()
+              .toString(36)
+              .substring(2, 6)}`,
             mcp: toolCall.name,
             args: toolArgs,
             description: getToolDescription(toolCall.name, toolArgs),
@@ -220,18 +226,33 @@ export const aiAnalyzeTool: MCPTool = {
 /**
  * 根据工具名称生成描述
  */
-function getToolDescription(toolName: string, args?: Record<string, unknown>): string {
+function getToolDescription(
+  toolName: string,
+  args?: Record<string, unknown>
+): string {
   switch (toolName) {
     case 'generate_image':
-      return `生成图片: ${((args?.prompt as string) || '').substring(0, 30)}...`;
+      return `生成图片: ${((args?.prompt as string) || '').substring(
+        0,
+        30
+      )}...`;
     case 'generate_video':
-      return `生成视频: ${((args?.prompt as string) || '').substring(0, 30)}...`;
+      return `生成视频: ${((args?.prompt as string) || '').substring(
+        0,
+        30
+      )}...`;
     case 'generate_audio':
-      return `生成音频: ${((args?.prompt as string) || '').substring(0, 30)}...`;
+      return `生成音频: ${((args?.prompt as string) || '').substring(
+        0,
+        30
+      )}...`;
     case 'generate_ppt':
       return `生成PPT: ${((args?.topic as string) || '').substring(0, 30)}...`;
     case 'generate_grid_image':
-      return `生成宫格图: ${((args?.theme as string) || '').substring(0, 30)}...`;
+      return `生成宫格图: ${((args?.theme as string) || '').substring(
+        0,
+        30
+      )}...`;
     case 'insert_svg':
       return `插入SVG矢量图`;
     case 'canvas_insertion':
@@ -254,7 +275,9 @@ export async function analyzeWithAI(
     options
   );
 
-  const data = result.data as { generatedSteps?: WorkflowStepInfo[]; response?: string } | undefined;
+  const data = result.data as
+    | { generatedSteps?: WorkflowStepInfo[]; response?: string }
+    | undefined;
 
   return {
     success: result.success,

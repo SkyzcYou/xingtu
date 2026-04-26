@@ -44,6 +44,7 @@ import {
   sanitizeImageToolExtraParams,
   saveAIImageToolPreferences,
 } from '../../services/ai-generation-preferences-service';
+import { promptStorageService } from '../../services/prompt-storage-service';
 import {
   geminiSettings,
   hasInvocationRouteCredentials,
@@ -239,10 +240,17 @@ const AIImageGeneration = ({
 
   // Use generation history from task queue
   const { imageHistory } = useGenerationHistory();
+  const [promptHistoryVersion, setPromptHistoryVersion] = useState(0);
   const { isGenerating } = useGenerationState('image');
   const { language } = useI18n();
   const { createTask } = useTaskQueue();
   const generatingLockRef = useRef(false);
+
+  useEffect(() => {
+    return promptStorageService.subscribeChanges(() => {
+      setPromptHistoryVersion((version) => version + 1);
+    });
+  }, []);
 
   const isMJModel = currentModel.startsWith('mj');
   const hasCompatibleParams = React.useMemo(() => {
@@ -529,19 +537,28 @@ const AIImageGeneration = ({
     window.dispatchEvent(new CustomEvent('ai-image-clear'));
   };
 
-  // 使用useMemo优化性能，当imageHistory或language变化时重新计算
+  // 使用useMemo优化性能，当imageHistory、language或promptHistoryVersion变化时重新计算
   const presetPrompts = React.useMemo(
     () => getMergedPresetPrompts('image', language as Language, imageHistory),
-    [imageHistory, language]
+    [imageHistory, language, promptHistoryVersion]
+  );
+
+  const isPptSlidePromptContext = Boolean(
+    pptSlideImage || pptSlidePrompt?.trim()
   );
 
   // 保存提示词到历史记录（去重）
   const savePromptToHistory = (promptText: string) => {
+    if (isPptSlidePromptContext) {
+      return;
+    }
+
     const dimensions = {
       width: typeof width === 'string' ? parseInt(width) || 1024 : width,
       height: typeof height === 'string' ? parseInt(height) || 1024 : height,
     };
     savePromptToHistoryUtil('image', promptText, dimensions);
+    setPromptHistoryVersion((version) => version + 1);
   };
 
   // 处理任务编辑（从弹窗内的任务列表点击编辑）

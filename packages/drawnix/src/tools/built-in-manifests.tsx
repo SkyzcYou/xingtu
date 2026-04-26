@@ -1,5 +1,5 @@
 import React from 'react';
-import { DiscAlbum, Film, Music4, Clapperboard } from 'lucide-react';
+import { DiscAlbum, Film, Music4, Clapperboard, History } from 'lucide-react';
 import {
   BatchIcon,
   BookOpenIcon,
@@ -69,6 +69,16 @@ export const BUILT_IN_TOOL_MANIFESTS: ToolDefinition[] = [
     component: MODEL_BENCHMARK_TOOL_ID,
     defaultWidth: 1280,
     defaultHeight: 860,
+  },
+  {
+    id: 'prompt-history',
+    name: '我的提示词',
+    description: '按任务分类管理初始提示词、发送提示词和生成结果预览',
+    icon: <History size={18} strokeWidth={1.75} />,
+    category: ToolCategory.CONTENT_TOOLS,
+    component: 'prompt-history',
+    defaultWidth: 1120,
+    defaultHeight: 680,
   },
   {
     id: 'knowledge-base',

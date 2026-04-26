@@ -18,11 +18,8 @@ const IDLE_PREFETCH_RETRY_DELAY_MS = 1000;
 
 function logStartupPrefetch(message: string, detail?: unknown): void {
   if (detail === undefined) {
-    console.info(`[StartupPrefetch] ${message}`);
     return;
   }
-
-  console.info(`[StartupPrefetch] ${message}`, detail);
 }
 
 function releaseRequestedGroups(groups: IdlePrefetchGroup[]): void {
@@ -80,9 +77,12 @@ export function requestServiceWorkerIdlePrefetch(
   });
 
   if (pendingGroups.length === 0) {
-    logStartupPrefetch('skip idle prefetch request: all groups already requested', {
-      groups,
-    });
+    logStartupPrefetch(
+      'skip idle prefetch request: all groups already requested',
+      {
+        groups,
+      }
+    );
     return;
   }
 
@@ -106,10 +106,13 @@ export function requestServiceWorkerIdlePrefetch(
       .then((registration) => {
         if (registration.active) {
           registration.active.postMessage(message);
-          logStartupPrefetch('posted idle prefetch request via registration.active', {
-            groups: pendingGroups,
-            attempt,
-          });
+          logStartupPrefetch(
+            'posted idle prefetch request via registration.active',
+            {
+              groups: pendingGroups,
+              attempt,
+            }
+          );
           return;
         }
 
@@ -125,30 +128,45 @@ export function requestServiceWorkerIdlePrefetch(
           return;
         }
 
-        logStartupPrefetch('retry idle prefetch request: no active service worker yet', {
-          groups: pendingGroups,
-          attempt,
-          retryDelayMs: IDLE_PREFETCH_RETRY_DELAY_MS,
-        });
-        window.setTimeout(() => postMessage(attempt + 1), IDLE_PREFETCH_RETRY_DELAY_MS);
+        logStartupPrefetch(
+          'retry idle prefetch request: no active service worker yet',
+          {
+            groups: pendingGroups,
+            attempt,
+            retryDelayMs: IDLE_PREFETCH_RETRY_DELAY_MS,
+          }
+        );
+        window.setTimeout(
+          () => postMessage(attempt + 1),
+          IDLE_PREFETCH_RETRY_DELAY_MS
+        );
       })
       .catch((error) => {
         if (attempt >= MAX_IDLE_PREFETCH_POST_ATTEMPTS) {
           releaseRequestedGroups(pendingGroups);
-          console.warn('[StartupPrefetch] idle prefetch request failed after retries', {
-            groups: pendingGroups,
-            attempt,
-            error,
-          });
+          console.warn(
+            '[StartupPrefetch] idle prefetch request failed after retries',
+            {
+              groups: pendingGroups,
+              attempt,
+              error,
+            }
+          );
           return;
         }
 
-        logStartupPrefetch('retry idle prefetch request after navigator.serviceWorker.ready failure', {
-          groups: pendingGroups,
-          attempt,
-          retryDelayMs: IDLE_PREFETCH_RETRY_DELAY_MS,
-        });
-        window.setTimeout(() => postMessage(attempt + 1), IDLE_PREFETCH_RETRY_DELAY_MS);
+        logStartupPrefetch(
+          'retry idle prefetch request after navigator.serviceWorker.ready failure',
+          {
+            groups: pendingGroups,
+            attempt,
+            retryDelayMs: IDLE_PREFETCH_RETRY_DELAY_MS,
+          }
+        );
+        window.setTimeout(
+          () => postMessage(attempt + 1),
+          IDLE_PREFETCH_RETRY_DELAY_MS
+        );
       });
   };
 

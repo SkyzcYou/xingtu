@@ -1573,9 +1573,6 @@ class TaskQueueService {
     updates?: Partial<Task>
   ): void {
     if (this.blockedTaskIds.has(taskId) && status !== TaskStatus.CANCELLED) {
-      console.debug(
-        `[TaskQueueService] Ignoring blocked task update: ${taskId} → ${status}`
-      );
       return;
     }
 
@@ -1641,11 +1638,7 @@ class TaskQueueService {
           errorCode: updatedTask.error?.code,
           errorMessage: updatedTask.error?.message,
         }
-      );
-      console.debug(
-        `[TaskQueueService] Task ${taskId} → ${status}, event emitted`
-      );
-      // 任务进入终态后检查是否需要归档旧任务
+      ); // 任务进入终态后检查是否需要归档旧任务
       this.enforceRetentionLimit();
     }
   }
@@ -1658,9 +1651,6 @@ class TaskQueueService {
    */
   updateTaskProgress(taskId: string, progress: number): void {
     if (this.blockedTaskIds.has(taskId)) {
-      console.debug(
-        `[TaskQueueService] Ignoring blocked task progress update: ${taskId}`
-      );
       return;
     }
 
@@ -1870,9 +1860,6 @@ class TaskQueueService {
    */
   syncTaskFromStorage(taskId: string, storageTask: Partial<Task>): void {
     if (this.blockedTaskIds.has(taskId)) {
-      console.debug(
-        `[TaskQueueService] Ignoring blocked storage sync for task ${taskId}`
-      );
       return;
     }
 
@@ -2063,13 +2050,8 @@ class TaskQueueService {
 
     // 异步批量归档到 IndexedDB（fire-and-forget）
     if (archiveIds.length > 0) {
-      taskStorageWriter.archiveTasks(archiveIds).catch((err) => {
-        console.debug('[TaskQueueService] Archive tasks failed:', err);
-      });
+      taskStorageWriter.archiveTasks(archiveIds).catch((err) => {});
       taskStorageReader.invalidateCache();
-      console.debug(
-        `[TaskQueueService] Archived ${archiveIds.length} tasks, active: ${this.tasks.size}`
-      );
     }
   }
 
@@ -2109,7 +2091,10 @@ class TaskQueueService {
     const storedTask = await taskStorageWriter
       .getTask(task.id)
       .catch(() => null);
-    const persistedParams = storedTask?.params as Record<string, unknown> | null;
+    const persistedParams = storedTask?.params as Record<
+      string,
+      unknown
+    > | null;
 
     if (!hasAnyPersistedLargeTaskParams(persistedParams)) {
       return task;

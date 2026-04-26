@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenTu AI 创作工作台 | GPT-Image-2、DeepSeek-v4 图片与知识画布</title>
+    <title>
+      OpenTu AI 创作工作台 | GPT-Image-2、DeepSeek-v4 图片与知识画布
+    </title>
     <meta
       name="description"
       content="OpenTu 是面向 AI 创作者的开源画布工作台，支持 GPT-Image-2 图片生成、DeepSeek-v4 文本推理、流程图、思维导图、素材库和作品整理。立即打开 OpenTu，把提示词、模型生成和作品展示放进同一块画布。"
@@ -15,13 +17,19 @@
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <link rel="canonical" href="https://opentu.ai/home.html" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="OpenTu AI 创作工作台 | GPT-Image-2 与 DeepSeek-v4 画布" />
+    <meta
+      property="og:title"
+      content="OpenTu AI 创作工作台 | GPT-Image-2 与 DeepSeek-v4 画布"
+    />
     <meta
       property="og:description"
       content="用 OpenTu 在浏览器里完成 AI 图片生成、文本推理、素材整理、流程图和作品展示。"
     />
     <meta property="og:url" content="https://opentu.ai/home.html" />
-    <meta property="og:image" content="https://opentu.ai/product_showcase/九宫格拆图.gif" />
+    <meta
+      property="og:image"
+      content="https://opentu.ai/product_showcase/九宫格拆图.gif"
+    />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="OpenTu AI 创作工作台" />
     <meta
@@ -53,7 +61,10 @@
             ],
             "image": "https://opentu.ai/product_showcase/九宫格拆图.gif",
             "license": "https://github.com/ljquan/aitu/blob/master/LICENSE",
-            "sameAs": ["https://github.com/ljquan/aitu", "https://x.com/szuljq"],
+            "sameAs": [
+              "https://github.com/ljquan/aitu",
+              "https://x.com/szuljq"
+            ],
             "offers": {
               "@type": "Offer",
               "price": "0",
@@ -120,12 +131,20 @@
 
       body {
         margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          'PingFang SC', sans-serif;
         color: var(--ink);
         background-color: var(--bg);
-        background-image:
-          radial-gradient(circle at 15% 0%, rgba(249, 115, 22, 0.06), transparent 40%),
-          radial-gradient(circle at 85% 30%, rgba(251, 146, 60, 0.08), transparent 40%);
+        background-image: radial-gradient(
+            circle at 15% 0%,
+            rgba(249, 115, 22, 0.06),
+            transparent 40%
+          ),
+          radial-gradient(
+            circle at 85% 30%,
+            rgba(251, 146, 60, 0.08),
+            transparent 40%
+          );
         line-height: 1.6;
       }
 
@@ -134,14 +153,20 @@
         inset: 0;
         z-index: -1;
         pointer-events: none;
-        content: "";
+        content: '';
         opacity: 0.4;
-        background-image:
-          linear-gradient(rgba(249, 115, 22, 0.05) 1px, transparent 1px),
+        background-image: linear-gradient(
+            rgba(249, 115, 22, 0.05) 1px,
+            transparent 1px
+          ),
           linear-gradient(90deg, rgba(249, 115, 22, 0.05) 1px, transparent 1px);
         background-size: 40px 40px;
         mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
-        -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+        -webkit-mask-image: linear-gradient(
+          to bottom,
+          black 30%,
+          transparent 100%
+        );
       }
 
       a {
@@ -237,7 +262,10 @@
         margin: 0 0 24px;
       }
 
-      h1, h2, h3, p {
+      h1,
+      h2,
+      h3,
+      p {
         margin-top: 0;
       }
 
@@ -339,7 +367,11 @@
         padding: 14px;
         border: 1px solid rgba(234, 88, 12, 0.14);
         border-radius: 18px;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 247, 237, 0.72));
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.78),
+          rgba(255, 247, 237, 0.72)
+        );
         box-shadow: 0 10px 26px rgba(124, 45, 18, 0.06);
       }
 
@@ -386,8 +418,12 @@
         width: 260px;
         height: 260px;
         border-radius: 999px;
-        background: radial-gradient(circle, rgba(249, 115, 22, 0.2), transparent 68%);
-        content: "";
+        background: radial-gradient(
+          circle,
+          rgba(249, 115, 22, 0.2),
+          transparent 68%
+        );
+        content: '';
         pointer-events: none;
       }
 
@@ -400,11 +436,11 @@
         background: rgba(255, 255, 255, 0.92);
         border: 1px solid var(--border);
         color: var(--ink);
-        content: "生成、整理、复用，一次完成";
+        content: '生成、整理、复用，一次完成';
         font-size: 12px;
         font-weight: 600;
         backdrop-filter: blur(8px);
-        box-shadow: 0 14px 34px rgba(124,45,18,0.12);
+        box-shadow: 0 14px 34px rgba(124, 45, 18, 0.12);
       }
 
       .hero-panel img {
@@ -511,7 +547,8 @@
         padding: 28px;
       }
 
-      .card:hover, .work-card:hover {
+      .card:hover,
+      .work-card:hover {
         transform: translateY(-4px);
         border-color: rgba(249, 115, 22, 0.3);
       }
@@ -690,16 +727,56 @@
     <main>
       <nav class="nav" aria-label="主导航">
         <a class="brand" href="/" aria-label="打开 OpenTu 工作台">
-          <img class="brand-logo" src="/icons/favicon-new.svg" alt="OpenTu logo" width="42" height="42" />
+          <img
+            class="brand-logo"
+            src="/icons/favicon-new.svg"
+            alt="OpenTu logo"
+            width="42"
+            height="42"
+          />
           <span>OpenTu</span>
         </a>
         <div class="nav-links">
-          <a href="#models" data-seo-track="home_nav_click" data-seo-target="models">热门模型</a>
-          <a href="#works" data-seo-track="home_nav_click" data-seo-target="works">作品展示</a>
-          <a href="#workflow" data-seo-track="home_nav_click" data-seo-target="workflow">使用流程</a>
-          <a href="/user-manual/index.html" data-seo-track="home_nav_click" data-seo-target="manual">教程</a>
-          <a href="https://github.com/ljquan/aitu" data-seo-track="home_nav_click" data-seo-target="github" target="_blank" rel="noopener noreferrer">GitHub</a>
-          <a href="https://x.com/szuljq" data-seo-track="home_nav_click" data-seo-target="author_x" target="_blank" rel="noopener noreferrer">关注作者 X</a>
+          <a
+            href="#models"
+            data-seo-track="home_nav_click"
+            data-seo-target="models"
+            >热门模型</a
+          >
+          <a
+            href="#works"
+            data-seo-track="home_nav_click"
+            data-seo-target="works"
+            >作品展示</a
+          >
+          <a
+            href="#workflow"
+            data-seo-track="home_nav_click"
+            data-seo-target="workflow"
+            >使用流程</a
+          >
+          <a
+            href="/user-manual/index.html"
+            data-seo-track="home_nav_click"
+            data-seo-target="manual"
+            >教程</a
+          >
+          <a
+            href="https://github.com/ljquan/aitu"
+            data-seo-track="home_nav_click"
+            data-seo-target="github"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub</a
+          >
+          <a
+            href="https://x.com/szuljq"
+            data-seo-track="home_nav_click"
+            data-seo-target="author_x"
+            target="_blank"
+            rel="noopener noreferrer"
+            >关注作者 X</a
+          >
         </div>
       </nav>
 
@@ -724,9 +801,34 @@
             </li>
           </ul>
           <div class="cta-row">
-            <a class="btn btn-primary" href="/" data-seo-track="home_cta_click" data-seo-target="open_workspace" data-seo-position="hero">立即进入画布</a>
-            <a class="btn btn-secondary" href="https://github.com/ljquan/aitu" data-seo-track="home_cta_click" data-seo-target="github" data-seo-position="hero" target="_blank" rel="noopener noreferrer">查看开源项目</a>
-            <a class="btn btn-secondary" href="https://x.com/szuljq" data-seo-track="home_cta_click" data-seo-target="author_x" data-seo-position="hero" target="_blank" rel="noopener noreferrer">关注作者 X</a>
+            <a
+              class="btn btn-primary"
+              href="/"
+              data-seo-track="home_cta_click"
+              data-seo-target="open_workspace"
+              data-seo-position="hero"
+              >立即进入画布</a
+            >
+            <a
+              class="btn btn-secondary"
+              href="https://github.com/ljquan/aitu"
+              data-seo-track="home_cta_click"
+              data-seo-target="github"
+              data-seo-position="hero"
+              target="_blank"
+              rel="noopener noreferrer"
+              >查看开源项目</a
+            >
+            <a
+              class="btn btn-secondary"
+              href="https://x.com/szuljq"
+              data-seo-track="home_cta_click"
+              data-seo-target="author_x"
+              data-seo-position="hero"
+              target="_blank"
+              rel="noopener noreferrer"
+              >关注作者 X</a
+            >
           </div>
         </div>
         <aside class="hero-panel">
@@ -734,7 +836,10 @@
             <strong>作品在画布中自然生长</strong>
             <span>生成结果、参考素材和创作说明集中保留。</span>
           </div>
-          <img src="/product_showcase/九宫格拆图.gif" alt="OpenTu 图片拆分与 AI 创作画布动态演示" />
+          <img
+            src="/product_showcase/九宫格拆图.gif"
+            alt="OpenTu 图片拆分与 AI 创作画布动态演示"
+          />
         </aside>
       </section>
 
@@ -743,19 +848,28 @@
           <div>
             <h2>把热门模型能力变成连续创作流程</h2>
             <p class="section-lead">
-              图片模型负责产出视觉结果，推理模型负责梳理创意与结构。OpenTu 让这两类能力在同一块画布中衔接：先想清楚，再生成，再筛选，再整理成可展示的作品。
+              图片模型负责产出视觉结果，推理模型负责梳理创意与结构。OpenTu
+              让这两类能力在同一块画布中衔接：先想清楚，再生成，再筛选，再整理成可展示的作品。
             </p>
           </div>
         </div>
         <div class="model-grid">
-          <article class="model-panel" data-seo-track="home_model_card_click" data-seo-target="gpt-image-2">
+          <article
+            class="model-panel"
+            data-seo-track="home_model_card_click"
+            data-seo-target="gpt-image-2"
+          >
             <span class="tag">图像创作</span>
             <strong>GPT-Image-2</strong>
             <p class="model-note">
               适合海报、封面、角色设定、产品图、社媒配图和灵感草图。生成结果会直接进入画布，方便你对比风格、筛选版本、补充说明并继续迭代。
             </p>
           </article>
-          <article class="model-panel" data-seo-track="home_model_card_click" data-seo-target="deepseek-v4">
+          <article
+            class="model-panel"
+            data-seo-track="home_model_card_click"
+            data-seo-target="deepseek-v4"
+          >
             <span class="tag">文本推理</span>
             <strong>DeepSeek-v4</strong>
             <p class="model-note">
@@ -770,7 +884,9 @@
           <div>
             <h2>OpenTu 帮你解决三个创作断点</h2>
             <p class="section-lead">
-              AI 生成最常见的问题不是不会生成，而是结果散落、上下文丢失、作品难以复用。OpenTu 把生成、整理和展示连成一条线。
+              AI
+              生成最常见的问题不是不会生成，而是结果散落、上下文丢失、作品难以复用。OpenTu
+              把生成、整理和展示连成一条线。
             </p>
           </div>
         </div>
@@ -778,17 +894,23 @@
           <article class="card">
             <span class="icon">🎨</span>
             <h3>生成结果不再散落</h3>
-            <p>把提示词、参考图、候选结果和最终版本放在同一画布，随时回看创作路径。</p>
+            <p>
+              把提示词、参考图、候选结果和最终版本放在同一画布，随时回看创作路径。
+            </p>
           </article>
           <article class="card">
             <span class="icon">🧠</span>
             <h3>想法自动变成结构</h3>
-            <p>把创意方向、脚本、分镜和流程说明沉淀为思维导图或流程图，团队沟通更轻松。</p>
+            <p>
+              把创意方向、脚本、分镜和流程说明沉淀为思维导图或流程图，团队沟通更轻松。
+            </p>
           </article>
           <article class="card">
             <span class="icon">📦</span>
             <h3>素材资产可复用</h3>
-            <p>生成图、参考图、截图和项目说明集中管理，下次做封面、教程、社媒内容更快。</p>
+            <p>
+              生成图、参考图、截图和项目说明集中管理，下次做封面、教程、社媒内容更快。
+            </p>
           </article>
         </div>
       </section>
@@ -798,30 +920,59 @@
           <div>
             <h2>你可以用 OpenTu 做出这些作品</h2>
             <p class="section-lead">
-              从图片创作到项目规划，OpenTu 让过程和结果同时保留。每一张图、每一条说明、每一次修改，都能成为下一次创作的素材。
+              从图片创作到项目规划，OpenTu
+              让过程和结果同时保留。每一张图、每一条说明、每一次修改，都能成为下一次创作的素材。
             </p>
           </div>
         </div>
         <div class="work-grid">
-          <article class="work-card" data-seo-track="home_work_card_click" data-seo-target="image_split">
-            <img src="/product_showcase/九宫格拆图.gif" alt="OpenTu 用户作品案例：AI 图片拆分与素材整理" loading="lazy" />
+          <article
+            class="work-card"
+            data-seo-track="home_work_card_click"
+            data-seo-target="image_split"
+          >
+            <img
+              src="/product_showcase/九宫格拆图.gif"
+              alt="OpenTu 用户作品案例：AI 图片拆分与素材整理"
+              loading="lazy"
+            />
             <div class="work-body">
               <h3>AI 图片创作板</h3>
-              <p>批量生成多张候选图，按主题、风格、用途筛选，快速确定可交付版本。</p>
+              <p>
+                批量生成多张候选图，按主题、风格、用途筛选，快速确定可交付版本。
+              </p>
             </div>
           </article>
-          <article class="work-card" data-seo-track="home_work_card_click" data-seo-target="flowchart">
-            <img src="/product_showcase/流程图.gif" alt="OpenTu 流程图和项目规划动态演示" loading="lazy" />
+          <article
+            class="work-card"
+            data-seo-track="home_work_card_click"
+            data-seo-target="flowchart"
+          >
+            <img
+              src="/product_showcase/流程图.gif"
+              alt="OpenTu 流程图和项目规划动态演示"
+              loading="lazy"
+            />
             <div class="work-body">
               <h3>流程与项目规划</h3>
               <p>把步骤、需求、决策链转换成流程图，让复杂项目一眼看懂。</p>
             </div>
           </article>
-          <article class="work-card" data-seo-track="home_work_card_click" data-seo-target="mindmap">
-            <img src="/product_showcase/思维导图.gif" alt="OpenTu 思维导图与知识整理动态演示" loading="lazy" />
+          <article
+            class="work-card"
+            data-seo-track="home_work_card_click"
+            data-seo-target="mindmap"
+          >
+            <img
+              src="/product_showcase/思维导图.gif"
+              alt="OpenTu 思维导图与知识整理动态演示"
+              loading="lazy"
+            />
             <div class="work-body">
               <h3>灵感与知识整理</h3>
-              <p>把提示词、参考资料、模型输出和最终作品放在一处，形成自己的创作知识库。</p>
+              <p>
+                把提示词、参考资料、模型输出和最终作品放在一处，形成自己的创作知识库。
+              </p>
             </div>
           </article>
         </div>
@@ -831,26 +982,35 @@
         <div class="section-head">
           <div>
             <h2>三步开始你的 OpenTu 工作流</h2>
-            <p class="section-lead">不用先搭复杂流程。打开画布、输入想法、整理结果，就能开始一次完整创作。</p>
+            <p class="section-lead">
+              不用先搭复杂流程。打开画布、输入想法、整理结果，就能开始一次完整创作。
+            </p>
           </div>
         </div>
         <ol class="steps">
           <li>
             <div>
               <h3>选择模型和任务</h3>
-              <p class="model-note">根据任务选择图片、文本或视频模型，也可以接入你的 OpenAI 兼容模型供应商。</p>
+              <p class="model-note">
+                根据任务选择图片、文本或视频模型，也可以接入你的 OpenAI
+                兼容模型供应商。
+              </p>
             </div>
           </li>
           <li>
             <div>
               <h3>在画布中生成和比较</h3>
-              <p class="model-note">把生成结果、参考图、文本说明和流程草图放在同一空间，快速比较版本并继续完善。</p>
+              <p class="model-note">
+                把生成结果、参考图、文本说明和流程草图放在同一空间，快速比较版本并继续完善。
+              </p>
             </div>
           </li>
           <li>
             <div>
               <h3>整理为可展示作品</h3>
-              <p class="model-note">将最终图、提示词、设计说明和流程图一起保存，形成可复用、可分享、可继续迭代的项目画布。</p>
+              <p class="model-note">
+                将最终图、提示词、设计说明和流程图一起保存，形成可复用、可分享、可继续迭代的项目画布。
+              </p>
             </div>
           </li>
         </ol>
@@ -860,25 +1020,38 @@
         <div class="section-head">
           <div>
             <h2>常见问题</h2>
-            <p class="section-lead">如果你正在寻找一个能承接 AI 生成结果的创作工作台，这里是几个常见问题。</p>
+            <p class="section-lead">
+              如果你正在寻找一个能承接 AI
+              生成结果的创作工作台，这里是几个常见问题。
+            </p>
           </div>
         </div>
         <ul class="faq">
           <li>
             <h3>OpenTu 和普通 AI 聊天工具有什么区别？</h3>
-            <p>普通聊天工具更适合问答，OpenTu 更适合创作执行：生成内容后，还能继续整理、排版、比较、沉淀和展示。</p>
+            <p>
+              普通聊天工具更适合问答，OpenTu
+              更适合创作执行：生成内容后，还能继续整理、排版、比较、沉淀和展示。
+            </p>
           </li>
           <li>
             <h3>OpenTu 适合做哪些 AI 图片任务？</h3>
-            <p>适合封面图、角色设定、产品图、海报、社媒配图、灵感草图和多版本视觉探索。你可以把所有候选图放在一块画布上比较。</p>
+            <p>
+              适合封面图、角色设定、产品图、海报、社媒配图、灵感草图和多版本视觉探索。你可以把所有候选图放在一块画布上比较。
+            </p>
           </li>
           <li>
             <h3>DeepSeek-v4 在 OpenTu 里适合做什么？</h3>
-            <p>适合做提示词扩写、分镜脚本、需求拆解、流程规划和文案草稿，再配合画布形成结构化成果。</p>
+            <p>
+              适合做提示词扩写、分镜脚本、需求拆解、流程规划和文案草稿，再配合画布形成结构化成果。
+            </p>
           </li>
           <li>
             <h3>OpenTu 是开源项目吗？</h3>
-            <p>是。OpenTu 开源可自部署，也可以直接在线体验。你可以在 GitHub 查看源码、提交 Issue 或参与改进。</p>
+            <p>
+              是。OpenTu 开源可自部署，也可以直接在线体验。你可以在 GitHub
+              查看源码、提交 Issue 或参与改进。
+            </p>
           </li>
         </ul>
       </section>
@@ -887,13 +1060,39 @@
         <div>
           <h2>打开 OpenTu，开始你的下一次 AI 创作</h2>
           <p>
-            从一张图、一个流程、一个创意板开始。OpenTu 会帮你把模型输出、参考资料和作品结果留在同一块画布。
+            从一张图、一个流程、一个创意板开始。OpenTu
+            会帮你把模型输出、参考资料和作品结果留在同一块画布。
           </p>
         </div>
         <div class="cta-actions">
-          <a class="btn btn-secondary" href="/" data-seo-track="home_cta_click" data-seo-target="open_workspace" data-seo-position="bottom">进入工作台</a>
-          <a class="btn btn-secondary" href="https://github.com/ljquan/aitu" data-seo-track="home_cta_click" data-seo-target="github" data-seo-position="bottom" target="_blank" rel="noopener noreferrer">查看 GitHub</a>
-          <a class="btn btn-secondary" href="https://x.com/szuljq" data-seo-track="home_cta_click" data-seo-target="author_x" data-seo-position="bottom" target="_blank" rel="noopener noreferrer">关注作者 X</a>
+          <a
+            class="btn btn-secondary"
+            href="/"
+            data-seo-track="home_cta_click"
+            data-seo-target="open_workspace"
+            data-seo-position="bottom"
+            >进入工作台</a
+          >
+          <a
+            class="btn btn-secondary"
+            href="https://github.com/ljquan/aitu"
+            data-seo-track="home_cta_click"
+            data-seo-target="github"
+            data-seo-position="bottom"
+            target="_blank"
+            rel="noopener noreferrer"
+            >查看 GitHub</a
+          >
+          <a
+            class="btn btn-secondary"
+            href="https://x.com/szuljq"
+            data-seo-track="home_cta_click"
+            data-seo-target="author_x"
+            data-seo-position="bottom"
+            target="_blank"
+            rel="noopener noreferrer"
+            >关注作者 X</a
+          >
         </div>
       </section>
     </main>
@@ -942,7 +1141,9 @@
             landing_page: '/home.html',
             referrer_host: (function () {
               try {
-                return document.referrer ? new URL(document.referrer).hostname : '';
+                return document.referrer
+                  ? new URL(document.referrer).hostname
+                  : '';
               } catch (error) {
                 return '';
               }
@@ -953,18 +1154,19 @@
             utm_campaign: sanitizeValue(params.get('utm_campaign')),
             primary_image_model: 'gpt-image-2',
             primary_reasoning_model: 'deepseek-v4',
-            content_variant: 'home-2026-04-25'
+            content_variant: 'home-2026-04-25',
           };
         }
 
         function track(eventName, properties) {
           if (!window.posthog || !window.posthog.capture) return;
           try {
-            window.posthog.capture(eventName, Object.assign(getCommonProperties(), properties || {}));
+            window.posthog.capture(
+              eventName,
+              Object.assign(getCommonProperties(), properties || {})
+            );
           } catch (error) {
-            if (window.console && window.console.debug) {
-              window.console.debug('[Home Analytics] track failed', error);
-            }
+            void error;
           }
         }
 
@@ -980,23 +1182,34 @@
                   var o = e.split('.');
                   2 == o.length && ((t = t[o[0]]), (e = o[1])),
                     (t[e] = function () {
-                      t.push([e].concat(Array.prototype.slice.call(arguments, 0)));
+                      t.push(
+                        [e].concat(Array.prototype.slice.call(arguments, 0))
+                      );
                     });
                 }
                 ((p = t.createElement('script')).type = 'text/javascript'),
                   (p.crossOrigin = 'anonymous'),
                   (p.async = !0),
                   (p.src =
-                    s.api_host.replace('.i.posthog.com', '-assets.i.posthog.com') +
-                    '/static/array.js'),
-                  (r = t.getElementsByTagName('script')[0]).parentNode.insertBefore(p, r);
+                    s.api_host.replace(
+                      '.i.posthog.com',
+                      '-assets.i.posthog.com'
+                    ) + '/static/array.js'),
+                  (r =
+                    t.getElementsByTagName(
+                      'script'
+                    )[0]).parentNode.insertBefore(p, r);
                 var u = e;
                 for (
                   void 0 !== a ? (u = e[a] = []) : (a = 'posthog'),
                     u.people = u.people || [],
                     u.toString = function (t) {
                       var e = 'posthog';
-                      return 'posthog' !== a && (e += '.' + a), t || (e += ' (stub)'), e;
+                      return (
+                        'posthog' !== a && (e += '.' + a),
+                        t || (e += ' (stub)'),
+                        e
+                      );
                     },
                     u.people.toString = function () {
                       return u.toString(1) + '.people (stub)';
@@ -1023,7 +1236,7 @@
             autocapture: false,
             capture_pageview: false,
             rate_limiting: { events_per_second: 5, events_burst_limit: 15 },
-            request_queue: { flush_interval_ms: 2000 }
+            request_queue: { flush_interval_ms: 2000 },
           });
 
           if (window.posthog.register) {
@@ -1049,20 +1262,20 @@
                 track('home_sw_register_success', {
                   sw_scope: registration.scope,
                   has_controller: !!navigator.serviceWorker.controller,
-                  duration_ms: Date.now() - startedAt
+                  duration_ms: Date.now() - startedAt,
                 });
                 return navigator.serviceWorker.ready;
               })
               .then(function () {
                 track('home_sw_ready', {
                   has_controller: !!navigator.serviceWorker.controller,
-                  duration_ms: Date.now() - startedAt
+                  duration_ms: Date.now() - startedAt,
                 });
               })
               .catch(function (error) {
                 track('home_sw_register_failed', {
                   error: sanitizeValue(error && error.message),
-                  duration_ms: Date.now() - startedAt
+                  duration_ms: Date.now() - startedAt,
                 });
               });
           }, 4500);
@@ -1072,19 +1285,20 @@
         registerHomeServiceWorker();
         track('home_seo_pageview', {
           viewport_width: window.innerWidth,
-          viewport_height: window.innerHeight
+          viewport_height: window.innerHeight,
         });
 
         document.addEventListener(
           'click',
           function (event) {
-            var target = event.target && event.target.closest('[data-seo-track]');
+            var target =
+              event.target && event.target.closest('[data-seo-track]');
             if (!target) return;
             track(target.getAttribute('data-seo-track'), {
               target: sanitizeValue(target.getAttribute('data-seo-target')),
               position: sanitizeValue(target.getAttribute('data-seo-position')),
               text: sanitizeValue(target.textContent),
-              href: sanitizeValue(target.getAttribute('href'))
+              href: sanitizeValue(target.getAttribute('href')),
             });
           },
           true

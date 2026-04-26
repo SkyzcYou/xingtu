@@ -11,11 +11,16 @@ import type { PromptPreviewExample } from '../../constants/prompts';
 import {
   PromptListItem,
   type PromptPreviewRequest,
+  type PromptListResultPreview,
 } from './PromptListItem';
 import {
   UnifiedMediaViewer,
   type MediaItem as UnifiedMediaItem,
 } from './media-preview';
+import {
+  analytics,
+  type PromptAnalyticsType,
+} from '../../utils/posthog-analytics';
 import './prompt-list-panel.scss';
 
 export interface PromptItem {
@@ -23,12 +28,27 @@ export interface PromptItem {
   id: string;
   /** 提示词内容 */
   content: string;
+  /** 列表展示标题，不影响点击回填的 content */
+  title?: string;
+  /** 实际发送给生成工具的提示词 */
+  sentPrompt?: string;
+  /** 轻量标签 */
+  tags?: string[];
+  /** 生成结果预览 */
+  resultPreview?: PromptListResultPreview;
   /** 是否已置顶 */
   pinned?: boolean;
   /** 是否是预设提示词（预设不允许删除和置顶） */
   isPreset?: boolean;
-  /** 生成类型：image/video/audio/text/agent/ppt-common */
-  modelType?: 'image' | 'video' | 'audio' | 'text' | 'agent' | 'ppt-common';
+  /** 生成类型：image/video/audio/text/agent/ppt-common/ppt-slide */
+  modelType?:
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'text'
+    | 'agent'
+    | 'ppt-common'
+    | 'ppt-slide';
   /** 场景描述（用于显示标签） */
   scene?: string;
   /** 悬浮预览示例图 */
@@ -52,8 +72,14 @@ export interface PromptListPanelProps {
   disabled?: boolean;
   /** 是否显示数量 */
   showCount?: boolean;
+  /** 点击标题 */
+  onTitleClick?: () => void;
   /** 自定义类名 */
   className?: string;
+  /** 埋点来源面板 */
+  analyticsSurface?: string;
+  /** 埋点提示词类型，默认使用 item.modelType */
+  analyticsPromptType?: PromptAnalyticsType;
 }
 
 export const PromptListPanel: React.FC<PromptListPanelProps> = ({
@@ -65,7 +91,10 @@ export const PromptListPanel: React.FC<PromptListPanelProps> = ({
   language = 'zh',
   disabled = false,
   showCount = true,
+  onTitleClick,
   className = '',
+  analyticsSurface = 'prompt_list',
+  analyticsPromptType,
 }) => {
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewItems, setPreviewItems] = useState<UnifiedMediaItem[]>([]);
@@ -97,8 +126,55 @@ export const PromptListPanel: React.FC<PromptListPanelProps> = ({
       );
       setPreviewInitialIndex(initialIndex);
       setPreviewVisible(true);
+      analytics.trackPromptAction({
+        action: 'preview_example',
+        surface: analyticsSurface,
+        promptType: analyticsPromptType,
+        prompt: content,
+        itemCount: previewExamples.length,
+      });
     },
-    []
+    [analyticsPromptType, analyticsSurface]
+  );
+
+  const handleSelect = useCallback(
+    (item: PromptItem) => {
+      analytics.trackPromptAction({
+        action: 'select',
+        surface: analyticsSurface,
+        promptType: analyticsPromptType || item.modelType,
+        prompt: item.content,
+        source: item.isPreset ? 'preset' : item.pinned ? 'pinned' : 'history',
+      });
+      onSelect?.(item);
+    },
+    [analyticsPromptType, analyticsSurface, onSelect]
+  );
+
+  const handleTogglePin = useCallback(
+    (item: PromptItem) => {
+      analytics.trackPromptAction({
+        action: item.pinned ? 'unpin' : 'pin',
+        surface: analyticsSurface,
+        promptType: analyticsPromptType || item.modelType,
+        prompt: item.content,
+      });
+      onTogglePin?.(item.id);
+    },
+    [analyticsPromptType, analyticsSurface, onTogglePin]
+  );
+
+  const handleDelete = useCallback(
+    (item: PromptItem) => {
+      analytics.trackPromptAction({
+        action: 'delete',
+        surface: analyticsSurface,
+        promptType: analyticsPromptType || item.modelType,
+        prompt: item.content,
+      });
+      onDelete?.(item.id);
+    },
+    [analyticsPromptType, analyticsSurface, onDelete]
   );
 
   return (
@@ -106,7 +182,17 @@ export const PromptListPanel: React.FC<PromptListPanelProps> = ({
       <div className={`prompt-list-panel ${className}`}>
       {/* 头部 */}
         <div className="prompt-list-panel__header">
-          <span className="prompt-list-panel__title">{title}</span>
+          {onTitleClick ? (
+            <button
+              type="button"
+              className="prompt-list-panel__title prompt-list-panel__title-button"
+              onClick={onTitleClick}
+            >
+              {title}
+            </button>
+          ) : (
+            <span className="prompt-list-panel__title">{title}</span>
+          )}
           {showCount && (
             <span className="prompt-list-panel__count">{items.length}</span>
           )}
@@ -118,20 +204,24 @@ export const PromptListPanel: React.FC<PromptListPanelProps> = ({
             <PromptListItem
               key={item.id}
               content={item.content}
+              title={item.title}
+              sentPrompt={item.sentPrompt}
+              tags={item.tags}
+              resultPreview={item.resultPreview}
               pinned={item.pinned}
               isPreset={item.isPreset}
               modelType={item.modelType}
               scene={item.scene}
               previewExamples={item.previewExamples}
-              onClick={() => onSelect?.(item)}
+              onClick={() => handleSelect(item)}
               onTogglePin={
                 onTogglePin && !item.isPreset
-                  ? () => onTogglePin(item.id)
+                  ? () => handleTogglePin(item)
                   : undefined
               }
               onDelete={
                 onDelete && !item.isPreset
-                  ? () => onDelete(item.id)
+                  ? () => handleDelete(item)
                   : undefined
               }
               onPreviewExample={(request) =>

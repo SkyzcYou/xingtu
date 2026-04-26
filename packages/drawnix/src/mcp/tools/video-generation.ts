@@ -7,7 +7,12 @@
  * - queue: 创建任务加入队列（直接生成流程）
  */
 
-import type { MCPTool, MCPResult, MCPExecuteOptions, MCPTaskResult } from '../types';
+import type {
+  MCPTool,
+  MCPResult,
+  MCPExecuteOptions,
+  MCPTaskResult,
+} from '../types';
 import { TaskType } from '../../types/task.types';
 import type { VideoModel } from '../../types/video.types';
 import { VIDEO_MODEL_CONFIGS } from '../../constants/video-model-config';
@@ -18,7 +23,13 @@ import {
   getAdapterContextFromSettings,
   resolveAdapterForInvocation,
 } from '../../services/model-adapters';
-import { createQueueTask, validatePrompt, wrapApiError, toUploadedImages } from './shared/queue-utils';
+import {
+  createQueueTask,
+  validatePrompt,
+  wrapApiError,
+  toUploadedImages,
+  type PromptLineageMeta,
+} from './shared/queue-utils';
 
 /**
  * 获取当前使用的视频模型名称
@@ -34,8 +45,8 @@ export function getCurrentVideoModel(): string {
  */
 function getVideoDurationOptions(): string[] {
   const durations = new Set<string>();
-  Object.values(VIDEO_MODEL_CONFIGS).forEach(config => {
-    config.durationOptions.forEach(opt => durations.add(opt.value));
+  Object.values(VIDEO_MODEL_CONFIGS).forEach((config) => {
+    config.durationOptions.forEach((opt) => durations.add(opt.value));
   });
   return Array.from(durations).sort((a, b) => parseInt(a) - parseInt(b));
 }
@@ -45,8 +56,8 @@ function getVideoDurationOptions(): string[] {
  */
 function getVideoSizeOptions(): string[] {
   const sizes = new Set<string>();
-  Object.values(VIDEO_MODEL_CONFIGS).forEach(config => {
-    config.sizeOptions.forEach(opt => sizes.add(opt.value));
+  Object.values(VIDEO_MODEL_CONFIGS).forEach((config) => {
+    config.sizeOptions.forEach((opt) => sizes.add(opt.value));
   });
   return Array.from(sizes);
 }
@@ -79,6 +90,8 @@ export interface VideoGenerationParams {
   batchTotal?: number;
   /** 全局索引 */
   globalIndex?: number;
+  /** 提示词历史轻量元数据 */
+  promptMeta?: PromptLineageMeta;
 }
 
 /**
@@ -172,9 +185,16 @@ function getVideoQueueConfig(params: VideoGenerationParams) {
       duration: parseInt(params.seconds || modelConfig.defaultDuration, 10),
       model,
       modelRef: params.modelRef || null,
-      uploadedImages: uploadedImages && uploadedImages.length > 0 ? uploadedImages : undefined,
-      referenceImages: params.referenceImages && params.referenceImages.length > 0 ? params.referenceImages : undefined,
+      uploadedImages:
+        uploadedImages && uploadedImages.length > 0
+          ? uploadedImages
+          : undefined,
+      referenceImages:
+        params.referenceImages && params.referenceImages.length > 0
+          ? params.referenceImages
+          : undefined,
       params: params.params,
+      promptMeta: params.promptMeta,
     }),
     buildResultData: () => ({
       size: params.size || '16x9',
@@ -207,7 +227,8 @@ export const videoGenerationTool: MCPTool = {
     properties: {
       prompt: {
         type: 'string',
-        description: '视频描述提示词，详细描述想要生成的视频内容、动作、场景、风格等',
+        description:
+          '视频描述提示词，详细描述想要生成的视频内容、动作、场景、风格等',
       },
       model: {
         type: 'string',
@@ -235,11 +256,18 @@ export const videoGenerationTool: MCPTool = {
       },
       params: {
         type: 'object',
-        description: '额外模型参数，Kling 可用字段包括 model_name、klingAction2、mode、cfg_scale、negative_prompt 与 camera_*；其中 cfg_scale 取值 0 到 1，camera_* 取值 -10 到 10 且需为整数',
+        description:
+          '额外模型参数，Kling 可用字段包括 model_name、klingAction2、mode、cfg_scale、negative_prompt 与 camera_*；其中 cfg_scale 取值 0 到 1，camera_* 取值 -10 到 10 且需为整数',
         properties: {
           model_name: {
             type: 'string',
-            enum: ['kling-v3', 'kling-v2-6', 'kling-v2-1', 'kling-v1-6', 'kling-v1-5'],
+            enum: [
+              'kling-v3',
+              'kling-v2-6',
+              'kling-v2-1',
+              'kling-v1-6',
+              'kling-v1-5',
+            ],
           },
           klingAction2: {
             type: 'string',
@@ -297,14 +325,18 @@ export const videoGenerationTool: MCPTool = {
   supportedModes: ['async', 'queue'],
 
   promptGuidance: {
-    whenToUse: '当用户想要生成视频、动画或动态内容时使用。适用于：将图片变成视频、创建短视频、生成动态场景等。关键词：视频、动画、动起来、动态。',
+    whenToUse:
+      '当用户想要生成视频、动画或动态内容时使用。适用于：将图片变成视频、创建短视频、生成动态场景等。关键词：视频、动画、动起来、动态。',
 
     parameterGuidance: {
-      prompt: '将用户描述扩展为详细的英文视频提示词，包含：主体动作（walking, flying, spinning）、场景描述、镜头运动（camera pan, zoom in, tracking shot）、氛围（cinematic, dreamy）、时间节奏（slow motion, timelapse）。',
+      prompt:
+        '将用户描述扩展为详细的英文视频提示词，包含：主体动作（walking, flying, spinning）、场景描述、镜头运动（camera pan, zoom in, tracking shot）、氛围（cinematic, dreamy）、时间节奏（slow motion, timelapse）。',
       model: '默认使用 veo3，支持高质量视频生成。可选其他模型如需特定效果。',
-      seconds: '根据内容复杂度选择：简单动作用 5-8 秒，复杂场景用 8-10 秒。默认 8 秒。',
+      seconds:
+        '根据内容复杂度选择：简单动作用 5-8 秒，复杂场景用 8-10 秒。默认 8 秒。',
       size: '横屏视频用 1280x720 或 1920x1080，竖屏用 720x1280，正方形用 1024x1024。',
-      referenceImages: '当用户提供图片并想让它"动起来"时使用，传入图片 URL 实现图生视频。',
+      referenceImages:
+        '当用户提供图片并想让它"动起来"时使用，传入图片 URL 实现图生视频。',
       count: '用户明确要求批量生成时使用，如 "+3 生成视频" 则 count=3。',
     },
 
@@ -320,20 +352,41 @@ export const videoGenerationTool: MCPTool = {
     examples: [
       {
         input: '生成一个猫咪走路的视频',
-        args: { prompt: 'A fluffy orange cat walking gracefully across a sunny room, soft natural lighting, camera tracking shot following the cat, gentle movements, high quality, cinematic', seconds: '8', size: '1280x720' },
+        args: {
+          prompt:
+            'A fluffy orange cat walking gracefully across a sunny room, soft natural lighting, camera tracking shot following the cat, gentle movements, high quality, cinematic',
+          seconds: '8',
+          size: '1280x720',
+        },
       },
       {
         input: '让这张日落图片动起来',
-        args: { prompt: 'Beautiful sunset scene with moving clouds drifting slowly across the sky, sun rays shifting, gentle wind effect on trees, time-lapse style, warm golden hour lighting, peaceful atmosphere', referenceImages: ['[图片1]'], seconds: '8' },
-        explanation: '图生视频使用 referenceImages 传递原图，prompt 描述期望的动态效果',
+        args: {
+          prompt:
+            'Beautiful sunset scene with moving clouds drifting slowly across the sky, sun rays shifting, gentle wind effect on trees, time-lapse style, warm golden hour lighting, peaceful atmosphere',
+          referenceImages: ['[图片1]'],
+          seconds: '8',
+        },
+        explanation:
+          '图生视频使用 referenceImages 传递原图，prompt 描述期望的动态效果',
       },
       {
         input: '赛博朋克城市夜景动画',
-        args: { prompt: 'Cyberpunk city at night with flying cars moving through neon-lit streets, holographic advertisements flickering, rain falling, camera slowly panning across the skyline, atmospheric fog, cinematic sci-fi mood', seconds: '10', size: '1920x1080' },
+        args: {
+          prompt:
+            'Cyberpunk city at night with flying cars moving through neon-lit streets, holographic advertisements flickering, rain falling, camera slowly panning across the skyline, atmospheric fog, cinematic sci-fi mood',
+          seconds: '10',
+          size: '1920x1080',
+        },
       },
       {
         input: '生成一个产品旋转展示视频',
-        args: { prompt: 'Product showcase video, sleek modern headphones rotating 360 degrees on a white pedestal, smooth continuous rotation, professional studio lighting, minimal clean background, commercial quality', seconds: '8', size: '1280x720' },
+        args: {
+          prompt:
+            'Product showcase video, sleek modern headphones rotating 360 degrees on a white pedestal, smooth continuous rotation, professional studio lighting, minimal clean background, commercial quality',
+          seconds: '8',
+          size: '1280x720',
+        },
       },
     ],
 
@@ -344,8 +397,10 @@ export const videoGenerationTool: MCPTool = {
     ],
   },
 
-  execute: async (params: Record<string, unknown>, options?: MCPExecuteOptions): Promise<MCPResult> => {
-    console.log('[VideoGenerationTool] execute called with mode:', options?.mode);
+  execute: async (
+    params: Record<string, unknown>,
+    options?: MCPExecuteOptions
+  ): Promise<MCPResult> => {
     const rawParams = params as unknown as VideoGenerationParams;
     const mode = options?.mode || 'async';
 
@@ -353,9 +408,14 @@ export const videoGenerationTool: MCPTool = {
     let normalizedSize = rawParams.size;
     if (rawParams.size) {
       const model = (rawParams.model || 'veo3') as VideoModel;
-      const modelConfig = VIDEO_MODEL_CONFIGS[model] || VIDEO_MODEL_CONFIGS['veo3'];
-      const validSizes = modelConfig.sizeOptions.map(opt => opt.value);
-      normalizedSize = normalizeToClosestVideoSize(rawParams.size, validSizes, modelConfig.defaultSize);
+      const modelConfig =
+        VIDEO_MODEL_CONFIGS[model] || VIDEO_MODEL_CONFIGS['veo3'];
+      const validSizes = modelConfig.sizeOptions.map((opt) => opt.value);
+      normalizedSize = normalizeToClosestVideoSize(
+        rawParams.size,
+        validSizes,
+        modelConfig.defaultSize
+      );
     }
     const typedParams: VideoGenerationParams = {
       ...rawParams,
@@ -363,7 +423,11 @@ export const videoGenerationTool: MCPTool = {
     };
 
     if (mode === 'queue') {
-      return createQueueTask(typedParams, options || {}, getVideoQueueConfig(typedParams));
+      return createQueueTask(
+        typedParams,
+        options || {},
+        getVideoQueueConfig(typedParams)
+      );
     }
 
     return executeAsync(typedParams);
@@ -373,8 +437,13 @@ export const videoGenerationTool: MCPTool = {
 /**
  * 便捷方法：直接生成视频（async 模式）
  */
-export async function generateVideo(params: VideoGenerationParams): Promise<MCPResult> {
-  return videoGenerationTool.execute(params as unknown as Record<string, unknown>, { mode: 'async' });
+export async function generateVideo(
+  params: VideoGenerationParams
+): Promise<MCPResult> {
+  return videoGenerationTool.execute(
+    params as unknown as Record<string, unknown>,
+    { mode: 'async' }
+  );
 }
 
 /**
@@ -384,9 +453,12 @@ export async function createVideoTask(
   params: VideoGenerationParams,
   options?: Omit<MCPExecuteOptions, 'mode'>
 ): Promise<MCPTaskResult> {
-  const result = await videoGenerationTool.execute(params as unknown as Record<string, unknown>, {
-    ...options,
-    mode: 'queue',
-  });
+  const result = await videoGenerationTool.execute(
+    params as unknown as Record<string, unknown>,
+    {
+      ...options,
+      mode: 'queue',
+    }
+  );
   return result as MCPTaskResult;
 }

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +10,7 @@ import { LS_KEYS } from '../../constants/storage-keys';
 
 const mocks = vi.hoisted(() => ({
   generateText: vi.fn(),
+  buildOptimizationPrompt: vi.fn(),
   success: vi.fn(),
   warning: vi.fn(),
   error: vi.fn(),
@@ -19,7 +21,14 @@ const mocks = vi.hoisted(() => ({
     content: string;
     timestamp: number;
     pinned?: boolean;
-    modelType?: 'image' | 'video' | 'audio' | 'text' | 'agent';
+    modelType?:
+      | 'image'
+      | 'video'
+      | 'audio'
+      | 'text'
+      | 'agent'
+      | 'ppt-common'
+      | 'ppt-slide';
   }>,
   textModels: [{ id: 'text-model', name: 'Text Model' }],
 }));
@@ -46,6 +55,53 @@ vi.mock('../../services/media-executor', () => ({
     getFallbackExecutor: () => ({
       generateText: mocks.generateText,
     }),
+  },
+}));
+
+vi.mock('../../services/unified-cache-service', () => ({
+  unifiedCacheService: {},
+  CacheStatus: {},
+}));
+
+vi.mock('../../hooks/useCanvasAudioPlayback', () => ({
+  useCanvasAudioPlayback: () => ({}),
+  useCanvasAudioPlaybackControls: () => ({}),
+  useCanvasAudioPlaybackSelector: () => undefined,
+}));
+
+vi.mock('../../services/prompt-optimization-service', () => ({
+  buildOptimizationPrompt: mocks.buildOptimizationPrompt,
+  getPromptOptimizationScenario: (
+    scenarioId?: string,
+    type: 'image' | 'video' | 'audio' | 'text' | 'agent' = 'image'
+  ) => {
+    if (scenarioId === 'ppt.common') {
+      return {
+        id: scenarioId,
+        name: 'PPT 公共提示词',
+        type: 'image',
+        historyType: 'ppt-common',
+        defaultMode: 'polish',
+        noteTitle: 'PPT-公共提示词',
+        focus: '',
+      };
+    }
+
+    return {
+      id: scenarioId || `ai-input.${type}`,
+      name: scenarioId || type,
+      type,
+      historyType: type,
+      defaultMode:
+        type === 'image' || type === 'video' ? 'structured' : 'polish',
+      noteTitle: scenarioId || type,
+      focus: '',
+    };
+  },
+  normalizeOptimizedPromptResult: (value: string) => {
+    const trimmed = value.trim();
+    const codeFenceMatch = trimmed.match(/^```[\w-]*\n?([\s\S]*?)\n?```$/);
+    return codeFenceMatch ? codeFenceMatch[1].trim() : trimmed;
   },
 }));
 
@@ -101,6 +157,13 @@ vi.mock('../../utils/settings-manager', () => ({
   providerPricingCacheSettings: {
     get: () => [],
     set: vi.fn(),
+  },
+  ttsSettings: {
+    get: () => ({ rate: 1 }),
+    set: vi.fn(),
+    update: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
   },
 }));
 
@@ -176,6 +239,9 @@ const queryButton = (name: string | RegExp): HTMLButtonElement | null => {
   return button instanceof HTMLButtonElement ? button : null;
 };
 
+const getOptimizeButton = (): HTMLButtonElement =>
+  getButton(/^(开始优化|生成结构化提示词)$/);
+
 const changeTextarea = (element: HTMLTextAreaElement, value: string) => {
   const valueSetter = Object.getOwnPropertyDescriptor(
     HTMLTextAreaElement.prototype,
@@ -215,6 +281,17 @@ const renderDialog = (
 describe('PromptOptimizeDialog', () => {
   beforeEach(() => {
     mocks.generateText.mockReset();
+    mocks.buildOptimizationPrompt.mockReset();
+    mocks.buildOptimizationPrompt.mockImplementation(
+      async ({ originalPrompt, optimizationRequirements }) =>
+        [
+          'mock optimization request',
+          '【原始提示词】',
+          originalPrompt,
+          '【优化要求】',
+          optimizationRequirements || '无',
+        ].join('\n')
+    );
     mocks.success.mockReset();
     mocks.warning.mockReset();
     mocks.error.mockReset();
@@ -238,7 +315,7 @@ describe('PromptOptimizeDialog', () => {
     renderDialog({ originalPrompt: '' });
 
     expect(getByLabelText('当前提示词').value).toBe('');
-    expect(getButton('开始优化').disabled).toBe(true);
+    expect(getOptimizeButton().disabled).toBe(true);
     expect(queryButton('回填')).toBeNull();
     expect(mocks.generateText).not.toHaveBeenCalled();
   });
@@ -250,7 +327,7 @@ describe('PromptOptimizeDialog', () => {
     await act(async () => {
       changeTextarea(getByLabelText('当前提示词'), '手动改写后的提示词');
       changeTextarea(getByLabelText('补充要求'), '补充电影感');
-      getButton('开始优化').click();
+      getOptimizeButton().click();
       await flushPromises();
     });
 
@@ -301,7 +378,7 @@ describe('PromptOptimizeDialog', () => {
     await act(async () => {
       changeTextarea(getByLabelText('当前提示词'), '手动改写后的提示词');
       changeTextarea(getByLabelText('补充要求'), '补充电影感');
-      getButton('开始优化').click();
+      getOptimizeButton().click();
       await flushPromises();
     });
 
@@ -324,7 +401,7 @@ describe('PromptOptimizeDialog', () => {
 
     await act(async () => {
       changeTextarea(getByLabelText('补充要求'), '继续压缩冗余');
-      getButton('开始优化').click();
+      getOptimizeButton().click();
       await flushPromises();
     });
 
@@ -370,7 +447,7 @@ describe('PromptOptimizeDialog', () => {
     });
 
     await act(async () => {
-      getButton('开始优化').click();
+      getOptimizeButton().click();
       await flushPromises();
     });
 
@@ -381,6 +458,36 @@ describe('PromptOptimizeDialog', () => {
         modelId: 'alternate-text-model',
       },
     });
+  });
+
+  it('uses scenario defaults for prompt history and request building', async () => {
+    mocks.generateText.mockResolvedValueOnce({ content: '优化结果' });
+    renderDialog({
+      scenarioId: 'ppt.common',
+      type: undefined,
+      historyType: undefined,
+      allowStructuredMode: true,
+      originalPrompt: '统一视觉方向',
+    });
+
+    await act(async () => {
+      getOptimizeButton().click();
+      await flushPromises();
+    });
+
+    await waitFor(() => expect(mocks.generateText).toHaveBeenCalledTimes(1));
+    expect(mocks.addPromptHistory).toHaveBeenCalledWith(
+      '统一视觉方向',
+      false,
+      'ppt-common'
+    );
+    expect(mocks.buildOptimizationPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scenarioId: 'ppt.common',
+        type: 'image',
+        mode: 'polish',
+      })
+    );
   });
 
   it('uses the previously stored optimizer text model on open', async () => {
@@ -399,7 +506,7 @@ describe('PromptOptimizeDialog', () => {
     renderDialog();
 
     await act(async () => {
-      getButton('开始优化').click();
+      getOptimizeButton().click();
       await flushPromises();
     });
 

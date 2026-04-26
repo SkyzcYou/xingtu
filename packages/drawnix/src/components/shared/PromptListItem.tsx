@@ -20,15 +20,38 @@ export interface PromptPreviewRequest {
   initialIndex: number;
 }
 
+export type PromptListResultPreview =
+  | { kind: 'image'; url: string; title?: string }
+  | { kind: 'video'; url: string; posterUrl?: string; title?: string; duration?: number }
+  | { kind: 'audio'; url?: string; coverUrl?: string; title?: string; text?: string; duration?: number }
+  | { kind: 'text'; text: string; title?: string }
+  | { kind: 'error'; text: string }
+  | { kind: 'none'; text: string };
+
 export interface PromptListItemProps {
   /** 提示词内容 */
   content: string;
+  /** 列表展示标题，不影响 content 回填 */
+  title?: string;
+  /** 实际发送给生成工具的提示词 */
+  sentPrompt?: string;
+  /** 轻量标签 */
+  tags?: string[];
+  /** 生成结果预览 */
+  resultPreview?: PromptListResultPreview;
   /** 是否已置顶 */
   pinned?: boolean;
   /** 是否是预设提示词 */
   isPreset?: boolean;
-  /** 生成类型：image/video/audio/text/agent/ppt-common */
-  modelType?: 'image' | 'video' | 'audio' | 'text' | 'agent' | 'ppt-common';
+  /** 生成类型：image/video/audio/text/agent/ppt-common/ppt-slide */
+  modelType?:
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'text'
+    | 'agent'
+    | 'ppt-common'
+    | 'ppt-slide';
   /** 场景描述（用于显示标签） */
   scene?: string;
   /** 悬浮预览示例图 */
@@ -55,10 +78,15 @@ const MODEL_TYPE_STYLES: Record<string, string> = {
   text: 'prompt-list-item__tag--text',
   agent: 'prompt-list-item__tag--agent',
   'ppt-common': 'prompt-list-item__tag--ppt-common',
+  'ppt-slide': 'prompt-list-item__tag--ppt-slide',
 };
 
 export const PromptListItem: React.FC<PromptListItemProps> = ({
   content,
+  title,
+  sentPrompt,
+  tags,
+  resultPreview,
   pinned = false,
   isPreset = false,
   modelType,
@@ -83,6 +111,11 @@ export const PromptListItem: React.FC<PromptListItemProps> = ({
 
   const visiblePreviewExamples = previewExamples?.slice(0, 3) ?? [];
   const hasPreviewExamples = visiblePreviewExamples.length > 0;
+  const displayTitle = title?.trim() || content;
+  const visibleTags = (tags || []).filter(Boolean).slice(0, 4);
+  const hasHistoryDetails =
+    Boolean(sentPrompt || resultPreview || visibleTags.length > 0) &&
+    !hasPreviewExamples;
   const isSinglePreview = visiblePreviewExamples.length === 1;
   const canPreviewExamples = Boolean(onPreviewExample && !disabled);
 
@@ -157,7 +190,7 @@ export const PromptListItem: React.FC<PromptListItemProps> = ({
       )}
 
       {/* 提示词内容 */}
-      <span className="prompt-list-item__text">{content}</span>
+      <span className="prompt-list-item__text">{displayTitle}</span>
 
       {/* 操作按钮 */}
       <div className="prompt-list-item__actions">
@@ -258,6 +291,86 @@ export const PromptListItem: React.FC<PromptListItemProps> = ({
     </div>
   ) : null;
 
+  const resultPreviewContent = resultPreview ? (
+    <div className="prompt-list-item__result-preview">
+      {(resultPreview.kind === 'image' || resultPreview.kind === 'video') && (
+        <div className="prompt-list-item__result-media">
+          <img
+            src={
+              resultPreview.kind === 'video'
+                ? resultPreview.posterUrl || resultPreview.url
+                : resultPreview.url
+            }
+            alt={resultPreview.title || displayTitle}
+            loading="lazy"
+          />
+        </div>
+      )}
+      {resultPreview.kind === 'audio' && (
+        <div className="prompt-list-item__result-audio">
+          {resultPreview.coverUrl && (
+            <img
+              src={resultPreview.coverUrl}
+              alt={resultPreview.title || displayTitle}
+              loading="lazy"
+            />
+          )}
+          <div>
+            <div className="prompt-list-item__result-title">
+              {resultPreview.title || '音频结果'}
+            </div>
+            {resultPreview.text && (
+              <div className="prompt-list-item__result-text">
+                {resultPreview.text}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {(resultPreview.kind === 'text' ||
+        resultPreview.kind === 'error' ||
+        resultPreview.kind === 'none') && (
+        <div
+          className={`prompt-list-item__result-text ${
+            resultPreview.kind === 'error'
+              ? 'prompt-list-item__result-text--error'
+              : ''
+          }`}
+        >
+          {resultPreview.kind === 'text' && resultPreview.title && (
+            <strong>{resultPreview.title}</strong>
+          )}
+          {resultPreview.text}
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  const historyContent = hasHistoryDetails ? (
+    <div className="prompt-list-item__history-card">
+      <div className="prompt-list-item__history-title">{displayTitle}</div>
+      {sentPrompt && (
+        <div className="prompt-list-item__history-section">
+          <div className="prompt-list-item__history-label">发送提示词</div>
+          <div className="prompt-list-item__history-text">{sentPrompt}</div>
+        </div>
+      )}
+      {visibleTags.length > 0 && (
+        <div className="prompt-list-item__history-tags">
+          {visibleTags.map((tag) => (
+            <span key={tag}>{tag}</span>
+          ))}
+        </div>
+      )}
+      {resultPreviewContent && (
+        <div className="prompt-list-item__history-section">
+          <div className="prompt-list-item__history-label">结果预览</div>
+          {resultPreviewContent}
+        </div>
+      )}
+    </div>
+  ) : null;
+
   if (previewContent) {
     return (
       <HoverTip
@@ -271,9 +384,22 @@ export const PromptListItem: React.FC<PromptListItemProps> = ({
     );
   }
 
+  if (historyContent) {
+    return (
+      <HoverTip
+        content={historyContent}
+        placement="right"
+        delay={60}
+        overlayClassName="prompt-list-item__history-card-popover"
+      >
+        {container}
+      </HoverTip>
+    );
+  }
+
   return (
     <HoverTip
-      content={content}
+      content={displayTitle === content ? content : `${displayTitle}\n\n${content}`}
       placement="right-top"
       delay={80}
       overlayClassName="prompt-list-item__text-tip-popover"

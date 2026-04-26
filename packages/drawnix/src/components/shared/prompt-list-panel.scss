@@ -35,6 +35,19 @@
     color: var(--td-text-color-primary, #333);
   }
 
+  &__title-button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    line-height: inherit;
+
+    &:hover {
+      color: var(--td-brand-color, #ff7a00);
+    }
+  }
+
   &__count {
     font-size: 12px;
     font-weight: normal;

@@ -20,10 +20,18 @@ vi.mock('./hover', () => ({
     overlayInnerClassName?: string;
   }) => {
     mockHoverTip({ content, placement, overlayClassName, overlayInnerClassName });
+    const isRenderablePrimitive =
+      typeof content === 'string' || typeof content === 'number';
+
     return (
       <div data-testid="hover-tip">
-        {children}
-        <div data-testid="hover-tip-content">{content}</div>
+        <div data-testid="hover-tip-trigger">{children}</div>
+        <div data-testid="hover-tip-content">
+          {isRenderablePrimitive ? content : null}
+        </div>
+        {React.isValidElement(content) && (
+          <div data-testid="hover-tip-rich">{content}</div>
+        )}
       </div>
     );
   },
@@ -212,5 +220,40 @@ describe('PromptListItem', () => {
         overlayInnerClassName: 'prompt-list-item__text-tip',
       })
     );
+  });
+
+  it('提示词历史项显示标题并在 hover 中展示发送提示词、标签和结果预览', async () => {
+    const { PromptListItem } = await import('./PromptListItem');
+    const onClick = vi.fn();
+
+    render(
+      <PromptListItem
+        content="发送给模型的完整提示词"
+        title="初始提示词标题"
+        sentPrompt="发送给模型的完整提示词"
+        tags={['agent', '封面 Skill']}
+        resultPreview={{
+          kind: 'image',
+          url: '/generated/result.png',
+          title: '结果图',
+        }}
+        onClick={onClick}
+      />
+    );
+
+    expect(screen.getAllByText('初始提示词标题').length).toBeGreaterThan(0);
+    expect(screen.getByText('发送提示词')).toBeTruthy();
+    expect(screen.getByText('发送给模型的完整提示词')).toBeTruthy();
+    expect(screen.getByText('封面 Skill')).toBeTruthy();
+    expect(screen.getByAltText('结果图')).toBeTruthy();
+    expect(mockHoverTip).toHaveBeenCalledWith(
+      expect.objectContaining({
+        placement: 'right',
+        overlayClassName: 'prompt-list-item__history-card-popover',
+      })
+    );
+
+    fireEvent.click(screen.getAllByText('初始提示词标题')[0]);
+    expect(onClick).toHaveBeenCalled();
   });
 });

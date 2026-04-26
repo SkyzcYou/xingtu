@@ -37,7 +37,10 @@ export function normalizeApiBase(url: string): string {
   return base;
 }
 
-function inferProviderType(baseUrl: string, explicitProviderType?: string): string {
+function inferProviderType(
+  baseUrl: string,
+  explicitProviderType?: string
+): string {
   if (explicitProviderType) {
     return explicitProviderType;
   }
@@ -60,7 +63,10 @@ function inferProviderType(baseUrl: string, explicitProviderType?: string): stri
   return 'custom';
 }
 
-function inferAuthType(config: ApiConfig, providerType: string): ResolvedProviderContext['authType'] {
+function inferAuthType(
+  config: ApiConfig,
+  providerType: string
+): ResolvedProviderContext['authType'] {
   if (
     config.authType === 'bearer' ||
     config.authType === 'header' ||
@@ -209,7 +215,9 @@ export function extractPromptFromMessages(
  * @param sizeStr 尺寸字符串，格式为 'WIDTHxHEIGHT'，如 '1280x720'
  * @returns 解析后的宽高对象，如果格式无效返回 null
  */
-export function parseSize(sizeStr: string): { width: number; height: number } | null {
+export function parseSize(
+  sizeStr: string
+): { width: number; height: number } | null {
   if (!sizeStr) return null;
   const match = sizeStr.match(/^(\d+)x(\d+)$/);
   if (!match) return null;
@@ -265,7 +273,23 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 /**
  * 图片生成支持的宽高比列表（NxM 格式）
  */
-const VALID_IMAGE_SIZES = ['auto', '1x1', '1x4', '4x1', '1x8', '8x1', '16x9', '9x16', '3x2', '2x3', '4x3', '3x4', '5x4', '4x5', '21x9'];
+const VALID_IMAGE_SIZES = [
+  'auto',
+  '1x1',
+  '1x4',
+  '4x1',
+  '1x8',
+  '8x1',
+  '16x9',
+  '9x16',
+  '3x2',
+  '2x3',
+  '4x3',
+  '3x4',
+  '5x4',
+  '4x5',
+  '21x9',
+];
 
 /**
  * 将宽高比字符串解析为数值比例
@@ -310,7 +334,10 @@ function sizeTokenToRatio(sizeToken: string): number | null {
  * @param defaultSize 默认尺寸，当无法匹配时返回
  * @returns 最接近的可用图片 size
  */
-export function normalizeToClosestImageSize(size?: string, defaultSize: string = 'auto'): string {
+export function normalizeToClosestImageSize(
+  size?: string,
+  defaultSize: string = 'auto'
+): string {
   if (!size) return defaultSize;
 
   const trimmed = size.trim();
@@ -340,10 +367,6 @@ export function normalizeToClosestImageSize(size?: string, defaultSize: string =
       bestDiff = diff;
       bestMatch = candidate;
     }
-  }
-
-  if (bestMatch !== defaultSize) {
-    console.log(`[normalizeToClosestImageSize] "${trimmed}" → "${bestMatch}" (ratio: ${targetRatio.toFixed(3)} → ${sizeTokenToRatio(bestMatch)?.toFixed(3)})`);
   }
 
   return bestMatch;
@@ -392,10 +415,6 @@ export function normalizeToClosestVideoSize(
       bestDiff = diff;
       bestMatch = candidate;
     }
-  }
-
-  if (bestMatch !== defaultSize || bestDiff < Infinity) {
-    console.log(`[normalizeToClosestVideoSize] "${trimmed}" → "${bestMatch}" (ratio: ${targetRatio.toFixed(3)})`);
   }
 
   return bestMatch;

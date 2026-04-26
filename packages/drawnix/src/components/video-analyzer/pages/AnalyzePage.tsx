@@ -2,7 +2,13 @@
  * 分析页 - 视频输入 + AI 分析 + 结果摘要
  */
 
-import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+  useEffect,
+} from 'react';
 import type { AnalysisRecord, VideoAnalysisData, VideoShot } from '../types';
 import { formatShotsMarkdown } from '../types';
 import { videoAnalyzeTool } from '../../../mcp/tools/video-analyze';
@@ -19,12 +25,15 @@ import {
   TUZI_MIX_PROVIDER_PROFILE_ID,
   type ModelRef,
 } from '../../../utils/settings-manager';
+import { readStoredModelSelection, writeStoredModelSelection } from '../utils';
 import {
-  readStoredModelSelection,
-  writeStoredModelSelection,
-} from '../utils';
-import { extractFramesFromVideo, cacheFrameBlob } from '../../../utils/video-frame-cache';
-import { cacheVideoSource, restoreVideoFileFromSnapshot } from '../video-source-cache';
+  extractFramesFromVideo,
+  cacheFrameBlob,
+} from '../../../utils/video-frame-cache';
+import {
+  cacheVideoSource,
+  restoreVideoFileFromSnapshot,
+} from '../video-source-cache';
 import { taskQueueService } from '../../../services/task-queue';
 import { syncVideoAnalyzerTask } from '../task-sync';
 import { analytics } from '../../../utils/posthog-analytics';
@@ -59,18 +68,29 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [selectedModel, setSelectedModelState] = useState(
-    () => existingRecord?.model || readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL).modelId
+    () =>
+      existingRecord?.model ||
+      readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL)
+        .modelId
   );
   const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
-    () => existingRecord?.modelRef || readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL).modelRef
+    () =>
+      existingRecord?.modelRef ||
+      readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL)
+        .modelRef
   );
-  const setSelectedModel = useCallback((model: string, modelRef?: ModelRef | null) => {
-    setSelectedModelState(model);
-    setSelectedModelRef(modelRef || null);
-    writeStoredModelSelection(STORAGE_KEY_MODEL, model, modelRef);
-  }, []);
+  const setSelectedModel = useCallback(
+    (model: string, modelRef?: ModelRef | null) => {
+      setSelectedModelState(model);
+      setSelectedModelRef(modelRef || null);
+      writeStoredModelSelection(STORAGE_KEY_MODEL, model, modelRef);
+    },
+    []
+  );
   const [analyzing, setAnalyzing] = useState(false);
-  const [pendingAnalyzeTaskId, setPendingAnalyzeTaskId] = useState<string | null>(null);
+  const [pendingAnalyzeTaskId, setPendingAnalyzeTaskId] = useState<
+    string | null
+  >(null);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
   const [analysis, setAnalysis] = useState<VideoAnalysisData | null>(
@@ -83,16 +103,22 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   // 视频预览 URL
   const videoPreviewUrl = useMemo(() => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-    if (!videoFile) { previewUrlRef.current = null; return null; }
+    if (!videoFile) {
+      previewUrlRef.current = null;
+      return null;
+    }
     const url = URL.createObjectURL(videoFile);
     previewUrlRef.current = url;
     return url;
   }, [videoFile]);
 
   // 组件卸载时清理 URL
-  useEffect(() => () => {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    },
+    []
+  );
 
   useEffect(() => {
     let disposed = false;
@@ -155,12 +181,12 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   }, [existingRecord]);
   const allTextModels = useSelectableModels('text');
   const videoAnalysisModels = useMemo(
-    () => allTextModels.filter(m => /^gemini/i.test(m.id)),
+    () => allTextModels.filter((m) => /^gemini/i.test(m.id)),
     [allTextModels]
   );
   const isGeminiMixConfigured = useMemo(() => {
     const mixProfile = providerProfiles.find(
-      profile => profile.id === TUZI_MIX_PROVIDER_PROFILE_ID
+      (profile) => profile.id === TUZI_MIX_PROVIDER_PROFILE_ID
     );
     return Boolean(mixProfile?.apiKey.trim());
   }, [providerProfiles]);
@@ -182,18 +208,29 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
     window.dispatchEvent(
       new CustomEvent(SETTINGS_PROVIDER_NAV_EVENT, { detail: intent })
     );
-    setAppState(prev => ({ ...prev, openSettings: true }));
+    setAppState((prev) => ({ ...prev, openSettings: true }));
   }, [setAppState]);
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) { setVideoFile(file); setError(''); setAnalysis(null); }
-  }, []);
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        setVideoFile(file);
+        setError('');
+        setAnalysis(null);
+      }
+    },
+    []
+  );
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
-    if (file?.type.startsWith('video/')) { setVideoFile(file); setError(''); setAnalysis(null); }
+    if (file?.type.startsWith('video/')) {
+      setVideoFile(file);
+      setError('');
+      setAnalysis(null);
+    }
   }, []);
 
   const handleClearFile = useCallback((e: React.MouseEvent) => {
@@ -207,41 +244,40 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   const [frameProgress, setFrameProgress] = useState('');
 
   /** 从本地视频提取帧图片并缓存 */
-  const extractAndCacheFrames = useCallback(async (
-    file: File,
-    shots: VideoShot[],
-  ): Promise<VideoShot[]> => {
-    setExtractingFrames(true);
-    setFrameProgress('提取帧图片...');
-    try {
-      const timestamps = shots.map(s => s.startTime);
-      const blobs = await extractFramesFromVideo(
-        file,
-        timestamps,
-        (cur, total) => setFrameProgress(`提取帧图片 ${cur}/${total}`)
-      );
+  const extractAndCacheFrames = useCallback(
+    async (file: File, shots: VideoShot[]): Promise<VideoShot[]> => {
+      setExtractingFrames(true);
+      setFrameProgress('提取帧图片...');
+      try {
+        const timestamps = shots.map((s) => s.startTime);
+        const blobs = await extractFramesFromVideo(
+          file,
+          timestamps,
+          (cur, total) => setFrameProgress(`提取帧图片 ${cur}/${total}`)
+        );
 
-      // 缓存每个帧并更新 shot
-      return await Promise.all(
-        shots.map(async (shot, i) => {
-          const blob = blobs[i];
-          if (!blob) return shot;
-          try {
-            const url = await cacheFrameBlob(blob, shot.id, 'first');
-            return { ...shot, generated_first_frame_url: url };
-          } catch {
-            return shot;
-          }
-        })
-      );
-    } catch (err) {
-      console.debug('Frame extraction failed:', err);
-      return shots;
-    } finally {
-      setExtractingFrames(false);
-      setFrameProgress('');
-    }
-  }, []);
+        // 缓存每个帧并更新 shot
+        return await Promise.all(
+          shots.map(async (shot, i) => {
+            const blob = blobs[i];
+            if (!blob) return shot;
+            try {
+              const url = await cacheFrameBlob(blob, shot.id, 'first');
+              return { ...shot, generated_first_frame_url: url };
+            } catch {
+              return shot;
+            }
+          })
+        );
+      } catch (err) {
+        return shots;
+      } finally {
+        setExtractingFrames(false);
+        setFrameProgress('');
+      }
+    },
+    []
+  );
 
   const handleAnalyze = useCallback(async () => {
     setAnalyzing(true);
@@ -253,8 +289,13 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
         setProgress('缓存视频文件...');
         const sourceSnapshot = await cacheVideoSource(videoFile);
         params = {
-          videoCacheUrl: sourceSnapshot.type === 'upload' ? sourceSnapshot.cacheUrl : undefined,
-          ...(sourceSnapshot.type === 'upload' ? { mimeType: sourceSnapshot.mimeType } : {}),
+          videoCacheUrl:
+            sourceSnapshot.type === 'upload'
+              ? sourceSnapshot.cacheUrl
+              : undefined,
+          ...(sourceSnapshot.type === 'upload'
+            ? { mimeType: sourceSnapshot.mimeType }
+            : {}),
           model: selectedModel,
           modelRef: selectedModelRef,
           taskLabel: `分析视频：${videoFile.name || '本地视频'}`,
@@ -316,62 +357,75 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       return;
     }
 
-    const subscription = taskQueueService.observeTaskUpdates().subscribe(event => {
-      if (event.task.id !== pendingAnalyzeTaskId) {
-        return;
-      }
+    const subscription = taskQueueService
+      .observeTaskUpdates()
+      .subscribe((event) => {
+        if (event.task.id !== pendingAnalyzeTaskId) {
+          return;
+        }
 
-      if (event.task.status === 'failed') {
-        setPendingAnalyzeTaskId(null);
-        setProgress('');
-        setError(event.task.error?.message || '分析失败');
-        return;
-      }
-
-      if (event.task.status === 'completed') {
-        void syncVideoAnalyzerTask(event.task).then(async synced => {
-          if (!synced) {
-            return;
-          }
-
-          onRecordsChange(synced.records);
-          onComplete(synced.record);
-          setAnalysis(synced.record.analysis);
-
-          if (
-            synced.record.source === 'upload' &&
-            videoFile &&
-            synced.record.analysis.shots.length > 0
-          ) {
-            const updatedShots = await extractAndCacheFrames(
-              videoFile,
-              synced.record.analysis.shots
-            );
-            setAnalysis(prev => (prev ? { ...prev, shots: updatedShots } : prev));
-            const refreshed = await updateRecord(synced.record.id, {
-              editedShots: updatedShots,
-            });
-            onRecordsChange(refreshed);
-            onComplete({ ...synced.record, editedShots: updatedShots });
-          }
-        }).catch((err: any) => {
-          setError(err.message || '分析结果同步失败');
-        }).finally(() => {
+        if (event.task.status === 'failed') {
           setPendingAnalyzeTaskId(null);
           setProgress('');
-        });
-        return;
-      }
+          setError(event.task.error?.message || '分析失败');
+          return;
+        }
 
-      if (typeof event.task.progress === 'number') {
-        setProgress(`分析中 ${Math.round(event.task.progress)}%`);
-      } else {
-        setProgress('分析中，请耐心等待...');
-      }
-    });
+        if (event.task.status === 'completed') {
+          void syncVideoAnalyzerTask(event.task)
+            .then(async (synced) => {
+              if (!synced) {
+                return;
+              }
+
+              onRecordsChange(synced.records);
+              onComplete(synced.record);
+              setAnalysis(synced.record.analysis);
+
+              if (
+                synced.record.source === 'upload' &&
+                videoFile &&
+                synced.record.analysis.shots.length > 0
+              ) {
+                const updatedShots = await extractAndCacheFrames(
+                  videoFile,
+                  synced.record.analysis.shots
+                );
+                setAnalysis((prev) =>
+                  prev ? { ...prev, shots: updatedShots } : prev
+                );
+                const refreshed = await updateRecord(synced.record.id, {
+                  editedShots: updatedShots,
+                });
+                onRecordsChange(refreshed);
+                onComplete({ ...synced.record, editedShots: updatedShots });
+              }
+            })
+            .catch((err: any) => {
+              setError(err.message || '分析结果同步失败');
+            })
+            .finally(() => {
+              setPendingAnalyzeTaskId(null);
+              setProgress('');
+            });
+          return;
+        }
+
+        if (typeof event.task.progress === 'number') {
+          setProgress(`分析中 ${Math.round(event.task.progress)}%`);
+        } else {
+          setProgress('分析中，请耐心等待...');
+        }
+      });
 
     return () => subscription.unsubscribe();
-  }, [pendingAnalyzeTaskId, onComplete, onRecordsChange, videoFile, extractAndCacheFrames]);
+  }, [
+    pendingAnalyzeTaskId,
+    onComplete,
+    onRecordsChange,
+    videoFile,
+    extractAndCacheFrames,
+  ]);
 
   const handleInsertAnalysis = useCallback(async () => {
     if (!analysis) return;
@@ -395,40 +449,87 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       {!analysis && (
         <>
           <div className="va-tabs">
-            <button className={`va-tab ${inputMode === 'upload' ? 'active' : ''}`} onClick={() => setInputMode('upload')}>上传视频</button>
-            <button className={`va-tab ${inputMode === 'youtube' ? 'active' : ''}`} onClick={() => setInputMode('youtube')}>YouTube URL</button>
+            <button
+              className={`va-tab ${inputMode === 'upload' ? 'active' : ''}`}
+              onClick={() => setInputMode('upload')}
+            >
+              上传视频
+            </button>
+            <button
+              className={`va-tab ${inputMode === 'youtube' ? 'active' : ''}`}
+              onClick={() => setInputMode('youtube')}
+            >
+              YouTube URL
+            </button>
           </div>
           {inputMode === 'upload' ? (
             videoFile ? (
               <div className="va-video-preview">
                 {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                 <video src={videoPreviewUrl!} controls muted playsInline />
-                <button className="va-video-preview-close" onClick={handleClearFile}>✕</button>
+                <button
+                  className="va-video-preview-close"
+                  onClick={handleClearFile}
+                >
+                  ✕
+                </button>
                 <div className="va-video-preview-info">
-                  <span className="va-video-preview-name">{videoFile.name}</span>
-                  <span className="va-video-preview-size">{formatSize(videoFile.size)}</span>
+                  <span className="va-video-preview-name">
+                    {videoFile.name}
+                  </span>
+                  <span className="va-video-preview-size">
+                    {formatSize(videoFile.size)}
+                  </span>
                 </div>
-                <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileSelect} style={{ display: 'none' }} />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFileSelect}
+                  style={{ display: 'none' }}
+                />
               </div>
             ) : (
-              <div className="va-dropzone" onDrop={handleDrop} onDragOver={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}>
-                <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileSelect} style={{ display: 'none' }} />
+              <div
+                className="va-dropzone"
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFileSelect}
+                  style={{ display: 'none' }}
+                />
                 <span className="va-placeholder">
                   拖拽视频到此处 或 点击上传
                   <br />
-                  <span className="va-placeholder-hint">建议视频在6M以内，可用推特或Youtube下载器下载最低分辨率视频</span>
+                  <span className="va-placeholder-hint">
+                    建议视频在6M以内，可用推特或Youtube下载器下载最低分辨率视频
+                  </span>
                 </span>
               </div>
             )
           ) : (
-            <input className="va-url-input" type="text" placeholder="https://www.youtube.com/watch?v=..." value={youtubeUrl} onChange={e => setYoutubeUrl(e.target.value)} />
+            <input
+              className="va-url-input"
+              type="text"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+            />
           )}
           <div className="va-model-select">
             <label className="va-model-label">分析模型</label>
             <ModelDropdown
               variant="form"
               selectedModel={selectedModel}
-              selectedSelectionKey={getSelectionKey(selectedModel, selectedModelRef)}
+              selectedSelectionKey={getSelectionKey(
+                selectedModel,
+                selectedModelRef
+              )}
               onSelect={setSelectedModel}
               models={videoAnalysisModels}
               placement="down"
@@ -453,9 +554,15 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
           <button
             className="va-analyze-btn"
             onClick={handleAnalyze}
-            disabled={analyzing || !!pendingAnalyzeTaskId || (inputMode === 'upload' ? !videoFile : !youtubeUrl)}
+            disabled={
+              analyzing ||
+              !!pendingAnalyzeTaskId ||
+              (inputMode === 'upload' ? !videoFile : !youtubeUrl)
+            }
           >
-            {analyzing || pendingAnalyzeTaskId ? progress || '分析中...' : '开始分析'}
+            {analyzing || pendingAnalyzeTaskId
+              ? progress || '分析中...'
+              : '开始分析'}
           </button>
           {error && <div className="va-error">{error}</div>}
         </>
@@ -465,19 +572,40 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       {analysis && (
         <div className="va-results">
           <div className="va-stats">
-            <div className="va-stat"><span className="va-stat-value">{analysis.totalDuration}s</span><span className="va-stat-label">总时长</span></div>
-            <div className="va-stat"><span className="va-stat-value">{analysis.shotCount}</span><span className="va-stat-label">镜头数</span></div>
-            <div className="va-stat"><span className="va-stat-value">{analysis.productExposureRatio}%</span><span className="va-stat-label">产品占比</span></div>
-            <div className="va-stat"><span className="va-stat-value">{analysis.aspect_ratio || '-'}</span><span className="va-stat-label">画面比例</span></div>
+            <div className="va-stat">
+              <span className="va-stat-value">{analysis.totalDuration}s</span>
+              <span className="va-stat-label">总时长</span>
+            </div>
+            <div className="va-stat">
+              <span className="va-stat-value">{analysis.shotCount}</span>
+              <span className="va-stat-label">镜头数</span>
+            </div>
+            <div className="va-stat">
+              <span className="va-stat-value">
+                {analysis.productExposureRatio}%
+              </span>
+              <span className="va-stat-label">产品占比</span>
+            </div>
+            <div className="va-stat">
+              <span className="va-stat-value">
+                {analysis.aspect_ratio || '-'}
+              </span>
+              <span className="va-stat-label">画面比例</span>
+            </div>
           </div>
           {(analysis.video_style || analysis.bgm_mood) && (
             <div className="va-style-info">
-              {analysis.video_style && <span>风格: {analysis.video_style}</span>}
+              {analysis.video_style && (
+                <span>风格: {analysis.video_style}</span>
+              )}
               {analysis.bgm_mood && <span>BGM: {analysis.bgm_mood}</span>}
             </div>
           )}
           <div className="va-suggestion">{analysis.suggestion}</div>
-          <ShotTimeline shots={analysis.shots} totalDuration={analysis.totalDuration} />
+          <ShotTimeline
+            shots={analysis.shots}
+            totalDuration={analysis.totalDuration}
+          />
 
           {/* 镜头列表（只读） */}
           <div className="va-shots">
@@ -487,11 +615,23 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
           </div>
 
           <div className="va-page-actions">
-            {extractingFrames && <span className="va-frame-progress">{frameProgress}</span>}
+            {extractingFrames && (
+              <span className="va-frame-progress">{frameProgress}</span>
+            )}
             <button onClick={handleInsertAnalysis}>插入画布</button>
-            <button onClick={() => { setAnalysis(null); }}>重新分析</button>
+            <button
+              onClick={() => {
+                setAnalysis(null);
+              }}
+            >
+              重新分析
+            </button>
             {onCreateNew && <button onClick={onCreateNew}>新建分析</button>}
-            {onNext && <button className="va-btn-primary" onClick={onNext}>下一步: 编辑脚本 →</button>}
+            {onNext && (
+              <button className="va-btn-primary" onClick={onNext}>
+                下一步: 编辑脚本 →
+              </button>
+            )}
           </div>
         </div>
       )}

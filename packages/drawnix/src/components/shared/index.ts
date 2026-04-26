@@ -1,5 +1,13 @@
 export { PromptListItem, type PromptListItemProps } from './PromptListItem';
 export {
+  PromptOptimizeButton,
+  type PromptOptimizeButtonProps,
+} from './PromptOptimizeButton';
+export {
+  PromptOptimizeDialog,
+  type PromptOptimizeDialogProps,
+} from './PromptOptimizeDialog';
+export {
   PromptListPanel,
   type PromptListPanelProps,
   type PromptItem,

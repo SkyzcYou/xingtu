@@ -221,7 +221,8 @@ export type PromptGenerationType =
   | 'audio'
   | 'text'
   | 'agent'
-  | 'ppt-common';
+  | 'ppt-common'
+  | 'ppt-slide';
 export type PromptPreviewExample =
   | {
       kind: 'image';

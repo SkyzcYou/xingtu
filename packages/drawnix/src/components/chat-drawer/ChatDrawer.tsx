@@ -1,7 +1,7 @@
 /**
  * ChatDrawer Component
  *
- * Main chat drawer component using @llamaindex/chat-ui.
+ * Main chat drawer component using local lightweight chat UI types.
  */
 
 import React, {
@@ -15,7 +15,6 @@ import React, {
   Suspense,
 } from 'react';
 import { CloseIcon, AddIcon, ViewListIcon } from 'tdesign-icons-react';
-import { type ChatHandler } from '@llamaindex/chat-ui';
 import { ATTACHED_ELEMENT_CLASS_NAME } from '@plait/core';
 import { SessionList } from './SessionList';
 import { ChatDrawerTrigger } from './ChatDrawerTrigger';
@@ -41,7 +40,7 @@ import type {
   ChatMessage as ChatMessageType,
 } from '../../types/chat.types';
 import { MessageRole, MessageStatus } from '../../types/chat.types';
-import type { Message } from '@llamaindex/chat-ui';
+import type { Message } from '../../types/chat-ui.types';
 import { useTextSelection } from '../../hooks/useTextSelection';
 
 import { analytics } from '../../utils/posthog-analytics';

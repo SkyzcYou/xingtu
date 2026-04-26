@@ -10,7 +10,7 @@ import React, { useRef, useState, useCallback, useEffect, forwardRef, useImperat
 import { SendIcon } from 'tdesign-icons-react';
 import { SelectedContentPreview } from '../shared/SelectedContentPreview';
 import type { SelectedContentItem } from '../../contexts/ChatDrawerContext';
-import type { Message } from '@llamaindex/chat-ui';
+import type { Message } from '../../types/chat-ui.types';
 import { usePromptHistory } from '../../hooks/usePromptHistory';
 
 interface EnhancedChatInputProps {

@@ -94,6 +94,14 @@ export const MinimizedToolsBar: React.FC<MinimizedToolsBarProps> = ({
    */
   const handleToolClick = useCallback((state: ToolWindowState, tool: ToolDefinition) => {
     ensureToolWindowsEnabled?.();
+    if (tool.id === 'prompt-history') {
+      console.info('[MinimizedToolsBar] click prompt-history', {
+        instanceId: state.instanceId,
+        status: state.status,
+        isLauncher: state.isLauncher,
+        isPinned: state.isPinned,
+      });
+    }
 
     if (state.isLauncher || state.status === 'closed') {
       const fullTool = toolboxService.getToolById(tool.id);

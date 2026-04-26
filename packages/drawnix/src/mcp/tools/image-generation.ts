@@ -34,6 +34,7 @@ import {
   validatePrompt,
   wrapApiError,
   toUploadedImages,
+  type PromptLineageMeta,
 } from './shared/queue-utils';
 
 /**
@@ -107,6 +108,8 @@ export interface ImageGenerationParams {
   pptReplaceElementId?: string;
   /** 是否自动插入画布 */
   autoInsertToCanvas?: boolean;
+  /** 提示词历史轻量元数据 */
+  promptMeta?: PromptLineageMeta;
 }
 
 function shouldUseEditSchema(params: ImageGenerationParams): boolean {
@@ -251,6 +254,7 @@ function getImageQueueConfig(params: ImageGenerationParams) {
       pptSlideImage: params.pptSlideImage,
       pptSlidePrompt: params.pptSlidePrompt,
       pptReplaceElementId: params.pptReplaceElementId,
+      promptMeta: params.promptMeta,
       ...(buildAdapterParams(params)
         ? { params: buildAdapterParams(params) }
         : {}),
@@ -410,10 +414,6 @@ export const imageGenerationTool: MCPTool = {
     params: Record<string, unknown>,
     options?: MCPExecuteOptions
   ): Promise<MCPResult> => {
-    console.log(
-      '[ImageGenerationTool] execute called with mode:',
-      options?.mode
-    );
     const rawParams = params as unknown as ImageGenerationParams;
     const mode = options?.mode || 'async';
 

@@ -3,6 +3,7 @@ import { generateUUID } from '../../../utils/runtime-helpers';
 import type { CreationMode, MusicAnalysisRecord } from '../types';
 import { formatMusicAnalysisMarkdown } from '../types';
 import { ModelDropdown } from '../../ai-input-bar/ModelDropdown';
+import { PromptOptimizeButton } from '../../shared';
 import { useSelectableModels } from '../../../hooks/use-runtime-models';
 import { getSelectionKey } from '../../../utils/model-selection';
 import type { ModelRef } from '../../../utils/settings-manager';
@@ -522,6 +523,13 @@ export const CreatePage: React.FC<CreatePageProps> = ({
           <div className="ma-card">
             <div className="ma-card-header">
               <span>描述你想创作的歌曲</span>
+              <PromptOptimizeButton
+                className="ma-icon-btn"
+                originalPrompt={creationPrompt}
+                language="zh"
+                scenarioId="music.create-song"
+                onApply={setCreationPrompt}
+              />
             </div>
             <textarea
               className="ma-textarea"

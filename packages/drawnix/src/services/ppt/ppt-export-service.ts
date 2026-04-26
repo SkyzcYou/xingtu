@@ -14,7 +14,10 @@ import { MindElement } from '@plait/mind';
 import { Freehand } from '../../plugins/freehand/type';
 import { getFreehandRectangle } from '../../plugins/freehand/utils';
 import { PenPath } from '../../plugins/pen/type';
-import { getAbsoluteAnchors, getPenPathRectangle } from '../../plugins/pen/utils';
+import {
+  getAbsoluteAnchors,
+  getPenPathRectangle,
+} from '../../plugins/pen/utils';
 import { getPathSamplePoints } from '../../plugins/pen/bezier-utils';
 import { isFrameElement, type PlaitFrame } from '../../types/frame.types';
 import {
@@ -42,7 +45,10 @@ const DEFAULT_CANVAS_TEXT_FONT_SIZE_PX = 14;
  * 画布坐标系下的描边宽度（与 element.points 同单位）→ PptxGenJS line.width（磅）。
  * 原先把 1～2 的像素级线宽直接当「磅」传入，在宽 Frame 上会粗得夸张。
  */
-function canvasStrokeWidthToPptPt(strokeWidthPx: number, frameWidthPx: number): number {
+function canvasStrokeWidthToPptPt(
+  strokeWidthPx: number,
+  frameWidthPx: number
+): number {
   const fw = Math.max(frameWidthPx, 1);
   const pt = strokeWidthPx * (SLIDE_WIDTH_PT / fw);
   return Math.max(0.1, pt);
@@ -58,7 +64,11 @@ function toPptColor(color: string | null | undefined): string | undefined {
   if (c.startsWith('#')) {
     const hex = c.slice(1);
     if (hex.length === 3) {
-      return hex.split('').map((ch) => ch + ch).join('').toUpperCase();
+      return hex
+        .split('')
+        .map((ch) => ch + ch)
+        .join('')
+        .toUpperCase();
     }
     return hex.substring(0, 6).toUpperCase();
   }
@@ -66,7 +76,10 @@ function toPptColor(color: string | null | undefined): string | undefined {
   const rgbMatch = c.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
   if (rgbMatch) {
     const [, r, g, b] = rgbMatch;
-    return [r, g, b].map((v) => parseInt(v).toString(16).padStart(2, '0')).join('').toUpperCase();
+    return [r, g, b]
+      .map((v) => parseInt(v).toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase();
   }
 
   return undefined;
@@ -163,7 +176,10 @@ function leafToTextProps(
 /**
  * 从 Slate 段落节点数组中提取带样式的 TextProps
  */
-function walkParagraphs(paragraphs: any[], fontScale: number): PptxGenJS.TextProps[] | null {
+function walkParagraphs(
+  paragraphs: any[],
+  fontScale: number
+): PptxGenJS.TextProps[] | null {
   const result: PptxGenJS.TextProps[] = [];
   const defaultFontSizePt = Math.max(
     6,
@@ -180,7 +196,9 @@ function walkParagraphs(paragraphs: any[], fontScale: number): PptxGenJS.TextPro
     for (let li = 0; li < leaves.length; li++) {
       const isLastLeaf = li === leaves.length - 1;
       const needBreak = isLastLeaf && !isLastPara;
-      result.push(leafToTextProps(leaves[li], needBreak, fontScale, defaultFontSizePt));
+      result.push(
+        leafToTextProps(leaves[li], needBreak, fontScale, defaultFontSizePt)
+      );
     }
   }
 
@@ -273,7 +291,10 @@ function extractFallbackTextStyle(
   return { align, fontSizePt };
 }
 
-function extractPlainTextWithLineBreaks(element: PlaitElement, board: PlaitBoard): string {
+function extractPlainTextWithLineBreaks(
+  element: PlaitElement,
+  board: PlaitBoard
+): string {
   const data = (element as any).data;
   if (Array.isArray(data) && data.length > 0) {
     const rows = data
@@ -292,9 +313,7 @@ function extractPlainTextWithLineBreaks(element: PlaitElement, board: PlaitBoard
       const lines: string[] = [];
       const hasParagraphChildren = children.some(
         (child: any) =>
-          child &&
-          typeof child === 'object' &&
-          Array.isArray(child.children)
+          child && typeof child === 'object' && Array.isArray(child.children)
       );
       if (hasParagraphChildren) {
         for (const child of children) {
@@ -303,7 +322,9 @@ function extractPlainTextWithLineBreaks(element: PlaitElement, board: PlaitBoard
           if (line.length > 0) lines.push(line);
         }
       } else {
-        const line = collectLeaves(textObj).map((leaf) => leaf.text || '').join('');
+        const line = collectLeaves(textObj)
+          .map((leaf) => leaf.text || '')
+          .join('');
         if (line.length > 0) lines.push(line);
       }
       if (lines.length > 0) return lines.join('\n');
@@ -347,21 +368,36 @@ function shouldEnableAutoWrap(text: string, isSingle: boolean): boolean {
 function mapShapeType(pptx: PptxGenJS, shape: string): any {
   const st = pptx.ShapeType as Record<string, any>;
   switch (shape) {
-    case 'rectangle': case 'process': return st.rect;
-    case 'ellipse': case 'circle': return st.ellipse;
+    case 'rectangle':
+    case 'process':
+      return st.rect;
+    case 'ellipse':
+    case 'circle':
+      return st.ellipse;
     case 'roundRectangle':
     case 'roundedRectangle':
     case 'round_rectangle':
       return st.roundRect;
-    case 'diamond': case 'decision': return st.diamond;
-    case 'triangle': return st.triangle;
-    case 'parallelogram': return st.parallelogram;
-    case 'trapezoid': return st.trapezoid;
-    case 'hexagon': return st.hexagon;
-    case 'star4': return st.star4;
-    case 'star5': case 'star': return st.star5;
-    case 'cloud': return st.cloud;
-    default: return st.rect;
+    case 'diamond':
+    case 'decision':
+      return st.diamond;
+    case 'triangle':
+      return st.triangle;
+    case 'parallelogram':
+      return st.parallelogram;
+    case 'trapezoid':
+      return st.trapezoid;
+    case 'hexagon':
+      return st.hexagon;
+    case 'star4':
+      return st.star4;
+    case 'star5':
+    case 'star':
+      return st.star5;
+    case 'cloud':
+      return st.cloud;
+    default:
+      return st.rect;
   }
 }
 
@@ -442,8 +478,10 @@ async function ensureBase64Image(url: string): Promise<string> {
 
 function sortFramesForPPT(frames: PlaitFrame[]): PlaitFrame[] {
   return [...frames].sort((a, b) => {
-    const metaA = (a as PlaitFrame & { pptMeta?: { pageIndex?: number } }).pptMeta;
-    const metaB = (b as PlaitFrame & { pptMeta?: { pageIndex?: number } }).pptMeta;
+    const metaA = (a as PlaitFrame & { pptMeta?: { pageIndex?: number } })
+      .pptMeta;
+    const metaB = (b as PlaitFrame & { pptMeta?: { pageIndex?: number } })
+      .pptMeta;
     const indexA = metaA?.pageIndex;
     const indexB = metaB?.pageIndex;
     const hasA = typeof indexA === 'number' && !Number.isNaN(indexA);
@@ -486,7 +524,9 @@ function partitionElementsByExportFrames(
 ): Map<string, PlaitElement[]> {
   const byFrame = new Map<string, PlaitElement[]>();
   const frameRectMap = new Map(
-    frames.map((f) => [f.id, RectangleClient.getRectangleByPoints(f.points)] as const)
+    frames.map(
+      (f) => [f.id, RectangleClient.getRectangleByPoints(f.points)] as const
+    )
   );
   for (const f of frames) {
     byFrame.set(f.id, []);
@@ -522,7 +562,10 @@ function partitionElementsByExportFrames(
     for (const f of frames) {
       const fr = frameRectMap.get(f.id)!;
       if (!RectangleClient.isHit(rect, fr)) continue;
-      const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+      const center = {
+        x: rect.x + rect.width / 2,
+        y: rect.y + rect.height / 2,
+      };
       if (!isPointInRect(center, fr, 2)) continue;
       const area = rectangleIntersectionArea(rect, fr);
       if (area > bestArea) {
@@ -620,9 +663,7 @@ async function addFrameSlide(
         h: '100%',
         transparency: 70,
       });
-    } catch {
-      console.debug('[PPT Export] Frame background image load failed, using default');
-    }
+    } catch {}
   }
 
   const ordered = sortElementsByPosition(board, children as PlaitElement[]);
@@ -653,9 +694,7 @@ async function addFrameSlide(
         try {
           const data = await ensureBase64Image(url);
           slide.addImage({ data, x: pos.x, y: pos.y, w: pos.w, h: pos.h });
-        } catch {
-          console.debug('[PPT Export] Image load failed, skipping');
-        }
+        } catch {}
         continue;
       }
 
@@ -670,8 +709,12 @@ async function addFrameSlide(
         const lineOpts = getElementLineOpts(board, element, frameRect.width);
 
         const baseOpts: Record<string, any> = {
-          x: pos.x, y: pos.y, w: pos.w, h: pos.h,
-          ...fillOpts, ...lineOpts,
+          x: pos.x,
+          y: pos.y,
+          w: pos.w,
+          h: pos.h,
+          ...fillOpts,
+          ...lineOpts,
         };
 
         const angle = (element as any).angle;
@@ -720,7 +763,11 @@ async function addFrameSlide(
         const isSingle = isShortSingleLine(rawText);
         const autoWrap = shouldEnableAutoWrap(rawText, isSingle);
         // 仅在允许自动换行时做轻微宽度冗余；手动换行时保持与画布等宽
-        const textPos = computeSlidePosition(rect, frameRect, autoWrap ? 1.12 : 1);
+        const textPos = computeSlidePosition(
+          rect,
+          frameRect,
+          autoWrap ? 1.12 : 1
+        );
         const rich = extractElementRichText(element, fontScale);
         if (rich) {
           slide.addText(rich.rows, {
@@ -742,18 +789,21 @@ async function addFrameSlide(
             defaultBodyPt,
             'left'
           );
-          slide.addText(buildPlainTextRows(rawText, fallback.fontSizePt || defaultBodyPt), {
-            x: textPos.x,
-            y: textPos.y,
-            w: textPos.w,
-            h: textPos.h,
-            valign: 'top',
-            wrap: autoWrap,
-            align: fallback.align || 'left',
-            fontFace: DEFAULT_FONT_FACE,
-            margin: 0,
-            fit: 'none',
-          });
+          slide.addText(
+            buildPlainTextRows(rawText, fallback.fontSizePt || defaultBodyPt),
+            {
+              x: textPos.x,
+              y: textPos.y,
+              w: textPos.w,
+              h: textPos.h,
+              valign: 'top',
+              wrap: autoWrap,
+              align: fallback.align || 'left',
+              fontFace: DEFAULT_FONT_FACE,
+              margin: 0,
+              fit: 'none',
+            }
+          );
         }
         continue;
       }
@@ -770,7 +820,8 @@ async function addFrameSlide(
         const endPt = points[points.length - 1] as [number, number];
 
         const sx = ((startPt[0] - frameRect.x) / frameRect.width) * SLIDE_WIDTH;
-        const sy = ((startPt[1] - frameRect.y) / frameRect.height) * SLIDE_HEIGHT;
+        const sy =
+          ((startPt[1] - frameRect.y) / frameRect.height) * SLIDE_HEIGHT;
         const ex = ((endPt[0] - frameRect.x) / frameRect.width) * SLIDE_WIDTH;
         const ey = ((endPt[1] - frameRect.y) / frameRect.height) * SLIDE_HEIGHT;
 
@@ -825,8 +876,8 @@ async function addFrameSlide(
 
         // 将画布坐标转为形状局部坐标（与 ppt 形状 w×h 同单位）
         const toLocal = (p: [number, number]) => ({
-          x: (p[0] - freehandRect.x) / freehandRect.width * fhPos.w,
-          y: (p[1] - freehandRect.y) / freehandRect.height * fhPos.h,
+          x: ((p[0] - freehandRect.x) / freehandRect.width) * fhPos.w,
+          y: ((p[1] - freehandRect.y) / freehandRect.height) * fhPos.h,
         });
 
         const pathPoints: CustGeomPoint[] = [];
@@ -869,21 +920,25 @@ async function addFrameSlide(
         };
 
         const fillColor = toPptColor(pen.fill);
-        const fill = pen.closed && fillColor
-          ? { color: fillColor }
-          : { color: 'FFFFFF', transparency: 100 };
+        const fill =
+          pen.closed && fillColor
+            ? { color: fillColor }
+            : { color: 'FFFFFF', transparency: 100 };
 
         // 贝塞尔曲线按采样点近似为折线（PPT 兼容 & 实现简单）
         const samples = getPathSamplePoints(absoluteAnchors, pen.closed, 12);
         if (samples.length < 2) continue;
 
         const toLocal = (p: [number, number]) => ({
-          x: (p[0] - penRect.x) / penRect.width * penPos.w,
-          y: (p[1] - penRect.y) / penRect.height * penPos.h,
+          x: ((p[0] - penRect.x) / penRect.width) * penPos.w,
+          y: ((p[1] - penRect.y) / penRect.height) * penPos.h,
         });
 
         const pathPoints: CustGeomPoint[] = [];
-        pathPoints.push({ ...toLocal(samples[0] as [number, number]), moveTo: true });
+        pathPoints.push({
+          ...toLocal(samples[0] as [number, number]),
+          moveTo: true,
+        });
         for (let i = 1; i < samples.length; i++) {
           pathPoints.push(toLocal(samples[i] as [number, number]));
         }
@@ -964,7 +1019,7 @@ async function addFrameSlide(
         });
       }
     } catch (err) {
-      console.debug('[PPT Export] Skipping element:', err);
+      void err;
     }
   }
 

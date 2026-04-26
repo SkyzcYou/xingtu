@@ -640,10 +640,6 @@ export const PopupToolbar = () => {
     const body = cardElement.body || '';
     const text = `${title}${body}`.trim();
     try {
-      console.info('[CardCopy] Copy text from card', {
-        source,
-        id: cardElement.id,
-      });
       await copyToClipboard(text);
       MessagePlugin.success(
         language === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard',

@@ -22,6 +22,14 @@ const INSTANCE_OFFSET_X = 36;
 const INSTANCE_OFFSET_Y = 28;
 const INSTANCE_BASE_X = 96;
 const INSTANCE_BASE_Y = 72;
+const PROMPT_HISTORY_TOOL_ID = 'prompt-history';
+
+function logPromptHistoryWindowDebug(
+  message: string,
+  details?: Record<string, unknown>
+): void {
+  console.info(`[ToolWindowService] ${message}`, details || {});
+}
 
 /** 可序列化的工具信息 */
 interface SerializableToolInfo {
@@ -284,6 +292,20 @@ class ToolWindowService {
 
   openTool(tool: ToolDefinition, options?: OpenToolOptions): string | undefined {
     const launchMode = this.resolveLaunchMode(tool, options?.launchMode);
+    if (tool.id === PROMPT_HISTORY_TOOL_ID) {
+      logPromptHistoryWindowDebug('openTool:start', {
+        toolId: tool.id,
+        launchMode,
+        isPinned: this.pinnedToolIds.has(tool.id),
+        componentProps: options?.componentProps,
+        instances: this.getToolInstances(tool.id).map((state) => ({
+          instanceId: state.instanceId,
+          status: state.status,
+          isLauncher: state.isLauncher,
+          activationOrder: state.activationOrder,
+        })),
+      });
+    }
     this.applyAutoPinBehavior(tool, options);
 
     if (this.pinnedToolIds.has(tool.id)) {
@@ -294,13 +316,37 @@ class ToolWindowService {
     if (launchMode === 'reuse') {
       const reusableState = this.getPrimaryToolState(tool.id);
       if (reusableState) {
+        if (tool.id === PROMPT_HISTORY_TOOL_ID) {
+          logPromptHistoryWindowDebug('openTool:reuse', {
+            instanceId: reusableState.instanceId,
+            status: reusableState.status,
+            isLauncher: reusableState.isLauncher,
+          });
+        }
         this.applyOpenToExistingState(reusableState, tool, options);
         this.notify();
+        if (tool.id === PROMPT_HISTORY_TOOL_ID) {
+          logPromptHistoryWindowDebug('openTool:reused-after-notify', {
+            instanceId: reusableState.instanceId,
+            status: reusableState.status,
+            isLauncher: reusableState.isLauncher,
+            componentProps: reusableState.componentProps,
+          });
+        }
         return reusableState.instanceId;
       }
     }
 
     const instanceId = this.openNewToolInstance(tool, options);
+    if (tool.id === PROMPT_HISTORY_TOOL_ID) {
+      const state = this.getToolInstance(instanceId);
+      logPromptHistoryWindowDebug('openTool:new-instance', {
+        instanceId,
+        status: state?.status,
+        isLauncher: state?.isLauncher,
+        componentProps: state?.componentProps,
+      });
+    }
     return instanceId;
   }
 
@@ -488,6 +534,8 @@ class ToolWindowService {
     tool: ToolDefinition,
     options?: Omit<OpenToolOptions, 'launchMode'>
   ): void {
+    const previousStatus = state.status;
+    const previousIsLauncher = state.isLauncher;
     state.tool = tool;
     state.toolId = tool.id;
     state.isPinned = this.pinnedToolIds.has(tool.id);
@@ -503,6 +551,16 @@ class ToolWindowService {
       if (options?.autoMaximize) {
         state.autoMaximize = true;
       }
+      if (tool.id === PROMPT_HISTORY_TOOL_ID) {
+        logPromptHistoryWindowDebug('applyOpenToExistingState:opened', {
+          instanceId: state.instanceId,
+          previousStatus,
+          nextStatus: state.status,
+          previousIsLauncher,
+          nextIsLauncher: state.isLauncher,
+          componentProps: state.componentProps,
+        });
+      }
       return;
     }
 
@@ -511,6 +569,16 @@ class ToolWindowService {
     }
 
     state.activationOrder = this.nextActivationOrder();
+    if (tool.id === PROMPT_HISTORY_TOOL_ID) {
+      logPromptHistoryWindowDebug('applyOpenToExistingState:already-open', {
+        instanceId: state.instanceId,
+        previousStatus,
+        nextStatus: state.status,
+        previousIsLauncher,
+        nextIsLauncher: state.isLauncher,
+        componentProps: state.componentProps,
+      });
+    }
   }
 
   private resolveState(target: string): ToolWindowState | undefined {

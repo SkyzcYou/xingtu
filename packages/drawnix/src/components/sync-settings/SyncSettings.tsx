@@ -291,9 +291,7 @@ export function SyncSettings({ visible, onClose }: SyncSettingsProps) {
 
   // 以远程为准同步（下载远程数据）
   const handlePullFromRemote = useCallback(async () => {
-    console.log('[SyncSettings] handlePullFromRemote called');
     if (isSyncing || isLocalSyncing) {
-      console.log('[SyncSettings] Already syncing, aborting');
       return;
     }
 
@@ -311,10 +309,7 @@ export function SyncSettings({ visible, onClose }: SyncSettingsProps) {
 
     setIsLocalSyncing(true);
     try {
-      console.log('[SyncSettings] Calling pullFromRemote...');
       const result = await pullFromRemote();
-      console.log('[SyncSettings] pullFromRemote result:', result);
-
       if (result.success) {
         const downloaded =
           result.downloaded.boards +
@@ -340,7 +335,6 @@ export function SyncSettings({ visible, onClose }: SyncSettingsProps) {
 
         // 刷新页面以加载新数据
         setTimeout(() => {
-          console.log('[SyncSettings] Refreshing page...');
           void safeReload();
         }, 1000);
       } else if (result.needsPassword) {
@@ -363,12 +357,7 @@ export function SyncSettings({ visible, onClose }: SyncSettingsProps) {
 
   // 以本地为准同步（上传本地数据）
   const handlePushToRemote = useCallback(async () => {
-    console.log('[SyncSettings] handlePushToRemote called', {
-      isSyncing,
-      isLocalSyncing,
-    });
     if (isSyncing || isLocalSyncing) {
-      console.log('[SyncSettings] Already syncing, aborting push');
       return;
     }
 
@@ -381,16 +370,11 @@ export function SyncSettings({ visible, onClose }: SyncSettingsProps) {
     });
 
     if (!confirmed) {
-      console.log('[SyncSettings] User cancelled push');
       return;
     }
-
-    console.log('[SyncSettings] Starting push...');
     setIsLocalSyncing(true);
     try {
-      console.log('[SyncSettings] Calling pushToRemote...');
       const result = await pushToRemote();
-      console.log('[SyncSettings] pushToRemote result:', result);
       if (result.success) {
         const uploaded =
           result.uploaded.boards +

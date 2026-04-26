@@ -5,10 +5,9 @@
  */
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ChatMessage } from '@llamaindex/chat-ui';
-import type { Message } from '@llamaindex/chat-ui';
 import type { WorkflowMessageData, AgentLogEntry } from '../../types/chat.types';
 import { MermaidRenderer } from './MermaidRenderer';
+import MarkdownEditor from '../MarkdownEditor';
 import './workflow-message-bubble.scss';
 
 // ============ 状态图标映射 ============
@@ -30,6 +29,54 @@ const STATUS_LABELS: Record<StepStatus, string> = {
   failed: '失败',
   skipped: '已跳过',
 };
+
+function renderMarkdownWithMermaid(markdown: string): React.ReactNode {
+  const blocks: React.ReactNode[] = [];
+  const mermaidFencePattern = /```mermaid\s*([\s\S]*?)```/gi;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = mermaidFencePattern.exec(markdown)) !== null) {
+    const before = markdown.slice(lastIndex, match.index);
+    if (before.trim()) {
+      blocks.push(
+        <MarkdownEditor
+          key={`md-${blocks.length}`}
+          markdown={before}
+          readOnly
+          showModeSwitch={false}
+          initialMode="wysiwyg"
+          className="chat-markdown"
+        />
+      );
+    }
+
+    blocks.push(
+      <MermaidRenderer
+        key={`mermaid-${blocks.length}`}
+        code={match[1].trim()}
+        className="chat-markdown__mermaid"
+      />
+    );
+    lastIndex = mermaidFencePattern.lastIndex;
+  }
+
+  const after = markdown.slice(lastIndex);
+  if (after.trim() || blocks.length === 0) {
+    blocks.push(
+      <MarkdownEditor
+        key={`md-${blocks.length}`}
+        markdown={after}
+        readOnly
+        showModeSwitch={false}
+        initialMode="wysiwyg"
+        className="chat-markdown"
+      />
+    );
+  }
+
+  return blocks;
+}
 
 // ============ 单个步骤项组件 ============
 
@@ -453,14 +500,10 @@ export const WorkflowMessageBubble: React.FC<WorkflowMessageBubbleProps> = ({
     return { variant: 'info' as const, icon: 'ℹ️', text: '未生成任何内容' };
   }, [isCompleted, isFailed, lastContent, hasMediaGeneration]);
 
-  const markdownMessage: Message | null = useMemo(() => {
+  const markdownSummary = useMemo(() => {
     if (!summaryView || summaryView.variant !== 'markdown') return null;
-    return {
-      id: `workflow_${workflow.id}_result`,
-      role: 'assistant',
-      parts: [{ type: 'text', text: summaryView.markdown }],
-    };
-  }, [summaryView, workflow.id]);
+    return summaryView.markdown;
+  }, [summaryView]);
 
   // 获取当前执行步骤的索引
   const currentStepIndex = useMemo(() => {
@@ -584,18 +627,15 @@ export const WorkflowMessageBubble: React.FC<WorkflowMessageBubbleProps> = ({
           </div>
         )}
 
-        {summaryView && summaryView.variant === 'markdown' && markdownMessage && (
+        {summaryView && summaryView.variant === 'markdown' && markdownSummary && (
           <div className="workflow-bubble__summary workflow-bubble__summary--success workflow-bubble__summary--markdown">
             <span className="workflow-bubble__summary-icon">{summaryView.icon}</span>
             <div className="workflow-bubble__summary-markdown">
-              <ChatMessage message={markdownMessage} isLast={false} className="workflow-bubble__markdown-message">
-                <ChatMessage.Content className="workflow-bubble__markdown-content">
-                  <ChatMessage.Content.Markdown
-                    className="chat-markdown"
-                    languageRenderers={{ mermaid: MermaidRenderer }}
-                  />
-                </ChatMessage.Content>
-              </ChatMessage>
+              <div className="workflow-bubble__markdown-message">
+                <div className="workflow-bubble__markdown-content">
+                  {renderMarkdownWithMermaid(markdownSummary)}
+                </div>
+              </div>
             </div>
           </div>
         )}

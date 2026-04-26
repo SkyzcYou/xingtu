@@ -49,7 +49,11 @@ function parseSunoFieldsFromMarkdown(prompt: string): {
   lyrics: string;
 } {
   // 快速判断：没有 Suno 结构标签则不拆分
-  if (!/\[(?:Intro|Verse|Chorus|Pre-Chorus|Bridge|Outro|Hook|Fade|Instrumental|Interlude)/i.test(prompt)) {
+  if (
+    !/\[(?:Intro|Verse|Chorus|Pre-Chorus|Bridge|Outro|Hook|Fade|Instrumental|Interlude)/i.test(
+      prompt
+    )
+  ) {
     return { lyrics: prompt };
   }
 
@@ -77,8 +81,13 @@ function parseSunoFieldsFromMarkdown(prompt: string): {
   }
 
   // 去掉首尾空行
-  while (lyricsLines.length > 0 && lyricsLines[0].trim() === '') lyricsLines.shift();
-  while (lyricsLines.length > 0 && lyricsLines[lyricsLines.length - 1].trim() === '') lyricsLines.pop();
+  while (lyricsLines.length > 0 && lyricsLines[0].trim() === '')
+    lyricsLines.shift();
+  while (
+    lyricsLines.length > 0 &&
+    lyricsLines[lyricsLines.length - 1].trim() === ''
+  )
+    lyricsLines.pop();
 
   return { title, tags, lyrics: lyricsLines.join('\n') };
 }
@@ -206,25 +215,33 @@ function applyMediaDefaultsToWorkflowSteps(
   steps: WorkflowStep[],
   params: Pick<
     ParsedGenerationParams,
-    'defaultModels' | 'defaultModelRefs' | 'modelId' | 'modelRef' | 'generationType'
+    | 'defaultModels'
+    | 'defaultModelRefs'
+    | 'modelId'
+    | 'modelRef'
+    | 'generationType'
   >,
   overrideSpecifiedModel = false
 ): WorkflowStep[] {
   return steps.map((step) => ({
     ...step,
-    args: applyMediaModelDefaultsToArgs(step.mcp, { ...step.args }, {
-      defaultModels: params.defaultModels,
-      defaultModelRefs: params.defaultModelRefs,
-      contextModel: {
-        id: params.modelId,
-        type:
-          params.generationType === 'agent'
-            ? 'text'
-            : (params.generationType as 'text' | 'image' | 'video' | 'audio'),
-      },
-      contextModelRef: params.modelRef,
-      overrideSpecifiedModel,
-    }),
+    args: applyMediaModelDefaultsToArgs(
+      step.mcp,
+      { ...step.args },
+      {
+        defaultModels: params.defaultModels,
+        defaultModelRefs: params.defaultModelRefs,
+        contextModel: {
+          id: params.modelId,
+          type:
+            params.generationType === 'agent'
+              ? 'text'
+              : (params.generationType as 'text' | 'image' | 'video' | 'audio'),
+        },
+        contextModelRef: params.modelRef,
+        overrideSpecifiedModel,
+      }
+    ),
   }));
 }
 
@@ -840,15 +857,6 @@ export async function convertSkillFlowToWorkflow(
   const processedSkillContent = needsPreprocess
     ? preprocessExternalSkillContent(skillContent, externalOutputType)
     : skillContent;
-
-  console.log(
-    `[SkillFlow] Skill="${skillName}" type=${
-      skill.type
-    } outputType=${externalOutputType} isExternal=${isExternalSkill} contentLen=${
-      processedSkillContent?.length || 0
-    }`
-  );
-
   // 从 Skill 笔记中提取工具名引用，用于判断走路径 B 还是路径 C
   const referencedToolNames = SkillDSLParser.extractToolNamesFromContent(
     processedSkillContent
@@ -870,17 +878,6 @@ export async function convertSkillFlowToWorkflow(
 
   // 判断是否包含 generate_image（用于后续路径 B/C 的图片生成指引）
   const hasGenerateImage = validToolNames.includes('generate_image');
-
-  console.log(
-    `[SkillFlow] referencedTools=[${referencedToolNames.join(
-      ','
-    )}] validTools=[${validToolNames.join(
-      ','
-    )}] hasGenerateImage=${hasGenerateImage} → 路径${
-      validToolNames.length > 0 ? 'B' : 'C'
-    }`
-  );
-
   // ─── 路径 B：Agent 模式，精准注入相关工具描述 ─────────────────────────────
   if (validToolNames.length > 0) {
     // 只注入 Skill 笔记中引用的工具描述

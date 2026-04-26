@@ -474,8 +474,6 @@ export const TaskQueuePanel: React.FC<TaskQueuePanelProps> = ({
           setSyncProgress(Math.round((current / total) * 100));
         }
       );
-
-      console.log('[TaskQueuePanel] Batch sync result:', result);
       setSyncProgress(100);
 
       if (result.succeeded > 0) {

@@ -82,6 +82,7 @@ function buildStoredImageTaskParams(
         ? options.uploadedImages
         : undefined,
     count: options.count,
+    promptMeta: options.promptMeta,
     params: buildStoredImageAdapterParams(options),
   };
 }

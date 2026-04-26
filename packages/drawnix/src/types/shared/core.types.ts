@@ -9,6 +9,7 @@
  */
 
 import type { CacheWarning } from '../cache-warning.types';
+import type { ModelRef } from '../../utils/settings-manager';
 
 // ============================================================================
 // Chat Tool Call
@@ -89,15 +90,33 @@ export enum TaskExecutionPhase {
 // Generation Parameters
 // ============================================================================
 
-/**
- * Generation parameters interface
- * Contains all parameters needed for AI content generation
- */
-import type { ModelRef } from '../../utils/settings-manager';
-
 export interface GenerationParams {
   /** Text prompt describing the desired content */
   prompt: string;
+  /** Lightweight prompt lineage metadata used by prompt history views */
+  promptMeta?: {
+    /** Prompt entered before parsing or optimization */
+    initialPrompt?: string;
+    /** Prompt actually sent to the generation tool */
+    sentPrompt?: string;
+    /** Display title for history cards */
+    title?: string;
+    /** Prompt category for filtering */
+    category?:
+      | 'image'
+      | 'video'
+      | 'audio'
+      | 'text'
+      | 'agent'
+      | 'ppt-common'
+      | 'ppt-slide';
+    /** Lightweight tags such as Skill names */
+    tags?: string[];
+    /** Agent Skill identifier, when available */
+    skillId?: string;
+    /** Agent Skill display name, when available */
+    skillName?: string;
+  };
   /** Image/video width in pixels */
   width?: number;
   /** Image/video height in pixels */
@@ -106,6 +125,12 @@ export interface GenerationParams {
   size?: string;
   /** Image generation mode for providers that distinguish generation/edit */
   generationMode?: 'text_to_image' | 'image_to_image' | 'image_edit';
+  /** Whether this image task is generating a PPT slide image */
+  pptSlideImage?: boolean;
+  /** PPT slide-specific prompt, separated from the full generated image prompt */
+  pptSlidePrompt?: string;
+  /** Existing PPT slide element to replace after generation */
+  pptReplaceElementId?: string;
   /** Image edit mask URL or data URL */
   maskImage?: string;
   /** Image edit input fidelity */

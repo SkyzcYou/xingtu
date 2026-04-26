@@ -32,6 +32,7 @@ import { KBSortDropdown } from './KBSortDropdown';
 import { useConfirmDialog } from '../dialog/ConfirmDialog';
 import { HoverTip } from '../shared';
 import { knowledgeBaseService } from '../../services/knowledge-base-service';
+import { ensurePromptOptimizationTemplates } from '../../services/prompt-optimization-service';
 import { getKBSearchEngine, type KBSearchResult } from '../../services/kb-search-engine';
 import type {
   KBDirectory,
@@ -185,6 +186,11 @@ const KnowledgeBaseContent: React.FC<KnowledgeBaseContentProps> = ({ initialNote
 
     const init = async () => {
       await knowledgeBaseService.initialize();
+      try {
+        await ensurePromptOptimizationTemplates();
+      } catch (error) {
+        console.warn('[KnowledgeBaseContent] 提示词优化模板初始化失败:', error);
+      }
       await refreshData();
       try {
         const usage = await knowledgeBaseService.getStorageUsage();

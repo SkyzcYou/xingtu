@@ -27,11 +27,11 @@ const RPC_METHODS = {
 // 事件类型常量（必须与 SW 端 channel-manager.ts 中的 SW_EVENTS 保持一致）
 const SW_EVENTS = {
   DEBUG_STATUS_CHANGED: 'debug:statusChanged',
-  DEBUG_LOG: 'debug:log',  // SW 的 fetch 调试日志
-  CONSOLE_LOG: 'console:log',  // SW 的控制台日志
-  POSTMESSAGE_LOG: 'postmessage:log',  // PostMessage 日志
-  DEBUG_LLM_LOG: 'debug:llmLog',  // LLM API 日志
-  POSTMESSAGE_LOG_BATCH: 'postmessage:logBatch',  // PostMessage 批量日志
+  DEBUG_LOG: 'debug:log', // SW 的 fetch 调试日志
+  CONSOLE_LOG: 'console:log', // SW 的控制台日志
+  POSTMESSAGE_LOG: 'postmessage:log', // PostMessage 日志
+  DEBUG_LLM_LOG: 'debug:llmLog', // LLM API 日志
+  POSTMESSAGE_LOG_BATCH: 'postmessage:logBatch', // PostMessage 批量日志
 };
 
 /** @type {ServiceWorkerChannel|null} */
@@ -47,7 +47,6 @@ const eventListeners = new Map();
  * 重置 duplex 客户端（在 SW 更新后调用）
  */
 export function resetDuplexClient() {
-  console.log('[DuplexClient] Resetting client for SW update');
   channel = null;
   initialized = false;
 }
@@ -74,14 +73,17 @@ export async function initDuplexClient() {
     // SW 端的 enableGlobalRouting 会自动为新客户端创建 channel
     // 不再需要显式的 SW_CHANNEL_CONNECT 握手
     channel = await ServiceWorkerChannel.createFromPage({
-      log: { log: () => {}, warn: () => {}, error: () => {} }
+      log: {
+        log: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+      },
     });
 
     // 注册事件订阅
     setupEventSubscriptions();
 
     initialized = true;
-    console.log('[DuplexClient] Initialized successfully');
     return true;
   } catch (error) {
     console.error('[DuplexClient] Failed to initialize:', error);
@@ -97,7 +99,7 @@ function setupEventSubscriptions() {
 
   // 使用 onBroadcast 接收 SW 的广播消息（单向，不需要响应）
   // SW 使用 channel.broadcast() 发送事件
-  Object.values(SW_EVENTS).forEach(eventName => {
+  Object.values(SW_EVENTS).forEach((eventName) => {
     channel.onBroadcast(eventName, ({ data }) => {
       if (data !== undefined) {
         emitEvent(eventName, data);
@@ -113,11 +115,14 @@ function setupEventSubscriptions() {
  */
 function emitEvent(eventName, data) {
   const listeners = eventListeners.get(eventName) || [];
-  listeners.forEach(callback => {
+  listeners.forEach((callback) => {
     try {
       callback(data);
     } catch (error) {
-      console.error(`[DuplexClient] Event handler error for ${eventName}:`, error);
+      console.error(
+        `[DuplexClient] Event handler error for ${eventName}:`,
+        error
+      );
     }
   });
 }
@@ -161,31 +166,36 @@ async function callRPC(method, params = {}, timeout = 10000, retries = 2) {
   if (!channel) {
     throw new Error('DuplexClient not initialized');
   }
-  
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       // 注意：publish 用于发送请求并等待响应（RPC 模式）
       // 响应格式: { ret: 0, data: {...} }，需要解包 data 字段
       const response = await channel.publish(method, params, { timeout });
-      
+
       // 检查响应格式并解包 data
       if (response && typeof response === 'object') {
         // ret === undefined || ret === 0 表示成功（publish 模式下 ret 可能是 undefined）
-        if ((response.ret === undefined || response.ret === 0) && response.data !== undefined) {
+        if (
+          (response.ret === undefined || response.ret === 0) &&
+          response.data !== undefined
+        ) {
           return response.data;
         }
         // 如果有错误信息（ret 存在且不为 0）
         if (response.ret !== undefined && response.ret !== 0) {
-          throw new Error(response.msg || `RPC failed with code ${response.ret}`);
+          throw new Error(
+            response.msg || `RPC failed with code ${response.ret}`
+          );
         }
       }
-      
+
       return response;
     } catch (error) {
       if (attempt < retries) {
         // 等待一段时间后重试（给 SW 更新完成的时间）
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
         // 重新初始化 channel
         if (!initialized) {
           await initDuplexClient();
@@ -267,7 +277,11 @@ export async function clearPostMessageLogs() {
  * @returns {Promise<{logs: Array, total: number, page: number, pageSize: number, totalPages: number}>}
  */
 export async function getLLMApiLogs(page = 1, pageSize = 20, filter = {}) {
-  return callRPC(RPC_METHODS.DEBUG_GET_LLM_API_LOGS, { page, pageSize, ...filter });
+  return callRPC(RPC_METHODS.DEBUG_GET_LLM_API_LOGS, {
+    page,
+    pageSize,
+    ...filter,
+  });
 }
 
 /**

@@ -153,10 +153,7 @@ function getRoundedRectanglePoints(
   // 左上角圆弧
   for (let i = 0; i <= samplesPerCorner; i++) {
     const angle = Math.PI + (Math.PI / 2) * (i / samplesPerCorner);
-    points.push([
-      x + r + r * Math.cos(angle),
-      y + r + r * Math.sin(angle),
-    ]);
+    points.push([x + r + r * Math.cos(angle), y + r + r * Math.sin(angle)]);
   }
 
   return points;
@@ -210,16 +207,16 @@ function getCapsulePoints(
   // 左边半圆
   for (let i = 0; i <= samplesPerArc; i++) {
     const angle = Math.PI / 2 + Math.PI * (i / samplesPerArc);
-    points.push([
-      x + r + r * Math.cos(angle),
-      y + r + r * Math.sin(angle),
-    ]);
+    points.push([x + r + r * Math.cos(angle), y + r + r * Math.sin(angle)]);
   }
 
   return points;
 }
 
-function getShapePolygon(element: PlaitDrawElement, samplesPerSegment: number = 20): Point[] {
+function getShapePolygon(
+  element: PlaitDrawElement,
+  samplesPerSegment: number = 20
+): Point[] {
   const points = element.points;
   if (!points || points.length < 2) return [];
 
@@ -231,9 +228,6 @@ function getShapePolygon(element: PlaitDrawElement, samplesPerSegment: number = 
 
   // 检查形状类型
   const shape = (element as any).shape;
-
-  console.log('[Boolean] Shape type:', shape, { x, y, width, height });
-
   if (shape === 'ellipse' || shape === 'circle') {
     // 椭圆/圆形采样 - 使用更高的采样密度以保持曲线平滑
     const cx = x + width / 2;
@@ -242,26 +236,30 @@ function getShapePolygon(element: PlaitDrawElement, samplesPerSegment: number = 
     const ry = height / 2;
     const polygonPoints: Point[] = [];
     // 根据椭圆周长动态计算采样点数量，确保曲线平滑
-    const perimeter = Math.PI * (3 * (rx + ry) - Math.sqrt((3 * rx + ry) * (rx + 3 * ry)));
+    const perimeter =
+      Math.PI * (3 * (rx + ry) - Math.sqrt((3 * rx + ry) * (rx + 3 * ry)));
     const numPoints = Math.max(180, Math.ceil(perimeter / 2)); // 至少 180 个点
 
     for (let i = 0; i < numPoints; i++) {
       const angle = (2 * Math.PI * i) / numPoints;
-      polygonPoints.push([cx + rx * Math.cos(angle), cy + ry * Math.sin(angle)]);
+      polygonPoints.push([
+        cx + rx * Math.cos(angle),
+        cy + ry * Math.sin(angle),
+      ]);
     }
-    
-    console.log('[Boolean] Ellipse points count:', polygonPoints.length);
     return polygonPoints;
   } else if (shape === 'roundRectangle') {
     // 圆角矩形 - 使用固定圆角比例
     const radius = Math.min(width, height) * 0.15; // 15% 的圆角
     const pts = getRoundedRectanglePoints(x, y, width, height, radius, 16);
-    console.log('[Boolean] RoundRectangle points count:', pts.length);
     return pts;
-  } else if (shape === 'terminal' || shape === 'stadium' || shape === 'capsule') {
+  } else if (
+    shape === 'terminal' ||
+    shape === 'stadium' ||
+    shape === 'capsule'
+  ) {
     // Terminal/胶囊形状 - 左右两端是半圆
     const pts = getCapsulePoints(x, y, width, height, 32);
-    console.log('[Boolean] Terminal/Capsule points count:', pts.length);
     return pts;
   } else if (shape === 'triangle') {
     // 三角形
@@ -362,8 +360,6 @@ function getShapePolygon(element: PlaitDrawElement, samplesPerSegment: number = 
       [x, y + height],
     ];
   } else {
-    // 默认矩形
-    console.log('[Boolean] Default rectangle for shape:', shape);
     return [
       [x, y],
       [x + width, y],
@@ -408,7 +404,10 @@ function elementToPolygon(
   }
 
   // PlaitDrawElement 形状元素
-  if (PlaitDrawElement.isDrawElement(element) && PlaitDrawElement.isShapeElement(element)) {
+  if (
+    PlaitDrawElement.isDrawElement(element) &&
+    PlaitDrawElement.isShapeElement(element)
+  ) {
     // 排除图片和文本
     if (PlaitDrawElement.isImage(element) || PlaitDrawElement.isText(element)) {
       return null;
@@ -453,7 +452,11 @@ function simplifyPath(points: Point[], tolerance: number): Point[] {
 /**
  * 计算点到直线的距离
  */
-function pointToLineDistance(point: Point, lineStart: Point, lineEnd: Point): number {
+function pointToLineDistance(
+  point: Point,
+  lineStart: Point,
+  lineEnd: Point
+): number {
   const dx = lineEnd[0] - lineStart[0];
   const dy = lineEnd[1] - lineStart[1];
   const lineLengthSquared = dx * dx + dy * dy;
@@ -466,7 +469,8 @@ function pointToLineDistance(point: Point, lineStart: Point, lineEnd: Point): nu
     0,
     Math.min(
       1,
-      ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) / lineLengthSquared
+      ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) /
+        lineLengthSquared
     )
   );
 
@@ -552,18 +556,8 @@ function polygonToPenPath(
 ): PenPath {
   if (points.length < 3) {
     throw new Error('Polygon must have at least 3 points');
-  }
-
-  console.log('[Boolean] polygonToPenPath input points:', points.length);
-  console.log('[Boolean] Input points sample (first 10):', points.slice(0, 10));
-
-  // 使用更小的容差值简化路径，保留更多曲线细节
-  const simplifiedPoints = simplifyPath(points, 0.3);
-  
-  console.log('[Boolean] After simplify points:', simplifiedPoints.length);
-  console.log('[Boolean] Simplified points sample:', simplifiedPoints.slice(0, 10));
-
-  // 计算包围盒
+  } // 使用更小的容差值简化路径，保留更多曲线细节
+  const simplifiedPoints = simplifyPath(points, 0.3); // 计算包围盒
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
@@ -596,7 +590,10 @@ function polygonToPenPath(
       return {
         point: relativePoint,
         handleIn: [handleIn[0] - origin[0], handleIn[1] - origin[1]] as Point,
-        handleOut: [handleOut[0] - origin[0], handleOut[1] - origin[1]] as Point,
+        handleOut: [
+          handleOut[0] - origin[0],
+          handleOut[1] - origin[1],
+        ] as Point,
         type: 'smooth' as const,
       };
     }
@@ -645,7 +642,9 @@ async function executeBooleanOperation(
 
   if (selectedElements.length < 2) {
     MessagePlugin.warning(
-      language === 'zh' ? '请选择至少2个闭合图形' : 'Please select at least 2 closed shapes'
+      language === 'zh'
+        ? '请选择至少2个闭合图形'
+        : 'Please select at least 2 closed shapes'
     );
     return;
   }
@@ -681,15 +680,11 @@ async function executeBooleanOperation(
 
     // 第一个多边形作为 Subject
     const subjectPath = pointsToClipperPath(polygons[0].polygon);
-    console.log('[Boolean] Subject polygon points:', polygons[0].polygon.length);
-    console.log('[Boolean] Subject clipper path points:', subjectPath.length);
     clipper.AddPath(subjectPath, ClipperLib.PolyType.ptSubject, true);
 
     // 其余多边形作为 Clip
     for (let i = 1; i < polygons.length; i++) {
       const clipPath = pointsToClipperPath(polygons[i].polygon);
-      console.log(`[Boolean] Clip ${i} polygon points:`, polygons[i].polygon.length);
-      console.log(`[Boolean] Clip ${i} clipper path points:`, clipPath.length);
       clipper.AddPath(clipPath, ClipperLib.PolyType.ptClip, true);
     }
 
@@ -701,17 +696,12 @@ async function executeBooleanOperation(
       ClipperLib.PolyFillType.pftNonZero
     );
 
-    console.log('[Boolean] Clipper execution success:', success);
-    console.log('[Boolean] Solution paths count:', solution.length);
-    if (solution.length > 0) {
-      console.log('[Boolean] Solution[0] points count:', solution[0].length);
-      console.log('[Boolean] Solution[0] sample (first 5):', solution[0].slice(0, 5));
-    }
-
     if (!success || solution.length === 0) {
       MessagePlugin.close(loadingInstance);
       MessagePlugin.warning(
-        language === 'zh' ? '布尔运算无结果（图形可能不相交）' : 'No result (shapes may not intersect)'
+        language === 'zh'
+          ? '布尔运算无结果（图形可能不相交）'
+          : 'No result (shapes may not intersect)'
       );
       return;
     }
@@ -740,7 +730,12 @@ async function executeBooleanOperation(
     for (const resultPath of solution) {
       const resultPoints = clipperPathToPoints(resultPath);
       if (resultPoints.length >= 3) {
-        const newElement = polygonToPenPath(resultPoints, strokeColor, fillColor, strokeWidth);
+        const newElement = polygonToPenPath(
+          resultPoints,
+          strokeColor,
+          fillColor,
+          strokeWidth
+        );
         newElements.push(newElement);
       }
     }
@@ -770,8 +765,10 @@ async function executeBooleanOperation(
 
     const operationNames = {
       [ClipperLib.ClipType.ctUnion]: language === 'zh' ? '合并' : 'Union',
-      [ClipperLib.ClipType.ctDifference]: language === 'zh' ? '减去' : 'Subtract',
-      [ClipperLib.ClipType.ctIntersection]: language === 'zh' ? '相交' : 'Intersect',
+      [ClipperLib.ClipType.ctDifference]:
+        language === 'zh' ? '减去' : 'Subtract',
+      [ClipperLib.ClipType.ctIntersection]:
+        language === 'zh' ? '相交' : 'Intersect',
       [ClipperLib.ClipType.ctXor]: language === 'zh' ? '排除' : 'Exclude',
     };
 
@@ -783,14 +780,19 @@ async function executeBooleanOperation(
   } catch (error: any) {
     MessagePlugin.close(loadingInstance);
     console.error('Boolean operation error:', error);
-    MessagePlugin.error(error.message || (language === 'zh' ? '操作失败' : 'Operation failed'));
+    MessagePlugin.error(
+      error.message || (language === 'zh' ? '操作失败' : 'Operation failed')
+    );
   }
 }
 
 /**
  * 合并操作 (Union)
  */
-const booleanUnion = async (board: PlaitBoard, language: 'zh' | 'en' = 'zh') => {
+const booleanUnion = async (
+  board: PlaitBoard,
+  language: 'zh' | 'en' = 'zh'
+) => {
   const ClipperLib = await loadClipperLib();
   await executeBooleanOperation(board, ClipperLib.ClipType.ctUnion, language);
 };
@@ -798,23 +800,40 @@ const booleanUnion = async (board: PlaitBoard, language: 'zh' | 'en' = 'zh') => 
 /**
  * 减去操作 (Subtract)
  */
-const booleanSubtract = async (board: PlaitBoard, language: 'zh' | 'en' = 'zh') => {
+const booleanSubtract = async (
+  board: PlaitBoard,
+  language: 'zh' | 'en' = 'zh'
+) => {
   const ClipperLib = await loadClipperLib();
-  await executeBooleanOperation(board, ClipperLib.ClipType.ctDifference, language);
+  await executeBooleanOperation(
+    board,
+    ClipperLib.ClipType.ctDifference,
+    language
+  );
 };
 
 /**
  * 相交操作 (Intersect)
  */
-const booleanIntersect = async (board: PlaitBoard, language: 'zh' | 'en' = 'zh') => {
+const booleanIntersect = async (
+  board: PlaitBoard,
+  language: 'zh' | 'en' = 'zh'
+) => {
   const ClipperLib = await loadClipperLib();
-  await executeBooleanOperation(board, ClipperLib.ClipType.ctIntersection, language);
+  await executeBooleanOperation(
+    board,
+    ClipperLib.ClipType.ctIntersection,
+    language
+  );
 };
 
 /**
  * 排除操作 (Exclude)
  */
-const booleanExclude = async (board: PlaitBoard, language: 'zh' | 'en' = 'zh') => {
+const booleanExclude = async (
+  board: PlaitBoard,
+  language: 'zh' | 'en' = 'zh'
+) => {
   const ClipperLib = await loadClipperLib();
   await executeBooleanOperation(board, ClipperLib.ClipType.ctXor, language);
 };
@@ -823,7 +842,10 @@ const booleanExclude = async (board: PlaitBoard, language: 'zh' | 'en' = 'zh') =
  * 扁平化操作 (Flatten)
  * 将所有选中的闭合图形合并为单一轮廓
  */
-const booleanFlatten = async (board: PlaitBoard, language: 'zh' | 'en' = 'zh') => {
+const booleanFlatten = async (
+  board: PlaitBoard,
+  language: 'zh' | 'en' = 'zh'
+) => {
   // Flatten 使用 Union 操作，但确保所有图形都被处理
   const ClipperLib = await loadClipperLib();
   await executeBooleanOperation(board, ClipperLib.ClipType.ctUnion, language);

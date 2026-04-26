@@ -311,8 +311,6 @@ export function App() {
 
         // 安全模式：优先复用已有的空白安全模式画板，否则创建新的
         if (crashRecoveryService.isSafeMode()) {
-          console.log('[App] Safe mode: looking for existing safe mode board');
-
           // 查找已有的安全模式画板（名称以 "安全模式" 开头且元素为空）
           const allBoards = workspaceService.getAllBoards();
           const safeModeBoard = allBoards.find(
@@ -322,14 +320,9 @@ export function App() {
           );
 
           if (safeModeBoard) {
-            console.log(
-              '[App] Safe mode: reusing existing board:',
-              safeModeBoard.name
-            );
             await workspaceService.switchBoard(safeModeBoard.id);
             setCurrentBoardId(safeModeBoard.id);
           } else {
-            console.log('[App] Safe mode: creating new blank board');
             // 使用时间戳生成唯一名称，避免名称冲突
             const timestamp = new Date()
               .toLocaleString('zh-CN', {
@@ -490,11 +483,7 @@ export function App() {
                   ...initialData,
                   children: recoveredElements,
                 };
-                updateLatestBoardData(
-                  currentBoard!.id,
-                  nextData,
-                  Date.now()
-                );
+                updateLatestBoardData(currentBoard!.id, nextData, Date.now());
                 setValue(nextData);
               }
             })
@@ -658,7 +647,11 @@ export function App() {
           viewport: updatedBoard.viewport,
           theme: updatedBoard.theme,
         };
-        updateLatestBoardData(updatedBoard.id, nextData, updatedBoard.updatedAt);
+        updateLatestBoardData(
+          updatedBoard.id,
+          nextData,
+          updatedBoard.updatedAt
+        );
         hasPendingPersistenceRef.current = false;
 
         // 更新 React 状态，触发重新渲染
@@ -678,103 +671,109 @@ export function App() {
   }, [updateLatestBoardData]);
 
   // Handle board changes (auto-save)
-  const handleBoardChange = useCallback((data: BoardChangeData) => {
-    setValue(data);
-    // 同步更新最新 viewport
-    latestViewportRef.current = data.viewport;
+  const handleBoardChange = useCallback(
+    (data: BoardChangeData) => {
+      setValue(data);
+      // 同步更新最新 viewport
+      latestViewportRef.current = data.viewport;
 
-    // 只在数据准备好之后才保存，避免在初始化时保存空数据
-    // 使用 ref 而非 state，避免闭包捕获旧值（Wrapper 中 BOARD_TO_AFTER_CHANGE 不会因 onChange 变化而更新）
-    if (!isDataReadyRef.current) {
-      return;
-    }
+      // 只在数据准备好之后才保存，避免在初始化时保存空数据
+      // 使用 ref 而非 state，避免闭包捕获旧值（Wrapper 中 BOARD_TO_AFTER_CHANGE 不会因 onChange 变化而更新）
+      if (!isDataReadyRef.current) {
+        return;
+      }
 
-    // 同步期间不保存，防止用旧数据覆盖其他标签页保存的新数据
-    if (isSyncingRef.current) {
-      return;
-    }
-
-    // 标记本标签页有用户主动修改
-    localDirtyRef.current = true;
-    hasPendingPersistenceRef.current = true;
-
-    // Save to current board
-    const workspaceService = WorkspaceService.getInstance();
-
-    // 额外安全检查：确保当前画板已经完全加载
-    const currentBoard = workspaceService.getCurrentBoard();
-    if (!currentBoard) {
-      console.warn(
-        '[App] handleBoardChange: board not fully loaded, skipping save'
-      );
-      return;
-    }
-
-    updateLatestBoardData(currentBoard.id, data);
-
-    workspaceService
-      .saveCurrentBoard(data)
-      .then(() => {
-        hasPendingPersistenceRef.current = false;
-        clearBoardCloseSnapshot(currentBoard.id);
-        // 通知其他标签页数据已更新
-        markTabSyncVersion(currentBoard.id);
-      })
-      .catch((err: Error) => {
-        console.error('[App] Failed to save board:', err);
-      });
-  }, [updateLatestBoardData]);
-
-  // Handle viewport changes (pan/zoom) - 单独保存 viewport
-  const handleViewportChange = useCallback((viewport: Viewport) => {
-    // 更新最新 viewport
-    latestViewportRef.current = viewport;
-    const latestSnapshot = latestBoardDataRef.current;
-    if (latestSnapshot) {
-      latestBoardDataRef.current = {
-        ...latestSnapshot,
-        viewport,
-        updatedAt: Date.now(),
-      };
-    }
-
-    // 同步期间不保存 viewport，防止用旧数据覆盖
-    if (isSyncingRef.current) {
-      return;
-    }
-
-    hasPendingPersistenceRef.current = true;
-
-    // 防抖保存
-    if (viewportSaveTimerRef.current) {
-      clearTimeout(viewportSaveTimerRef.current);
-    }
-    viewportSaveTimerRef.current = setTimeout(() => {
-      // 再次检查同步状态
+      // 同步期间不保存，防止用旧数据覆盖其他标签页保存的新数据
       if (isSyncingRef.current) {
         return;
       }
 
+      // 标记本标签页有用户主动修改
+      localDirtyRef.current = true;
+      hasPendingPersistenceRef.current = true;
+
+      // Save to current board
       const workspaceService = WorkspaceService.getInstance();
+
+      // 额外安全检查：确保当前画板已经完全加载
       const currentBoard = workspaceService.getCurrentBoard();
-      if (currentBoard) {
-        // 只保存 viewport，不影响其他数据
-        workspaceService
-          .saveCurrentBoard({
-            children: currentBoard.elements,
-            viewport: viewport,
-            theme: currentBoard.theme,
-          })
-          .then(() => {
-            hasPendingPersistenceRef.current = false;
-            clearBoardCloseSnapshot(currentBoard.id);
-          })
-          .catch((err: Error) => {
-            console.error('[App] Failed to save viewport:', err);
-          });
+      if (!currentBoard) {
+        console.warn(
+          '[App] handleBoardChange: board not fully loaded, skipping save'
+        );
+        return;
       }
-    }, VIEWPORT_SAVE_DEBOUNCE);
-  }, [updateLatestBoardData]);
+
+      updateLatestBoardData(currentBoard.id, data);
+
+      workspaceService
+        .saveCurrentBoard(data)
+        .then(() => {
+          hasPendingPersistenceRef.current = false;
+          clearBoardCloseSnapshot(currentBoard.id);
+          // 通知其他标签页数据已更新
+          markTabSyncVersion(currentBoard.id);
+        })
+        .catch((err: Error) => {
+          console.error('[App] Failed to save board:', err);
+        });
+    },
+    [updateLatestBoardData]
+  );
+
+  // Handle viewport changes (pan/zoom) - 单独保存 viewport
+  const handleViewportChange = useCallback(
+    (viewport: Viewport) => {
+      // 更新最新 viewport
+      latestViewportRef.current = viewport;
+      const latestSnapshot = latestBoardDataRef.current;
+      if (latestSnapshot) {
+        latestBoardDataRef.current = {
+          ...latestSnapshot,
+          viewport,
+          updatedAt: Date.now(),
+        };
+      }
+
+      // 同步期间不保存 viewport，防止用旧数据覆盖
+      if (isSyncingRef.current) {
+        return;
+      }
+
+      hasPendingPersistenceRef.current = true;
+
+      // 防抖保存
+      if (viewportSaveTimerRef.current) {
+        clearTimeout(viewportSaveTimerRef.current);
+      }
+      viewportSaveTimerRef.current = setTimeout(() => {
+        // 再次检查同步状态
+        if (isSyncingRef.current) {
+          return;
+        }
+
+        const workspaceService = WorkspaceService.getInstance();
+        const currentBoard = workspaceService.getCurrentBoard();
+        if (currentBoard) {
+          // 只保存 viewport，不影响其他数据
+          workspaceService
+            .saveCurrentBoard({
+              children: currentBoard.elements,
+              viewport: viewport,
+              theme: currentBoard.theme,
+            })
+            .then(() => {
+              hasPendingPersistenceRef.current = false;
+              clearBoardCloseSnapshot(currentBoard.id);
+            })
+            .catch((err: Error) => {
+              console.error('[App] Failed to save viewport:', err);
+            });
+        }
+      }, VIEWPORT_SAVE_DEBOUNCE);
+    },
+    [updateLatestBoardData]
+  );
 
   // 页面关闭/隐藏前保存当前画布快照，并尽量 flush 到 IndexedDB
   useEffect(() => {

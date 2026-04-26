@@ -28,7 +28,9 @@ import { getDefaultImageModel } from '../../constants/model-config';
 // 重新导出工具函数，方便外部使用
 export { isAsyncImageModel, aspectRatioToSize };
 
-function normalizeImageResultUrl(item: Record<string, unknown>): string | undefined {
+function normalizeImageResultUrl(
+  item: Record<string, unknown>
+): string | undefined {
   if (typeof item.url === 'string' && item.url) {
     // url 字段可能是原始 base64（如 /9j/4AAQ...），需要转为 data URL
     return normalizeImageDataUrl(item.url);
@@ -45,7 +47,9 @@ function normalizeImageResultUrl(item: Record<string, unknown>): string | undefi
 /**
  * 构建图片生成请求体
  */
-export function buildImageRequestBody(params: ImageGenerationParams): Record<string, unknown> {
+export function buildImageRequestBody(
+  params: ImageGenerationParams
+): Record<string, unknown> {
   const body: Record<string, unknown> = {
     prompt: params.prompt,
     model: params.model,
@@ -77,7 +81,9 @@ export function buildImageRequestBody(params: ImageGenerationParams): Record<str
 /**
  * 解析同步图片生成响应
  */
-export function parseImageResponse(data: Record<string, unknown>): ImageGenerationResult {
+export function parseImageResponse(
+  data: Record<string, unknown>
+): ImageGenerationResult {
   // 支持多种响应格式
   if (data.data && Array.isArray(data.data)) {
     const urls = data.data
@@ -93,7 +99,9 @@ export function parseImageResponse(data: Record<string, unknown>): ImageGenerati
           throw new Error('内容被拒绝：包含违禁内容');
         }
         if (revisedPrompt.includes('NO_IMAGE')) {
-          throw new Error('该模型为多模态模型，未生成图片，可更换提示词明确生成图片试试');
+          throw new Error(
+            '该模型为多模态模型，未生成图片，可更换提示词明确生成图片试试'
+          );
         }
       }
       throw new Error('No image URL in response');
@@ -156,7 +164,9 @@ export async function generateImageSync(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Image generation failed: ${response.status} - ${errorText}`);
+    throw new Error(
+      `Image generation failed: ${response.status} - ${errorText}`
+    );
   }
 
   const data = await response.json();
@@ -177,20 +187,21 @@ export async function generateImageAsync(
   config: ImageApiConfig,
   options: AsyncImageOptions = {}
 ): Promise<ImageGenerationResult> {
-  const { onProgress, onSubmitted, signal, interval = 5000, maxAttempts = 1080 } = options;
+  const {
+    onProgress,
+    onSubmitted,
+    signal,
+    interval = 5000,
+    maxAttempts = 1080,
+  } = options;
   const fetchFn = config.fetchImpl || fetch;
   const baseUrl = normalizeApiBase(config.baseUrl);
   const providerContext = buildProviderContextFromApiConfig(config, baseUrl);
-  const model = params.model || config.defaultModel || 'gemini-3-pro-image-preview-async';
-
-  console.log(
-    `[ImageAPI] 🚀 开始异步图片生成: model=${model}, baseUrl=${baseUrl}`
-  );
-
+  const model =
+    params.model || config.defaultModel || 'gemini-3-pro-image-preview-async';
   // 计算宽高比
-  const aspectRatio = params.aspectRatio || sizeToAspectRatio(params.size) || '1:1';
-  console.log(`[ImageAPI] 配置: aspectRatio=${aspectRatio}`);
-
+  const aspectRatio =
+    params.aspectRatio || sizeToAspectRatio(params.size) || '1:1';
   // 构建 FormData
   const formData = new FormData();
   formData.append('model', model);
@@ -199,7 +210,6 @@ export async function generateImageAsync(
 
   // 处理参考图片：需要转换为 Blob
   if (params.referenceImages && params.referenceImages.length > 0) {
-    console.log(`[ImageAPI] 处理 ${params.referenceImages.length} 张参考图片`);
     for (let i = 0; i < params.referenceImages.length; i++) {
       const refImage = params.referenceImages[i];
       try {
@@ -216,9 +226,6 @@ export async function generateImageAsync(
   }
 
   onProgress?.(5);
-
-  console.log(`[ImageAPI] 📤 提交异步图片任务到: ${baseUrl}/v1/videos`);
-
   // 提交异步任务
   const submitResponse = await providerTransport.send(providerContext, {
     path: '/v1/videos',
@@ -227,20 +234,20 @@ export async function generateImageAsync(
     signal,
     fetcher: fetchFn,
   });
-
-  console.log(`[ImageAPI] 📥 提交响应状态: ${submitResponse.status}`);
-
   if (!submitResponse.ok) {
     const errorText = await submitResponse.text();
-    console.error(`[ImageAPI] ❌ 提交失败: ${submitResponse.status} - ${errorText.substring(0, 200)}`);
-    throw new Error(`Async image submit failed: ${submitResponse.status} - ${errorText}`);
+    console.error(
+      `[ImageAPI] ❌ 提交失败: ${submitResponse.status} - ${errorText.substring(
+        0,
+        200
+      )}`
+    );
+    throw new Error(
+      `Async image submit failed: ${submitResponse.status} - ${errorText}`
+    );
   }
 
   const submitData: AsyncTaskSubmitResponse = await submitResponse.json();
-  console.log(
-    `[ImageAPI] 📋 提交结果: id=${submitData.id}, status=${submitData.status}, progress=${submitData.progress}`
-  );
-
   if (submitData.status === 'failed') {
     const msg = parseErrorMessage(submitData.error) || '图片生成失败';
     console.error(`[ImageAPI] ❌ 任务失败: ${msg}`);
@@ -256,9 +263,6 @@ export async function generateImageAsync(
   // 通知调用方保存 remoteId（用于页面刷新后恢复轮询）
   onSubmitted?.(taskRemoteId);
   onProgress?.(10);
-
-  console.log(`[ImageAPI] 🔄 开始轮询: remoteId=${taskRemoteId}`);
-
   // 轮询等待结果
   let progress = submitData.progress ?? 0;
 
@@ -278,20 +282,19 @@ export async function generateImageAsync(
 
     if (!queryResponse.ok) {
       const errorText = await queryResponse.text();
-      console.warn(`[ImageAPI] ⚠️ 轮询失败: attempt=${attempt + 1}, status=${queryResponse.status}`);
-      throw new Error(`Async image query failed: ${queryResponse.status} - ${errorText}`);
+      console.warn(
+        `[ImageAPI] ⚠️ 轮询失败: attempt=${attempt + 1}, status=${
+          queryResponse.status
+        }`
+      );
+      throw new Error(
+        `Async image query failed: ${queryResponse.status} - ${errorText}`
+      );
     }
 
     const statusData = await queryResponse.json();
     progress = statusData.progress ?? progress;
     onProgress?.(10 + progress * 0.9); // 10% 提交 + 90% 轮询
-
-    // 每 10 次轮询打印一次日志，避免刷屏
-    if (attempt % 10 === 0) {
-      console.log(
-        `[ImageAPI] 🔄 轮询中: attempt=${attempt + 1}, status=${statusData.status}, progress=${progress}`
-      );
-    }
 
     if (statusData.status === 'completed') {
       const url = statusData.video_url || statusData.url;
@@ -299,7 +302,6 @@ export async function generateImageAsync(
         console.error('[ImageAPI] ❌ API 未返回有效的图片 URL');
         throw new Error('API 未返回有效的图片 URL');
       }
-      console.log(`[ImageAPI] ✅ 异步图片生成完成: url=${url.substring(0, 80)}...`);
       return {
         url,
         format: getExtensionFromUrl(url),
@@ -350,7 +352,9 @@ export async function resumeAsyncImagePolling(
 
     if (!queryResponse.ok) {
       const errorText = await queryResponse.text();
-      throw new Error(`Async image query failed: ${queryResponse.status} - ${errorText}`);
+      throw new Error(
+        `Async image query failed: ${queryResponse.status} - ${errorText}`
+      );
     }
 
     const statusData = await queryResponse.json();

@@ -25,6 +25,7 @@ import { PlaitFrame, isFrameElement } from '../../types/frame.types';
 import { defaultGeminiClient } from '../../utils/gemini-api';
 import { geminiSettings } from '../../utils/settings-manager';
 import type { GeminiMessage } from '../../utils/gemini-api/types';
+import { analytics } from '../../utils/posthog-analytics';
 import {
   type PPTGenerationParams,
   type PPTOutline,
@@ -229,8 +230,15 @@ async function executePPTGeneration(
   options: MCPExecuteOptions
 ): Promise<MCPResult> {
   const { topic, pageCount, language, extraRequirements } = params;
+  const startTime = Date.now();
 
   if (!topic || typeof topic !== 'string') {
+    analytics.trackPPTAction({
+      action: 'generate_outline',
+      source: 'mcp_generate_ppt',
+      status: 'failed',
+      error: 'MissingTopic',
+    });
     return {
       success: false,
       error: '缺少必填参数 topic（PPT 主题）',
@@ -240,6 +248,13 @@ async function executePPTGeneration(
 
   const board = getBoard();
   if (!board) {
+    analytics.trackPPTAction({
+      action: 'generate_outline',
+      source: 'mcp_generate_ppt',
+      status: 'failed',
+      prompt: topic,
+      error: 'BoardUnavailable',
+    });
     return {
       success: false,
       error: '画布未初始化，请先打开画布',
@@ -248,6 +263,29 @@ async function executePPTGeneration(
   }
 
   try {
+    const settings = geminiSettings.get();
+    const textModel =
+      params.textModelRef ||
+      params.textModel ||
+      params.modelRef ||
+      params.model ||
+      settings.textModelName;
+    const analyticsTextModel =
+      typeof textModel === 'string'
+        ? textModel
+        : textModel?.modelId || settings.textModelName;
+    analytics.trackPPTAction({
+      action: 'generate_outline',
+      source: 'mcp_generate_ppt',
+      status: 'start',
+      model: analyticsTextModel,
+      prompt: topic,
+      metadata: {
+        page_count_option: pageCount || 'normal',
+        has_extra_requirements: Boolean(extraRequirements?.trim()),
+        language,
+      },
+    });
     // 通知开始生成
     options.onChunk?.(`🎯 正在为「${topic}」生成 PPT 大纲...\n\n`);
 
@@ -313,6 +351,26 @@ async function executePPTGeneration(
     }
 
     requestOpenPPTEditor({ viewMode: 'outline' });
+    analytics.trackPPTAction({
+      action: 'generate_outline',
+      source: 'mcp_generate_ppt',
+      status: 'success',
+      pageCount: createdCount,
+      frameCount: createdCount,
+      durationMs: Date.now() - startTime,
+      model: analyticsTextModel,
+      prompt: topic,
+      metadata: {
+        replaced_frame_count: replacedFrameCount,
+        layout_count: outline.pages.reduce<Record<string, number>>(
+          (acc, page) => {
+            acc[page.layout] = (acc[page.layout] || 0) + 1;
+            return acc;
+          },
+          {}
+        ),
+      },
+    });
 
     options.onChunk?.(`\n🎉 **PPT 大纲已生成！**\n`);
     options.onChunk?.(`- 共创建 ${createdCount} 个 Frame\n`);
@@ -333,6 +391,14 @@ async function executePPTGeneration(
     };
   } catch (error: any) {
     console.error('[PPT] Generation failed:', error);
+    analytics.trackPPTAction({
+      action: 'generate_outline',
+      source: 'mcp_generate_ppt',
+      status: 'failed',
+      durationMs: Date.now() - startTime,
+      prompt: topic,
+      error: error instanceof Error ? error.name || 'Error' : typeof error,
+    });
     return {
       success: false,
       error: error.message || 'PPT 生成失败',

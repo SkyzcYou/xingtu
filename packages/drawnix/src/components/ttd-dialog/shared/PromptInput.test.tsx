@@ -1,22 +1,44 @@
 // @vitest-environment jsdom
-import React from 'react';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import React, { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AI_IMAGE_PROMPTS,
   AI_VIDEO_PROMPTS,
 } from '../../../constants/prompts';
 
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
+  .IS_REACT_ACT_ENVIRONMENT = true;
+
 const mockPromptListPanel = vi.fn();
+const promptStorageMockState = vi.hoisted(() => ({
+  reverseSort: false,
+  listeners: new Set<(event: { version: number; types: string[] }) => void>(),
+}));
+let roots: Root[] = [];
 
 vi.mock('../../../services/prompt-storage-service', () => ({
   promptStorageService: {
-    sortPrompts: (_type: string, prompts: string[]) => prompts,
+    sortPrompts: (_type: string, prompts: string[]) =>
+      promptStorageMockState.reverseSort ? [...prompts].reverse() : prompts,
     isPinned: () => false,
+    resolveContent: (content: string) => content.trim(),
     pinPrompt: vi.fn(),
     unpinPrompt: vi.fn(),
     deletePrompt: vi.fn(),
+    subscribeChanges: vi.fn(
+      (listener: (event: { version: number; types: string[] }) => void) => {
+        promptStorageMockState.listeners.add(listener);
+        return () => {
+          promptStorageMockState.listeners.delete(listener);
+        };
+      }
+    ),
   },
+}));
+
+vi.mock('lucide-react', () => ({
+  Lightbulb: () => React.createElement('span', { 'aria-hidden': 'true' }),
 }));
 
 vi.mock('../../../hooks/useMention', () => ({
@@ -102,7 +124,7 @@ vi.mock('../../dialog/dialog', () => ({
   }: {
     children: React.ReactNode;
     open?: boolean;
-  }) => <>{open ? children : null}</>,
+  }) => (open ? <div>{children}</div> : null),
   DialogContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -115,6 +137,9 @@ vi.mock('../../dialog/dialog', () => ({
 }));
 
 vi.mock('../../shared', () => ({
+  PromptOptimizeButton: () => (
+    <button type="button" data-testid="prompt-optimize-button" />
+  ),
   PromptListPanel: (props: Record<string, unknown>) => {
     mockPromptListPanel(props);
     return <div data-testid="prompt-list-panel" />;
@@ -124,28 +149,63 @@ vi.mock('../../shared', () => ({
 describe('PromptInput', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    promptStorageMockState.reverseSort = false;
+    promptStorageMockState.listeners.clear();
   });
 
   afterEach(() => {
-    cleanup();
+    roots.forEach((root) => {
+      act(() => root.unmount());
+    });
+    roots = [];
+    document.body.innerHTML = '';
   });
 
-  it('图片默认提示词在弹窗预设列表中不再带内置示例图', async () => {
+  const renderPromptInput = async (
+    props: Partial<
+      React.ComponentProps<typeof import('./PromptInput').PromptInput>
+    >
+  ) => {
     const { PromptInput } = await import('./PromptInput');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    roots.push(root);
 
-    render(
-      <PromptInput
-        prompt=""
-        onPromptChange={vi.fn()}
-        presetPrompts={[AI_IMAGE_PROMPTS.zh[1]]}
-        language="zh"
-        type="image"
-      />
-    );
+    act(() => {
+      root.render(
+        <PromptInput
+          prompt=""
+          onPromptChange={vi.fn()}
+          language="zh"
+          type="image"
+          {...props}
+        />
+      );
+    });
+  };
 
-    fireEvent.click(
-      document.querySelector('.preset-icon-button') as HTMLButtonElement
-    );
+  const openPresetPanel = () => {
+    act(() => {
+      document.querySelector<HTMLButtonElement>('.preset-icon-button')?.click();
+    });
+  };
+
+  const triggerPromptStorageChange = () => {
+    act(() => {
+      promptStorageMockState.listeners.forEach((listener) => {
+        listener({ version: 1, types: ['pin'] });
+      });
+    });
+  };
+
+  it('图片默认提示词在弹窗预设列表中不再带内置示例图', async () => {
+    await renderPromptInput({
+      presetPrompts: [AI_IMAGE_PROMPTS.zh[1]],
+      type: 'image',
+    });
+
+    openPresetPanel();
 
     const panelProps = mockPromptListPanel.mock.calls.at(-1)?.[0] as {
       items: Array<{ content: string; previewExamples?: Array<{ src: string }> }>;
@@ -156,21 +216,12 @@ describe('PromptInput', () => {
   });
 
   it('视频默认提示词命中用户生成历史时使用真实预览', async () => {
-    const { PromptInput } = await import('./PromptInput');
+    await renderPromptInput({
+      presetPrompts: [AI_VIDEO_PROMPTS.zh[0]],
+      type: 'video',
+    });
 
-    render(
-      <PromptInput
-        prompt=""
-        onPromptChange={vi.fn()}
-        presetPrompts={[AI_VIDEO_PROMPTS.zh[0]]}
-        language="zh"
-        type="video"
-      />
-    );
-
-    fireEvent.click(
-      document.querySelector('.preset-icon-button') as HTMLButtonElement
-    );
+    openPresetPanel();
 
     const panelProps = mockPromptListPanel.mock.calls.at(-1)?.[0] as {
       items: Array<{
@@ -193,21 +244,12 @@ describe('PromptInput', () => {
   });
 
   it('未命中用户生成历史时，视频默认提示词不再回退到内置样片', async () => {
-    const { PromptInput } = await import('./PromptInput');
+    await renderPromptInput({
+      presetPrompts: [AI_VIDEO_PROMPTS.zh[1]],
+      type: 'video',
+    });
 
-    render(
-      <PromptInput
-        prompt=""
-        onPromptChange={vi.fn()}
-        presetPrompts={[AI_VIDEO_PROMPTS.zh[1]]}
-        language="zh"
-        type="video"
-      />
-    );
-
-    fireEvent.click(
-      document.querySelector('.preset-icon-button') as HTMLButtonElement
-    );
+    openPresetPanel();
 
     const panelProps = mockPromptListPanel.mock.calls.at(-1)?.[0] as {
       items: Array<{
@@ -222,5 +264,39 @@ describe('PromptInput', () => {
 
     expect(panelProps.items[0]?.content).toBe(AI_VIDEO_PROMPTS.zh[1]);
     expect(panelProps.items[0]?.previewExamples).toEqual([]);
+  });
+
+  it('提示词存储广播后重新计算并刷新预设列表', async () => {
+    await renderPromptInput({
+      presetPrompts: ['广播前提示词', '广播后提示词'],
+      type: 'image',
+    });
+
+    openPresetPanel();
+
+    const initialPanelProps = mockPromptListPanel.mock.calls.at(-1)?.[0] as {
+      items: Array<{ content: string }>;
+    };
+    const initialCallCount = mockPromptListPanel.mock.calls.length;
+
+    expect(initialPanelProps.items.map((item) => item.content)).toEqual([
+      '广播前提示词',
+      '广播后提示词',
+    ]);
+
+    promptStorageMockState.reverseSort = true;
+    triggerPromptStorageChange();
+
+    const updatedPanelProps = mockPromptListPanel.mock.calls.at(-1)?.[0] as {
+      items: Array<{ content: string }>;
+    };
+
+    expect(mockPromptListPanel.mock.calls.length).toBeGreaterThan(
+      initialCallCount
+    );
+    expect(updatedPanelProps.items.map((item) => item.content)).toEqual([
+      '广播后提示词',
+      '广播前提示词',
+    ]);
   });
 });

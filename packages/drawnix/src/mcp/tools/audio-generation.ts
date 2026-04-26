@@ -12,7 +12,11 @@ import {
   audioAPIService,
   extractAudioGenerationResult,
 } from '../../services/audio-api-service';
-import { createQueueTask, validatePrompt } from './shared/queue-utils';
+import {
+  createQueueTask,
+  validatePrompt,
+  type PromptLineageMeta,
+} from './shared/queue-utils';
 
 export interface AudioGenerationParams {
   prompt: string;
@@ -36,6 +40,7 @@ export interface AudioGenerationParams {
   globalIndex?: number;
   autoInsertToCanvas?: boolean;
   params?: Record<string, unknown>;
+  promptMeta?: PromptLineageMeta;
 }
 
 export function getCurrentAudioModel(): string {
@@ -121,6 +126,7 @@ function getAudioQueueConfig(params: AudioGenerationParams) {
       continueAt: params.continueAt,
       infillStartS: params.infillStartS,
       infillEndS: params.infillEndS,
+      promptMeta: params.promptMeta,
       ...((params.params || params.continueSource)
         ? {
             params: {

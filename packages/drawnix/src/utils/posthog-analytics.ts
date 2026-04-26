@@ -3,7 +3,7 @@
  *
  * Provides type-safe event tracking for PostHog analytics.
  * Tracks model calls and API usage.
- * 
+ *
  * SECURITY: All event data is sanitized before being sent to PostHog
  * to prevent accidental leakage of API keys and other sensitive information.
  */
@@ -35,6 +35,8 @@ declare global {
 /** Event categories for analytics */
 enum AnalyticsCategory {
   AI_GENERATION = 'ai_generation',
+  PPT = 'ppt',
+  PROMPT = 'prompt',
   SYSTEM = 'system',
   UI_INTERACTION = 'ui_interaction',
 }
@@ -101,7 +103,47 @@ enum APICallEvent {
 
 type AnalyticsEventData = Record<string, any>;
 
-function inferDeploymentEnv(hostname: string): 'local' | 'preview' | 'staging' | 'production' {
+export type PromptAnalyticsType =
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'text'
+  | 'agent'
+  | 'ppt-common'
+  | 'ppt-slide';
+
+export interface PromptAnalyticsSummary {
+  has_prompt: boolean;
+  prompt_length: number;
+  prompt_length_bucket: string;
+  prompt_line_count: number;
+}
+
+function getTextLengthBucket(length: number): string {
+  if (length <= 0) return '0';
+  if (length <= 50) return '1-50';
+  if (length <= 200) return '51-200';
+  if (length <= 500) return '201-500';
+  if (length <= 1000) return '501-1000';
+  if (length <= 2000) return '1001-2000';
+  return '2000+';
+}
+
+export function getPromptAnalyticsSummary(
+  prompt?: string | null
+): PromptAnalyticsSummary {
+  const trimmed = String(prompt || '').trim();
+  return {
+    has_prompt: trimmed.length > 0,
+    prompt_length: trimmed.length,
+    prompt_length_bucket: getTextLengthBucket(trimmed.length),
+    prompt_line_count: trimmed ? trimmed.split(/\r?\n/).length : 0,
+  };
+}
+
+function inferDeploymentEnv(
+  hostname: string
+): 'local' | 'preview' | 'staging' | 'production' {
   const normalized = hostname.toLowerCase();
   if (
     normalized === 'localhost' ||
@@ -135,8 +177,9 @@ function getAppVersion(): string {
 
   if (typeof document !== 'undefined') {
     return (
-      document.querySelector('meta[name="app-version"]')?.getAttribute('content') ||
-      '0.0.0'
+      document
+        .querySelector('meta[name="app-version"]')
+        ?.getAttribute('content') || '0.0.0'
     );
   }
 
@@ -189,7 +232,7 @@ export function registerAnalyticsSuperProperties(
       ...(properties || {}),
     });
   } catch (error) {
-    console.debug('[Analytics] register super properties failed', error);
+    void error;
   }
 }
 
@@ -236,11 +279,27 @@ class PostHogAnalytics {
             : undefined;
         window.posthog!.capture(eventName, sanitizedData);
       } catch (error) {
-        console.debug('[Analytics] track failed', error);
+        void error;
       }
     };
-    if (typeof (globalThis as unknown as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback === 'function') {
-      (globalThis as unknown as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback(doTrack, { timeout: 2000 });
+    if (
+      typeof (
+        globalThis as unknown as Window & {
+          requestIdleCallback?: (
+            cb: () => void,
+            opts?: { timeout: number }
+          ) => number;
+        }
+      ).requestIdleCallback === 'function'
+    ) {
+      (
+        globalThis as unknown as Window & {
+          requestIdleCallback: (
+            cb: () => void,
+            opts?: { timeout: number }
+          ) => number;
+        }
+      ).requestIdleCallback(doTrack, { timeout: 2000 });
     } else {
       setTimeout(doTrack, 0);
     }
@@ -252,6 +311,73 @@ class PostHogAnalytics {
     this.track('ui_interaction', {
       category: AnalyticsCategory.UI_INTERACTION,
       ...coreParams,
+      metadata: metadata || undefined,
+      timestamp: Date.now(),
+    });
+  }
+
+  /** Track PPT feature usage without sending raw prompt or slide text. */
+  trackPPTAction(params: {
+    action: string;
+    source?: string;
+    status?: 'start' | 'success' | 'failed' | 'cancelled';
+    pageCount?: number;
+    frameCount?: number;
+    selectedCount?: number;
+    successCount?: number;
+    failedCount?: number;
+    durationMs?: number;
+    serialMode?: boolean;
+    model?: string;
+    prompt?: string | null;
+    error?: string;
+    metadata?: Record<string, any>;
+  }): void {
+    const { prompt, metadata, ...coreParams } = params;
+    this.track('ppt_action', {
+      category: AnalyticsCategory.PPT,
+      ...coreParams,
+      ...(prompt !== undefined ? getPromptAnalyticsSummary(prompt) : {}),
+      metadata: metadata || undefined,
+      timestamp: Date.now(),
+    });
+  }
+
+  /** Track prompt library and optimization usage without sending raw prompt text. */
+  trackPromptAction(params: {
+    action: string;
+    surface: string;
+    promptType?: PromptAnalyticsType;
+    mode?: string;
+    source?: string;
+    status?: 'start' | 'success' | 'failed' | 'cancelled';
+    model?: string;
+    prompt?: string | null;
+    requirements?: string | null;
+    durationMs?: number;
+    itemCount?: number;
+    metadata?: Record<string, any>;
+  }): void {
+    const { prompt, requirements, metadata, ...coreParams } = params;
+    const promptSummary =
+      prompt !== undefined ? getPromptAnalyticsSummary(prompt) : undefined;
+    const requirementsSummary =
+      requirements !== undefined
+        ? getPromptAnalyticsSummary(requirements)
+        : undefined;
+    this.track('prompt_action', {
+      category: AnalyticsCategory.PROMPT,
+      ...coreParams,
+      ...(promptSummary || {}),
+      ...(requirementsSummary
+        ? {
+            has_requirements: requirementsSummary.has_prompt,
+            requirements_length: requirementsSummary.prompt_length,
+            requirements_length_bucket:
+              requirementsSummary.prompt_length_bucket,
+            requirements_line_count: requirementsSummary.prompt_line_count,
+          }
+        : {}),
       metadata: metadata || undefined,
       timestamp: Date.now(),
     });
@@ -283,10 +409,10 @@ class PostHogAnalytics {
     hasUploadedImage: boolean;
     startTime: number;
     // Enhanced parameters for detailed analytics
-    aspectRatio?: string;       // 图片/视频比例 (e.g., "16:9", "1:1")
-    duration?: number;          // 视频时长（秒）
-    resolution?: string;        // 分辨率 (e.g., "1080p", "720p")
-    batchCount?: number;        // 批量生成数量
+    aspectRatio?: string; // 图片/视频比例 (e.g., "16:9", "1:1")
+    duration?: number; // 视频时长（秒）
+    resolution?: string; // 分辨率 (e.g., "1080p", "720p")
+    batchCount?: number; // 批量生成数量
     hasReferenceImage?: boolean; // 是否有参考图
   }): void {
     const eventMap = {
@@ -363,12 +489,14 @@ class PostHogAnalytics {
   }
 
   /** Track API call start */
-  trackAPICallStart(params: {
-    endpoint: string;
-    model: string;
-    messageCount: number;
-    stream: boolean;
-  } & Record<string, unknown>): void {
+  trackAPICallStart(
+    params: {
+      endpoint: string;
+      model: string;
+      messageCount: number;
+      stream: boolean;
+    } & Record<string, unknown>
+  ): void {
     this.track(APICallEvent.API_CALL_START, {
       category: AnalyticsCategory.SYSTEM,
       ...params,
@@ -377,13 +505,15 @@ class PostHogAnalytics {
   }
 
   /** Track API call success */
-  trackAPICallSuccess(params: {
-    endpoint: string;
-    model: string;
-    duration: number;
-    responseLength?: number;
-    stream: boolean;
-  } & Record<string, unknown>): void {
+  trackAPICallSuccess(
+    params: {
+      endpoint: string;
+      model: string;
+      duration: number;
+      responseLength?: number;
+      stream: boolean;
+    } & Record<string, unknown>
+  ): void {
     this.track(APICallEvent.API_CALL_SUCCESS, {
       category: AnalyticsCategory.SYSTEM,
       ...params,
@@ -392,14 +522,16 @@ class PostHogAnalytics {
   }
 
   /** Track API call failure */
-  trackAPICallFailure(params: {
-    endpoint: string;
-    model: string;
-    duration: number;
-    error: string;
-    httpStatus?: number;
-    stream: boolean;
-  } & Record<string, unknown>): void {
+  trackAPICallFailure(
+    params: {
+      endpoint: string;
+      model: string;
+      duration: number;
+      error: string;
+      httpStatus?: number;
+      stream: boolean;
+    } & Record<string, unknown>
+  ): void {
     this.track(APICallEvent.API_CALL_FAILED, {
       category: AnalyticsCategory.SYSTEM,
       ...params,

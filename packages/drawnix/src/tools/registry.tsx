@@ -27,6 +27,13 @@ const INTERNAL_COMPONENT_LOADERS = new Map<string, InternalComponentLoader>([
       })),
   ],
   [
+    'prompt-history',
+    () =>
+      import('./tools/prompt-history').then((module) => ({
+        default: module.PromptHistoryToolComponent,
+      })),
+  ],
+  [
     'knowledge-base',
     () =>
       import('./tools/knowledge-base').then((module) => ({

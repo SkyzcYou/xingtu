@@ -1,6 +1,6 @@
 /**
  * SW Debug Panel - Service Worker Communication Module
- * 
+ *
  * 使用 postmessage-duplex 实现可靠的点对点通信
  */
 
@@ -74,7 +74,7 @@ function trackOutgoingRequest(requestId, cmdname) {
       requestIdToMethod.delete(id);
     }
   }
-  
+
   requestIdToMethod.set(requestId, { cmdname, timestamp: now });
 }
 
@@ -102,14 +102,17 @@ let postMessageWrapped = false;
  */
 function wrapPostMessage() {
   if (postMessageWrapped) return;
-  
+
   // We need to wrap the postMessage on any controller that gets set
   // Use a getter/setter on navigator.serviceWorker to catch controller changes
-  const originalDescriptor = Object.getOwnPropertyDescriptor(ServiceWorkerContainer.prototype, 'controller');
-  
+  const originalDescriptor = Object.getOwnPropertyDescriptor(
+    ServiceWorkerContainer.prototype,
+    'controller'
+  );
+
   if (originalDescriptor && originalDescriptor.get) {
     let lastController = null;
-    
+
     Object.defineProperty(navigator.serviceWorker, 'controller', {
       get() {
         const controller = originalDescriptor.get.call(this);
@@ -121,14 +124,16 @@ function wrapPostMessage() {
       },
       configurable: true,
     });
-    
+
     // Also wrap the current controller if it exists
-    const currentController = originalDescriptor.get.call(navigator.serviceWorker);
+    const currentController = originalDescriptor.get.call(
+      navigator.serviceWorker
+    );
     if (currentController) {
       wrapControllerPostMessage(currentController);
     }
   }
-  
+
   postMessageWrapped = true;
 }
 
@@ -138,20 +143,25 @@ function wrapPostMessage() {
  */
 function wrapControllerPostMessage(controller) {
   if (controller._postMessageWrapped) return;
-  
+
   const originalPostMessage = controller.postMessage.bind(controller);
-  
-  controller.postMessage = function(message, transfer) {
+
+  controller.postMessage = function (message, transfer) {
     // Track duplex protocol messages (those with requestId and cmdname)
-    if (message && typeof message === 'object' && message.requestId && message.cmdname) {
+    if (
+      message &&
+      typeof message === 'object' &&
+      message.requestId &&
+      message.cmdname
+    ) {
       trackOutgoingRequest(message.requestId, message.cmdname);
       // Log the outgoing message
       logPostMessage('send', message.cmdname, message);
     }
-    
+
     return originalPostMessage(message, transfer);
   };
-  
+
   controller._postMessageWrapped = true;
 }
 
@@ -188,7 +198,9 @@ function isDebugPanelMessage(messageType) {
   if (!messageType || typeof messageType !== 'string') {
     return false;
   }
-  return DEBUG_PANEL_MESSAGE_PREFIXES.some(prefix => messageType.startsWith(prefix));
+  return DEBUG_PANEL_MESSAGE_PREFIXES.some((prefix) =>
+    messageType.startsWith(prefix)
+  );
 }
 
 /**
@@ -225,13 +237,12 @@ function logPostMessage(direction, messageType, data, response, error) {
  */
 async function ensureDuplexInitialized() {
   if (duplexInitialized) return true;
-  
+
   try {
     const success = await initDuplexClient();
     if (success) {
       duplexInitialized = true;
       setupDuplexEventHandlers();
-      console.log('[SW Communication] Duplex communication initialized');
     }
     return success;
   } catch (error) {
@@ -294,7 +305,9 @@ function setupDuplexEventHandlers() {
  * Enable debug mode
  */
 export function enableDebug() {
-  try { sessionStorage.setItem('sw-debug-enabled', 'true'); } catch {}
+  try {
+    sessionStorage.setItem('sw-debug-enabled', 'true');
+  } catch {}
   enableDebugMode();
 }
 
@@ -302,7 +315,9 @@ export function enableDebug() {
  * Disable debug mode
  */
 export function disableDebug() {
-  try { sessionStorage.setItem('sw-debug-enabled', 'false'); } catch {}
+  try {
+    sessionStorage.setItem('sw-debug-enabled', 'false');
+  } catch {}
   disableDebugMode();
 }
 
@@ -318,7 +333,7 @@ export function heartbeat() {
  */
 export async function refreshStatus() {
   await ensureDuplexInitialized();
-  
+
   try {
     const result = await getDebugStatus();
     if (messageHandlers['SW_DEBUG_STATUS']) {
@@ -337,7 +352,7 @@ export async function refreshStatus() {
  */
 export async function loadFetchLogs() {
   await ensureDuplexInitialized();
-  
+
   try {
     const result = await getFetchLogs();
     if (messageHandlers['SW_DEBUG_LOGS']) {
@@ -354,7 +369,7 @@ export async function loadFetchLogs() {
  */
 export async function clearFetchLogs() {
   await ensureDuplexInitialized();
-  
+
   try {
     await clearFetchLogsRPC();
     if (messageHandlers['SW_DEBUG_LOGS_CLEARED']) {
@@ -371,7 +386,7 @@ export async function clearFetchLogs() {
  */
 export async function clearConsoleLogs() {
   await ensureDuplexInitialized();
-  
+
   try {
     await clearConsoleLogsRPC();
     if (messageHandlers['SW_DEBUG_CONSOLE_LOGS_CLEARED']) {
@@ -394,7 +409,10 @@ export async function loadConsoleLogs() {
       messageHandlers['SW_DEBUG_CONSOLE_LOGS'](result);
     }
   } catch (error) {
-    console.error('[SW Communication] Failed to load console logs directly, falling back to RPC:', error);
+    console.error(
+      '[SW Communication] Failed to load console logs directly, falling back to RPC:',
+      error
+    );
     // Fallback to RPC
     try {
       await ensureDuplexInitialized();
@@ -413,7 +431,7 @@ export async function loadConsoleLogs() {
  */
 export async function loadPostMessageLogs() {
   await ensureDuplexInitialized();
-  
+
   try {
     const result = await getPostMessageLogs(500);
     if (messageHandlers['SW_DEBUG_POSTMESSAGE_LOGS']) {
@@ -430,14 +448,17 @@ export async function loadPostMessageLogs() {
  */
 export async function clearPostMessageLogs() {
   await ensureDuplexInitialized();
-  
+
   try {
     await clearPostMessageLogsRPC();
     if (messageHandlers['SW_DEBUG_POSTMESSAGE_LOGS_CLEARED']) {
       messageHandlers['SW_DEBUG_POSTMESSAGE_LOGS_CLEARED']({});
     }
   } catch (error) {
-    console.error('[SW Communication] Failed to clear postmessage logs:', error);
+    console.error(
+      '[SW Communication] Failed to clear postmessage logs:',
+      error
+    );
     sendNativeMessage('SW_DEBUG_CLEAR_POSTMESSAGE_LOGS');
   }
 }
@@ -454,7 +475,10 @@ export async function loadLLMApiLogs(page = 1, pageSize = 20, filter = {}) {
     const result = await getLLMApiLogsDirect(page, pageSize, filter);
     return result;
   } catch (error) {
-    console.error('[SW Communication] Failed to load LLM API logs directly, falling back to RPC:', error);
+    console.error(
+      '[SW Communication] Failed to load LLM API logs directly, falling back to RPC:',
+      error
+    );
     // Fallback to RPC
     try {
       await ensureDuplexInitialized();
@@ -472,7 +496,7 @@ export async function loadLLMApiLogs(page = 1, pageSize = 20, filter = {}) {
  */
 export async function clearLLMApiLogsInSW() {
   await ensureDuplexInitialized();
-  
+
   try {
     await clearLLMApiLogsRPC();
     if (messageHandlers['SW_DEBUG_LLM_API_LOGS_CLEARED']) {
@@ -491,7 +515,7 @@ export async function clearLLMApiLogsInSW() {
  */
 export async function deleteLLMApiLogsInSW(logIds) {
   await ensureDuplexInitialized();
-  
+
   try {
     const result = await deleteLLMApiLogsRPC(logIds);
     return result;
@@ -517,7 +541,10 @@ export async function getLLMApiLogByIdInSW(logId) {
     const linkedTask = await getLinkedTaskDebugDataForLLMLog(log);
     return linkedTask ? { ...log, linkedTask } : log;
   } catch (error) {
-    console.error('[SW Communication] Failed to get LLM API log by ID directly, falling back to RPC:', error);
+    console.error(
+      '[SW Communication] Failed to get LLM API log by ID directly, falling back to RPC:',
+      error
+    );
     // Fallback to RPC
     try {
       await ensureDuplexInitialized();
@@ -548,7 +575,10 @@ export async function loadCrashSnapshots() {
     }
     return result;
   } catch (error) {
-    console.error('[SW Communication] Failed to load crash snapshots directly, falling back to RPC:', error);
+    console.error(
+      '[SW Communication] Failed to load crash snapshots directly, falling back to RPC:',
+      error
+    );
     // Fallback to RPC
     try {
       await ensureDuplexInitialized();
@@ -569,7 +599,7 @@ export async function loadCrashSnapshots() {
  */
 export async function clearCrashSnapshotsInSW() {
   await ensureDuplexInitialized();
-  
+
   try {
     await clearCrashSnapshotsRPC();
     if (messageHandlers['SW_DEBUG_CRASH_SNAPSHOTS_CLEARED']) {
@@ -593,7 +623,10 @@ export async function loadCacheStats() {
     }
     return result;
   } catch (error) {
-    console.error('[SW Communication] Failed to load cache stats directly, falling back to RPC:', error);
+    console.error(
+      '[SW Communication] Failed to load cache stats directly, falling back to RPC:',
+      error
+    );
     // Fallback to RPC
     try {
       await ensureDuplexInitialized();
@@ -621,16 +654,16 @@ export async function checkSwReady() {
   if (!('serviceWorker' in navigator)) {
     return false;
   }
-  
+
   const registration = await navigator.serviceWorker.ready;
   cachedRegistration = registration;
-  
+
   // If SW is active, initialize duplex communication
   if (registration.active) {
     await ensureDuplexInitialized();
     return true;
   }
-  
+
   return false;
 }
 
@@ -656,10 +689,10 @@ export function getActiveSW() {
  */
 export function registerMessageHandlers(handlers) {
   messageHandlers = handlers;
-  
+
   // Initialize postMessage wrapper to track outgoing requests
   wrapPostMessage();
-  
+
   // Also listen for native messages (for backward compatibility)
   navigator.serviceWorker.addEventListener('message', (event) => {
     // Extract message type from different message formats:
@@ -667,16 +700,21 @@ export function registerMessageHandlers(handlers) {
     // - postmessage-duplex requests: event.data.cmdname
     // - postmessage-duplex responses: event.data.req.cmdname
     // - postmessage-duplex responses without req: lookup by requestId
-    let messageType = event.data?.type 
-      || event.data?.cmdname 
-      || event.data?.req?.cmdname;
-    
+    let messageType =
+      event.data?.type || event.data?.cmdname || event.data?.req?.cmdname;
+
     // For duplex responses without embedded request info, try to look up the method
-    if (!messageType && event.data?.requestId && event.data?.ret !== undefined) {
+    if (
+      !messageType &&
+      event.data?.requestId &&
+      event.data?.ret !== undefined
+    ) {
       const trackedMethod = lookupRequestMethod(event.data.requestId);
-      messageType = trackedMethod ? `${trackedMethod} [response]` : '[response]';
+      messageType = trackedMethod
+        ? `${trackedMethod} [response]`
+        : '[response]';
     }
-    
+
     messageType = messageType || 'unknown';
     const { type, cmdname, req, ...data } = event.data || {};
 
@@ -691,16 +729,15 @@ export function registerMessageHandlers(handlers) {
 
 /**
  * Register controller change handler
- * @param {Function} callback 
+ * @param {Function} callback
  */
 export function onControllerChange(callback) {
   navigator.serviceWorker.addEventListener('controllerchange', async () => {
     if (navigator.serviceWorker.controller) {
-      console.log('[SW Communication] Controller changed, resetting duplex client');
       // 完全重置 duplex 客户端
       resetDuplexClient();
       duplexInitialized = false;
-      
+
       // 重新初始化
       await ensureDuplexInitialized();
       callback();

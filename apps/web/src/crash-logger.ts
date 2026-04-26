@@ -1,9 +1,9 @@
 /**
  * Crash Logger - 崩溃日志记录系统
- * 
+ *
  * 在页面崩溃前记录关键状态信息，持久化到 SW/IndexedDB，
  * 便于用户在 sw-debug.html 导出分析。
- * 
+ *
  * 功能：
  * 1. 页面启动时记录初始快照
  * 2. 定期内存快照（仅在内存使用较高时）
@@ -19,7 +19,14 @@ import { swChannelClient } from '@drawnix/drawnix/runtime';
 export interface CrashSnapshot {
   id: string;
   timestamp: number;
-  type: 'startup' | 'periodic' | 'error' | 'beforeunload' | 'freeze' | 'whitescreen' | 'longtask';
+  type:
+    | 'startup'
+    | 'periodic'
+    | 'error'
+    | 'beforeunload'
+    | 'freeze'
+    | 'whitescreen'
+    | 'longtask';
   memory?: {
     usedJSHeapSize: number;
     totalJSHeapSize: number;
@@ -42,10 +49,10 @@ export interface CrashSnapshot {
   };
   // 性能指标（卡死/长任务检测）
   performance?: {
-    fps?: number;                    // 当前帧率
-    longTaskDuration?: number;       // 长任务持续时间（毫秒）
-    freezeDuration?: number;         // 卡死持续时间（毫秒）
-    lastHeartbeat?: number;          // 上次心跳时间戳
+    fps?: number; // 当前帧率
+    longTaskDuration?: number; // 长任务持续时间（毫秒）
+    freezeDuration?: number; // 卡死持续时间（毫秒）
+    lastHeartbeat?: number; // 上次心跳时间戳
   };
   userAgent: string;
   url: string;
@@ -172,7 +179,7 @@ const networkErrors: Array<{
 /**
  * 轻量级操作监控
  * 只在操作导致内存变化超过阈值时才记录日志
- * 
+ *
  * @example
  * const end = trackOperation('图片合并');
  * await mergeImages();
@@ -181,14 +188,15 @@ const networkErrors: Array<{
 export function trackOperation(label: string): () => void {
   const startMem = getMemoryInfo();
   const startTime = Date.now();
-  
+
   return () => {
     const endMem = getMemoryInfo();
     if (!startMem || !endMem) return;
-    
-    const deltaMB = (endMem.usedJSHeapSize - startMem.usedJSHeapSize) / (1024 * 1024);
+
+    const deltaMB =
+      (endMem.usedJSHeapSize - startMem.usedJSHeapSize) / (1024 * 1024);
     const duration = Date.now() - startTime;
-    
+
     // 只在内存变化超过阈值时记录
     if (Math.abs(deltaMB) >= OPERATION_MEMORY_DELTA_THRESHOLD) {
       const sign = deltaMB >= 0 ? '+' : '';
@@ -201,7 +209,7 @@ export function trackOperation(label: string): () => void {
 
 /**
  * 异步操作监控包装器
- * 
+ *
  * @example
  * const result = await withMemoryTracking('AI生成', async () => {
  *   return await generateImage(params);
@@ -221,7 +229,9 @@ export async function withMemoryTracking<T>(
 
 declare const __APP_VERSION__: string;
 
-function truncateContextValue(value: string | null | undefined): string | undefined {
+function truncateContextValue(
+  value: string | null | undefined
+): string | undefined {
   if (!value) {
     return undefined;
   }
@@ -235,8 +245,9 @@ function getAppVersion(): string {
   }
 
   return (
-    document.querySelector('meta[name="app-version"]')?.getAttribute('content') ||
-    '0.0.0'
+    document
+      .querySelector('meta[name="app-version"]')
+      ?.getAttribute('content') || '0.0.0'
   );
 }
 
@@ -295,7 +306,9 @@ function getLoadedResourceSummary(): Record<string, unknown> {
   };
 }
 
-function getEventTargetContext(target: EventTarget | null): Record<string, unknown> | undefined {
+function getEventTargetContext(
+  target: EventTarget | null
+): Record<string, unknown> | undefined {
   if (!(target instanceof HTMLElement)) {
     return undefined;
   }
@@ -570,15 +583,17 @@ export function startPeriodicSnapshots(): void {
     const ratio = usedMB / limitMB;
 
     // 检查是否超过阈值
-    const isHighMemory = usedMB > MEMORY_THRESHOLD_MB || ratio > MEMORY_RATIO_THRESHOLD;
-    
+    const isHighMemory =
+      usedMB > MEMORY_THRESHOLD_MB || ratio > MEMORY_RATIO_THRESHOLD;
+
     if (isHighMemory) {
       highMemoryCount++;
-      
+
       // 只有连续多次高内存才收集详细信息（减少 DOM 查询开销）
-      const shouldCollectDetails = highMemoryCount >= HIGH_MEMORY_COUNT_FOR_DETAILS;
+      const shouldCollectDetails =
+        highMemoryCount >= HIGH_MEMORY_COUNT_FOR_DETAILS;
       const pageStats = shouldCollectDetails ? collectPageStats() : undefined;
-      
+
       const snapshot: CrashSnapshot = {
         id: `periodic-${Date.now()}`,
         timestamp: Date.now(),
@@ -590,7 +605,7 @@ export function startPeriodicSnapshots(): void {
       };
 
       sendSnapshotToSW(snapshot);
-      
+
       // 日志已发送到 SW，不再在控制台输出
     } else {
       // 内存恢复正常，重置计数
@@ -619,7 +634,8 @@ export function setupErrorCapture(): void {
   window.addEventListener('error', (event) => {
     if (
       event.error instanceof DOMException &&
-      (event.error.name === 'AbortError' || event.error.name === 'NotAllowedError')
+      (event.error.name === 'AbortError' ||
+        event.error.name === 'NotAllowedError')
     ) {
       return;
     }
@@ -663,15 +679,15 @@ export function setupErrorCapture(): void {
     ) {
       return;
     }
-    
-    // 过滤监控服务相关的错误（PostHog, Sentry）
-    if (errorMessage.includes('posthog.com') ||
-        errorMessage.includes('sentry.io') ||
-        errorStack.includes('posthog') ||
-        errorStack.includes('sentry')) {
+
+    // 过滤监控服务相关的错误（PostHog）
+    if (
+      errorMessage.includes('posthog.com') ||
+      errorStack.includes('posthog')
+    ) {
       return; // 静默忽略监控服务的网络错误
     }
-    
+
     const snapshot: CrashSnapshot = {
       id: `rejection-${Date.now()}`,
       timestamp: Date.now(),
@@ -800,7 +816,7 @@ export function setupLongTaskMonitoring(): void {
           const longTaskEntry = entry as any;
           const attribution = longTaskEntry.attribution;
           let attributionInfo: Record<string, unknown> | undefined;
-          
+
           if (attribution && attribution.length > 0) {
             const attr = attribution[0];
             attributionInfo = {
@@ -828,7 +844,8 @@ export function setupLongTaskMonitoring(): void {
               startTime: entry.startTime,
               attribution: attributionInfo,
               // 提示：Long Task API 无法获取调用栈，需要使用 DevTools Performance 面板
-              debugTip: 'Use Chrome DevTools Performance panel to record and analyze the call stack',
+              debugTip:
+                'Use Chrome DevTools Performance panel to record and analyze the call stack',
             },
           };
 
@@ -853,19 +870,19 @@ export function setupFpsMonitoring(): void {
 
   // 优化：使用采样帧数而非每帧计算，降低 RAF 回调频率
   let sampleCount = 0;
-  
+
   const measureFps = () => {
     sampleCount++;
-    
+
     // 每 N 帧才计算一次 FPS（减少计算频率）
     if (sampleCount >= FPS_SAMPLE_FRAMES) {
       const now = performance.now();
       const elapsed = now - lastFrameTime;
-      
+
       if (elapsed > 0) {
         currentFps = Math.round((sampleCount * 1000) / elapsed);
       }
-      
+
       sampleCount = 0;
       lastFrameTime = now;
     }
@@ -932,7 +949,7 @@ function checkForWhitescreen(): void {
   // 如果 root 存在但没有子元素，可能是白屏
   if (root && !hasContent) {
     whitescreenReported = true;
-    
+
     const snapshot: CrashSnapshot = {
       id: `whitescreen-${Date.now()}`,
       timestamp: Date.now(),
@@ -964,9 +981,12 @@ function checkForWhitescreen(): void {
   if (hasContent && !hasPlaitBoard && location.pathname === '/') {
     // 给更多时间，画板可能还在加载
     setTimeout(() => {
-      if (!document.querySelector('.plait-board-container') && !whitescreenReported) {
+      if (
+        !document.querySelector('.plait-board-container') &&
+        !whitescreenReported
+      ) {
         whitescreenReported = true;
-        
+
         const snapshot: CrashSnapshot = {
           id: `whitescreen-noboard-${Date.now()}`,
           timestamp: Date.now(),
@@ -994,7 +1014,11 @@ function checkForWhitescreen(): void {
  * 记录用户操作
  * 用于问题重现和分析
  */
-function recordUserAction(action: string, target?: string, detail?: string): void {
+function recordUserAction(
+  action: string,
+  target?: string,
+  detail?: string
+): void {
   userActions.push({
     time: Date.now(),
     action,
@@ -1013,70 +1037,90 @@ function recordUserAction(action: string, target?: string, detail?: string): voi
  */
 export function setupUserActionTracking(): void {
   let lastClickTime = 0;
-  
+
   // 监听点击事件（节流处理）
-  document.addEventListener('click', (event) => {
-    const now = Date.now();
-    // 节流：100ms 内只记录一次点击
-    if (now - lastClickTime < CLICK_THROTTLE_INTERVAL) return;
-    lastClickTime = now;
-    
-    const target = event.target as HTMLElement;
-    if (!target) return;
+  document.addEventListener(
+    'click',
+    (event) => {
+      const now = Date.now();
+      // 节流：100ms 内只记录一次点击
+      if (now - lastClickTime < CLICK_THROTTLE_INTERVAL) return;
+      lastClickTime = now;
 
-    // 使用 requestIdleCallback 延迟处理，不阻塞主线程
-    const processClick = () => {
-      let targetDesc = '';
-      
-      // 1. 优先使用 data-track 属性
-      const trackAttr = target.closest?.('[data-track]')?.getAttribute('data-track');
-      if (trackAttr) {
-        targetDesc = trackAttr;
-      } else if (target.tagName === 'BUTTON' || target.closest?.('button')) {
-        // 2. 按钮：获取文字或类名
-        const btn = (target.closest?.('button') || target) as HTMLButtonElement;
-        const text = btn.textContent?.trim().slice(0, 20);
-        const cls = btn.className?.split?.(' ')?.[0]?.slice(0, 20);
-        targetDesc = `btn:${text || cls || 'unknown'}`;
-      } else if (target.tagName === 'A') {
-        // 3. 链接
-        targetDesc = `link:${(target as HTMLAnchorElement).pathname?.slice(0, 30) || ''}`;
-      } else if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        // 4. 输入框
-        const input = target as HTMLInputElement;
-        targetDesc = `input:${input.name || input.type || input.placeholder?.slice(0, 15) || ''}`;
-      } else if (target.id) {
-        // 5. 有 ID
-        targetDesc = `#${target.id}`;
+      const target = event.target as HTMLElement;
+      if (!target) return;
+
+      // 使用 requestIdleCallback 延迟处理，不阻塞主线程
+      const processClick = () => {
+        let targetDesc = '';
+
+        // 1. 优先使用 data-track 属性
+        const trackAttr = target
+          .closest?.('[data-track]')
+          ?.getAttribute('data-track');
+        if (trackAttr) {
+          targetDesc = trackAttr;
+        } else if (target.tagName === 'BUTTON' || target.closest?.('button')) {
+          // 2. 按钮：获取文字或类名
+          const btn = (target.closest?.('button') ||
+            target) as HTMLButtonElement;
+          const text = btn.textContent?.trim().slice(0, 20);
+          const cls = btn.className?.split?.(' ')?.[0]?.slice(0, 20);
+          targetDesc = `btn:${text || cls || 'unknown'}`;
+        } else if (target.tagName === 'A') {
+          // 3. 链接
+          targetDesc = `link:${
+            (target as HTMLAnchorElement).pathname?.slice(0, 30) || ''
+          }`;
+        } else if (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA'
+        ) {
+          // 4. 输入框
+          const input = target as HTMLInputElement;
+          targetDesc = `input:${
+            input.name || input.type || input.placeholder?.slice(0, 15) || ''
+          }`;
+        } else if (target.id) {
+          // 5. 有 ID
+          targetDesc = `#${target.id}`;
+        } else {
+          // 6. 使用标签和类名
+          const cls = target.className?.split?.(' ')?.[0];
+          targetDesc = cls
+            ? `.${cls.slice(0, 20)}`
+            : target.tagName?.toLowerCase() || 'unknown';
+        }
+
+        recordUserAction('click', targetDesc);
+      };
+
+      // 使用 requestIdleCallback 或 setTimeout 延迟处理
+      if ('requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(processClick, { timeout: 100 });
       } else {
-        // 6. 使用标签和类名
-        const cls = target.className?.split?.(' ')?.[0];
-        targetDesc = cls ? `.${cls.slice(0, 20)}` : target.tagName?.toLowerCase() || 'unknown';
+        setTimeout(processClick, 0);
       }
-
-      recordUserAction('click', targetDesc);
-    };
-
-    // 使用 requestIdleCallback 或 setTimeout 延迟处理
-    if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(processClick, { timeout: 100 });
-    } else {
-      setTimeout(processClick, 0);
-    }
-  }, { capture: true, passive: true });
+    },
+    { capture: true, passive: true }
+  );
 
   // 监听键盘快捷键
-  document.addEventListener('keydown', (event) => {
-    // 只记录快捷键组合
-    if (event.ctrlKey || event.metaKey || event.altKey) {
-      const keys = [];
-      if (event.ctrlKey || event.metaKey) keys.push('Cmd');
-      if (event.altKey) keys.push('Alt');
-      if (event.shiftKey) keys.push('Shift');
-      keys.push(event.key);
-      recordUserAction('shortcut', keys.join('+'));
-    }
-  }, { capture: true, passive: true });
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      // 只记录快捷键组合
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        const keys = [];
+        if (event.ctrlKey || event.metaKey) keys.push('Cmd');
+        if (event.altKey) keys.push('Alt');
+        if (event.shiftKey) keys.push('Shift');
+        keys.push(event.key);
+        recordUserAction('shortcut', keys.join('+'));
+      }
+    },
+    { capture: true, passive: true }
+  );
 
   // 监听路由变化
   window.addEventListener('popstate', () => {
@@ -1097,21 +1141,22 @@ export function setupUserActionTracking(): void {
  */
 export function setupNetworkErrorTracking(): void {
   const originalFetch = window.fetch;
-  
-  window.fetch = async function(input, init) {
+
+  window.fetch = async function (input, init) {
     const startTime = Date.now();
-    
+
     try {
       const response = await originalFetch.call(this, input, init);
-      
+
       // 只在失败时才处理（正常请求零开销）
       if (!response.ok) {
-        const rawUrl = typeof input === 'string' ? input : (input as Request).url;
+        const rawUrl =
+          typeof input === 'string' ? input : (input as Request).url;
         const duration = Date.now() - startTime;
-        
+
         // 对 URL 进行脱敏处理，移除敏感参数
         const url = sanitizeUrl(rawUrl).slice(0, 300);
-        
+
         // 提取更多有用信息
         networkErrors.push({
           time: Date.now(),
@@ -1120,33 +1165,33 @@ export function setupNetworkErrorTracking(): void {
           status: response.status,
           statusText: response.statusText,
           duration,
-        } as typeof networkErrors[0]);
-        
+        } as (typeof networkErrors)[0]);
+
         if (networkErrors.length > MAX_NETWORK_ERRORS) {
           networkErrors.shift();
         }
       }
-      
+
       return response;
     } catch (error) {
       const rawUrl = typeof input === 'string' ? input : (input as Request).url;
       const duration = Date.now() - startTime;
-      
+
       // 对 URL 进行脱敏处理，移除敏感参数
       const url = sanitizeUrl(rawUrl).slice(0, 300);
-      
+
       networkErrors.push({
         time: Date.now(),
         url,
         method: init?.method || 'GET',
         error: (error as Error).message,
         duration,
-      } as typeof networkErrors[0]);
-      
+      } as (typeof networkErrors)[0]);
+
       if (networkErrors.length > MAX_NETWORK_ERRORS) {
         networkErrors.shift();
       }
-      
+
       throw error;
     }
   };
@@ -1159,40 +1204,46 @@ export function setupNetworkErrorTracking(): void {
  */
 export function setupResourceErrorTracking(): void {
   // 监听资源加载失败
-  window.addEventListener('error', (event) => {
-    const target = event.target;
-    
-    // 只处理资源加载错误（img, script, link 等），排除 window 级别的错误
-    if (target && target !== window && target instanceof HTMLElement) {
-      if ('src' in target || 'href' in target) {
-        const url = (target as HTMLImageElement).src || (target as HTMLLinkElement).href;
-        const tagName = target.tagName?.toLowerCase();
-        
-        recordUserAction('resource_error', tagName, url?.slice(0, 100));
+  window.addEventListener(
+    'error',
+    (event) => {
+      const target = event.target;
 
-        const snapshot: CrashSnapshot = {
-          id: `resource-error-${Date.now()}`,
-          timestamp: Date.now(),
-          type: 'error',
-          error: {
-            message: `Resource load failed: ${tagName || 'unknown'}`,
-            type: 'resourceError',
-          },
-          memory: getMemoryInfo(),
-          userAgent: navigator.userAgent,
-          url: location.href,
-          customData: buildErrorDiagnosticContext({
-            resourceUrl: truncateContextValue(
-              url ? sanitizeUrl(url) : undefined
-            ),
-            eventTarget: getEventTargetContext(target),
-          }),
-        };
+      // 只处理资源加载错误（img, script, link 等），排除 window 级别的错误
+      if (target && target !== window && target instanceof HTMLElement) {
+        if ('src' in target || 'href' in target) {
+          const url =
+            (target as HTMLImageElement).src ||
+            (target as HTMLLinkElement).href;
+          const tagName = target.tagName?.toLowerCase();
 
-        sendSnapshotToSW(snapshot);
+          recordUserAction('resource_error', tagName, url?.slice(0, 100));
+
+          const snapshot: CrashSnapshot = {
+            id: `resource-error-${Date.now()}`,
+            timestamp: Date.now(),
+            type: 'error',
+            error: {
+              message: `Resource load failed: ${tagName || 'unknown'}`,
+              type: 'resourceError',
+            },
+            memory: getMemoryInfo(),
+            userAgent: navigator.userAgent,
+            url: location.href,
+            customData: buildErrorDiagnosticContext({
+              resourceUrl: truncateContextValue(
+                url ? sanitizeUrl(url) : undefined
+              ),
+              eventTarget: getEventTargetContext(target),
+            }),
+          };
+
+          sendSnapshotToSW(snapshot);
+        }
       }
-    }
-  }, { capture: true });
+    },
+    { capture: true }
+  );
 }
 
 // ==================== 控制台错误收集 ====================
@@ -1203,25 +1254,25 @@ export function setupResourceErrorTracking(): void {
  */
 export function setupConsoleErrorTracking(): void {
   const originalError = console.error;
-  
-  console.error = function(...args) {
+
+  console.error = function (...args) {
     // 先调用原始方法，确保不影响正常错误输出
     originalError.apply(this, args);
-    
+
     // 快速检查：排除自己的日志
     const firstArg = args[0];
     if (typeof firstArg === 'string' && firstArg.includes('[MemoryLog]')) {
       return;
     }
-    
+
     // 捕获 args 快照用于延迟处理
     const argsCopy = [...args];
-    
+
     // 延迟处理，不阻塞主线程
     setTimeout(() => {
       let message = '';
       let stack: string | undefined;
-      
+
       for (let i = 0; i < Math.min(argsCopy.length, 5); i++) {
         const arg = argsCopy[i];
         if (typeof arg === 'string') {
@@ -1235,23 +1286,27 @@ export function setupConsoleErrorTracking(): void {
           // 安全的浅层序列化
           try {
             const keys = Object.keys(arg).slice(0, 5);
-            const preview = keys.map(k => {
-              const v = (arg as Record<string, unknown>)[k];
-              return `${k}:${typeof v === 'string' ? v.slice(0, 20) : typeof v}`;
-            }).join(',');
+            const preview = keys
+              .map((k) => {
+                const v = (arg as Record<string, unknown>)[k];
+                return `${k}:${
+                  typeof v === 'string' ? v.slice(0, 20) : typeof v
+                }`;
+              })
+              .join(',');
             message += `{${preview}} `;
           } catch {
             message += `[${arg.constructor?.name || 'Object'}] `;
           }
         }
       }
-      
+
       consoleErrors.push({
         time: Date.now(),
         message: message.trim().slice(0, 500),
         stack,
       });
-      
+
       if (consoleErrors.length > MAX_CONSOLE_ERRORS) {
         consoleErrors.shift();
       }
@@ -1287,7 +1342,10 @@ export function getDiagnosticData(): {
  * 手动记录自定义快照
  * 用于在关键操作时记录状态
  */
-export function recordCustomSnapshot(label: string, customData?: Record<string, unknown>): void {
+export function recordCustomSnapshot(
+  label: string,
+  customData?: Record<string, unknown>
+): void {
   const snapshot: CrashSnapshot = {
     id: `custom-${label}-${Date.now()}`,
     timestamp: Date.now(),
@@ -1322,38 +1380,21 @@ function exposeDebugTools(): void {
         percent: ((mem.usedJSHeapSize / mem.jsHeapSizeLimit) * 100).toFixed(1),
       };
     },
-    
+
     // 操作追踪（供代码调用）
     track: trackOperation,
-    
+
     // 完整诊断（会触发 DOM 查询，仅手动调用）
     diagnose: () => {
       const mem = getMemoryInfo();
       const stats = collectPageStats();
-      
-      console.group('[MemoryLog] 内存诊断');
-      
-      if (mem) {
-        const usedMB = mem.usedJSHeapSize / (1024 * 1024);
-        const limitMB = mem.jsHeapSizeLimit / (1024 * 1024);
-        const percent = (usedMB / limitMB) * 100;
-        console.log(`内存: ${usedMB.toFixed(0)} MB / ${limitMB.toFixed(0)} MB (${percent.toFixed(1)}%)`);
-      }
-      
-      console.log(`页面: DOM ${stats.domNodeCount} | Canvas ${stats.canvasCount} | Img ${stats.imageCount} | Video ${stats.videoCount}`);
-      
-      if (stats.plaitElementCount !== undefined) {
-        console.log(`Plait 元素: ${stats.plaitElementCount}`);
-      }
-      
+
       // 简化的建议
       if (stats.imageCount > 50) console.warn('图片较多，考虑懒加载');
       if (stats.domNodeCount > 5000) console.warn('DOM 节点较多');
-      
-      console.groupEnd();
       return { memory: mem, pageStats: stats };
     },
-    
+
     // 手动记录快照到 SW
     snapshot: () => {
       const snapshot: CrashSnapshot = {
@@ -1367,38 +1408,22 @@ function exposeDebugTools(): void {
       };
       sendSnapshotToSW(snapshot);
     },
-    
+
     // 获取诊断数据
     getDiagnostics: getDiagnosticData,
-    
+
     // 查看用户操作轨迹
     getActions: () => {
-      console.table(userActions.map(a => ({
-        time: new Date(a.time).toLocaleTimeString('zh-CN'),
-        action: a.action,
-        target: a.target,
-        detail: a.detail,
-      })));
       return userActions;
     },
-    
+
     // 查看网络错误
     getNetworkErrors: () => {
-      console.table(networkErrors.map(e => ({
-        time: new Date(e.time).toLocaleTimeString('zh-CN'),
-        url: e.url,
-        status: e.status,
-        error: e.error,
-      })));
       return networkErrors;
     },
-    
+
     // 查看控制台错误
     getConsoleErrors: () => {
-      console.table(consoleErrors.map(e => ({
-        time: new Date(e.time).toLocaleTimeString('zh-CN'),
-        message: e.message.slice(0, 100),
-      })));
       return consoleErrors;
     },
   };

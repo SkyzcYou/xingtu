@@ -10,7 +10,7 @@ import { geminiSettings } from '../settings-manager';
  */
 export function promptForApiKey(): Promise<string | null> {
   if (typeof window === 'undefined') return Promise.resolve(null);
-  
+
   return new Promise((resolve) => {
     // 创建弹窗遮罩
     const overlay = document.createElement('div');
@@ -107,7 +107,6 @@ export function promptForApiKey(): Promise<string | null> {
         // 更新本地设置（内部会 await syncToIndexedDB，确保 SW 能拿到最新配置）
         await geminiSettings.update({ apiKey });
         cleanup();
-        console.log('[promptForApiKey] API Key 已保存并同步完成');
         resolve(apiKey);
       } else {
         input.style.borderColor = '#ff4d4f';
@@ -141,12 +140,14 @@ export function promptForApiKey(): Promise<string | null> {
 /**
  * 验证并确保配置有效，如果缺少 API Key 则弹窗获取
  */
-export async function validateAndEnsureConfig(config: GeminiConfig): Promise<GeminiConfig> {
+export async function validateAndEnsureConfig(
+  config: GeminiConfig
+): Promise<GeminiConfig> {
   // 检查 baseUrl
   if (!config.baseUrl) {
     throw new Error('Base URL 是必需的');
   }
-  
+
   // 检查 apiKey，优先从全局设置获取
   if (!config.apiKey) {
     // 首先尝试从全局设置获取
@@ -156,18 +157,18 @@ export async function validateAndEnsureConfig(config: GeminiConfig): Promise<Gem
       config.apiKey = globalSettings.apiKey;
       return config;
     }
-    
+
     // 如果全局设置中也没有，则弹窗获取
     const newApiKey = await promptForApiKey();
     if (!newApiKey) {
       throw new Error('API Key 是必需的，操作已取消');
     }
-    
+
     // 更新原始config对象
     config.apiKey = newApiKey;
     return config;
   }
-  
+
   return config;
 }
 
@@ -178,9 +179,11 @@ export async function validateAndEnsureConfig(config: GeminiConfig): Promise<Gem
 function isPlaceholder(value: string | null | undefined): boolean {
   if (!value || typeof value !== 'string') return false;
   // 匹配 {xxx}、${xxx}、{{xxx}} 等占位符格式
-  return /^[{$]*\{?\w+\}?\}*$/.test(value) || 
-         value.includes('{key}') || 
-         value.includes('${');
+  return (
+    /^[{$]*\{?\w+\}?\}*$/.test(value) ||
+    value.includes('{key}') ||
+    value.includes('${')
+  );
 }
 
 /**
@@ -188,16 +191,19 @@ function isPlaceholder(value: string | null | undefined): boolean {
  */
 function getApiKeyFromUrl(): string | null {
   if (typeof window === 'undefined') return null;
-  
+
   const urlParams = new URLSearchParams(window.location.search);
   const apiKey = urlParams.get('apiKey');
-  
+
   // 验证 apiKey 不是占位符格式
   if (isPlaceholder(apiKey)) {
-    console.warn('[Auth] Detected placeholder in URL apiKey, ignoring:', apiKey);
+    console.warn(
+      '[Auth] Detected placeholder in URL apiKey, ignoring:',
+      apiKey
+    );
     return null;
   }
-  
+
   return apiKey;
 }
 
@@ -206,25 +212,28 @@ function getApiKeyFromUrl(): string | null {
  */
 function getSettingsFromUrl(): { apiKey?: string; baseUrl?: string } | null {
   if (typeof window === 'undefined') return null;
-  
+
   const urlParams = new URLSearchParams(window.location.search);
   const settingsParam = urlParams.get('settings');
-  
+
   if (!settingsParam) return null;
-  
+
   try {
     const decoded = decodeURIComponent(settingsParam);
     const settings = JSON.parse(decoded);
-    
+
     // 验证 apiKey 不是占位符格式
     const apiKey = isPlaceholder(settings.key) ? undefined : settings.key;
     if (settings.key && isPlaceholder(settings.key)) {
-      console.warn('[Auth] Detected placeholder in settings.key, ignoring:', settings.key);
+      console.warn(
+        '[Auth] Detected placeholder in settings.key, ignoring:',
+        settings.key
+      );
     }
-    
+
     return {
       apiKey,
-      baseUrl: settings.url
+      baseUrl: settings.url,
     };
   } catch (error) {
     console.warn('Failed to parse settings parameter:', error);
@@ -237,20 +246,20 @@ function getSettingsFromUrl(): { apiKey?: string; baseUrl?: string } | null {
  */
 function removeApiKeyFromUrl(): void {
   if (typeof window === 'undefined') return;
-  
+
   const url = new URL(window.location.href);
   let hasChanges = false;
-  
+
   if (url.searchParams.has('apiKey')) {
     url.searchParams.delete('apiKey');
     hasChanges = true;
   }
-  
+
   if (url.searchParams.has('settings')) {
     url.searchParams.delete('settings');
     hasChanges = true;
   }
-  
+
   if (hasChanges) {
     window.history.replaceState({}, document.title, url.toString());
   }
@@ -264,14 +273,14 @@ export function initializeSettings(): void {
   const settings = getSettingsFromUrl();
   // 处理单独的apiKey参数
   const apiKey = getApiKeyFromUrl();
-  
+
   if (settings?.apiKey || settings?.baseUrl || apiKey) {
     geminiSettings.update({
       ...(settings?.apiKey && { apiKey: settings.apiKey }),
       ...(settings?.baseUrl && { baseUrl: settings.baseUrl }),
-      ...(apiKey && { apiKey: apiKey })
+      ...(apiKey && { apiKey: apiKey }),
     });
-    
+
     // Remove parameters from URL after processing
     const url = new URL(window.location.href);
     if (settings?.apiKey || settings?.baseUrl) {
@@ -290,12 +299,12 @@ if (typeof window !== 'undefined') {
   const settings = getSettingsFromUrl();
   // 处理单独的apiKey参数
   const apiKey = getApiKeyFromUrl();
-  
+
   if (settings?.apiKey || settings?.baseUrl || apiKey) {
     geminiSettings.update({
       ...(settings?.apiKey && { apiKey: settings.apiKey }),
       ...(settings?.baseUrl && { baseUrl: settings.baseUrl }),
-      ...(apiKey && { apiKey: apiKey })
+      ...(apiKey && { apiKey: apiKey }),
     });
     removeApiKeyFromUrl();
   }

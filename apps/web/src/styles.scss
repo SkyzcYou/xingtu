@@ -4,7 +4,6 @@
 @import 'tailwindcss';
 @source '../**/*.{js,ts,jsx,tsx}';
 @source '../../packages/**/*.{js,ts,jsx,tsx}';
-@source '../../../node_modules/@llamaindex/chat-ui/**/*.{js,ts,jsx,tsx}';
 
 /* Opentu 品牌全局样式 - 与 TDesign 主题保持一致 */
 @theme {

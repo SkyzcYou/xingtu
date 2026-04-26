@@ -13,6 +13,9 @@ const STORAGE_KEY = LS_KEYS_TO_MIGRATE.PROMPT_HISTORY;
 
 // 预设提示词设置的存储 key
 const PRESET_SETTINGS_KEY = LS_KEYS_TO_MIGRATE.PRESET_SETTINGS;
+const PROMPT_DELETED_CONTENTS_KEY = LS_KEYS_TO_MIGRATE.PROMPT_DELETED_CONTENTS;
+const PROMPT_HISTORY_OVERRIDES_KEY =
+  LS_KEYS_TO_MIGRATE.PROMPT_HISTORY_OVERRIDES;
 
 // 视频描述历史记录的存储 key
 const VIDEO_PROMPT_HISTORY_KEY = LS_KEYS_TO_MIGRATE.VIDEO_PROMPT_HISTORY;
@@ -27,6 +30,7 @@ export const PROMPT_TYPES = [
   'text',
   'agent',
   'ppt-common',
+  'ppt-slide',
 ] as const;
 export type PromptType = (typeof PROMPT_TYPES)[number];
 
@@ -38,7 +42,7 @@ export interface PromptHistoryItem {
   hasSelection?: boolean;
   /** 是否置顶 */
   pinned?: boolean;
-  /** 生成类型：image/video/audio/text/agent/ppt-common */
+  /** 生成类型：image/video/audio/text/agent/ppt-common/ppt-slide */
   modelType?: PromptType;
 }
 
@@ -49,6 +53,45 @@ export interface PresetPromptSettings {
   deletedPrompts: string[];
 }
 
+export interface PromptHistoryOverride {
+  /** 原始任务/历史提示词内容 */
+  sourceContent: string;
+  /** 用户编辑后的有效提示词内容 */
+  content: string;
+  title?: string;
+  tags?: string[];
+  modelType?: PromptType;
+  updatedAt: number;
+  /** @deprecated 兼容旧覆盖数据 */
+  sourceSentPrompt?: string;
+  /** @deprecated 兼容旧覆盖数据 */
+  sentPrompt?: string;
+}
+
+export interface PromptMetadata {
+  sourceContent: string;
+  content: string;
+  title?: string;
+  tags?: string[];
+  modelType?: PromptType;
+}
+
+export type PromptStorageChangeType =
+  | 'history'
+  | 'metadata'
+  | 'pin'
+  | 'delete'
+  | 'reset';
+
+export interface PromptStorageChangeEvent {
+  version: number;
+  types: PromptStorageChangeType[];
+}
+
+export type PromptStorageChangeListener = (
+  event: PromptStorageChangeEvent
+) => void;
+
 interface PresetStorageData {
   image: PresetPromptSettings;
   video: PresetPromptSettings;
@@ -56,6 +99,7 @@ interface PresetStorageData {
   text: PresetPromptSettings;
   agent: PresetPromptSettings;
   'ppt-common': PresetPromptSettings;
+  'ppt-slide': PresetPromptSettings;
 }
 
 function createDefaultPresetSettings(): PresetPromptSettings {
@@ -73,6 +117,7 @@ function createEmptyPresetStorageData(): PresetStorageData {
     text: createDefaultPresetSettings(),
     agent: createDefaultPresetSettings(),
     'ppt-common': createDefaultPresetSettings(),
+    'ppt-slide': createDefaultPresetSettings(),
   };
 }
 
@@ -100,6 +145,52 @@ function normalizePresetStorageData(
   return normalized;
 }
 
+function normalizePromptHistoryOverride(
+  override: Partial<PromptHistoryOverride>
+): PromptHistoryOverride | null {
+  const sourceContent = (
+    override.sourceContent ||
+    override.sourceSentPrompt ||
+    ''
+  ).trim();
+  const content = (override.content || override.sentPrompt || sourceContent).trim();
+
+  if (!sourceContent || !content) {
+    return null;
+  }
+
+  return {
+    sourceContent,
+    content: content.slice(0, 2000),
+    title: override.title?.trim().slice(0, 80) || undefined,
+    tags: normalizeHistoryOverrideTags(override.tags),
+    modelType: override.modelType,
+    updatedAt:
+      typeof override.updatedAt === 'number' ? override.updatedAt : Date.now(),
+  };
+}
+
+function normalizePromptHistoryOverrides(
+  overrides?: Partial<PromptHistoryOverride>[] | null
+): PromptHistoryOverride[] {
+  if (!Array.isArray(overrides)) {
+    return [];
+  }
+
+  const map = new Map<string, PromptHistoryOverride>();
+  overrides.forEach((override) => {
+    const normalized = normalizePromptHistoryOverride(override);
+    if (!normalized) {
+      return;
+    }
+    const existing = map.get(normalized.sourceContent);
+    if (!existing || normalized.updatedAt >= existing.updatedAt) {
+      map.set(normalized.sourceContent, normalized);
+    }
+  });
+  return Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 /**
  * 生成唯一 ID
  */
@@ -115,7 +206,59 @@ let promptHistoryCache: PromptHistoryItem[] | null = null;
 let videoPromptHistoryCache: VideoPromptHistoryItem[] | null = null;
 let imagePromptHistoryCache: ImagePromptHistoryItem[] | null = null;
 let presetDataCache: PresetStorageData | null = null;
+let deletedPromptContentsCache: string[] | null = null;
+let promptHistoryOverridesCache: PromptHistoryOverride[] | null = null;
 let cacheInitialized = false;
+let promptStorageVersion = 0;
+let promptStorageChangeScheduled = false;
+const promptStorageChangeTypes = new Set<PromptStorageChangeType>();
+const promptStorageChangeListeners = new Set<PromptStorageChangeListener>();
+
+function emitPromptStorageChange(type: PromptStorageChangeType): void {
+  promptStorageChangeTypes.add(type);
+  if (promptStorageChangeScheduled) {
+    return;
+  }
+
+  promptStorageChangeScheduled = true;
+  queueMicrotask(() => {
+    promptStorageChangeScheduled = false;
+    if (promptStorageChangeTypes.size === 0) {
+      return;
+    }
+
+    promptStorageVersion += 1;
+    const event: PromptStorageChangeEvent = {
+      version: promptStorageVersion,
+      types: Array.from(promptStorageChangeTypes),
+    };
+    promptStorageChangeTypes.clear();
+
+    promptStorageChangeListeners.forEach((listener) => {
+      try {
+        listener(event);
+      } catch (error) {
+        console.error(
+          '[PromptStorageService] Prompt storage change listener failed:',
+          error
+        );
+      }
+    });
+  });
+}
+
+export function subscribePromptStorageChanges(
+  listener: PromptStorageChangeListener
+): () => void {
+  promptStorageChangeListeners.add(listener);
+  return () => {
+    promptStorageChangeListeners.delete(listener);
+  };
+}
+
+export function getPromptStorageVersion(): number {
+  return promptStorageVersion;
+}
 
 /**
  * 初始化缓存（从 IndexedDB 加载数据）
@@ -127,17 +270,33 @@ export async function initPromptStorageCache(): Promise<void> {
   }
 
   try {
-    const [promptHistory, videoHistory, imageHistory, presetSettings] = await Promise.all([
+    const [
+      promptHistory,
+      videoHistory,
+      imageHistory,
+      presetSettings,
+      deletedPromptContents,
+      promptHistoryOverrides,
+    ] = await Promise.all([
       kvStorageService.get<PromptHistoryItem[]>(STORAGE_KEY),
       kvStorageService.get<VideoPromptHistoryItem[]>(VIDEO_PROMPT_HISTORY_KEY),
       kvStorageService.get<ImagePromptHistoryItem[]>(IMAGE_PROMPT_HISTORY_KEY),
       kvStorageService.get<PresetStorageData>(PRESET_SETTINGS_KEY),
+      kvStorageService.get<string[]>(PROMPT_DELETED_CONTENTS_KEY),
+      kvStorageService.get<PromptHistoryOverride[]>(
+        PROMPT_HISTORY_OVERRIDES_KEY
+      ),
     ]);
 
     promptHistoryCache = promptHistory || [];
     videoPromptHistoryCache = videoHistory || [];
     imagePromptHistoryCache = imageHistory || [];
     presetDataCache = normalizePresetStorageData(presetSettings);
+    deletedPromptContentsCache = Array.isArray(deletedPromptContents)
+      ? deletedPromptContents
+      : [];
+    promptHistoryOverridesCache =
+      normalizePromptHistoryOverrides(promptHistoryOverrides);
 
     cacheInitialized = true;
   } catch (error) {
@@ -147,6 +306,8 @@ export async function initPromptStorageCache(): Promise<void> {
     videoPromptHistoryCache = [];
     imagePromptHistoryCache = [];
     presetDataCache = createEmptyPresetStorageData();
+    deletedPromptContentsCache = [];
+    promptHistoryOverridesCache = [];
     cacheInitialized = true;
   }
 }
@@ -161,7 +322,10 @@ export async function resetPromptStorageCache(): Promise<void> {
   videoPromptHistoryCache = null;
   imagePromptHistoryCache = null;
   presetDataCache = null;
+  deletedPromptContentsCache = null;
+  promptHistoryOverridesCache = null;
   await initPromptStorageCache();
+  emitPromptStorageChange('reset');
 }
 
 /**
@@ -190,6 +354,8 @@ function ensureCacheInitialized(): void {
     videoPromptHistoryCache = videoPromptHistoryCache || [];
     imagePromptHistoryCache = imagePromptHistoryCache || [];
     presetDataCache = normalizePresetStorageData(presetDataCache);
+    deletedPromptContentsCache = deletedPromptContentsCache || [];
+    promptHistoryOverridesCache = promptHistoryOverridesCache || [];
   }
 }
 
@@ -233,6 +399,30 @@ function savePresetData(): void {
   });
 }
 
+function saveDeletedPromptContents(): void {
+  if (deletedPromptContentsCache === null) return;
+  kvStorageService
+    .set(PROMPT_DELETED_CONTENTS_KEY, deletedPromptContentsCache)
+    .catch((error) => {
+      console.error(
+        '[PromptStorageService] Failed to save deleted prompt contents:',
+        error
+      );
+    });
+}
+
+function savePromptHistoryOverrides(): void {
+  if (promptHistoryOverridesCache === null) return;
+  kvStorageService
+    .set(PROMPT_HISTORY_OVERRIDES_KEY, promptHistoryOverridesCache)
+    .catch((error) => {
+      console.error(
+        '[PromptStorageService] Failed to save prompt history overrides:',
+        error
+      );
+    });
+}
+
 // ============================================
 // 提示词历史记录功能
 // ============================================
@@ -269,6 +459,9 @@ export function addPromptHistory(
 
   const trimmedContent = content.trim();
   ensureCacheInitialized();
+  deletedPromptContentsCache = (deletedPromptContentsCache || []).filter(
+    (item) => item !== trimmedContent
+  );
 
   let history = promptHistoryCache || [];
 
@@ -285,6 +478,7 @@ export function addPromptHistory(
       }
       promptHistoryCache = history;
       savePromptHistory();
+      emitPromptStorageChange('history');
       return;
     }
     // 未置顶的：移除旧记录，后面会添加新的
@@ -305,6 +499,8 @@ export function addPromptHistory(
 
   promptHistoryCache = history;
   savePromptHistory();
+  saveDeletedPromptContents();
+  emitPromptStorageChange('history');
 }
 
 /**
@@ -312,8 +508,15 @@ export function addPromptHistory(
  */
 export function removePromptHistory(id: string): void {
   ensureCacheInitialized();
-  promptHistoryCache = (promptHistoryCache || []).filter((item) => item.id !== id);
+  const history = promptHistoryCache || [];
+  const item = history.find((entry) => entry.id === id);
+  if (item && !(deletedPromptContentsCache || []).includes(item.content)) {
+    deletedPromptContentsCache = [...(deletedPromptContentsCache || []), item.content];
+    saveDeletedPromptContents();
+  }
+  promptHistoryCache = history.filter((entry) => entry.id !== id);
   savePromptHistory();
+  emitPromptStorageChange('delete');
 }
 
 /**
@@ -322,6 +525,7 @@ export function removePromptHistory(id: string): void {
 export function clearPromptHistory(): void {
   promptHistoryCache = [];
   savePromptHistory();
+  emitPromptStorageChange('delete');
 }
 
 /**
@@ -344,6 +548,7 @@ export function mergePromptHistory(remoteHistory: PromptHistoryItem[]): number {
   if (addedCount > 0) {
     promptHistoryCache = localHistory;
     savePromptHistory();
+    emitPromptStorageChange('history');
   }
 
   return addedCount;
@@ -363,9 +568,308 @@ export function togglePinPrompt(id: string): boolean {
 
   // 切换置顶状态
   item.pinned = !item.pinned;
+  syncPresetPinnedForContent(item.content, item.pinned, item.modelType);
   savePromptHistory();
+  emitPromptStorageChange('pin');
 
   return item.pinned;
+}
+
+export function isPromptContentPinned(content: string): boolean {
+  ensureCacheInitialized();
+  const trimmedContent = content.trim();
+  return (promptHistoryCache || []).some(
+    (item) => item.content === trimmedContent && item.pinned
+  );
+}
+
+function syncPresetPinnedForContent(
+  content: string,
+  pinned: boolean,
+  modelType?: PromptType
+): void {
+  const trimmedContent = content.trim();
+  if (!trimmedContent) {
+    return;
+  }
+
+  const data = normalizePresetStorageData(presetDataCache);
+  let changed = false;
+
+  if (pinned && modelType) {
+    const settings = data[modelType];
+    const existingIndex = settings.pinnedPrompts.indexOf(trimmedContent);
+    if (existingIndex >= 0) {
+      settings.pinnedPrompts.splice(existingIndex, 1);
+    }
+    settings.pinnedPrompts.unshift(trimmedContent);
+    settings.deletedPrompts = settings.deletedPrompts.filter(
+      (prompt) => prompt !== trimmedContent
+    );
+    changed = true;
+  }
+
+  if (!pinned) {
+    for (const type of PROMPT_TYPES) {
+      const settings = data[type];
+      const nextPinnedPrompts = settings.pinnedPrompts.filter(
+        (prompt) => prompt !== trimmedContent
+      );
+      if (nextPinnedPrompts.length !== settings.pinnedPrompts.length) {
+        settings.pinnedPrompts = nextPinnedPrompts;
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    presetDataCache = data;
+    savePresetData();
+  }
+}
+
+export function setPromptContentPinned(
+  content: string,
+  pinned: boolean,
+  modelType?: PromptType
+): boolean {
+  if (!content.trim()) return false;
+  ensureCacheInitialized();
+
+  const trimmedContent = content.trim();
+  const history = promptHistoryCache || [];
+  let item = history.find((entry) => entry.content === trimmedContent);
+
+  if (!item) {
+    if (!pinned) {
+      syncPresetPinnedForContent(trimmedContent, false, modelType);
+      emitPromptStorageChange('pin');
+      return false;
+    }
+    item = {
+      id: generatePromptId(),
+      content: trimmedContent,
+      timestamp: Date.now(),
+      modelType,
+    };
+    history.unshift(item);
+  }
+
+  item.pinned = pinned;
+  item.timestamp = Date.now();
+  if (modelType) {
+    item.modelType = modelType;
+  }
+
+  if (pinned) {
+    deletedPromptContentsCache = (deletedPromptContentsCache || []).filter(
+      (entry) => entry !== trimmedContent
+    );
+    saveDeletedPromptContents();
+  }
+
+  syncPresetPinnedForContent(trimmedContent, pinned, modelType);
+  promptHistoryCache = history;
+  savePromptHistory();
+  emitPromptStorageChange('pin');
+  return pinned;
+}
+
+export function isPromptContentDeleted(content: string): boolean {
+  ensureCacheInitialized();
+  return (deletedPromptContentsCache || []).includes(content.trim());
+}
+
+export function deletePromptContents(contents: string[]): void {
+  ensureCacheInitialized();
+  const normalized = contents
+    .map((content) => content.trim())
+    .filter(Boolean);
+  if (normalized.length === 0) return;
+
+  const deleteSet = new Set(normalized);
+  const existingDeleted = new Set(deletedPromptContentsCache || []);
+  normalized.forEach((content) => existingDeleted.add(content));
+  deletedPromptContentsCache = Array.from(existingDeleted);
+  promptHistoryCache = (promptHistoryCache || []).filter(
+    (item) => !deleteSet.has(item.content)
+  );
+  deletePromptContentOverrides(normalized);
+  savePromptHistory();
+  saveDeletedPromptContents();
+  emitPromptStorageChange('delete');
+}
+
+function normalizeHistoryOverrideTags(tags?: string[]): string[] | undefined {
+  if (!Array.isArray(tags)) {
+    return undefined;
+  }
+
+  const result: string[] = [];
+  const seen = new Set<string>();
+  tags.forEach((tag) => {
+    const normalized = tag.trim().slice(0, 60);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  });
+  return result;
+}
+
+export function getPromptHistoryOverride(
+  sourceSentPrompt: string
+): PromptHistoryOverride | undefined {
+  ensureCacheInitialized();
+  const source = sourceSentPrompt.trim();
+  if (!source) {
+    return undefined;
+  }
+  return (promptHistoryOverridesCache || []).find(
+    (item) =>
+      item.sourceContent === source ||
+      item.sourceSentPrompt === source ||
+      item.content === source ||
+      item.sentPrompt === source
+  );
+}
+
+export function resolvePromptContent(content: string): string {
+  const source = content.trim();
+  if (!source) {
+    return '';
+  }
+  const override = getPromptHistoryOverride(source);
+  return (override?.content || override?.sentPrompt || source).trim();
+}
+
+export function resolvePromptMetadata(content: string): PromptMetadata {
+  const source = content.trim();
+  const override = source ? getPromptHistoryOverride(source) : undefined;
+  const resolvedContent = (
+    override?.content ||
+    override?.sentPrompt ||
+    source
+  ).trim();
+
+  return {
+    sourceContent: override?.sourceContent || override?.sourceSentPrompt || source,
+    content: resolvedContent,
+    title: override?.title,
+    tags: override?.tags,
+    modelType: override?.modelType,
+  };
+}
+
+export function deletePromptContentOverrides(sourceContents: string[]): void {
+  ensureCacheInitialized();
+  const deleteSet = new Set(
+    sourceContents.map((content) => content.trim()).filter(Boolean)
+  );
+  if (deleteSet.size === 0) {
+    return;
+  }
+
+  const beforeLength = (promptHistoryOverridesCache || []).length;
+  promptHistoryOverridesCache = (promptHistoryOverridesCache || []).filter(
+    (override) =>
+      !deleteSet.has(override.sourceContent) &&
+      !(override.sourceSentPrompt && deleteSet.has(override.sourceSentPrompt))
+  );
+  if ((promptHistoryOverridesCache || []).length !== beforeLength) {
+    savePromptHistoryOverrides();
+    emitPromptStorageChange('metadata');
+  }
+}
+
+export function setPromptHistoryOverride(
+  sourceSentPrompt: string,
+  override: {
+    title?: string;
+    sentPrompt?: string;
+    tags?: string[];
+    modelType?: PromptType;
+  }
+): PromptHistoryOverride | undefined {
+  ensureCacheInitialized();
+  const source = sourceSentPrompt.trim();
+  if (!source) {
+    return undefined;
+  }
+
+  const overrides = promptHistoryOverridesCache || [];
+  const index = overrides.findIndex(
+    (item) => item.sourceContent === source || item.sourceSentPrompt === source
+  );
+  const existing = index >= 0 ? overrides[index] : undefined;
+  const content = (
+    override.sentPrompt ||
+    existing?.content ||
+    existing?.sentPrompt ||
+    source
+  ).trim();
+  if (!content) {
+    return undefined;
+  }
+
+  const nextOverride: PromptHistoryOverride = {
+    sourceContent: source,
+    content: content.slice(0, 2000),
+    title: override.title?.trim().slice(0, 80) || undefined,
+    tags: normalizeHistoryOverrideTags(override.tags),
+    modelType: override.modelType,
+    updatedAt: Date.now(),
+  };
+
+  if (index >= 0) {
+    overrides[index] = nextOverride;
+  } else {
+    overrides.unshift(nextOverride);
+  }
+
+  promptHistoryOverridesCache = overrides;
+  savePromptHistoryOverrides();
+  emitPromptStorageChange('metadata');
+  return nextOverride;
+}
+
+export function setPromptContentEdited(
+  sourceContents: string[],
+  nextContent: string,
+  modelType?: PromptType
+): boolean {
+  ensureCacheInitialized();
+  const normalizedSources = Array.from(
+    new Set(sourceContents.map((content) => content.trim()).filter(Boolean))
+  );
+  const normalizedNextContent = nextContent.trim();
+  if (normalizedSources.length === 0 || !normalizedNextContent) {
+    return false;
+  }
+
+  const shouldPinNext = normalizedSources.some(
+    (source) => isPromptContentPinned(source) || isPromptContentPinned(resolvePromptContent(source))
+  );
+
+  for (const source of normalizedSources) {
+    setPromptHistoryOverride(source, {
+      sentPrompt: normalizedNextContent,
+      modelType,
+    });
+    setPromptContentPinned(source, false, modelType);
+  }
+
+  if (shouldPinNext) {
+    setPromptContentPinned(normalizedNextContent, true, modelType);
+  }
+
+  deletedPromptContentsCache = (deletedPromptContentsCache || []).filter(
+    (content) => content !== normalizedNextContent
+  );
+  saveDeletedPromptContents();
+  emitPromptStorageChange('metadata');
+  return true;
 }
 
 // ============================================
@@ -411,6 +915,7 @@ export function addVideoPromptHistory(content: string): void {
     history.unshift(existingItem);
     videoPromptHistoryCache = history;
     saveVideoPromptHistory();
+    emitPromptStorageChange('history');
     return;
   }
 
@@ -426,6 +931,7 @@ export function addVideoPromptHistory(content: string): void {
 
   videoPromptHistoryCache = history;
   saveVideoPromptHistory();
+  emitPromptStorageChange('history');
 }
 
 /**
@@ -437,13 +943,16 @@ export function removeVideoPromptHistory(id: string): void {
     (item) => item.id !== id
   );
   saveVideoPromptHistory();
+  emitPromptStorageChange('delete');
 }
 
 /**
  * 获取视频描述历史记录的提示词列表（仅内容）
  */
 export function getVideoPromptHistoryContents(): string[] {
-  return getVideoPromptHistory().map((item) => item.content);
+  return getVideoPromptHistory()
+    .map((item) => resolvePromptContent(item.content))
+    .filter(Boolean);
 }
 
 /**
@@ -465,6 +974,7 @@ export function mergeVideoPromptHistory(remoteHistory: VideoPromptHistoryItem[])
   if (addedCount > 0) {
     videoPromptHistoryCache = localHistory;
     saveVideoPromptHistory();
+    emitPromptStorageChange('history');
   }
 
   return addedCount;
@@ -513,6 +1023,7 @@ export function addImagePromptHistory(content: string): void {
     history.unshift(existingItem);
     imagePromptHistoryCache = history;
     saveImagePromptHistory();
+    emitPromptStorageChange('history');
     return;
   }
 
@@ -526,6 +1037,7 @@ export function addImagePromptHistory(content: string): void {
 
   imagePromptHistoryCache = history;
   saveImagePromptHistory();
+  emitPromptStorageChange('history');
 }
 
 /**
@@ -537,13 +1049,16 @@ export function removeImagePromptHistory(id: string): void {
     (item) => item.id !== id
   );
   saveImagePromptHistory();
+  emitPromptStorageChange('delete');
 }
 
 /**
  * 获取图片描述历史记录的提示词列表（仅内容）
  */
 export function getImagePromptHistoryContents(): string[] {
-  return getImagePromptHistory().map((item) => item.content);
+  return getImagePromptHistory()
+    .map((item) => resolvePromptContent(item.content))
+    .filter(Boolean);
 }
 
 /**
@@ -565,6 +1080,7 @@ export function mergeImagePromptHistory(remoteHistory: ImagePromptHistoryItem[])
   if (addedCount > 0) {
     imagePromptHistoryCache = localHistory;
     saveImagePromptHistory();
+    emitPromptStorageChange('history');
   }
 
   return addedCount;
@@ -593,23 +1109,28 @@ function getPresetSettings(type: PromptType): PresetPromptSettings {
 function pinPresetPrompt(type: PromptType, prompt: string): void {
   const data = loadPresetData();
   const settings = data[type];
+  const content = resolvePromptContent(prompt);
+  if (!content) {
+    return;
+  }
 
   // 如果已经置顶，先移除
-  const index = settings.pinnedPrompts.indexOf(prompt);
+  const index = settings.pinnedPrompts.indexOf(content);
   if (index > -1) {
     settings.pinnedPrompts.splice(index, 1);
   }
 
   // 添加到置顶列表最前面
-  settings.pinnedPrompts.unshift(prompt);
+  settings.pinnedPrompts.unshift(content);
 
   // 如果在删除列表中，移除
-  const deletedIndex = settings.deletedPrompts.indexOf(prompt);
+  const deletedIndex = settings.deletedPrompts.indexOf(content);
   if (deletedIndex > -1) {
     settings.deletedPrompts.splice(deletedIndex, 1);
   }
 
   presetDataCache = data;
+  setPromptContentPinned(content, true, type);
   savePresetData();
 }
 
@@ -619,21 +1140,23 @@ function pinPresetPrompt(type: PromptType, prompt: string): void {
 function unpinPresetPrompt(type: PromptType, prompt: string): void {
   const data = loadPresetData();
   const settings = data[type];
+  const content = resolvePromptContent(prompt);
 
-  const index = settings.pinnedPrompts.indexOf(prompt);
+  const index = settings.pinnedPrompts.indexOf(content);
   if (index > -1) {
     settings.pinnedPrompts.splice(index, 1);
     presetDataCache = data;
     savePresetData();
   }
+  setPromptContentPinned(content, false, type);
 }
 
 /**
  * 检查预设提示词是否已置顶
  */
-function isPresetPinned(type: PromptType, prompt: string): boolean {
-  const settings = getPresetSettings(type);
-  return settings.pinnedPrompts.includes(prompt);
+function isPresetPinned(_type: PromptType, prompt: string): boolean {
+  const content = resolvePromptContent(prompt);
+  return isPromptContentPinned(content);
 }
 
 /**
@@ -642,20 +1165,22 @@ function isPresetPinned(type: PromptType, prompt: string): boolean {
 function deletePresetPrompt(type: PromptType, prompt: string): void {
   const data = loadPresetData();
   const settings = data[type];
+  const content = resolvePromptContent(prompt);
 
   // 从置顶列表移除
-  const pinnedIndex = settings.pinnedPrompts.indexOf(prompt);
+  const pinnedIndex = settings.pinnedPrompts.indexOf(content);
   if (pinnedIndex > -1) {
     settings.pinnedPrompts.splice(pinnedIndex, 1);
   }
 
   // 添加到删除列表
-  if (!settings.deletedPrompts.includes(prompt)) {
-    settings.deletedPrompts.push(prompt);
+  if (!settings.deletedPrompts.includes(content)) {
+    settings.deletedPrompts.push(content);
   }
 
   presetDataCache = data;
   savePresetData();
+  emitPromptStorageChange('delete');
 }
 
 /**
@@ -665,14 +1190,21 @@ function sortPresetPrompts(type: PromptType, prompts: string[]): string[] {
   const settings = getPresetSettings(type);
 
   // 过滤掉已删除的
-  const filtered = prompts.filter((p) => !settings.deletedPrompts.includes(p));
+  const filtered = prompts.filter((p) => {
+    const content = resolvePromptContent(p);
+    return (
+      content &&
+      !settings.deletedPrompts.includes(content) &&
+      !isPromptContentDeleted(content)
+    );
+  });
 
   // 分离置顶和非置顶
   const pinned: string[] = [];
   const unpinned: string[] = [];
 
   for (const prompt of filtered) {
-    if (settings.pinnedPrompts.includes(prompt)) {
+    if (isPresetPinned(type, prompt)) {
       pinned.push(prompt);
     } else {
       unpinned.push(prompt);
@@ -681,7 +1213,18 @@ function sortPresetPrompts(type: PromptType, prompts: string[]): string[] {
 
   // 按置顶顺序排序
   pinned.sort((a, b) => {
-    return settings.pinnedPrompts.indexOf(a) - settings.pinnedPrompts.indexOf(b);
+    const left = resolvePromptContent(a);
+    const right = resolvePromptContent(b);
+    const leftTypeIndex = settings.pinnedPrompts.indexOf(left);
+    const rightTypeIndex = settings.pinnedPrompts.indexOf(right);
+    if (leftTypeIndex >= 0 && rightTypeIndex >= 0) {
+      return leftTypeIndex - rightTypeIndex;
+    }
+    if (leftTypeIndex >= 0) return -1;
+    if (rightTypeIndex >= 0) return 1;
+    const leftItem = (promptHistoryCache || []).find((item) => item.content === left);
+    const rightItem = (promptHistoryCache || []).find((item) => item.content === right);
+    return (rightItem?.timestamp || 0) - (leftItem?.timestamp || 0);
   });
 
   return [...pinned, ...unpinned];
@@ -696,6 +1239,8 @@ export const promptStorageService = {
   resetCache: resetPromptStorageCache,
   isInitialized: isPromptCacheInitialized,
   waitForInit: waitForPromptCacheInit,
+  subscribeChanges: subscribePromptStorageChanges,
+  getVersion: getPromptStorageVersion,
 
   // 历史记录功能（用于 AI 输入框）
   getHistory: getPromptHistory,
@@ -703,6 +1248,17 @@ export const promptStorageService = {
   removeHistory: removePromptHistory,
   clearHistory: clearPromptHistory,
   togglePin: togglePinPrompt,
+  isContentPinned: isPromptContentPinned,
+  setContentPinned: setPromptContentPinned,
+  isContentDeleted: isPromptContentDeleted,
+  deleteContents: deletePromptContents,
+  getHistoryOverride: getPromptHistoryOverride,
+  setHistoryOverride: setPromptHistoryOverride,
+  resolveContent: resolvePromptContent,
+  resolveMetadata: resolvePromptMetadata,
+  resolvePromptMetadata,
+  setContentEdited: setPromptContentEdited,
+  deleteContentOverrides: deletePromptContentOverrides,
 
   // 预设提示词设置功能（用于 AI 图片/视频生成弹窗）
   getPresetSettings,
@@ -717,4 +1273,10 @@ export const promptStorageService = {
   addVideoPromptHistory,
   removeVideoPromptHistory,
   getVideoPromptHistoryContents,
+
+  // 图片描述历史记录功能
+  getImagePromptHistory,
+  addImagePromptHistory,
+  removeImagePromptHistory,
+  getImagePromptHistoryContents,
 };

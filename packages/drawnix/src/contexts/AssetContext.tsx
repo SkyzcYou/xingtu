@@ -38,7 +38,11 @@ import type {
   FilterState,
   StorageStatus,
 } from '../types/asset.types';
-import { AssetType as AssetTypeEnum, AssetSource as AssetSourceEnum, DEFAULT_FILTER_STATE } from '../types/asset.types';
+import {
+  AssetType as AssetTypeEnum,
+  AssetSource as AssetSourceEnum,
+  DEFAULT_FILTER_STATE,
+} from '../types/asset.types';
 import { TaskType } from '../types/task.types';
 import { AssetContext } from './asset-context-instance';
 import { audioPlaylistService } from '../services/audio-playlist-service';
@@ -53,7 +57,6 @@ import {
   isAssetLibraryUrl,
   isLegacyCacheUrl,
 } from '../utils/virtual-media-url';
-
 
 /**
  * Asset Provider Props
@@ -95,7 +98,10 @@ function isPlaybackCachePollution(
     return true;
   }
 
-  return !item.metadata?.name && /^asset:[0-9a-f-]+\.(mp3|wav|ogg|aac|flac|m4a|webm)$/i.test(filename);
+  return (
+    !item.metadata?.name &&
+    /^asset:[0-9a-f-]+\.(mp3|wav|ogg|aac|flac|m4a|webm)$/i.test(filename)
+  );
 }
 
 function hasAIGeneratedCacheMetadata(item: {
@@ -113,11 +119,13 @@ function hasAIGeneratedCacheMetadata(item: {
 
   return Boolean(
     item.metadata?.taskId &&
-    (item.metadata.prompt || item.metadata.model || item.metadata.params)
+      (item.metadata.prompt || item.metadata.model || item.metadata.params)
   );
 }
 
-function isInternalLibraryExcludedCache(item: Pick<CachedMedia, 'metadata'>): boolean {
+function isInternalLibraryExcludedCache(
+  item: Pick<CachedMedia, 'metadata'>
+): boolean {
   return item.metadata?.source === 'video-frame';
 }
 
@@ -126,7 +134,9 @@ function getNormalizedClipId(asset: Pick<Asset, 'clipId'>): string | undefined {
   return clipId || undefined;
 }
 
-function getAudioAssetIdentityKeys(asset: Pick<Asset, 'clipId' | 'contentHash' | 'url'>): string[] {
+function getAudioAssetIdentityKeys(
+  asset: Pick<Asset, 'clipId' | 'contentHash' | 'url'>
+): string[] {
   const keys: string[] = [];
   const clipId = getNormalizedClipId(asset);
   const contentHash = getAssetContentHash(asset);
@@ -151,7 +161,12 @@ function getAudioAssetRepresentativeScore(asset: Asset): number {
   if (asset.source === AssetSourceEnum.AI_GENERATED) score += 50;
   if (!isUnifiedCacheAsset(asset)) score += 100;
   if (asset.thumbnail) score += 20;
-  if (typeof asset.duration === 'number' && Number.isFinite(asset.duration) && asset.duration > 0) score += 10;
+  if (
+    typeof asset.duration === 'number' &&
+    Number.isFinite(asset.duration) &&
+    asset.duration > 0
+  )
+    score += 10;
   if (asset.clipId) score += 8;
   if (asset.contentHash) score += 4;
   if (asset.providerTaskId) score += 2;
@@ -182,7 +197,8 @@ function mergeAudioAssetMetadata(preferred: Asset, fallback: Asset): Asset {
     mimeType: preferred.mimeType || fallback.mimeType,
     createdAt: Math.max(preferred.createdAt, fallback.createdAt),
     size: preferred.size || fallback.size,
-    contentHash: getAssetContentHash(preferred) || getAssetContentHash(fallback),
+    contentHash:
+      getAssetContentHash(preferred) || getAssetContentHash(fallback),
     thumbnail: preferred.thumbnail || fallback.thumbnail,
     duration: preferred.duration ?? fallback.duration,
     taskId: preferred.taskId || fallback.taskId,
@@ -225,9 +241,9 @@ function mergeAIGeneratedAudioAssets(assets: Asset[]): Asset[] {
   for (const asset of assets) {
     const identityKeys = getAudioAssetIdentityKeys(asset);
     const matchedIndexes = groups
-      .map((group, index) => (
+      .map((group, index) =>
         identityKeys.some((key) => group.keys.has(key)) ? index : -1
-      ))
+      )
       .filter((index) => index >= 0);
 
     if (matchedIndexes.length === 0) {
@@ -240,11 +256,16 @@ function mergeAIGeneratedAudioAssets(assets: Asset[]): Asset[] {
     }
 
     const primaryGroup = groups[matchedIndexes[0]];
-    primaryGroup.representative = combineAudioAssets(primaryGroup.representative, asset);
+    primaryGroup.representative = combineAudioAssets(
+      primaryGroup.representative,
+      asset
+    );
     primaryGroup.members.push(asset);
     identityKeys.forEach((key) => primaryGroup.keys.add(key));
 
-    const secondaryIndexes = matchedIndexes.slice(1).sort((left, right) => right - left);
+    const secondaryIndexes = matchedIndexes
+      .slice(1)
+      .sort((left, right) => right - left);
     for (const index of secondaryIndexes) {
       const [mergedGroup] = groups.splice(index, 1);
       if (!mergedGroup) {
@@ -254,7 +275,9 @@ function mergeAIGeneratedAudioAssets(assets: Asset[]): Asset[] {
         primaryGroup.representative,
         mergedGroup.representative
       );
-      mergedGroup.members.forEach((member) => primaryGroup.members.push(member));
+      mergedGroup.members.forEach((member) =>
+        primaryGroup.members.push(member)
+      );
       mergedGroup.keys.forEach((key) => primaryGroup.keys.add(key));
     }
   }
@@ -290,11 +313,15 @@ function mergeLocalAssets(assets: Asset[]): Asset[] {
       continue;
     }
 
-    const mergedAssetIds = new Set([...(existing.dedupeAssetIds || []), ...candidateAssetIds]);
+    const mergedAssetIds = new Set([
+      ...(existing.dedupeAssetIds || []),
+      ...candidateAssetIds,
+    ]);
     const mergedUrls = new Set([...(existing.dedupeUrls || []), normalizedUrl]);
     const shouldReplaceRepresentative =
       (isUnifiedCacheAsset(existing) && !isUnifiedCacheAsset(asset)) ||
-      (isUnifiedCacheAsset(existing) === isUnifiedCacheAsset(asset) && asset.createdAt > existing.createdAt);
+      (isUnifiedCacheAsset(existing) === isUnifiedCacheAsset(asset) &&
+        asset.createdAt > existing.createdAt);
 
     const representative = shouldReplaceRepresentative ? asset : existing;
     const fallbackName = representative.name || existing.name || asset.name;
@@ -303,9 +330,13 @@ function mergeLocalAssets(assets: Asset[]): Asset[] {
       ...representative,
       name: fallbackName,
       size: representative.size || existing.size || asset.size,
-      contentHash: getAssetContentHash(representative) || existing.contentHash || getAssetContentHash(asset),
+      contentHash:
+        getAssetContentHash(representative) ||
+        existing.contentHash ||
+        getAssetContentHash(asset),
       createdAt: Math.max(existing.createdAt, asset.createdAt),
-      thumbnail: representative.thumbnail || existing.thumbnail || asset.thumbnail,
+      thumbnail:
+        representative.thumbnail || existing.thumbnail || asset.thumbnail,
       dedupeAssetIds: Array.from(mergedAssetIds),
       dedupeUrls: Array.from(mergedUrls),
     });
@@ -327,16 +358,31 @@ function mergeVisibleAsset(prevAssets: Asset[], nextAsset: Asset): Asset[] {
   });
 
   const mergedAsset = localKey
-    ? mergeLocalAssets([nextAsset, ...prevAssets.filter(asset => getLocalDedupeKey(asset) === localKey)])[0]
+    ? mergeLocalAssets([
+        nextAsset,
+        ...prevAssets.filter((asset) => getLocalDedupeKey(asset) === localKey),
+      ])[0]
     : nextAsset;
 
-  return [mergedAsset, ...remainingAssets].sort((a, b) => b.createdAt - a.createdAt);
+  return [mergedAsset, ...remainingAssets].sort(
+    (a, b) => b.createdAt - a.createdAt
+  );
 }
 
-function getLocalCleanupTargets(asset: Asset): { assetIds: string[]; urls: string[]; dedupeKey?: string } {
+function getLocalCleanupTargets(asset: Asset): {
+  assetIds: string[];
+  urls: string[];
+  dedupeKey?: string;
+} {
   const dedupeKey = getLocalDedupeKey(asset);
-  const urls = Array.from(new Set((asset.dedupeUrls || [asset.url]).map(normalizeAssetUrl)));
-  const assetIds = Array.from(new Set(asset.dedupeAssetIds || (isUnifiedCacheAsset(asset) ? [] : [asset.id])));
+  const urls = Array.from(
+    new Set((asset.dedupeUrls || [asset.url]).map(normalizeAssetUrl))
+  );
+  const assetIds = Array.from(
+    new Set(
+      asset.dedupeAssetIds || (isUnifiedCacheAsset(asset) ? [] : [asset.id])
+    )
+  );
   return { assetIds, urls, dedupeKey };
 }
 
@@ -353,13 +399,16 @@ export function AssetProvider({ children }: AssetProviderProps) {
   const [error, setError] = useState<string | null>(null);
 
   // 筛选和排序
-  const [filters, setFiltersState] = useState<FilterState>(DEFAULT_FILTER_STATE);
+  const [filters, setFiltersState] =
+    useState<FilterState>(DEFAULT_FILTER_STATE);
 
   // 选择
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
 
   // 存储状态
-  const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null);
+  const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(
+    null
+  );
 
   // 同步状态 - 已同步到 Gist 的 URL 集合
   const [syncedUrls, setSyncedUrls] = useState<Set<string>>(new Set());
@@ -367,7 +416,10 @@ export function AssetProvider({ children }: AssetProviderProps) {
   // ref 供初始化 effect 延迟调用 loadAssets
   const loadAssetsRef = useRef<(() => void) | null>(null);
   const loadAssetsPromiseRef = useRef<Promise<void> | null>(null);
-  const lastSuccessfulLoadRef = useRef<{ loadedAt: number; assetCount: number } | null>(null);
+  const lastSuccessfulLoadRef = useRef<{
+    loadedAt: number;
+    assetCount: number;
+  } | null>(null);
 
   /**
    * Initialize service on mount
@@ -405,19 +457,21 @@ export function AssetProvider({ children }: AssetProviderProps) {
       return [];
     }
 
-    const assetType = task.type === TaskType.IMAGE
-      ? AssetTypeEnum.IMAGE
-      : task.type === TaskType.AUDIO
-      ? AssetTypeEnum.AUDIO
-      : AssetTypeEnum.VIDEO;
+    const assetType =
+      task.type === TaskType.IMAGE
+        ? AssetTypeEnum.IMAGE
+        : task.type === TaskType.AUDIO
+        ? AssetTypeEnum.AUDIO
+        : AssetTypeEnum.VIDEO;
 
-    const mimeType = task.type === TaskType.AUDIO
-      ? 'audio/mpeg'
-      : result.format === 'mp4'
-      ? 'video/mp4'
-      : result.format === 'webm'
-      ? 'video/webm'
-      : `image/${result.format || 'png'}`;
+    const mimeType =
+      task.type === TaskType.AUDIO
+        ? 'audio/mpeg'
+        : result.format === 'mp4'
+        ? 'video/mp4'
+        : result.format === 'webm'
+        ? 'video/webm'
+        : `image/${result.format || 'png'}`;
 
     if (task.type === TaskType.AUDIO) {
       const clipAssets = (result.clips || [])
@@ -459,9 +513,7 @@ export function AssetProvider({ children }: AssetProviderProps) {
             clipId: clip.clipId || clip.id,
             providerTaskId: result.providerTaskId || task.remoteId || task.id,
             thumbnail:
-              clip.imageLargeUrl ||
-              clip.imageUrl ||
-              result.previewImageUrl,
+              clip.imageLargeUrl || clip.imageUrl || result.previewImageUrl,
           };
         })
         .filter((asset): asset is Asset => asset !== null);
@@ -471,35 +523,40 @@ export function AssetProvider({ children }: AssetProviderProps) {
       }
     }
 
-    const name = task.type === TaskType.AUDIO
-      ? (result.title || task.params.title || task.params.prompt?.substring(0, 30) || 'AI音频')
-      : (task.params.prompt?.substring(0, 30) || 'AI生成');
+    const name =
+      task.type === TaskType.AUDIO
+        ? result.title ||
+          task.params.title ||
+          task.params.prompt?.substring(0, 30) ||
+          'AI音频'
+        : task.params.prompt?.substring(0, 30) || 'AI生成';
 
-    return [{
-      id: task.id,
-      taskId: task.id,
-      type: assetType,
-      source: AssetSourceEnum.AI_GENERATED,
-      url: result.url,
-      name,
-      mimeType,
-      createdAt: task.completedAt || task.createdAt,
-      size: result.size,
-      cacheWarning: result.cacheWarning,
-      prompt: task.params.prompt,
-      modelName: task.params.model,
-      duration:
-        task.type === TaskType.AUDIO ? result.duration : undefined,
-      providerTaskId:
-        task.type === TaskType.AUDIO
-          ? result.providerTaskId || task.remoteId || task.id
-          : undefined,
-      clipId:
-        task.type === TaskType.AUDIO
-          ? result.primaryClipId || result.clipIds?.[0]
-          : undefined,
-      ...(result.previewImageUrl && { thumbnail: result.previewImageUrl }),
-    }];
+    return [
+      {
+        id: task.id,
+        taskId: task.id,
+        type: assetType,
+        source: AssetSourceEnum.AI_GENERATED,
+        url: result.url,
+        name,
+        mimeType,
+        createdAt: task.completedAt || task.createdAt,
+        size: result.size,
+        cacheWarning: result.cacheWarning,
+        prompt: task.params.prompt,
+        modelName: task.params.model,
+        duration: task.type === TaskType.AUDIO ? result.duration : undefined,
+        providerTaskId:
+          task.type === TaskType.AUDIO
+            ? result.providerTaskId || task.remoteId || task.id
+            : undefined,
+        clipId:
+          task.type === TaskType.AUDIO
+            ? result.primaryClipId || result.clipIds?.[0]
+            : undefined,
+        ...(result.previewImageUrl && { thumbnail: result.previewImageUrl }),
+      },
+    ];
   }, []);
 
   /**
@@ -507,124 +564,145 @@ export function AssetProvider({ children }: AssetProviderProps) {
    * 优化：不再逐个访问 Cache Storage，直接使用 IndexedDB 元数据
    * 这大幅提升了素材库的加载速度
    */
-  const getAssetsFromCacheStorage = useCallback(async (
-    taskContext?: CacheAssetTaskContext
-  ): Promise<CacheAssetLoadResult> => {
-    try {
-      // 直接从 IndexedDB 获取所有缓存媒体的元数据
-      // 这比遍历 Cache Storage 快得多
-      const cachedMediaList = await unifiedCacheService.getAllCachedMedia();
+  const getAssetsFromCacheStorage = useCallback(
+    async (
+      taskContext?: CacheAssetTaskContext
+    ): Promise<CacheAssetLoadResult> => {
+      try {
+        // 直接从 IndexedDB 获取所有缓存媒体的元数据
+        // 这比遍历 Cache Storage 快得多
+        const cachedMediaList = await unifiedCacheService.getAllCachedMedia();
 
-      const assets: Asset[] = [];
-      const metadataByNormalizedUrl = new Map<string, CachedMedia>();
-      
-      for (const item of cachedMediaList) {
-        // 统一使用 pathname
-        const pathname = item.url.startsWith('/') ? item.url : (() => {
-          try {
-            return new URL(item.url).pathname;
-          } catch {
-            return item.url;
+        const assets: Asset[] = [];
+        const metadataByNormalizedUrl = new Map<string, CachedMedia>();
+
+        for (const item of cachedMediaList) {
+          // 统一使用 pathname
+          const pathname = item.url.startsWith('/')
+            ? item.url
+            : (() => {
+                try {
+                  return new URL(item.url).pathname;
+                } catch {
+                  return item.url;
+                }
+              })();
+
+          const isAituCache = isLegacyCacheUrl(pathname);
+          const isAssetLibrary = isAssetLibraryUrl(pathname);
+          const isAIGeneratedAudio = isAIGeneratedAudioUrl(pathname);
+
+          if (!isAituCache && !isAssetLibrary && !isAIGeneratedAudio) continue;
+
+          // 视频分析 / 爆款视频工具生成的帧截图属于内部工作缓存，
+          // 不能混入素材库，也不能参与本地素材去重，否则会导致选中与插入错位。
+          if (isInternalLibraryExcludedCache(item)) continue;
+
+          const normalizedPathname = normalizeAssetUrl(pathname);
+          metadataByNormalizedUrl.set(normalizedPathname, item);
+          const isDuplicatedByCompletedTask = Boolean(
+            taskContext &&
+              (taskContext.completedTaskUrls.has(normalizedPathname) ||
+                (item.metadata?.taskId &&
+                  taskContext.completedTaskIds.has(item.metadata.taskId)))
+          );
+
+          if (isDuplicatedByCompletedTask) continue;
+
+          const filename = pathname.split('/').pop() || '';
+
+          // 跳过辅助缓存条目（如音频封面图 *-cover.png / *-cover_1.jpg）
+          if (/-cover(?:_\d+)?\.\w+$/i.test(filename)) continue;
+
+          const isVideo =
+            item.type === 'video' ||
+            pathname.includes('/video/') ||
+            /\.(mp4|webm|mov)$/i.test(pathname);
+          const isAudio =
+            item.type === 'audio' ||
+            isAIGeneratedAudio ||
+            pathname.startsWith('/__aitu_cache__/audio/') ||
+            /\.(mp3|wav|ogg|aac|flac)$/i.test(pathname);
+
+          if (isPlaybackCachePollution(item, filename, isAudio)) continue;
+
+          const assetSource =
+            isAIGeneratedAudio || hasAIGeneratedCacheMetadata(item)
+              ? AssetSourceEnum.AI_GENERATED
+              : AssetSourceEnum.LOCAL;
+
+          const assetType = isAudio
+            ? AssetTypeEnum.AUDIO
+            : isVideo
+            ? AssetTypeEnum.VIDEO
+            : AssetTypeEnum.IMAGE;
+
+          // 音频素材：尝试查找对应的封面图缓存
+          let thumbnail: string | undefined;
+          if (isAudio && item.metadata?.taskId) {
+            const coverUrl = `/__aitu_cache__/image/${item.metadata.taskId}-cover.png`;
+            const hasCover = cachedMediaList.some((m) => {
+              const mPath = m.url.startsWith('/')
+                ? m.url
+                : (() => {
+                    try {
+                      return new URL(m.url).pathname;
+                    } catch {
+                      return m.url;
+                    }
+                  })();
+              return mPath === coverUrl;
+            });
+            if (hasCover) thumbnail = coverUrl;
           }
-        })();
-        
-        const isAituCache = isLegacyCacheUrl(pathname);
-        const isAssetLibrary = isAssetLibraryUrl(pathname);
-        const isAIGeneratedAudio = isAIGeneratedAudioUrl(pathname);
-        
-        if (!isAituCache && !isAssetLibrary && !isAIGeneratedAudio) continue;
 
-        // 视频分析 / 爆款视频工具生成的帧截图属于内部工作缓存，
-        // 不能混入素材库，也不能参与本地素材去重，否则会导致选中与插入错位。
-        if (isInternalLibraryExcludedCache(item)) continue;
-
-        const normalizedPathname = normalizeAssetUrl(pathname);
-        metadataByNormalizedUrl.set(normalizedPathname, item);
-        const isDuplicatedByCompletedTask = Boolean(
-          taskContext &&
-          (
-            taskContext.completedTaskUrls.has(normalizedPathname) ||
-            (item.metadata?.taskId && taskContext.completedTaskIds.has(item.metadata.taskId))
-          )
-        );
-
-        if (isDuplicatedByCompletedTask) continue;
-
-        const filename = pathname.split('/').pop() || '';
-
-        // 跳过辅助缓存条目（如音频封面图 *-cover.png / *-cover_1.jpg）
-        if (/-cover(?:_\d+)?\.\w+$/i.test(filename)) continue;
-
-        const isVideo = item.type === 'video' ||
-                        pathname.includes('/video/') ||
-                        /\.(mp4|webm|mov)$/i.test(pathname);
-        const isAudio = item.type === 'audio' ||
-                        isAIGeneratedAudio ||
-                        pathname.startsWith('/__aitu_cache__/audio/') ||
-                        /\.(mp3|wav|ogg|aac|flac)$/i.test(pathname);
-
-        if (isPlaybackCachePollution(item, filename, isAudio)) continue;
-
-        const assetSource =
-          isAIGeneratedAudio || hasAIGeneratedCacheMetadata(item)
-            ? AssetSourceEnum.AI_GENERATED
-            : AssetSourceEnum.LOCAL;
-
-        const assetType = isAudio ? AssetTypeEnum.AUDIO
-          : isVideo ? AssetTypeEnum.VIDEO
-          : AssetTypeEnum.IMAGE;
-
-        // 音频素材：尝试查找对应的封面图缓存
-        let thumbnail: string | undefined;
-        if (isAudio && item.metadata?.taskId) {
-          const coverUrl = `/__aitu_cache__/image/${item.metadata.taskId}-cover.png`;
-          const hasCover = cachedMediaList.some(m => {
-            const mPath = m.url.startsWith('/') ? m.url : (() => { try { return new URL(m.url).pathname; } catch { return m.url; } })();
-            return mPath === coverUrl;
+          assets.push({
+            id: `unified-cache-${filename}`,
+            type: assetType,
+            source: assetSource,
+            url: normalizedPathname,
+            name: item.metadata?.name || filename,
+            mimeType: item.mimeType,
+            createdAt: item.cachedAt,
+            size: item.size,
+            cacheWarning: item.metadata?.cacheWarning,
+            contentHash:
+              item.contentHash ||
+              getAssetContentHash({ url: normalizedPathname }),
+            taskId: item.metadata?.taskId,
+            providerTaskId:
+              typeof item.metadata?.providerTaskId === 'string'
+                ? item.metadata.providerTaskId
+                : item.metadata?.taskId,
+            clipId:
+              typeof item.metadata?.clipId === 'string'
+                ? item.metadata.clipId
+                : undefined,
+            duration:
+              typeof item.metadata?.duration === 'number'
+                ? item.metadata.duration
+                : undefined,
+            ...(thumbnail && { thumbnail }),
           });
-          if (hasCover) thumbnail = coverUrl;
         }
 
-        assets.push({
-          id: `unified-cache-${filename}`,
-          type: assetType,
-          source: assetSource,
-          url: normalizedPathname,
-          name: item.metadata?.name || filename,
-          mimeType: item.mimeType,
-          createdAt: item.cachedAt,
-          size: item.size,
-          cacheWarning: item.metadata?.cacheWarning,
-          contentHash: item.contentHash || getAssetContentHash({ url: normalizedPathname }),
-          taskId: item.metadata?.taskId,
-          providerTaskId:
-            typeof item.metadata?.providerTaskId === 'string'
-              ? item.metadata.providerTaskId
-              : item.metadata?.taskId,
-          clipId:
-            typeof item.metadata?.clipId === 'string'
-              ? item.metadata.clipId
-              : undefined,
-          duration:
-            typeof item.metadata?.duration === 'number'
-              ? item.metadata.duration
-              : undefined,
-          ...(thumbnail && { thumbnail }),
-        });
+        return {
+          assets,
+          metadataByNormalizedUrl,
+        };
+      } catch (error) {
+        console.error(
+          '[AssetContext] Failed to get assets from IndexedDB:',
+          error
+        );
+        return {
+          assets: [],
+          metadataByNormalizedUrl: new Map(),
+        };
       }
-      
-      return {
-        assets,
-        metadataByNormalizedUrl,
-      };
-    } catch (error) {
-      console.error('[AssetContext] Failed to get assets from IndexedDB:', error);
-      return {
-        assets: [],
-        metadataByNormalizedUrl: new Map(),
-      };
-    }
-  }, []);
+    },
+    []
+  );
 
   /**
    * Load Assets
@@ -634,8 +712,9 @@ export function AssetProvider({ children }: AssetProviderProps) {
   const loadAssets = useCallback(async () => {
     const now = Date.now();
     const lastSuccessfulLoad = lastSuccessfulLoadRef.current;
-    const cachedAgeMs =
-      lastSuccessfulLoad ? now - lastSuccessfulLoad.loadedAt : null;
+    const cachedAgeMs = lastSuccessfulLoad
+      ? now - lastSuccessfulLoad.loadedAt
+      : null;
 
     if (loadAssetsPromiseRef.current) {
       return loadAssetsPromiseRef.current;
@@ -656,21 +735,25 @@ export function AssetProvider({ children }: AssetProviderProps) {
         // 2. 从任务队列获取已完成的 AI 生成任务
         // 统一从 IndexedDB 直接读取，SW 模式和降级模式使用同一个数据库
         // includeArchived: 归档任务的媒体仍在 Cache Storage 中，需要读取元数据
-        const completedTasks = await taskStorageReader.getAssetTasks({ includeArchived: true });
+        const completedTasks = await taskStorageReader.getAssetTasks({
+          includeArchived: true,
+        });
         const preliminaryAiAssets = completedTasks.flatMap(taskToAssets);
-        const completedTaskIds = new Set(completedTasks.map(task => task.id));
-        const aiAssetUrls = new Set(preliminaryAiAssets.map(asset => normalizeAssetUrl(asset.url)));
+        const completedTaskIds = new Set(completedTasks.map((task) => task.id));
+        const aiAssetUrls = new Set(
+          preliminaryAiAssets.map((asset) => normalizeAssetUrl(asset.url))
+        );
 
         // 3. 从 Cache Storage 获取媒体（优先级最低，用于补充）
-        const {
-          assets: cacheStorageAssets,
-          metadataByNormalizedUrl,
-        } = await getAssetsFromCacheStorage({
-          completedTaskIds,
-          completedTaskUrls: aiAssetUrls,
-        });
+        const { assets: cacheStorageAssets, metadataByNormalizedUrl } =
+          await getAssetsFromCacheStorage({
+            completedTaskIds,
+            completedTaskUrls: aiAssetUrls,
+          });
         const aiAssets = preliminaryAiAssets.map((asset) => {
-          const cachedMetadata = metadataByNormalizedUrl.get(normalizeAssetUrl(asset.url));
+          const cachedMetadata = metadataByNormalizedUrl.get(
+            normalizeAssetUrl(asset.url)
+          );
           const cachedDuration =
             typeof cachedMetadata?.metadata?.duration === 'number'
               ? cachedMetadata.metadata.duration
@@ -692,14 +775,15 @@ export function AssetProvider({ children }: AssetProviderProps) {
             clipId: asset.clipId || cachedClipId,
             providerTaskId: asset.providerTaskId || cachedProviderTaskId,
             taskId: asset.taskId || cachedMetadata?.metadata?.taskId,
-            cacheWarning: asset.cacheWarning || cachedMetadata?.metadata?.cacheWarning,
+            cacheWarning:
+              asset.cacheWarning || cachedMetadata?.metadata?.cacheWarning,
           };
         });
         const localCacheAssets = cacheStorageAssets.filter(
-          asset => asset.source === AssetSourceEnum.LOCAL
+          (asset) => asset.source === AssetSourceEnum.LOCAL
         );
         const generatedCacheAssets = cacheStorageAssets.filter(
-          asset => asset.source === AssetSourceEnum.AI_GENERATED
+          (asset) => asset.source === AssetSourceEnum.AI_GENERATED
         );
 
         // 4. 本地来源按内容去重；AI 结果保持独立
@@ -708,9 +792,13 @@ export function AssetProvider({ children }: AssetProviderProps) {
           ...localCacheAssets,
         ]);
         const supplementalGeneratedAssets = generatedCacheAssets.filter(
-          (asset) => asset.type === AssetTypeEnum.AUDIO || !aiAssetUrls.has(normalizeAssetUrl(asset.url))
+          (asset) =>
+            asset.type === AssetTypeEnum.AUDIO ||
+            !aiAssetUrls.has(normalizeAssetUrl(asset.url))
         );
-        const aiAudioAssets = aiAssets.filter((asset) => asset.type === AssetTypeEnum.AUDIO);
+        const aiAudioAssets = aiAssets.filter(
+          (asset) => asset.type === AssetTypeEnum.AUDIO
+        );
         const generatedAudioAssets = supplementalGeneratedAssets.filter(
           (asset) => asset.type === AssetTypeEnum.AUDIO
         );
@@ -731,9 +819,7 @@ export function AssetProvider({ children }: AssetProviderProps) {
           ...nonAudioGeneratedAssets,
           ...nonAudioAiAssets,
           ...mergedAIAudioAssets,
-        ].sort(
-          (a, b) => b.createdAt - a.createdAt
-        );
+        ].sort((a, b) => b.createdAt - a.createdAt);
 
         setAssets(allAssets);
         lastSuccessfulLoadRef.current = {
@@ -744,7 +830,9 @@ export function AssetProvider({ children }: AssetProviderProps) {
         // 7. 延迟异步填充缺失的文件大小（不阻塞加载）
         // 使用 requestIdleCallback 在浏览器空闲时执行
         const fillMissingSizes = () => {
-          const assetsNeedingSize = allAssets.filter(a => !a.size || a.size === 0);
+          const assetsNeedingSize = allAssets.filter(
+            (a) => !a.size || a.size === 0
+          );
           if (assetsNeedingSize.length === 0) return;
 
           // 分批获取，每批最多 10 个，避免一次性发起太多请求
@@ -752,7 +840,10 @@ export function AssetProvider({ children }: AssetProviderProps) {
           let currentIndex = 0;
 
           const processBatch = async () => {
-            const batch = assetsNeedingSize.slice(currentIndex, currentIndex + batchSize);
+            const batch = assetsNeedingSize.slice(
+              currentIndex,
+              currentIndex + batchSize
+            );
             if (batch.length === 0) return;
 
             const sizePromises = batch.map(async (asset) => {
@@ -763,13 +854,13 @@ export function AssetProvider({ children }: AssetProviderProps) {
             const sizeResults = await Promise.all(sizePromises);
             const sizeMap = new Map(
               sizeResults
-                .filter(r => r.size !== null && r.size > 0)
-                .map(r => [r.id, r.size as number])
+                .filter((r) => r.size !== null && r.size > 0)
+                .map((r) => [r.id, r.size as number])
             );
 
             if (sizeMap.size > 0) {
-              setAssets(prev =>
-                prev.map(asset =>
+              setAssets((prev) =>
+                prev.map((asset) =>
                   sizeMap.has(asset.id)
                     ? { ...asset, size: sizeMap.get(asset.id) }
                     : asset
@@ -798,7 +889,9 @@ export function AssetProvider({ children }: AssetProviderProps) {
 
         // 使用 requestIdleCallback 延迟执行，不阻塞加载
         if ('requestIdleCallback' in window) {
-          (window as Window).requestIdleCallback(fillMissingSizes, { timeout: 3000 });
+          (window as Window).requestIdleCallback(fillMissingSizes, {
+            timeout: 3000,
+          });
         } else {
           setTimeout(fillMissingSizes, 200);
         }
@@ -834,12 +927,16 @@ export function AssetProvider({ children }: AssetProviderProps) {
       // 如果接近限制，显示警告
       if (status.isCritical) {
         MessagePlugin.warning({
-          content: `本地存储空间已使用 ${status.quota.percentUsed.toFixed(1)}%，即将达到上限。请删除一些旧素材。`,
+          content: `本地存储空间已使用 ${status.quota.percentUsed.toFixed(
+            1
+          )}%，即将达到上限。请删除一些旧素材。`,
           duration: 5000,
         });
       } else if (status.isNearLimit) {
         MessagePlugin.info({
-          content: `本地存储空间已使用 ${status.quota.percentUsed.toFixed(1)}%，接近上限。`,
+          content: `本地存储空间已使用 ${status.quota.percentUsed.toFixed(
+            1
+          )}%，接近上限。`,
           duration: 3000,
         });
       }
@@ -857,7 +954,7 @@ export function AssetProvider({ children }: AssetProviderProps) {
       file: File | Blob,
       type: AssetType,
       source: AssetSource,
-      name?: string,
+      name?: string
     ): Promise<Asset> => {
       // console.log('[AssetContext] addAsset called with:', {
       //   fileName: file instanceof File ? file.name : 'Blob',
@@ -874,11 +971,12 @@ export function AssetProvider({ children }: AssetProviderProps) {
       try {
         // 生成默认名称
         const assetName =
-          name ||
-          (file instanceof File ? file.name : `asset-${Date.now()}`);
+          name || (file instanceof File ? file.name : `asset-${Date.now()}`);
 
         const mimeType =
-          file instanceof File ? file.type : (file.type || 'application/octet-stream');
+          file instanceof File
+            ? file.type
+            : file.type || 'application/octet-stream';
 
         // console.log('[AssetContext] Calling assetStorageService.addAsset...');
         const asset = await assetStorageService.addAsset({
@@ -933,7 +1031,7 @@ export function AssetProvider({ children }: AssetProviderProps) {
         setLoading(false);
       }
     },
-    [checkStorageQuota],
+    [checkStorageQuota]
   );
 
   /**
@@ -943,254 +1041,298 @@ export function AssetProvider({ children }: AssetProviderProps) {
    * AI 生成素材：从任务队列删除
    * 缓存素材：从 unified-cache 删除
    */
-  const removeAsset = useCallback(async (id: string): Promise<void> => {
-    setLoading(true);
-    setError(null);
+  const removeAsset = useCallback(
+    async (id: string): Promise<void> => {
+      setLoading(true);
+      setError(null);
 
-    try {
-      const asset = assets.find(a => a.id === id);
-      const cleanupTargets = asset ? getLocalCleanupTargets(asset) : null;
+      try {
+        const asset = assets.find((a) => a.id === id);
+        const cleanupTargets = asset ? getLocalCleanupTargets(asset) : null;
 
-      if (id.startsWith('unified-cache-')) {
-        if (cleanupTargets) {
-          await Promise.all(cleanupTargets.urls.map((url) => unifiedCacheService.deleteCache(url)));
+        if (id.startsWith('unified-cache-')) {
+          if (cleanupTargets) {
+            await Promise.all(
+              cleanupTargets.urls.map((url) =>
+                unifiedCacheService.deleteCache(url)
+              )
+            );
+          }
+        } else if (asset?.source === AssetSourceEnum.AI_GENERATED) {
+          // AI 生成的素材：删除任务 + 清理缓存
+          taskQueueService.deleteTask(asset.taskId || id);
+          if (asset.url) {
+            await unifiedCacheService.deleteCache(asset.url).catch((e) => {});
+          }
+        } else {
+          if (cleanupTargets) {
+            await Promise.all(
+              cleanupTargets.assetIds.map((assetId) =>
+                assetStorageService.removeAsset(assetId)
+              )
+            );
+            const storedAssetUrls = new Set(
+              assets
+                .filter((existingAsset) =>
+                  cleanupTargets.assetIds.includes(existingAsset.id)
+                )
+                .map((existingAsset) => normalizeAssetUrl(existingAsset.url))
+            );
+            const cacheOnlyUrls = cleanupTargets.urls.filter(
+              (url) => !storedAssetUrls.has(normalizeAssetUrl(url))
+            );
+            await Promise.all(
+              cacheOnlyUrls.map((url) =>
+                unifiedCacheService.deleteCache(url).catch((e) => {})
+              )
+            );
+          } else {
+            await assetStorageService.removeAsset(id);
+          }
         }
-      } else if (asset?.source === AssetSourceEnum.AI_GENERATED) {
-        // AI 生成的素材：删除任务 + 清理缓存
-        taskQueueService.deleteTask(asset.taskId || id);
-        if (asset.url) {
-          await unifiedCacheService.deleteCache(asset.url).catch((e) => {
-            console.debug('[AssetContext] AI asset cache delete skipped:', e);
+
+        await audioPlaylistService
+          .removeAssetFromAllPlaylists(id)
+          .catch((playlistError) => {
+            console.error(
+              '[AssetContext] Failed to remove asset from playlists:',
+              playlistError
+            );
+          });
+
+        // 更新状态
+        setAssets((prev) =>
+          prev.filter((a) =>
+            cleanupTargets?.dedupeKey
+              ? getLocalDedupeKey(a) !== cleanupTargets.dedupeKey
+              : a.id !== id
+          )
+        );
+
+        // 如果删除的是当前选中的素材，清除选中状态
+        setSelectedAssetId((prev) => (prev === id ? null : prev));
+
+        // 检查存储配额
+        await checkStorageQuota();
+
+        MessagePlugin.success({
+          content: '素材删除成功',
+          duration: 2000,
+        });
+      } catch (err) {
+        console.error('Failed to remove asset:', err);
+        const error = err as Error;
+        setError(error.message);
+
+        if (error.name === 'NotFoundError') {
+          MessagePlugin.warning({
+            content: '素材未找到，可能已被删除',
+            duration: 3000,
+          });
+        } else {
+          MessagePlugin.error({
+            content: '删除素材失败',
+            duration: 3000,
           });
         }
-      } else {
-        if (cleanupTargets) {
-          await Promise.all(cleanupTargets.assetIds.map((assetId) => assetStorageService.removeAsset(assetId)));
-          const storedAssetUrls = new Set(
-            assets
-              .filter(existingAsset => cleanupTargets.assetIds.includes(existingAsset.id))
-              .map(existingAsset => normalizeAssetUrl(existingAsset.url))
-          );
-          const cacheOnlyUrls = cleanupTargets.urls.filter((url) => !storedAssetUrls.has(normalizeAssetUrl(url)));
-          await Promise.all(cacheOnlyUrls.map((url) => unifiedCacheService.deleteCache(url).catch((e) => {
-            console.debug('[AssetContext] Local cache delete skipped:', e);
-          })));
-        } else {
-          await assetStorageService.removeAsset(id);
-        }
+
+        throw err;
+      } finally {
+        setLoading(false);
       }
-
-      await audioPlaylistService.removeAssetFromAllPlaylists(id).catch((playlistError) => {
-        console.error('[AssetContext] Failed to remove asset from playlists:', playlistError);
-      });
-
-      // 更新状态
-      setAssets((prev) => prev.filter((a) =>
-        cleanupTargets?.dedupeKey
-          ? getLocalDedupeKey(a) !== cleanupTargets.dedupeKey
-          : a.id !== id
-      ));
-
-      // 如果删除的是当前选中的素材，清除选中状态
-      setSelectedAssetId((prev) => (prev === id ? null : prev));
-
-      // 检查存储配额
-      await checkStorageQuota();
-
-      MessagePlugin.success({
-        content: '素材删除成功',
-        duration: 2000,
-      });
-    } catch (err) {
-      console.error('Failed to remove asset:', err);
-      const error = err as Error;
-      setError(error.message);
-
-      if (error.name === 'NotFoundError') {
-        MessagePlugin.warning({
-          content: '素材未找到，可能已被删除',
-          duration: 3000,
-        });
-      } else {
-        MessagePlugin.error({
-          content: '删除素材失败',
-          duration: 3000,
-        });
-      }
-
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [assets, checkStorageQuota]);
+    },
+    [assets, checkStorageQuota]
+  );
 
   /**
    * Remove Multiple Assets (Batch Delete)
    * 批量删除素材 - 区分本地素材、AI 生成素材和缓存素材
    */
-  const removeAssets = useCallback(async (ids: string[]): Promise<void> => {
-    if (ids.length === 0) return;
-    const requestedCount = ids.length;
+  const removeAssets = useCallback(
+    async (ids: string[]): Promise<void> => {
+      if (ids.length === 0) return;
+      const requestedCount = ids.length;
 
-    setLoading(true);
-    setError(null);
+      setLoading(true);
+      setError(null);
 
-    try {
-      const successIds: string[] = [];
-      const errors: { id: string; error: Error }[] = [];
+      try {
+        const successIds: string[] = [];
+        const errors: { id: string; error: Error }[] = [];
 
-      // 区分本地素材、AI 生成素材和缓存素材
-      const localIds: string[] = [];
-      const aiIds: string[] = [];
-      const cacheIds: string[] = [];
-      const localUrlSet = new Set<string>();
-      const localDedupeKeys = new Set<string>();
+        // 区分本地素材、AI 生成素材和缓存素材
+        const localIds: string[] = [];
+        const aiIds: string[] = [];
+        const cacheIds: string[] = [];
+        const localUrlSet = new Set<string>();
+        const localDedupeKeys = new Set<string>();
 
-      for (const id of ids) {
-        const asset = assets.find(a => a.id === id);
-        if (asset?.source === AssetSourceEnum.AI_GENERATED) {
-          aiIds.push(id);
-          continue;
-        }
-
-        if (asset) {
-          const cleanupTargets = getLocalCleanupTargets(asset);
-          cleanupTargets.assetIds.forEach(assetId => localIds.push(assetId));
-          cleanupTargets.urls.forEach(url => localUrlSet.add(normalizeAssetUrl(url)));
-          if (cleanupTargets.dedupeKey) {
-            localDedupeKeys.add(cleanupTargets.dedupeKey);
+        for (const id of ids) {
+          const asset = assets.find((a) => a.id === id);
+          if (asset?.source === AssetSourceEnum.AI_GENERATED) {
+            aiIds.push(id);
+            continue;
           }
-          if (id.startsWith('unified-cache-')) {
-            cacheIds.push(id);
-          }
-          continue;
-        }
 
-        if (id.startsWith('unified-cache-')) {
-          cacheIds.push(id);
-        } else {
-          localIds.push(id);
-        }
-      }
-
-      // 删除缓存素材：使用素材的实际 URL
-      for (const id of cacheIds) {
-        try {
-          const asset = assets.find(a => a.id === id);
           if (asset) {
             const cleanupTargets = getLocalCleanupTargets(asset);
-            await Promise.all(cleanupTargets.urls.map((url) => unifiedCacheService.deleteCache(url)));
+            cleanupTargets.assetIds.forEach((assetId) =>
+              localIds.push(assetId)
+            );
+            cleanupTargets.urls.forEach((url) =>
+              localUrlSet.add(normalizeAssetUrl(url))
+            );
+            if (cleanupTargets.dedupeKey) {
+              localDedupeKeys.add(cleanupTargets.dedupeKey);
+            }
+            if (id.startsWith('unified-cache-')) {
+              cacheIds.push(id);
+            }
+            continue;
           }
-          await audioPlaylistService.removeAssetFromAllPlaylists(id);
-          successIds.push(id);
-        } catch (err) {
-          console.error(`Failed to remove cache asset ${id}:`, err);
-          errors.push({ id, error: err as Error });
-        }
-      }
 
-      // 删除 AI 生成的素材：删除任务 + 清理缓存
-      for (const id of aiIds) {
-        try {
-          const asset = assets.find(a => a.id === id);
-          taskQueueService.deleteTask(asset?.taskId || id);
-          if (asset?.url) {
-            await unifiedCacheService.deleteCache(asset.url).catch((e) => {
-              console.debug('[AssetContext] AI asset cache delete skipped:', e);
-            });
-          }
-          await audioPlaylistService.removeAssetFromAllPlaylists(id);
-          successIds.push(id);
-        } catch (err) {
-          console.error(`Failed to remove AI asset ${id}:`, err);
-          errors.push({ id, error: err as Error });
-        }
-      }
-
-      // 并行删除本地素材
-      const uniqueLocalIds = Array.from(new Set(localIds));
-
-      if (uniqueLocalIds.length > 0) {
-        const deleteResults = await Promise.allSettled(
-          uniqueLocalIds.map(id => assetStorageService.removeAsset(id))
-        );
-
-        deleteResults.forEach((result, index) => {
-          if (result.status === 'fulfilled') {
-            successIds.push(uniqueLocalIds[index]);
+          if (id.startsWith('unified-cache-')) {
+            cacheIds.push(id);
           } else {
-            console.error(`Failed to remove asset ${uniqueLocalIds[index]}:`, result.reason);
-            errors.push({ id: uniqueLocalIds[index], error: result.reason as Error });
+            localIds.push(id);
           }
-        });
-
-        const storedAssetUrls = new Set(
-          assets
-            .filter(asset => uniqueLocalIds.includes(asset.id))
-            .map(asset => normalizeAssetUrl(asset.url))
-        );
-
-        await Promise.all(Array.from(localUrlSet)
-          .filter((url) => !storedAssetUrls.has(normalizeAssetUrl(url)))
-          .map((url) =>
-          unifiedCacheService.deleteCache(url).catch((e) => {
-            console.debug('[AssetContext] Batch local cache delete skipped:', e);
-          })
-        ));
-
-        await Promise.all(
-          uniqueLocalIds
-            .filter((id) => successIds.includes(id))
-            .map((id) =>
-              audioPlaylistService.removeAssetFromAllPlaylists(id).catch((playlistError) => {
-                console.error('[AssetContext] Failed to remove asset from playlists:', playlistError);
-              })
-            )
-        );
-      }
-
-      // 更新状态 - 只移除成功删除的素材
-      setAssets((prev) => prev.filter((asset) => {
-        if (successIds.includes(asset.id)) {
-          return false;
         }
-        const dedupeKey = getLocalDedupeKey(asset);
-        return dedupeKey ? !localDedupeKeys.has(dedupeKey) : true;
-      }));
 
-      // 如果删除的包含当前选中的素材,清除选中状态
-      if (selectedAssetId && successIds.includes(selectedAssetId)) {
-        setSelectedAssetId(null);
-      }
+        // 删除缓存素材：使用素材的实际 URL
+        for (const id of cacheIds) {
+          try {
+            const asset = assets.find((a) => a.id === id);
+            if (asset) {
+              const cleanupTargets = getLocalCleanupTargets(asset);
+              await Promise.all(
+                cleanupTargets.urls.map((url) =>
+                  unifiedCacheService.deleteCache(url)
+                )
+              );
+            }
+            await audioPlaylistService.removeAssetFromAllPlaylists(id);
+            successIds.push(id);
+          } catch (err) {
+            console.error(`Failed to remove cache asset ${id}:`, err);
+            errors.push({ id, error: err as Error });
+          }
+        }
 
-      // 检查存储配额
-      await checkStorageQuota();
+        // 删除 AI 生成的素材：删除任务 + 清理缓存
+        for (const id of aiIds) {
+          try {
+            const asset = assets.find((a) => a.id === id);
+            taskQueueService.deleteTask(asset?.taskId || id);
+            if (asset?.url) {
+              await unifiedCacheService.deleteCache(asset.url).catch((e) => {});
+            }
+            await audioPlaylistService.removeAssetFromAllPlaylists(id);
+            successIds.push(id);
+          } catch (err) {
+            console.error(`Failed to remove AI asset ${id}:`, err);
+            errors.push({ id, error: err as Error });
+          }
+        }
 
-      // 显示结果消息
-      if (errors.length === 0) {
-        MessagePlugin.success({
-          content: `成功删除 ${requestedCount} 个素材`,
-          duration: 2000,
-        });
-      } else {
-        MessagePlugin.warning({
-          content: `已处理 ${requestedCount} 个素材，存在 ${errors.length} 个删除失败`,
+        // 并行删除本地素材
+        const uniqueLocalIds = Array.from(new Set(localIds));
+
+        if (uniqueLocalIds.length > 0) {
+          const deleteResults = await Promise.allSettled(
+            uniqueLocalIds.map((id) => assetStorageService.removeAsset(id))
+          );
+
+          deleteResults.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+              successIds.push(uniqueLocalIds[index]);
+            } else {
+              console.error(
+                `Failed to remove asset ${uniqueLocalIds[index]}:`,
+                result.reason
+              );
+              errors.push({
+                id: uniqueLocalIds[index],
+                error: result.reason as Error,
+              });
+            }
+          });
+
+          const storedAssetUrls = new Set(
+            assets
+              .filter((asset) => uniqueLocalIds.includes(asset.id))
+              .map((asset) => normalizeAssetUrl(asset.url))
+          );
+
+          await Promise.all(
+            Array.from(localUrlSet)
+              .filter((url) => !storedAssetUrls.has(normalizeAssetUrl(url)))
+              .map((url) =>
+                unifiedCacheService.deleteCache(url).catch((e) => {})
+              )
+          );
+
+          await Promise.all(
+            uniqueLocalIds
+              .filter((id) => successIds.includes(id))
+              .map((id) =>
+                audioPlaylistService
+                  .removeAssetFromAllPlaylists(id)
+                  .catch((playlistError) => {
+                    console.error(
+                      '[AssetContext] Failed to remove asset from playlists:',
+                      playlistError
+                    );
+                  })
+              )
+          );
+        }
+
+        // 更新状态 - 只移除成功删除的素材
+        setAssets((prev) =>
+          prev.filter((asset) => {
+            if (successIds.includes(asset.id)) {
+              return false;
+            }
+            const dedupeKey = getLocalDedupeKey(asset);
+            return dedupeKey ? !localDedupeKeys.has(dedupeKey) : true;
+          })
+        );
+
+        // 如果删除的包含当前选中的素材,清除选中状态
+        if (selectedAssetId && successIds.includes(selectedAssetId)) {
+          setSelectedAssetId(null);
+        }
+
+        // 检查存储配额
+        await checkStorageQuota();
+
+        // 显示结果消息
+        if (errors.length === 0) {
+          MessagePlugin.success({
+            content: `成功删除 ${requestedCount} 个素材`,
+            duration: 2000,
+          });
+        } else {
+          MessagePlugin.warning({
+            content: `已处理 ${requestedCount} 个素材，存在 ${errors.length} 个删除失败`,
+            duration: 3000,
+          });
+        }
+      } catch (err) {
+        console.error('Batch remove assets error:', err);
+        const error = err as Error;
+        setError(error.message);
+        MessagePlugin.error({
+          content: '批量删除失败',
           duration: 3000,
         });
+        throw err;
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('Batch remove assets error:', err);
-      const error = err as Error;
-      setError(error.message);
-      MessagePlugin.error({
-        content: '批量删除失败',
-        duration: 3000,
-      });
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [assets, selectedAssetId, checkStorageQuota]);
+    },
+    [assets, selectedAssetId, checkStorageQuota]
+  );
 
   /**
    * Rename Asset
@@ -1208,11 +1350,14 @@ export function AssetProvider({ children }: AssetProviderProps) {
         // 根据 ID 前缀判断使用哪个服务
         if (id.startsWith('unified-cache-')) {
           // 从 unified-cache 获取的素材
-          const asset = assets.find(a => a.id === id);
+          const asset = assets.find((a) => a.id === id);
           if (asset) {
-            const success = await unifiedCacheService.updateCachedMedia(asset.url, {
-              metadata: { name: newName }
-            });
+            const success = await unifiedCacheService.updateCachedMedia(
+              asset.url,
+              {
+                metadata: { name: newName },
+              }
+            );
             if (!success) {
               throw new Error('更新缓存元数据失败');
             }
@@ -1225,8 +1370,8 @@ export function AssetProvider({ children }: AssetProviderProps) {
         // 更新状态
         setAssets((prev) =>
           prev.map((asset) =>
-            asset.id === id ? { ...asset, name: newName } : asset,
-          ),
+            asset.id === id ? { ...asset, name: newName } : asset
+          )
         );
 
         MessagePlugin.success({
@@ -1260,7 +1405,7 @@ export function AssetProvider({ children }: AssetProviderProps) {
         setLoading(false);
       }
     },
-    [assets],
+    [assets]
   );
 
   /**
@@ -1280,10 +1425,11 @@ export function AssetProvider({ children }: AssetProviderProps) {
    */
   const loadSyncedUrls = useCallback(async () => {
     try {
-      const { mediaSyncService } = await import('../services/github-sync/media-sync-service');
+      const { mediaSyncService } = await import(
+        '../services/github-sync/media-sync-service'
+      );
       const urls = await mediaSyncService.getRemoteSyncedUrls();
       setSyncedUrls(urls);
-      console.log('[AssetContext] Loaded synced URLs:', urls.size);
     } catch (error) {
       console.warn('[AssetContext] Failed to load synced URLs:', error);
       // 不设置错误状态，同步状态加载失败不影响主功能
@@ -1334,10 +1480,12 @@ export function AssetProvider({ children }: AssetProviderProps) {
       setFilters,
       checkStorageQuota,
       loadSyncedUrls,
-    ],
+    ]
   );
 
-  return <AssetContext.Provider value={value}>{children}</AssetContext.Provider>;
+  return (
+    <AssetContext.Provider value={value}>{children}</AssetContext.Provider>
+  );
 }
 
 /**

@@ -63,10 +63,9 @@ function sendToSW(level: string, message: string, stack?: string) {
     return;
   }
 
-  // 过滤监控服务相关的错误（PostHog, Sentry）
+  // 过滤监控服务相关的错误（PostHog）
   if (message.includes('posthog.com') ||
-      message.includes('sentry.io') ||
-      (stack && (stack.includes('posthog') || stack.includes('sentry')))) {
+      (stack && stack.includes('posthog'))) {
     return;
   }
 

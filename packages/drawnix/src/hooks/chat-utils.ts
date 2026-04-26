@@ -5,7 +5,7 @@
  */
 
 import type { ChatMessage, WorkflowMessageData } from '../types/chat.types';
-import type { Message, MessagePart } from '@llamaindex/chat-ui';
+import type { Message, MessagePart } from '../types/chat-ui.types';
 import { MessageStatus, MessageRole } from '../types/chat.types';
 import { geminiSettings } from '../utils/settings-manager';
 import {
@@ -121,7 +121,7 @@ export function serializeWorkflowToContext(workflow: WorkflowMessageData): strin
 }
 
 /**
- * Convert our ChatMessage to chat-ui Message format
+ * Convert our ChatMessage to lightweight UI Message format
  */
 export function toChatUIMessage(msg: ChatMessage): Message {
   const parts: MessagePart[] = [{ type: 'text', text: msg.content }];
@@ -147,7 +147,7 @@ export function toChatUIMessage(msg: ChatMessage): Message {
 }
 
 /**
- * Convert chat-ui Message to our ChatMessage format
+ * Convert lightweight UI Message to our ChatMessage format
  */
 export function fromChatUIMessage(msg: Message, sessionId: string): ChatMessage {
   const textParts = msg.parts.filter((p) => p.type === 'text');

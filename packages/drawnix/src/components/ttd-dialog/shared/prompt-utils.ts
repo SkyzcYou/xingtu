@@ -61,7 +61,7 @@ export interface ResolvePresetPromptItemsParams {
  */
 function extractUserPromptsFromHistory(historyItems: HistoryItem[]): string[] {
   return historyItems
-    .map((item) => item.prompt.trim())
+    .map((item) => promptStorageService.resolveContent(item.prompt))
     .filter((prompt) => prompt.length > 0)
     .filter((prompt, index, arr) => arr.indexOf(prompt) === index); // 去重
 }
@@ -111,15 +111,32 @@ function createResolvedPromptItems(
   const promptSeedLookup = buildPromptSeedLookup(promptSeeds);
   const sortedContents = promptStorageService.sortPrompts(
     generationType,
-    dedupePromptContents(promptContents)
+    dedupePromptContents(
+      promptContents
+        .map((content) => promptStorageService.resolveContent(content))
+        .filter(Boolean)
+    )
   );
 
   return sortedContents.map((content, index) => {
     const promptSeed = promptSeedLookup.get(content);
+    const metadata = (
+      promptStorageService as typeof promptStorageService & {
+        resolveMetadata?: (content: string) => {
+          content: string;
+          title?: string;
+          tags?: string[];
+        };
+      }
+    ).resolveMetadata?.(content);
+    const sentPrompt = metadata?.content || content;
 
     return {
       id: promptSeed?.historyId || `${generationType}-prompt-${index}-${content.slice(0, 24)}`,
       content,
+      title: metadata?.title,
+      tags: metadata?.tags,
+      sentPrompt,
       pinned: promptStorageService.isPinned(generationType, content),
       modelType: generationType,
       historyId: promptSeed?.historyId,
@@ -142,7 +159,7 @@ function createDefaultPromptSeeds(
 function createTypedHistorySeeds(history: PromptHistoryItem[]): ResolvedPromptSeed[] {
   return history
     .map((item) => ({
-      content: item.content.trim(),
+      content: promptStorageService.resolveContent(item.content),
       historyId: item.id,
     }))
     .filter((item) => item.content.length > 0);
@@ -182,7 +199,7 @@ function createMediaHistorySeeds(
   const orderedPrompts: string[] = [];
 
   historyItems.forEach((item) => {
-    const content = item.prompt.trim();
+    const content = promptStorageService.resolveContent(item.prompt);
     if (!content) {
       return;
     }
@@ -229,8 +246,23 @@ function createMediaHistorySeeds(
 
 function createLocalPromptSeeds(promptContents: string[]): ResolvedPromptSeed[] {
   return promptContents
-    .map((content) => ({ content: content.trim() }))
+    .map((content) => ({ content: promptStorageService.resolveContent(content) }))
     .filter((item) => item.content.length > 0);
+}
+
+function getTypedPromptHistoryContents(type: PromptType): string[] {
+  const history =
+    typeof promptStorageService.getHistory === 'function'
+      ? promptStorageService.getHistory()
+      : [];
+
+  return history
+    .filter((item) => {
+      const metadata = promptStorageService.resolveMetadata?.(item.content);
+      return item.modelType === type || metadata?.modelType === type;
+    })
+    .map((item) => promptStorageService.resolveContent(item.content))
+    .filter(Boolean);
 }
 
 export function resolvePromptPreviewExamples({
@@ -264,6 +296,8 @@ export function resolvePresetPromptItems({
   const sortedPromptContents = promptStorageService.sortPrompts(
     generationType,
     promptContents
+      .map((content) => promptStorageService.resolveContent(content))
+      .filter(Boolean)
   );
   const previewExampleLookup = resolvePromptPreviewExamples({
     generationType,
@@ -273,13 +307,21 @@ export function resolvePresetPromptItems({
     videoHistory,
   });
 
-  return sortedPromptContents.map((content, index) => ({
-    id: `preset-${index}-${content.slice(0, 20)}`,
-    content,
-    pinned: promptStorageService.isPinned(generationType, content),
-    modelType: generationType,
-    previewExamples: [...(previewExampleLookup.get(content) ?? [])],
-  }));
+  return sortedPromptContents.map((content, index) => {
+    const metadata = promptStorageService.resolveMetadata?.(content);
+    const sentPrompt = metadata?.content || content;
+
+    return {
+      id: `preset-${index}-${content.slice(0, 20)}`,
+      content,
+      title: metadata?.title,
+      tags: metadata?.tags,
+      sentPrompt,
+      pinned: promptStorageService.isPinned(generationType, content),
+      modelType: generationType,
+      previewExamples: [...(previewExampleLookup.get(content) ?? [])],
+    };
+  });
 }
 
 /**
@@ -303,14 +345,19 @@ export const getMergedPresetPrompts = (
   // 提取用户历史提示词（来自任务队列的已完成任务）
   const taskQueuePrompts = extractUserPromptsFromHistory(historyItems);
 
-  // 获取本地存储的历史记录
+  // 获取“我的提示词”通用历史，以及图片/视频工具本地历史记录
+  const typedPromptHistoryPrompts = getTypedPromptHistoryContents(type);
   const localStoragePrompts = type === 'video'
     ? getVideoPromptHistoryContents()
     : getImagePromptHistoryContents();
 
   // 合并所有来源的提示词（本地存储优先，因为包含最新提交的）
-  // 顺序：本地存储历史 -> 任务队列历史 -> 默认预设
-  const allUserPrompts = [...localStoragePrompts, ...taskQueuePrompts]
+  // 顺序：我的提示词 -> 本地存储历史 -> 任务队列历史 -> 默认预设
+  const allUserPrompts = [
+    ...typedPromptHistoryPrompts,
+    ...localStoragePrompts,
+    ...taskQueuePrompts,
+  ]
     .filter((prompt, index, arr) => arr.indexOf(prompt) === index) // 去重
     .slice(0, USER_PROMPTS_LIMIT);
 

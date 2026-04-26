@@ -275,14 +275,6 @@ export class FallbackMediaExecutor implements IMediaExecutor {
             return ensureBase64ForAI(imageData, options?.signal);
           })
         );
-        console.debug(
-          '[FallbackMediaExecutor] generateImage: base64 conversion took',
-          Math.round(performance.now() - t0),
-          'ms for',
-          referenceImages.length,
-          'images, taskId:',
-          taskId
-        );
       }
 
       // 构建请求体
@@ -336,14 +328,6 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       const data = await response.json();
       const result = parseImageResponse(data);
       const duration = Date.now() - startTime;
-
-      console.debug(
-        '[FallbackMediaExecutor] generateImage: success, duration:',
-        duration,
-        'ms, taskId:',
-        taskId
-      );
-
       // 记录成功
       completeLLMApiLog(logId, {
         httpStatus: response.status,
@@ -449,14 +433,6 @@ export class FallbackMediaExecutor implements IMediaExecutor {
             const imageData = await unifiedCacheService.getImageForAI(imgUrl);
             return ensureBase64ForAI(imageData, options?.signal);
           })
-        );
-        console.debug(
-          '[FallbackMediaExecutor] generateAsyncImage: base64 conversion took',
-          Math.round(performance.now() - t0),
-          'ms for',
-          params.referenceImages.length,
-          'images, taskId:',
-          taskId
         );
       }
 
@@ -628,14 +604,6 @@ export class FallbackMediaExecutor implements IMediaExecutor {
             return url;
           })
         );
-        console.debug(
-          '[FallbackMediaExecutor] generateVideo: ref image processing took',
-          Math.round(performance.now() - t0),
-          'ms for',
-          refUrls.length,
-          'images, taskId:',
-          taskId
-        );
       }
 
       const videoApiConfig = {
@@ -726,9 +694,6 @@ export class FallbackMediaExecutor implements IMediaExecutor {
           this.pollingTasks.delete(taskId);
         }
       } else {
-        console.log(
-          `[FallbackMediaExecutor] Task ${taskId} is already being polled, skipping duplicate request.`
-        );
       }
     } catch (error: any) {
       const elapsedTime = Date.now() - startTime;
@@ -1129,11 +1094,6 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         console.warn('[FallbackMediaExecutor] No video tasks to resume');
         return;
       }
-
-      console.log(
-        `[FallbackMediaExecutor] Resuming ${videoTasks.length} pending video tasks...`
-      );
-
       // 并行恢复
       await Promise.all(
         videoTasks.map((task) => this.resumeVideoTask(task, onTaskUpdate))
@@ -1159,9 +1119,6 @@ export class FallbackMediaExecutor implements IMediaExecutor {
   ): Promise<void> {
     // 如果任务已经在轮询中，直接跳过
     if (this.pollingTasks.has(task.id)) {
-      console.log(
-        `[FallbackMediaExecutor] Task ${task.id} is already being polled, skipping resume.`
-      );
       return;
     }
 
@@ -1172,12 +1129,6 @@ export class FallbackMediaExecutor implements IMediaExecutor {
     this.pollingTasks.add(task.id);
 
     try {
-      console.log(
-        `[FallbackMediaExecutor] Resuming video task: ${
-          task.id
-        } (remoteId: ${videoId}, model: ${task.params?.model || 'unknown'})`
-      );
-
       // 重新开始轮询
       const result = await pollVideoStatus(
         videoId,
@@ -1231,10 +1182,6 @@ export class FallbackMediaExecutor implements IMediaExecutor {
           completedAt: Date.now(),
         });
       }
-
-      console.log(
-        `[FallbackMediaExecutor] Resumed video task completed: ${task.id}`
-      );
     } catch (error: any) {
       console.error(
         `[FallbackMediaExecutor] Failed to resume task ${task.id}:`,
@@ -1253,9 +1200,6 @@ export class FallbackMediaExecutor implements IMediaExecutor {
 
       // 再通知内存状态同步
       if (onTaskUpdate) {
-        console.debug(
-          `[FallbackMediaExecutor] Calling onTaskUpdate for failed task ${task.id}`
-        );
         onTaskUpdate(task.id, TaskStatus.FAILED, { error: errorInfo });
       } else {
         console.warn(

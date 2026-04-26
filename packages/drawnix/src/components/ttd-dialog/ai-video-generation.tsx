@@ -32,6 +32,7 @@ import {
   loadScopedAIVideoToolPreferences,
   saveAIVideoToolPreferences,
 } from '../../services/ai-generation-preferences-service';
+import { promptStorageService } from '../../services/prompt-storage-service';
 import { useTaskQueue } from '../../hooks/useTaskQueue';
 import { TaskType } from '../../types/task.types';
 import { MessagePlugin } from 'tdesign-react';
@@ -505,6 +506,12 @@ const AIVideoGeneration = ({
 
   // 用于触发 presetPrompts 重新计算的计数器
   const [promptHistoryVersion, setPromptHistoryVersion] = useState(0);
+
+  useEffect(() => {
+    return promptStorageService.subscribeChanges(() => {
+      setPromptHistoryVersion((version) => version + 1);
+    });
+  }, []);
 
   const { isGenerating } = useGenerationState('video');
 

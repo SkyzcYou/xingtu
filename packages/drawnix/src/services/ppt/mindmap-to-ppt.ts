@@ -36,6 +36,7 @@ import {
   getPPTFrameGridPositions,
   loadPPTFrameLayoutColumns,
 } from './ppt-frame-layout';
+import { analytics } from '../../utils/posthog-analytics';
 
 /**
  * 从 MindElement 的 data 中提取纯文本
@@ -372,9 +373,16 @@ export async function generatePPTFromMindmap(
   mindElement: MindElement,
   options: MindmapToPPTOptions = {}
 ): Promise<MindmapToPPTResult> {
+  const startTime = Date.now();
   try {
     // 1. 验证输入
     if (!isPlaitMind(mindElement)) {
+      analytics.trackPPTAction({
+        action: 'mindmap_to_ppt',
+        source: 'popup_toolbar',
+        status: 'failed',
+        error: 'InvalidMindmapSelection',
+      });
       return {
         success: false,
         error: '请选择一个完整的思维导图（根节点）',
@@ -383,12 +391,30 @@ export async function generatePPTFromMindmap(
 
     // 2. 提取思维导图结构并转换为大纲
     const outline = mindmapToOutline(mindElement, options);
+    analytics.trackPPTAction({
+      action: 'mindmap_to_ppt',
+      source: 'popup_toolbar',
+      status: 'start',
+      pageCount: outline.pages.length,
+      prompt: outline.title,
+      metadata: {
+        include_toc: options.includeToc !== false,
+        has_ending_subtitle: Boolean(options.endingSubtitle),
+      },
+    });
 
     // 3. 验证大纲
     if (outline.pages.length <= 2) {
       // 只有封面页和结尾页，说明思维导图内容为空
       const rootInfo = extractMindmapStructure(mindElement);
       if (!rootInfo.text && rootInfo.children.length === 0) {
+        analytics.trackPPTAction({
+          action: 'mindmap_to_ppt',
+          source: 'popup_toolbar',
+          status: 'failed',
+          pageCount: outline.pages.length,
+          error: 'EmptyMindmap',
+        });
         return {
           success: false,
           error: '思维导图内容为空，请先添加内容',
@@ -399,6 +425,8 @@ export async function generatePPTFromMindmap(
     // 4. 逐页创建 Frame，并生成整页图片
     let firstFrame: PlaitFrame | null = null;
     let createdCount = 0;
+    let queuedImageTaskCount = 0;
+    let failedImageTaskCount = 0;
     const startPosition = calcPPTFrameInsertionStartPosition(board);
     const framePositions = getPPTFrameGridPositions(
       outline.pages.length,
@@ -435,7 +463,11 @@ export async function generatePPTFromMindmap(
           ),
           slidePrompt
         );
+        if (queued) {
+          queuedImageTaskCount++;
+        }
         if (!queued) {
+          failedImageTaskCount++;
           setFramePPTMeta(board, frame.id, {
             slideImageStatus: 'failed',
             imageStatus: 'failed',
@@ -451,12 +483,40 @@ export async function generatePPTFromMindmap(
       focusOnFrame(board, firstFrame);
     }
 
+    analytics.trackPPTAction({
+      action: 'mindmap_to_ppt',
+      source: 'popup_toolbar',
+      status: failedImageTaskCount > 0 ? 'failed' : 'success',
+      pageCount: createdCount,
+      frameCount: createdCount,
+      successCount: queuedImageTaskCount,
+      failedCount: failedImageTaskCount,
+      durationMs: Date.now() - startTime,
+      prompt: outline.title,
+      metadata: {
+        image_task_count: queuedImageTaskCount,
+        layout_count: outline.pages.reduce<Record<string, number>>(
+          (acc, page) => {
+            acc[page.layout] = (acc[page.layout] || 0) + 1;
+            return acc;
+          },
+          {}
+        ),
+      },
+    });
     return {
       success: true,
       pageCount: createdCount,
     };
   } catch (error: any) {
     console.error('[MindmapToPPT] Conversion failed:', error);
+    analytics.trackPPTAction({
+      action: 'mindmap_to_ppt',
+      source: 'popup_toolbar',
+      status: 'failed',
+      durationMs: Date.now() - startTime,
+      error: error instanceof Error ? error.name || 'Error' : typeof error,
+    });
     return {
       success: false,
       error: error.message || '思维导图转 PPT 失败',

@@ -14,7 +14,11 @@ import type { ExecutionOptions } from '../../services/media-executor/types';
 import { TaskType } from '../../types/task.types';
 import { geminiSettings, type ModelRef } from '../../utils/settings-manager';
 import { getDefaultTextModel } from '../../constants/model-config';
-import { createQueueTask, validatePrompt } from './shared/queue-utils';
+import {
+  createQueueTask,
+  validatePrompt,
+  type PromptLineageMeta,
+} from './shared/queue-utils';
 
 export interface TextGenerationParams {
   prompt: string;
@@ -27,6 +31,7 @@ export interface TextGenerationParams {
   globalIndex?: number;
   autoInsertToCanvas?: boolean;
   params?: Record<string, unknown>;
+  promptMeta?: PromptLineageMeta;
 }
 
 export function getCurrentTextModel(): string {
@@ -92,6 +97,7 @@ function getTextQueueConfig(params: TextGenerationParams) {
       model: params.model || getCurrentTextModel(),
       modelRef: params.modelRef || null,
       referenceImages: params.referenceImages,
+      promptMeta: params.promptMeta,
       ...(params.params ? { params: params.params } : {}),
     }),
   };

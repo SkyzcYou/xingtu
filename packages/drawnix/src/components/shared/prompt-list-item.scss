@@ -112,6 +112,12 @@
       background: #ede9fe;
       color: #6d28d9;
     }
+
+    // PPT 页面提示词 - 黄色
+    &--ppt-slide {
+      background: #fef9c3;
+      color: #a16207;
+    }
   }
 
   // 文本内容
@@ -179,6 +185,110 @@
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
+}
+
+.prompt-list-item__history-card-popover {
+  padding: 10px;
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+.prompt-list-item__history-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--td-text-color-primary, #333);
+}
+
+.prompt-list-item__history-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.prompt-list-item__history-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prompt-list-item__history-label {
+  font-size: 11px;
+  color: var(--td-text-color-placeholder, #999);
+}
+
+.prompt-list-item__history-text {
+  max-height: 128px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.prompt-list-item__history-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  span {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: var(--td-bg-color-component, #f3f3f3);
+    color: var(--td-text-color-secondary, #666);
+  }
+}
+
+.prompt-list-item__result-preview {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.prompt-list-item__result-media {
+  width: 120px;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--td-bg-color-component, #f3f3f3);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+}
+
+.prompt-list-item__result-audio {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+
+  img {
+    width: 44px;
+    height: 44px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+}
+
+.prompt-list-item__result-title {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.prompt-list-item__result-text {
+  max-height: 96px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--td-text-color-secondary, #666);
+
+  &--error {
+    color: var(--td-error-color, #d54941);
+  }
 }
 
 .prompt-list-item__hover-card {

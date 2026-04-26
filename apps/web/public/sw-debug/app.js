@@ -14,7 +14,11 @@ import { createConsoleEntry } from './console-entry.js';
 import { createPostMessageEntry } from './postmessage-entry.js';
 
 // Panel components
-import { updateSwStatus, updateStatusPanel, updateDebugButton } from './status-panel.js';
+import {
+  updateSwStatus,
+  updateStatusPanel,
+  updateDebugButton,
+} from './status-panel.js';
 import { extractUniqueTypes, updateTypeSelectOptions } from './log-panel.js';
 
 // SW Communication
@@ -121,13 +125,14 @@ function renderConsoleLogs() {
   let filteredLogs = state.consoleLogs;
 
   if (levelFilter) {
-    filteredLogs = filteredLogs.filter(l => l.logLevel === levelFilter);
+    filteredLogs = filteredLogs.filter((l) => l.logLevel === levelFilter);
   }
 
   if (textFilter) {
-    filteredLogs = filteredLogs.filter(l =>
-      l.logMessage?.toLowerCase().includes(textFilter) ||
-      l.logStack?.toLowerCase().includes(textFilter)
+    filteredLogs = filteredLogs.filter(
+      (l) =>
+        l.logMessage?.toLowerCase().includes(textFilter) ||
+        l.logStack?.toLowerCase().includes(textFilter)
     );
   }
 
@@ -145,7 +150,7 @@ function renderConsoleLogs() {
   }
 
   elements.consoleLogsContainer.innerHTML = '';
-  filteredLogs.slice(0, 200).forEach(log => {
+  filteredLogs.slice(0, 200).forEach((log) => {
     const isExpanded = state.expandedStackIds.has(log.id);
     const entry = createConsoleEntry(log, isExpanded, (id, expanded) => {
       if (expanded) {
@@ -162,9 +167,13 @@ function renderConsoleLogs() {
  * Update console log count indicator
  */
 function updateConsoleCount() {
-  const errorCount = state.consoleLogs.filter(l => l.logLevel === 'error').length;
-  const warnCount = state.consoleLogs.filter(l => l.logLevel === 'warn').length;
-  
+  const errorCount = state.consoleLogs.filter(
+    (l) => l.logLevel === 'error'
+  ).length;
+  const warnCount = state.consoleLogs.filter(
+    (l) => l.logLevel === 'warn'
+  ).length;
+
   if (errorCount > 0) {
     elements.consoleCountEl.innerHTML = `(<span style="color:var(--error-color)">${errorCount} errors</span>)`;
   } else if (warnCount > 0) {
@@ -182,7 +191,7 @@ function addConsoleLog(entry) {
   // In analysis mode, save to liveLogs buffer instead of display state
   if (state.isAnalysisMode) {
     // Check for duplicates in liveLogs
-    if (state.liveLogs.consoleLogs.some(l => l.id === entry.id)) {
+    if (state.liveLogs.consoleLogs.some((l) => l.id === entry.id)) {
       return;
     }
     state.liveLogs.consoleLogs.unshift(entry);
@@ -193,7 +202,7 @@ function addConsoleLog(entry) {
   }
 
   // Check for duplicates (in case of race condition with initial load)
-  if (state.consoleLogs.some(l => l.id === entry.id)) {
+  if (state.consoleLogs.some((l) => l.id === entry.id)) {
     return;
   }
 
@@ -238,14 +247,16 @@ function renderPostmessageLogs() {
 
   // 按来源过滤（从 SW 角度：receive = 应用页面发送, send = SW 发送）
   if (sourceFilter === 'main') {
-    filteredLogs = filteredLogs.filter(l => l.direction === 'receive');
+    filteredLogs = filteredLogs.filter((l) => l.direction === 'receive');
   } else if (sourceFilter === 'sw') {
-    filteredLogs = filteredLogs.filter(l => l.direction === 'send');
+    filteredLogs = filteredLogs.filter((l) => l.direction === 'send');
   }
 
   // 下拉选择器过滤（精确匹配）
   if (typeSelectFilter) {
-    filteredLogs = filteredLogs.filter(l => l.messageType === typeSelectFilter);
+    filteredLogs = filteredLogs.filter(
+      (l) => l.messageType === typeSelectFilter
+    );
   }
 
   // 时间范围过滤
@@ -253,7 +264,7 @@ function renderPostmessageLogs() {
 
   // 搜索框过滤（模糊匹配）
   if (typeFilter) {
-    filteredLogs = filteredLogs.filter(l =>
+    filteredLogs = filteredLogs.filter((l) =>
       l.messageType?.toLowerCase().includes(typeFilter)
     );
   }
@@ -273,7 +284,7 @@ function renderPostmessageLogs() {
   }
 
   elements.postmessageLogsContainer.innerHTML = '';
-  filteredLogs.slice(0, 200).forEach(log => {
+  filteredLogs.slice(0, 200).forEach((log) => {
     const isExpanded = state.expandedPmIds.has(log.id);
     const entry = createPostMessageEntry(log, isExpanded, (id, expanded) => {
       if (expanded) {
@@ -291,8 +302,12 @@ function renderPostmessageLogs() {
  */
 function updatePostmessageCount() {
   // 从 SW 角度：receive = 应用页面发送，send = SW 发送
-  const mainCount = state.postmessageLogs.filter(l => l.direction === 'receive').length;
-  const swCount = state.postmessageLogs.filter(l => l.direction === 'send').length;
+  const mainCount = state.postmessageLogs.filter(
+    (l) => l.direction === 'receive'
+  ).length;
+  const swCount = state.postmessageLogs.filter(
+    (l) => l.direction === 'send'
+  ).length;
 
   if (state.postmessageLogs.length > 0) {
     elements.postmessageCountEl.innerHTML = `(<span style="color:var(--success-color)">应用${mainCount}</span> <span style="color:var(--primary-color)">SW${swCount}</span>)`;
@@ -309,10 +324,15 @@ function addPostmessageLog(entry) {
   // In analysis mode, save to liveLogs buffer instead of display state
   if (state.isAnalysisMode) {
     // Check for existing entry to update (when response is linked to request)
-    const existingIndex = state.liveLogs.postmessageLogs.findIndex(l => l.id === entry.id);
+    const existingIndex = state.liveLogs.postmessageLogs.findIndex(
+      (l) => l.id === entry.id
+    );
     if (existingIndex !== -1) {
       // Update existing entry (merge response data)
-      state.liveLogs.postmessageLogs[existingIndex] = { ...state.liveLogs.postmessageLogs[existingIndex], ...entry };
+      state.liveLogs.postmessageLogs[existingIndex] = {
+        ...state.liveLogs.postmessageLogs[existingIndex],
+        ...entry,
+      };
       return;
     }
     state.liveLogs.postmessageLogs.unshift(entry);
@@ -330,11 +350,16 @@ function addPostmessageLog(entry) {
   }
 
   // Check for existing entry to update (when response is linked to request)
-  const existingIndex = state.postmessageLogs.findIndex(l => l.id === entry.id);
+  const existingIndex = state.postmessageLogs.findIndex(
+    (l) => l.id === entry.id
+  );
   if (existingIndex !== -1) {
     // Update existing entry (merge response data)
     const wasExpanded = state.expandedPmLogs?.has(entry.id);
-    state.postmessageLogs[existingIndex] = { ...state.postmessageLogs[existingIndex], ...entry };
+    state.postmessageLogs[existingIndex] = {
+      ...state.postmessageLogs[existingIndex],
+      ...entry,
+    };
     // Re-render to show updated data
     if (state.activeTab === 'postmessage') {
       renderPostmessageLogs();
@@ -366,8 +391,8 @@ function togglePmPause() {
 
   if (!state.isPmPaused && state.pendingPmLogs.length > 0) {
     // Apply pending logs when resuming
-    state.pendingPmLogs.forEach(entry => {
-      if (!state.postmessageLogs.some(l => l.id === entry.id)) {
+    state.pendingPmLogs.forEach((entry) => {
+      if (!state.postmessageLogs.some((l) => l.id === entry.id)) {
         state.postmessageLogs.unshift(entry);
       }
     });
@@ -388,8 +413,10 @@ function updatePmPauseButton() {
   const btn = elements.togglePmPauseBtn;
   if (!btn) return;
 
-  const playIcon = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-  const pauseIcon = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+  const playIcon =
+    '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+  const pauseIcon =
+    '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
 
   if (state.isPmPaused) {
     let text = '暂停';
@@ -425,17 +452,19 @@ function getFilteredPostmessageLogs() {
 
   // 按来源过滤
   if (sourceFilter === 'main') {
-    filteredLogs = filteredLogs.filter(l => l.direction === 'receive');
+    filteredLogs = filteredLogs.filter((l) => l.direction === 'receive');
   } else if (sourceFilter === 'sw') {
-    filteredLogs = filteredLogs.filter(l => l.direction === 'send');
+    filteredLogs = filteredLogs.filter((l) => l.direction === 'send');
   }
 
   if (typeSelectFilter) {
-    filteredLogs = filteredLogs.filter(l => l.messageType === typeSelectFilter);
+    filteredLogs = filteredLogs.filter(
+      (l) => l.messageType === typeSelectFilter
+    );
   }
 
   if (typeFilter) {
-    filteredLogs = filteredLogs.filter(l =>
+    filteredLogs = filteredLogs.filter((l) =>
       l.messageType?.toLowerCase().includes(typeFilter)
     );
   }
@@ -455,16 +484,23 @@ async function handleCopyPostmessageLogs() {
   }
 
   // Format logs as text
-  const logText = filteredLogs.map(log => {
-    const time = new Date(log.timestamp).toLocaleTimeString('zh-CN', { hour12: false });
-    // 从 SW 角度：receive = 应用页面发送，send = SW 发送
-    const source = log.direction === 'receive' ? '应用页面' : 'SW';
-    const type = log.messageType || 'unknown';
-    const data = log.data ? JSON.stringify(log.data, null, 2) : '';
-    const response = log.response !== undefined ? `\n  响应: ${JSON.stringify(log.response, null, 2)}` : '';
-    const error = log.error ? `\n  错误: ${log.error}` : '';
-    return `${time} [${source}] ${type}\n  数据: ${data}${response}${error}`;
-  }).join('\n\n');
+  const logText = filteredLogs
+    .map((log) => {
+      const time = new Date(log.timestamp).toLocaleTimeString('zh-CN', {
+        hour12: false,
+      });
+      // 从 SW 角度：receive = 应用页面发送，send = SW 发送
+      const source = log.direction === 'receive' ? '应用页面' : 'SW';
+      const type = log.messageType || 'unknown';
+      const data = log.data ? JSON.stringify(log.data, null, 2) : '';
+      const response =
+        log.response !== undefined
+          ? `\n  响应: ${JSON.stringify(log.response, null, 2)}`
+          : '';
+      const error = log.error ? `\n  错误: ${log.error}` : '';
+      return `${time} [${source}] ${type}\n  数据: ${data}${response}${error}`;
+    })
+    .join('\n\n');
 
   try {
     await navigator.clipboard.writeText(logText);
@@ -489,20 +525,26 @@ async function handleCopyPostmessageLogs() {
 function updateErrorDots() {
   // Console errors
   if (elements.consoleErrorDot) {
-    const hasErrors = state.consoleLogs.some(l => l.logLevel === 'error');
-    elements.consoleErrorDot.style.display = (hasErrors && state.activeTab !== 'console') ? 'inline-block' : 'none';
+    const hasErrors = state.consoleLogs.some((l) => l.logLevel === 'error');
+    elements.consoleErrorDot.style.display =
+      hasErrors && state.activeTab !== 'console' ? 'inline-block' : 'none';
   }
-  
+
   // LLM API errors
   if (elements.llmapiErrorDot) {
-    const hasErrors = state.llmapiLogs.some(l => l.status === 'error');
-    elements.llmapiErrorDot.style.display = (hasErrors && state.activeTab !== 'llmapi') ? 'inline-block' : 'none';
+    const hasErrors = state.llmapiLogs.some((l) => l.status === 'error');
+    elements.llmapiErrorDot.style.display =
+      hasErrors && state.activeTab !== 'llmapi' ? 'inline-block' : 'none';
   }
-  
+
   // Crash/memory errors
   if (elements.crashErrorDot) {
-    const hasErrors = state.crashLogs.some(l => l.type === 'error' || l.type === 'freeze' || l.type === 'whitescreen');
-    elements.crashErrorDot.style.display = (hasErrors && state.activeTab !== 'crash') ? 'inline-block' : 'none';
+    const hasErrors = state.crashLogs.some(
+      (l) =>
+        l.type === 'error' || l.type === 'freeze' || l.type === 'whitescreen'
+    );
+    elements.crashErrorDot.style.display =
+      hasErrors && state.activeTab !== 'crash' ? 'inline-block' : 'none';
   }
 }
 
@@ -527,13 +569,14 @@ async function handleCopyConsoleLogs() {
   let filteredLogs = state.consoleLogs;
 
   if (levelFilter) {
-    filteredLogs = filteredLogs.filter(l => l.logLevel === levelFilter);
+    filteredLogs = filteredLogs.filter((l) => l.logLevel === levelFilter);
   }
 
   if (textFilter) {
-    filteredLogs = filteredLogs.filter(l =>
-      l.logMessage?.toLowerCase().includes(textFilter) ||
-      l.logStack?.toLowerCase().includes(textFilter)
+    filteredLogs = filteredLogs.filter(
+      (l) =>
+        l.logMessage?.toLowerCase().includes(textFilter) ||
+        l.logStack?.toLowerCase().includes(textFilter)
     );
   }
 
@@ -543,15 +586,21 @@ async function handleCopyConsoleLogs() {
   }
 
   // Format logs as text with all details
-  const logText = filteredLogs.map(log => {
-    const time = new Date(log.timestamp).toLocaleTimeString('zh-CN', { hour12: false });
-    const level = `[${log.logLevel.toUpperCase()}]`;
-    const message = log.logMessage || '';
-    const source = log.logSource ? `\n  来源: ${log.logSource}` : '';
-    const url = log.url ? `\n  页面: ${log.url}` : '';
-    const stack = log.logStack ? `\n  堆栈:\n    ${log.logStack.split('\n').join('\n    ')}` : '';
-    return `${time} ${level} ${message}${source}${url}${stack}`;
-  }).join('\n\n');
+  const logText = filteredLogs
+    .map((log) => {
+      const time = new Date(log.timestamp).toLocaleTimeString('zh-CN', {
+        hour12: false,
+      });
+      const level = `[${log.logLevel.toUpperCase()}]`;
+      const message = log.logMessage || '';
+      const source = log.logSource ? `\n  来源: ${log.logSource}` : '';
+      const url = log.url ? `\n  页面: ${log.url}` : '';
+      const stack = log.logStack
+        ? `\n  堆栈:\n    ${log.logStack.split('\n').join('\n    ')}`
+        : '';
+      return `${time} ${level} ${message}${source}${url}${stack}`;
+    })
+    .join('\n\n');
 
   try {
     await navigator.clipboard.writeText(logText);
@@ -609,28 +658,28 @@ function handleClearLogs() {
 
 /**
  * Switch active tab
- * @param {string} tabName 
+ * @param {string} tabName
  * @param {boolean} updateUrl - Whether to update URL parameter (default: true)
  */
 function switchTab(tabName, updateUrl = true) {
   state.activeTab = tabName;
-  document.querySelectorAll('.tab').forEach(t => {
+  document.querySelectorAll('.tab').forEach((t) => {
     t.classList.toggle('active', t.dataset.tab === tabName);
   });
-  document.querySelectorAll('.tab-content').forEach(c => {
+  document.querySelectorAll('.tab-content').forEach((c) => {
     c.classList.toggle('active', c.id === tabName + 'Tab');
   });
-  
+
   // Update URL parameter
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set('tab', tabName);
     window.history.replaceState({}, '', url.toString());
   }
-  
+
   // Update error dots (hide dot for active tab)
   updateErrorDots();
-  
+
   if (tabName === 'fetch') {
     renderLogs();
   } else if (tabName === 'console') {
@@ -651,7 +700,7 @@ function switchTab(tabName, updateUrl = true) {
 /**
  * Handle SW status update
  * Supports both RPC format { status: {...} } and native message format { debugModeEnabled, swVersion, ... }
- * @param {object} data 
+ * @param {object} data
  */
 function handleStatusUpdate(data) {
   // Normalize: RPC returns { status: {...} }, native message returns flat object
@@ -659,7 +708,10 @@ function handleStatusUpdate(data) {
   if (data.status) {
     // RPC format
     status = data.status;
-  } else if (data.debugModeEnabled !== undefined || data.swVersion !== undefined) {
+  } else if (
+    data.debugModeEnabled !== undefined ||
+    data.swVersion !== undefined
+  ) {
     // Native message format - normalize field names
     status = {
       ...data,
@@ -674,7 +726,11 @@ function handleStatusUpdate(data) {
   state.debugEnabled = updateStatusPanel(status, elements);
   state.swStatus = status; // Store for export
   updateDebugButton(elements.toggleDebugBtn, state.debugEnabled);
-  try { sessionStorage.setItem('sw-debug-enabled', String(state.debugEnabled)); } catch {}
+  try {
+    sessionStorage.setItem('sw-debug-enabled', String(state.debugEnabled));
+  } catch (err) {
+    void err;
+  }
 }
 
 // ==================== Event Listeners Setup ====================
@@ -687,45 +743,48 @@ function setupEventListeners() {
   elements.toggleAnalysisModeBtn?.addEventListener('click', toggleAnalysisMode);
   elements.importLogsBtn?.addEventListener('click', triggerImportDialog);
   elements.importLogsInput?.addEventListener('change', handleLogImport);
-  
+
   // Backup button event listener
   elements.backupDataBtn?.addEventListener('click', performBackup);
 
   // Restore button event listeners
   elements.restoreBackupBtn?.addEventListener('click', triggerRestoreDialog);
   elements.restoreBackupInput?.addEventListener('change', handleRestoreFile);
-  
+
   elements.toggleDebugBtn?.addEventListener('click', toggleDebug);
   elements.exportLogsBtn?.addEventListener('click', openExportModal);
   elements.doExportBtn?.addEventListener('click', exportLogs);
   elements.closeExportModalBtn?.addEventListener('click', closeExportModal);
   elements.cancelExportBtn?.addEventListener('click', closeExportModal);
   elements.clearLogsBtn.addEventListener('click', handleClearLogs);
-  
+
   // Close modal when clicking overlay
   elements.exportModalOverlay?.addEventListener('click', (e) => {
     if (e.target === elements.exportModalOverlay) {
       closeExportModal();
     }
   });
-  
+
   // Setup export modal checkboxes
   setupExportModalCheckboxes();
-  
+
   elements.refreshStatusBtn.addEventListener('click', async () => {
     refreshStatus();
     loadFetchLogs();
   });
   elements.refreshCacheBtn.addEventListener('click', refreshStatus);
   elements.enableDebugBtn?.addEventListener('click', toggleDebug);
-  elements.clearConsoleLogsBtn?.addEventListener('click', handleClearConsoleLogs);
+  elements.clearConsoleLogsBtn?.addEventListener(
+    'click',
+    handleClearConsoleLogs
+  );
   elements.copyConsoleLogsBtn?.addEventListener('click', handleCopyConsoleLogs);
 
   elements.filterType?.addEventListener('change', renderLogs);
   elements.filterStatus?.addEventListener('change', renderLogs);
   elements.filterTimeRange?.addEventListener('change', renderLogs);
   elements.filterUrl?.addEventListener('input', renderLogs);
-  
+
   // 慢请求点击过滤
   elements.statSlowRequestsWrapper?.addEventListener('click', () => {
     toggleSlowRequestFilter();
@@ -743,7 +802,10 @@ function setupEventListeners() {
     state.showBookmarksOnly = e.target.checked;
     renderLogs();
   });
-  elements.closeShortcutsModalBtn?.addEventListener('click', closeShortcutsModal);
+  elements.closeShortcutsModalBtn?.addEventListener(
+    'click',
+    closeShortcutsModal
+  );
   elements.shortcutsModalOverlay?.addEventListener('click', (e) => {
     if (e.target === elements.shortcutsModalOverlay) {
       closeShortcutsModal();
@@ -766,24 +828,45 @@ function setupEventListeners() {
 
   // PostMessage log event listeners
   elements.togglePmPauseBtn?.addEventListener('click', togglePmPause);
-  elements.filterMessageSource?.addEventListener('change', renderPostmessageLogs);
-  elements.filterMessageTypeSelect?.addEventListener('change', renderPostmessageLogs);
+  elements.filterMessageSource?.addEventListener(
+    'change',
+    renderPostmessageLogs
+  );
+  elements.filterMessageTypeSelect?.addEventListener(
+    'change',
+    renderPostmessageLogs
+  );
   elements.filterPmTimeRange?.addEventListener('change', renderPostmessageLogs);
   elements.filterMessageType?.addEventListener('input', renderPostmessageLogs);
-  elements.clearPostmessageLogsBtn?.addEventListener('click', handleClearPostmessageLogs);
-  elements.copyPostmessageLogsBtn?.addEventListener('click', handleCopyPostmessageLogs);
+  elements.clearPostmessageLogsBtn?.addEventListener(
+    'click',
+    handleClearPostmessageLogs
+  );
+  elements.copyPostmessageLogsBtn?.addEventListener(
+    'click',
+    handleCopyPostmessageLogs
+  );
 
   // LLM API log event listeners
   elements.filterLLMApiType?.addEventListener('change', onLLMApiFilterChange);
   elements.filterLLMApiStatus?.addEventListener('change', onLLMApiFilterChange);
   elements.refreshLLMApiLogsBtn?.addEventListener('click', loadLLMApiLogs);
   elements.copyLLMApiLogsBtn?.addEventListener('click', handleCopyLLMApiLogs);
-  elements.exportLLMApiLogsBtn?.addEventListener('click', handleExportLLMApiLogs);
+  elements.exportLLMApiLogsBtn?.addEventListener(
+    'click',
+    handleExportLLMApiLogs
+  );
   elements.clearLLMApiLogsBtn?.addEventListener('click', handleClearLLMApiLogs);
   // LLM API select mode
-  elements.toggleLLMApiSelectModeBtn?.addEventListener('click', toggleLLMApiSelectMode);
+  elements.toggleLLMApiSelectModeBtn?.addEventListener(
+    'click',
+    toggleLLMApiSelectMode
+  );
   elements.llmapiSelectAllBtn?.addEventListener('click', selectAllLLMApiLogs);
-  elements.llmapiBatchDeleteBtn?.addEventListener('click', batchDeleteLLMApiLogs);
+  elements.llmapiBatchDeleteBtn?.addEventListener(
+    'click',
+    batchDeleteLLMApiLogs
+  );
 
   // Crash log event listeners
   elements.filterCrashType?.addEventListener('change', renderCrashLogs);
@@ -793,7 +876,7 @@ function setupEventListeners() {
   elements.exportCrashLogsBtn?.addEventListener('click', handleExportCrashLogs);
 
   // Tab switching
-  document.querySelectorAll('.tab').forEach(tab => {
+  document.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   });
 
@@ -829,7 +912,14 @@ function setupEventListeners() {
     }
 
     // Number keys 1-5 to switch tabs
-    const tabMap = { '1': 'fetch', '2': 'console', '3': 'postmessage', '4': 'llmapi', '5': 'crash', '6': 'gist' };
+    const tabMap = {
+      1: 'fetch',
+      2: 'console',
+      3: 'postmessage',
+      4: 'llmapi',
+      5: 'crash',
+      6: 'gist',
+    };
     if (tabMap[e.key] && !e.ctrlKey && !e.metaKey && !e.altKey) {
       switchTab(tabMap[e.key]);
     }
@@ -874,9 +964,14 @@ function addOrUpdateLiveLog(logType, entry) {
   if (!state.liveLogs[logType]) {
     state.liveLogs[logType] = [];
   }
-  const existingIndex = state.liveLogs[logType].findIndex(l => l.id === entry.id);
+  const existingIndex = state.liveLogs[logType].findIndex(
+    (l) => l.id === entry.id
+  );
   if (existingIndex >= 0) {
-    state.liveLogs[logType][existingIndex] = { ...state.liveLogs[logType][existingIndex], ...entry };
+    state.liveLogs[logType][existingIndex] = {
+      ...state.liveLogs[logType][existingIndex],
+      ...entry,
+    };
   } else {
     state.liveLogs[logType].unshift(entry);
   }
@@ -889,10 +984,14 @@ function addOrUpdateLiveLog(logType, entry) {
  */
 function setupMessageHandlers() {
   registerMessageHandlers({
-    'SW_DEBUG_STATUS': handleStatusUpdate,
-    'SW_DEBUG_ENABLED': () => {
+    SW_DEBUG_STATUS: handleStatusUpdate,
+    SW_DEBUG_ENABLED: () => {
       state.debugEnabled = true;
-      try { sessionStorage.setItem('sw-debug-enabled', 'true'); } catch {}
+      try {
+        sessionStorage.setItem('sw-debug-enabled', 'true');
+      } catch (err) {
+        void err;
+      }
       updateDebugButton(elements.toggleDebugBtn, true);
       // Update status panel text to show "开启"
       if (elements.debugMode) {
@@ -905,9 +1004,13 @@ function setupMessageHandlers() {
       // This ensures cache stats and other info are up-to-date
       refreshStatus();
     },
-    'SW_DEBUG_DISABLED': () => {
+    SW_DEBUG_DISABLED: () => {
       state.debugEnabled = false;
-      try { sessionStorage.setItem('sw-debug-enabled', 'false'); } catch {}
+      try {
+        sessionStorage.setItem('sw-debug-enabled', 'false');
+      } catch (err) {
+        void err;
+      }
       updateDebugButton(elements.toggleDebugBtn, false);
       // Update status panel text to show "关闭"
       if (elements.debugMode) {
@@ -917,7 +1020,7 @@ function setupMessageHandlers() {
         renderLogs(); // Refresh to show "enable debug" button
       }
     },
-    'SW_DEBUG_LOG': (data) => {
+    SW_DEBUG_LOG: (data) => {
       if (state.isAnalysisMode) {
         // Store in live logs buffer, don't display
         addOrUpdateLiveLog('logs', data.entry);
@@ -925,7 +1028,7 @@ function setupMessageHandlers() {
         addOrUpdateLog(data.entry);
       }
     },
-    'SW_DEBUG_LOGS': (data) => {
+    SW_DEBUG_LOGS: (data) => {
       if (state.isAnalysisMode) {
         state.liveLogs.logs = data.logs || [];
       } else {
@@ -933,7 +1036,7 @@ function setupMessageHandlers() {
         renderLogs();
       }
     },
-    'SW_DEBUG_LOGS_CLEARED': () => {
+    SW_DEBUG_LOGS_CLEARED: () => {
       if (state.isAnalysisMode) {
         state.liveLogs.logs = [];
       } else {
@@ -941,14 +1044,14 @@ function setupMessageHandlers() {
         renderLogs();
       }
     },
-    'SW_CONSOLE_LOG': (data) => {
+    SW_CONSOLE_LOG: (data) => {
       if (state.isAnalysisMode) {
         addOrUpdateLiveLog('consoleLogs', data.entry);
       } else {
         addConsoleLog(data.entry);
       }
     },
-    'SW_DEBUG_CONSOLE_LOGS': (data) => {
+    SW_DEBUG_CONSOLE_LOGS: (data) => {
       if (state.isAnalysisMode) {
         state.liveLogs.consoleLogs = data.logs || [];
       } else {
@@ -956,7 +1059,7 @@ function setupMessageHandlers() {
         renderConsoleLogs();
       }
     },
-    'SW_DEBUG_CONSOLE_LOGS_CLEARED': () => {
+    SW_DEBUG_CONSOLE_LOGS_CLEARED: () => {
       if (state.isAnalysisMode) {
         state.liveLogs.consoleLogs = [];
       } else {
@@ -964,14 +1067,14 @@ function setupMessageHandlers() {
         renderConsoleLogs();
       }
     },
-    'SW_POSTMESSAGE_LOG': (data) => {
+    SW_POSTMESSAGE_LOG: (data) => {
       if (state.isAnalysisMode) {
         addOrUpdateLiveLog('postmessageLogs', data.entry);
       } else {
         addPostmessageLog(data.entry);
       }
     },
-    'SW_DEBUG_POSTMESSAGE_LOG_BATCH': (data) => {
+    SW_DEBUG_POSTMESSAGE_LOG_BATCH: (data) => {
       // 处理批量 PostMessage 日志
       const entries = data.entries || [];
       for (const entry of entries) {
@@ -982,7 +1085,7 @@ function setupMessageHandlers() {
         }
       }
     },
-    'SW_DEBUG_POSTMESSAGE_LOGS': (data) => {
+    SW_DEBUG_POSTMESSAGE_LOGS: (data) => {
       if (state.isAnalysisMode) {
         state.liveLogs.postmessageLogs = data.logs || [];
       } else {
@@ -991,7 +1094,7 @@ function setupMessageHandlers() {
         renderPostmessageLogs();
       }
     },
-    'SW_DEBUG_POSTMESSAGE_LOGS_CLEARED': () => {
+    SW_DEBUG_POSTMESSAGE_LOGS_CLEARED: () => {
       if (state.isAnalysisMode) {
         state.liveLogs.postmessageLogs = [];
       } else {
@@ -999,7 +1102,7 @@ function setupMessageHandlers() {
         renderPostmessageLogs();
       }
     },
-    'SW_DEBUG_CRASH_SNAPSHOTS': (data) => {
+    SW_DEBUG_CRASH_SNAPSHOTS: (data) => {
       if (state.isAnalysisMode) {
         state.liveLogs.crashLogs = data.snapshots || [];
       } else {
@@ -1007,7 +1110,7 @@ function setupMessageHandlers() {
         renderCrashLogs();
       }
     },
-    'SW_DEBUG_NEW_CRASH_SNAPSHOT': (data) => {
+    SW_DEBUG_NEW_CRASH_SNAPSHOT: (data) => {
       if (data.snapshot) {
         if (state.isAnalysisMode) {
           state.liveLogs.crashLogs.unshift(data.snapshot);
@@ -1023,7 +1126,7 @@ function setupMessageHandlers() {
         }
       }
     },
-    'SW_DEBUG_CRASH_SNAPSHOTS_CLEARED': () => {
+    SW_DEBUG_CRASH_SNAPSHOTS_CLEARED: () => {
       if (state.isAnalysisMode) {
         state.liveLogs.crashLogs = [];
       } else {
@@ -1031,7 +1134,7 @@ function setupMessageHandlers() {
         renderCrashLogs();
       }
     },
-    'SW_DEBUG_LLM_API_LOGS': (data) => {
+    SW_DEBUG_LLM_API_LOGS: (data) => {
       if (state.isAnalysisMode) {
         state.liveLogs.llmapiLogs = data.logs || [];
       } else {
@@ -1046,10 +1149,12 @@ function setupMessageHandlers() {
         renderLLMApiLogs();
       }
     },
-    'SW_DEBUG_LLM_API_LOG': (data) => {
+    SW_DEBUG_LLM_API_LOG: (data) => {
       if (data.log) {
         if (state.isAnalysisMode) {
-          const existingIndex = state.liveLogs.llmapiLogs.findIndex(l => l.id === data.log.id);
+          const existingIndex = state.liveLogs.llmapiLogs.findIndex(
+            (l) => l.id === data.log.id
+          );
           if (existingIndex >= 0) {
             state.liveLogs.llmapiLogs[existingIndex] = data.log;
           } else {
@@ -1060,7 +1165,9 @@ function setupMessageHandlers() {
           }
         } else {
           // 实时更新：更新现有日志或在第一页时插入新日志
-          const existingIndex = state.llmapiLogs.findIndex(l => l.id === data.log.id);
+          const existingIndex = state.llmapiLogs.findIndex(
+            (l) => l.id === data.log.id
+          );
           if (existingIndex >= 0) {
             // 更新已存在的日志（无论在哪一页）
             state.llmapiLogs[existingIndex] = data.log;
@@ -1073,43 +1180,46 @@ function setupMessageHandlers() {
             }
             // 更新总数
             state.llmapiPagination.total++;
-            state.llmapiPagination.totalPages = Math.ceil(state.llmapiPagination.total / state.llmapiPagination.pageSize);
+            state.llmapiPagination.totalPages = Math.ceil(
+              state.llmapiPagination.total / state.llmapiPagination.pageSize
+            );
             renderLLMApiLogs();
           } else {
             // 不在第一页，只更新总数，不插入
             state.llmapiPagination.total++;
-            state.llmapiPagination.totalPages = Math.ceil(state.llmapiPagination.total / state.llmapiPagination.pageSize);
+            state.llmapiPagination.totalPages = Math.ceil(
+              state.llmapiPagination.total / state.llmapiPagination.pageSize
+            );
             // 可选：刷新分页显示
             renderLLMApiLogs();
           }
         }
       }
     },
-    'SW_DEBUG_LLM_API_LOGS_CLEARED': () => {
+    SW_DEBUG_LLM_API_LOGS_CLEARED: () => {
       if (state.isAnalysisMode) {
         state.liveLogs.llmapiLogs = [];
       } else {
         state.llmapiLogs = [];
-        state.llmapiPagination = { page: 1, pageSize: 20, total: 0, totalPages: 0 };
+        state.llmapiPagination = {
+          page: 1,
+          pageSize: 20,
+          total: 0,
+          totalPages: 0,
+        };
         renderLLMApiLogs();
       }
     },
-    'SW_DEBUG_EXPORT_DATA': () => {
+    SW_DEBUG_EXPORT_DATA: () => {
       // Handle export data from SW if needed
     },
   });
 
   onControllerChange(async () => {
-    // Service Worker controller 改变时，等待新 SW 完全就绪后再刷新
-    // 避免在 SW 更新过程中发起 RPC 调用
-    console.log('[SW Debug] Controller changed, waiting for new SW to be ready...');
-    
     // 等待一段时间让新的 SW 完全接管
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    console.log('[SW Debug] Refreshing status after SW update...');
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     updateSwStatus(elements.swStatus, true);
-    
+
     // 重新加载所有数据
     refreshStatus();
     loadFetchLogs();
@@ -1125,12 +1235,12 @@ function setupMessageHandlers() {
  */
 async function init() {
   cacheElements();
-  
+
   // Load saved bookmarks, theme, and settings first (before any early returns)
   loadBookmarks();
   loadTheme();
   loadSettings();
-  
+
   // Setup callbacks for modules that need render functions
   setAnalysisModeCallbacks({
     renderLogs,
@@ -1147,78 +1257,80 @@ async function init() {
     loadLLMApiLogs,
     updateMemoryDisplay,
   });
-  
+
   setThemeSettingsCallbacks({
     renderLogs,
   });
-  
+
   // Setup event listeners (always needed, even in analysis mode)
   setupEventListeners();
   initGistManagement();
-  
+
   // Check URL parameters
   const urlParams = new URLSearchParams(window.location.search);
-  
+
   // Activate tab from URL parameter (valid tabs: fetch, console, postmessage, llmapi, gist, crash)
-  const validTabs = ['fetch', 'console', 'postmessage', 'llmapi', 'gist', 'crash'];
+  const validTabs = [
+    'fetch',
+    'console',
+    'postmessage',
+    'llmapi',
+    'gist',
+    'crash',
+  ];
   const tabParam = urlParams.get('tab');
   if (tabParam && validTabs.includes(tabParam)) {
     // Use setTimeout to ensure DOM is ready
     setTimeout(() => switchTab(tabParam, false), 0);
   }
-  
+
   // Check if analysis mode should be auto-enabled (e.g., via URL parameter)
   if (urlParams.has('analysis')) {
     state.isAnalysisMode = true;
     updateAnalysisModeUI();
     showImportPrompt();
-    console.log('[SW Debug] Started in analysis mode');
     return;
   }
 
   // Check SW availability
   if (!('serviceWorker' in navigator)) {
-    alert('此浏览器不支持 Service Worker\n\n提示：您可以使用分析模式导入用户日志进行分析');
+    alert(
+      '此浏览器不支持 Service Worker\n\n提示：您可以使用分析模式导入用户日志进行分析'
+    );
     updateSwStatus(elements.swStatus, false);
     return;
   }
-  
+
   const swReady = await checkSwReady();
-  
+
   if (!swReady) {
     // SW not ready - offer analysis mode as alternative
-    const useAnalysisMode = confirm('Service Worker 未注册或未激活\n\n您可以：\n1. 点击"取消"后访问主应用，然后刷新此页面\n2. 点击"确定"进入分析模式，导入用户日志进行分析');
-    
+    const useAnalysisMode = confirm(
+      'Service Worker 未注册或未激活\n\n您可以：\n1. 点击"取消"后访问主应用，然后刷新此页面\n2. 点击"确定"进入分析模式，导入用户日志进行分析'
+    );
+
     if (useAnalysisMode) {
       state.isAnalysisMode = true;
       updateAnalysisModeUI();
       showImportPrompt();
       return;
     }
-    
+
     updateSwStatus(elements.swStatus, false);
     return;
   }
-  
-  console.log('[SW Debug] SW ready, controller:', !!navigator.serviceWorker.controller);
-
   updateSwStatus(elements.swStatus, true);
 
   // Register PostMessage logging callback
   setPostMessageLogCallback(addPostmessageLog);
 
   setupMessageHandlers();
-
-  // 先建立 duplex 通道并订阅广播（CONSOLE_LOG、POSTMESSAGE_LOG 等），再启用调试
-  // 否则 SW 启用调试后开始转发日志时，调试页尚未在 channel-manager 中注册，收不到任何日志
-  console.log('[SW Debug] Initializing duplex channel before enabling debug');
   const duplexOk = await ensureDuplexInitialized();
   if (!duplexOk) {
-    console.warn('[SW Debug] Duplex init failed, console/postmessage logs may not stream');
+    console.warn(
+      '[SW Debug] Duplex init failed, console/postmessage logs may not stream'
+    );
   }
-
-  // Auto-enable debug mode when entering debug page
-  console.log('[SW Debug] Auto-enabling debug mode');
   enableDebug();
 
   // Load fetch logs (existing logs from before debug mode was enabled won't exist,
@@ -1233,17 +1345,16 @@ async function init() {
   // Load LLM API logs (ensure data is available for export even without visiting the tab)
   loadLLMApiLogs();
   renderLogs();
-  
+
   // Start memory monitoring
   startMemoryMonitoring();
-  
+
   // Clean up on page unload - disable debug mode when page is closed
   window.addEventListener('beforeunload', () => {
     stopMemoryMonitoring();
     // Disable debug mode when debug page is closed
     disableDebug();
   });
-  
 }
 
 // ==================== Global Helper Functions ====================
@@ -1253,14 +1364,16 @@ async function init() {
  * 该函数暴露给 window 用于 inline onclick 调用
  * @param {string} previewId - 预览元素的 ID
  */
-window.toggleBase64Preview = function(previewId) {
+window.toggleBase64Preview = function (previewId) {
   const previewEl = document.getElementById(previewId);
   if (previewEl) {
     const isHidden = previewEl.style.display === 'none';
     previewEl.style.display = isHidden ? 'inline-block' : 'none';
-    
+
     // 更新 toggle 按钮的样式
-    const toggleEl = previewEl.parentElement?.querySelector('.base64-preview-toggle');
+    const toggleEl = previewEl.parentElement?.querySelector(
+      '.base64-preview-toggle'
+    );
     if (toggleEl) {
       toggleEl.classList.toggle('expanded', isHidden);
     }

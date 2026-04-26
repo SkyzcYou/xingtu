@@ -14,10 +14,7 @@ import {
 } from './types';
 import { VIDEO_DEFAULT_CONFIG } from './config';
 import { getDefaultImageModel } from '../../constants/model-config';
-import {
-  analytics,
-  getProviderEndpointAnalytics,
-} from '../posthog-analytics';
+import { analytics, getProviderEndpointAnalytics } from '../posthog-analytics';
 
 type GoogleInlineData = {
   mime_type?: string;
@@ -45,10 +42,13 @@ function buildProviderContext(config: GeminiConfig): ResolvedProviderContext {
   );
 }
 
-function buildAPIAnalyticsContext(config: GeminiConfig): Record<string, unknown> {
+function buildAPIAnalyticsContext(
+  config: GeminiConfig
+): Record<string, unknown> {
   const endpoint = getProviderEndpointAnalytics(config.baseUrl);
   return {
-    providerType: config.provider?.providerType || config.providerType || 'custom',
+    providerType:
+      config.provider?.providerType || config.providerType || 'custom',
     profileId: config.provider?.profileId,
     profileName: config.provider?.profileName,
     providerOrigin: endpoint?.origin,
@@ -76,7 +76,11 @@ function resolveBindingPath(
   );
 }
 
-function buildGoogleEndpoint(config: GeminiConfig, model: string, stream: boolean): string {
+function buildGoogleEndpoint(
+  config: GeminiConfig,
+  model: string,
+  stream: boolean
+): string {
   const submitPath = resolveBindingPath(config.binding?.submitPath, model);
   if (!stream) {
     return submitPath;
@@ -87,7 +91,10 @@ function buildGoogleEndpoint(config: GeminiConfig, model: string, stream: boolea
   }
 
   if (submitPath.endsWith(':generateContent')) {
-    return `${submitPath.slice(0, -':generateContent'.length)}:streamGenerateContent`;
+    return `${submitPath.slice(
+      0,
+      -':generateContent'.length
+    )}:streamGenerateContent`;
   }
 
   return `/v1beta/models/${model}:streamGenerateContent`;
@@ -173,10 +180,11 @@ async function toGoogleInlineData(url: string): Promise<GoogleInlineData> {
   };
 }
 
-async function buildGoogleParts(
-  messages: GeminiMessage[]
-): Promise<{
-  contents: Array<{ role: 'user' | 'model'; parts: Array<Record<string, unknown>> }>;
+async function buildGoogleParts(messages: GeminiMessage[]): Promise<{
+  contents: Array<{
+    role: 'user' | 'model';
+    parts: Array<Record<string, unknown>>;
+  }>;
   systemInstruction?: { parts: Array<{ text: string }> };
 }> {
   const contents: Array<{
@@ -258,7 +266,9 @@ function extractGooglePartContent(part: Record<string, any>): string {
 }
 
 function normalizeGoogleResponseContent(response: Record<string, any>): string {
-  const candidates = Array.isArray(response.candidates) ? response.candidates : [];
+  const candidates = Array.isArray(response.candidates)
+    ? response.candidates
+    : [];
   const parts = candidates.flatMap((candidate) =>
     Array.isArray(candidate?.content?.parts) ? candidate.content.parts : []
   );
@@ -284,13 +294,13 @@ function normalizeGoogleResponse(
   };
 }
 
-export function normalizeGoogleImageResponse(
-  response: Record<string, any>
-): {
+export function normalizeGoogleImageResponse(response: Record<string, any>): {
   data: Array<{ b64_json?: string; url?: string; mime_type?: string }>;
   raw: Record<string, any>;
 } {
-  const candidates = Array.isArray(response.candidates) ? response.candidates : [];
+  const candidates = Array.isArray(response.candidates)
+    ? response.candidates
+    : [];
   const data = candidates.flatMap((candidate) => {
     const parts = Array.isArray(candidate?.content?.parts)
       ? candidate.content.parts
@@ -303,7 +313,8 @@ export function normalizeGoogleImageResponse(
         if (inlineData?.data) {
           return {
             b64_json: inlineData.data,
-            mime_type: inlineData.mime_type || inlineData.mimeType || 'video/mp4',
+            mime_type:
+              inlineData.mime_type || inlineData.mimeType || 'video/mp4',
           };
         }
 
@@ -527,7 +538,7 @@ export async function callGoogleGenerateContentRaw(
  */
 export async function callApiRaw(
   config: GeminiConfig,
-  messages: GeminiMessage[],
+  messages: GeminiMessage[]
 ): Promise<GeminiResponse> {
   if (isGoogleGenerateContentProtocol(config)) {
     return callGoogleGenerateContentRaw(config, messages, {
@@ -559,12 +570,15 @@ export async function callApiRaw(
   };
 
   try {
-    const response = await providerTransport.send(buildProviderContext(config), {
-      path: endpoint,
-      method: 'POST',
-      headers,
-      body: JSON.stringify(data),
-    });
+    const response = await providerTransport.send(
+      buildProviderContext(config),
+      {
+        path: endpoint,
+        method: 'POST',
+        headers,
+        body: JSON.stringify(data),
+      }
+    );
 
     if (!response.ok) {
       const duration = Date.now() - startTime;
@@ -574,7 +588,10 @@ export async function callApiRaw(
       try {
         const errorJson = await response.json();
         if (errorJson.error) {
-          errorMessage = errorJson.error.message || errorJson.error.code || response.statusText;
+          errorMessage =
+            errorJson.error.message ||
+            errorJson.error.code ||
+            response.statusText;
           errorBody = JSON.stringify(errorJson.error);
         }
       } catch (e) {
@@ -667,14 +684,6 @@ async function callApiStreamDirect(
   const startTime = Date.now();
   const model = config.modelName || getDefaultImageModel();
   const endpoint = '/chat/completions';
-
-  console.log('[callApiStreamDirect] 发起 direct fetch 请求:', {
-    model,
-    baseUrl: config.baseUrl,
-    hasApiKey: !!config.apiKey,
-    messageCount: messages.length,
-  });
-
   // Track API call start
   analytics.trackAPICallStart({
     endpoint,
@@ -697,13 +706,16 @@ async function callApiStreamDirect(
   };
 
   try {
-    const response = await providerTransport.send(buildProviderContext(config), {
-      path: endpoint,
-      method: 'POST',
-      headers,
-      body: JSON.stringify(data),
-      signal,
-    });
+    const response = await providerTransport.send(
+      buildProviderContext(config),
+      {
+        path: endpoint,
+        method: 'POST',
+        headers,
+        body: JSON.stringify(data),
+        signal,
+      }
+    );
 
     if (!response.ok) {
       const duration = Date.now() - startTime;
@@ -713,7 +725,10 @@ async function callApiStreamDirect(
       try {
         const errorJson = await response.json();
         if (errorJson.error) {
-          errorMessage = errorJson.error.message || errorJson.error.code || response.statusText;
+          errorMessage =
+            errorJson.error.message ||
+            errorJson.error.code ||
+            response.statusText;
           errorBody = JSON.stringify(errorJson.error);
         }
       } catch (e) {
@@ -803,11 +818,15 @@ async function callApiStreamDirect(
     // console.log('[StreamAPI] Full response content:', fullContent);
 
     // Check for incomplete response patterns
-    const hasGeneratingText = fullContent.includes('正在生成') || fullContent.includes('generating');
-    const hasImageUrl = fullContent.includes('![') && fullContent.includes('](http');
+    const hasGeneratingText =
+      fullContent.includes('正在生成') || fullContent.includes('generating');
+    const hasImageUrl =
+      fullContent.includes('![') && fullContent.includes('](http');
 
     if (hasGeneratingText && !hasImageUrl) {
-      console.warn('[StreamAPI] Warning: Response contains "generating" text but no image URL - response may be incomplete');
+      console.warn(
+        '[StreamAPI] Warning: Response contains "generating" text but no image URL - response may be incomplete'
+      );
     }
 
     analytics.trackAPICallSuccess({
@@ -821,12 +840,14 @@ async function callApiStreamDirect(
 
     // 返回标准格式的响应
     return {
-      choices: [{
-        message: {
-          role: 'assistant',
-          content: fullContent
-        }
-      }]
+      choices: [
+        {
+          message: {
+            role: 'assistant',
+            content: fullContent,
+          },
+        },
+      ],
     };
   } catch (error) {
     const duration = Date.now() - startTime;
@@ -873,10 +894,12 @@ export async function callVideoApiStreamRaw(
   // 添加系统消息，参考你提供的接口参数
   const systemMessage: GeminiMessage = {
     role: 'user',
-    content: [{
-      type: 'text',
-      text: `You are Video Creator.\nCurrent model: ${model}\nCurrent time: ${new Date().toLocaleString()}\nLatex inline: $x^2$\nLatex block: $e=mc^2$`
-    }]
+    content: [
+      {
+        type: 'text',
+        text: `You are Video Creator.\nCurrent model: ${model}\nCurrent time: ${new Date().toLocaleString()}\nLatex inline: $x^2$\nLatex block: $e=mc^2$`,
+      },
+    ],
   };
 
   const data = {
@@ -891,12 +914,15 @@ export async function callVideoApiStreamRaw(
   };
 
   try {
-    const response = await providerTransport.send(buildProviderContext(config), {
-      path: endpoint,
-      method: 'POST',
-      headers,
-      body: JSON.stringify(data),
-    });
+    const response = await providerTransport.send(
+      buildProviderContext(config),
+      {
+        path: endpoint,
+        method: 'POST',
+        headers,
+        body: JSON.stringify(data),
+      }
+    );
 
     if (!response.ok) {
       const duration = Date.now() - startTime;
@@ -906,7 +932,10 @@ export async function callVideoApiStreamRaw(
       try {
         const errorJson = await response.json();
         if (errorJson.error) {
-          errorMessage = errorJson.error.message || errorJson.error.code || response.statusText;
+          errorMessage =
+            errorJson.error.message ||
+            errorJson.error.code ||
+            response.statusText;
           errorBody = JSON.stringify(errorJson.error);
         }
       } catch (e) {
@@ -985,12 +1014,14 @@ export async function callVideoApiStreamRaw(
 
     // 返回标准格式的响应
     return {
-      choices: [{
-        message: {
-          role: 'assistant',
-          content: fullContent
-        }
-      }]
+      choices: [
+        {
+          message: {
+            role: 'assistant',
+            content: fullContent,
+          },
+        },
+      ],
     };
   } catch (error) {
     const duration = Date.now() - startTime;
@@ -1014,7 +1045,7 @@ export async function callVideoApiStreamRaw(
  */
 export async function callApiWithRetry(
   config: GeminiConfig,
-  messages: GeminiMessage[],
+  messages: GeminiMessage[]
 ): Promise<GeminiResponse> {
   // 直接调用，不再重试
   return callApiRaw(config, messages);

@@ -68,7 +68,9 @@ export async function getAppDB(): Promise<IDBDatabase> {
 
       // tasks store
       if (!db.objectStoreNames.contains(APP_DB_STORES.TASKS)) {
-        const tasksStore = db.createObjectStore(APP_DB_STORES.TASKS, { keyPath: 'id' });
+        const tasksStore = db.createObjectStore(APP_DB_STORES.TASKS, {
+          keyPath: 'id',
+        });
         tasksStore.createIndex('status', 'status', { unique: false });
         tasksStore.createIndex('type', 'type', { unique: false });
         tasksStore.createIndex('createdAt', 'createdAt', { unique: false });
@@ -77,7 +79,9 @@ export async function getAppDB(): Promise<IDBDatabase> {
 
       // workflows store
       if (!db.objectStoreNames.contains(APP_DB_STORES.WORKFLOWS)) {
-        const workflowsStore = db.createObjectStore(APP_DB_STORES.WORKFLOWS, { keyPath: 'id' });
+        const workflowsStore = db.createObjectStore(APP_DB_STORES.WORKFLOWS, {
+          keyPath: 'id',
+        });
         workflowsStore.createIndex('status', 'status', { unique: false });
         workflowsStore.createIndex('createdAt', 'createdAt', { unique: false });
       }
@@ -116,7 +120,6 @@ export async function migrateFromLegacyDB(): Promise<void> {
     });
 
     if (hasData) {
-      console.log('[AppDB] 新数据库已有数据，跳过迁移');
       return;
     }
 
@@ -125,9 +128,18 @@ export async function migrateFromLegacyDB(): Promise<void> {
       const timeout = setTimeout(() => resolve(null), 3000);
       try {
         const request = indexedDB.open('sw-task-queue');
-        request.onerror = () => { clearTimeout(timeout); resolve(null); };
-        request.onsuccess = () => { clearTimeout(timeout); resolve(request.result); };
-        request.onblocked = () => { clearTimeout(timeout); resolve(null); };
+        request.onerror = () => {
+          clearTimeout(timeout);
+          resolve(null);
+        };
+        request.onsuccess = () => {
+          clearTimeout(timeout);
+          resolve(request.result);
+        };
+        request.onblocked = () => {
+          clearTimeout(timeout);
+          resolve(null);
+        };
         request.onupgradeneeded = () => {
           // 旧数据库不存在（正在创建），关闭它
           clearTimeout(timeout);
@@ -141,7 +153,6 @@ export async function migrateFromLegacyDB(): Promise<void> {
     });
 
     if (!oldDb) {
-      console.log('[AppDB] 旧数据库不存在或无法打开，跳过迁移');
       return;
     }
 
@@ -161,7 +172,6 @@ export async function migrateFromLegacyDB(): Promise<void> {
     }
 
     oldDb.close();
-    console.log('[AppDB] 数据迁移完成');
   } catch (error) {
     console.warn('[AppDB] 数据迁移失败（非致命）:', error);
   }
@@ -198,8 +208,6 @@ async function migrateStore(
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
-
-    console.log(`[AppDB] 迁移 ${oldStoreName} → ${newStoreName}: ${records.length} 条记录`);
   } catch (error) {
     console.warn(`[AppDB] 迁移 ${oldStoreName} 失败:`, error);
   }

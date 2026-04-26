@@ -8,12 +8,12 @@ import {
   updateViewportByScrolling,
   updateViewportOffset,
 } from '@plait/core';
-import { useEventListener } from 'ahooks';
 import { useEffect, useRef } from 'react';
 import {
   consumeIgnoredViewportScroll,
   updateZoomFromCurrentViewport,
 } from '../utils/viewport';
+import { useEventListener } from './use-event-listener';
 
 const useBoardEvent = (
   board: PlaitBoard,

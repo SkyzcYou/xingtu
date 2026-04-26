@@ -3,7 +3,7 @@
  *
  * Provides IndexedDB-based persistence for task queue state.
  * Ensures tasks survive page refreshes and SW restarts.
- * 
+ *
  * Supports:
  * - Tasks (image/video/character generation)
  * - Workflows (multi-step operations)
@@ -95,7 +95,7 @@ export interface StoredPendingToolRequest {
 
 /**
  * Pending DOM operation stored in IndexedDB
- * 
+ *
  * When a main-thread tool completes in SW but no client is available,
  * the result is stored here. When a client reconnects, these operations
  * are sent to the client to continue execution.
@@ -121,7 +121,7 @@ export interface PendingDomOperation {
 
 /**
  * Pending Canvas operation stored in IndexedDB
- * 
+ *
  * When a canvas operation fails (e.g., timeout, no client), it's stored here
  * for retry when client reconnects.
  */
@@ -151,14 +151,14 @@ function detectDatabaseVersion(): Promise<number> {
   return new Promise((resolve) => {
     // Open without version to get current version
     const request = indexedDB.open(DB_NAME);
-    
+
     request.onsuccess = () => {
       const db = request.result;
       const version = db.version;
       db.close();
       resolve(Math.max(version, MIN_DB_VERSION));
     };
-    
+
     request.onerror = () => {
       resolve(MIN_DB_VERSION);
     };
@@ -185,18 +185,18 @@ function repairDatabase(currentVersion: number): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     // Increment version to trigger onupgradeneeded
     const newVersion = currentVersion + 1;
-    
+
     const request = indexedDB.open(DB_NAME, newVersion);
-    
+
     request.onerror = () => {
       console.error('[SWStorage] Failed to repair DB:', request.error);
       reject(request.error);
     };
-    
+
     request.onsuccess = () => {
       resolve(request.result);
     };
-    
+
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
       createAllStores(db);
@@ -223,41 +223,65 @@ function createAllStores(db: IDBDatabase): void {
 
   // Create workflows store
   if (!db.objectStoreNames.contains(WORKFLOWS_STORE)) {
-    const workflowsStore = db.createObjectStore(WORKFLOWS_STORE, { keyPath: 'id' });
+    const workflowsStore = db.createObjectStore(WORKFLOWS_STORE, {
+      keyPath: 'id',
+    });
     workflowsStore.createIndex('status', 'status', { unique: false });
     workflowsStore.createIndex('createdAt', 'createdAt', { unique: false });
   }
 
   // Create chat workflows store
   if (!db.objectStoreNames.contains(CHAT_WORKFLOWS_STORE)) {
-    const chatWorkflowsStore = db.createObjectStore(CHAT_WORKFLOWS_STORE, { keyPath: 'id' });
+    const chatWorkflowsStore = db.createObjectStore(CHAT_WORKFLOWS_STORE, {
+      keyPath: 'id',
+    });
     chatWorkflowsStore.createIndex('status', 'status', { unique: false });
     chatWorkflowsStore.createIndex('createdAt', 'createdAt', { unique: false });
   }
 
   // Create pending tool requests store
   if (!db.objectStoreNames.contains(PENDING_TOOL_REQUESTS_STORE)) {
-    const pendingRequestsStore = db.createObjectStore(PENDING_TOOL_REQUESTS_STORE, { keyPath: 'requestId' });
-    pendingRequestsStore.createIndex('workflowId', 'workflowId', { unique: false });
+    const pendingRequestsStore = db.createObjectStore(
+      PENDING_TOOL_REQUESTS_STORE,
+      { keyPath: 'requestId' }
+    );
+    pendingRequestsStore.createIndex('workflowId', 'workflowId', {
+      unique: false,
+    });
   }
 
   // Create pending DOM operations store (for page refresh recovery)
   if (!db.objectStoreNames.contains(PENDING_DOM_OPERATIONS_STORE)) {
-    const pendingDomOpsStore = db.createObjectStore(PENDING_DOM_OPERATIONS_STORE, { keyPath: 'id' });
-    pendingDomOpsStore.createIndex('workflowId', 'workflowId', { unique: false });
+    const pendingDomOpsStore = db.createObjectStore(
+      PENDING_DOM_OPERATIONS_STORE,
+      { keyPath: 'id' }
+    );
+    pendingDomOpsStore.createIndex('workflowId', 'workflowId', {
+      unique: false,
+    });
     pendingDomOpsStore.createIndex('chatId', 'chatId', { unique: false });
   }
 
   // Create task-step mappings store (for unified progress sync)
   if (!db.objectStoreNames.contains(TASK_STEP_MAPPINGS_STORE)) {
-    const taskStepMappingsStore = db.createObjectStore(TASK_STEP_MAPPINGS_STORE, { keyPath: 'taskId' });
-    taskStepMappingsStore.createIndex('workflowId', 'workflowId', { unique: false });
+    const taskStepMappingsStore = db.createObjectStore(
+      TASK_STEP_MAPPINGS_STORE,
+      { keyPath: 'taskId' }
+    );
+    taskStepMappingsStore.createIndex('workflowId', 'workflowId', {
+      unique: false,
+    });
   }
 
   // Create pending canvas operations store (for canvas operation retry)
   if (!db.objectStoreNames.contains(PENDING_CANVAS_OPERATIONS_STORE)) {
-    const pendingCanvasOpsStore = db.createObjectStore(PENDING_CANVAS_OPERATIONS_STORE, { keyPath: 'id' });
-    pendingCanvasOpsStore.createIndex('workflowId', 'workflowId', { unique: false });
+    const pendingCanvasOpsStore = db.createObjectStore(
+      PENDING_CANVAS_OPERATIONS_STORE,
+      { keyPath: 'id' }
+    );
+    pendingCanvasOpsStore.createIndex('workflowId', 'workflowId', {
+      unique: false,
+    });
   }
 }
 
@@ -267,7 +291,7 @@ function createAllStores(db: IDBDatabase): void {
 async function openDB(): Promise<IDBDatabase> {
   // First, detect the current database version
   const targetVersion = await detectDatabaseVersion();
-  
+
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, targetVersion);
 
@@ -278,20 +302,22 @@ async function openDB(): Promise<IDBDatabase> {
 
     request.onsuccess = () => {
       const db = request.result;
-      
+
       // Check if all stores exist
       const missingStores = checkStoresIntegrity(db);
       if (missingStores.length > 0) {
-        console.warn(`[SWStorage] Missing object stores: ${missingStores.join(', ')}. Repairing...`);
+        console.warn(
+          `[SWStorage] Missing object stores: ${missingStores.join(
+            ', '
+          )}. Repairing...`
+        );
         db.close();
-        
+
         // Repair by incrementing version
-        repairDatabase(db.version)
-          .then(resolve)
-          .catch(reject);
+        repairDatabase(db.version).then(resolve).catch(reject);
         return;
       }
-      
+
       resolve(db);
     };
 
@@ -307,11 +333,14 @@ async function openDB(): Promise<IDBDatabase> {
  */
 export class TaskQueueStorage {
   private dbPromise: Promise<IDBDatabase> | null = null;
-  
+
   // Batch save optimization to reduce IndexedDB transaction overhead
   private pendingTaskSaves: Map<string, SWTask> = new Map();
   private batchSaveTimer: ReturnType<typeof setTimeout> | null = null;
-  private batchSavePromises: Map<string, { resolve: () => void; reject: (err: unknown) => void }> = new Map();
+  private batchSavePromises: Map<
+    string,
+    { resolve: () => void; reject: (err: unknown) => void }
+  > = new Map();
   private readonly BATCH_SAVE_DELAY = 50; // ms - batch saves within this window
 
   /**
@@ -335,7 +364,7 @@ export class TaskQueueStorage {
 
     const tasksToSave = Array.from(this.pendingTaskSaves.values());
     const promisesToResolve = new Map(this.batchSavePromises);
-    
+
     this.pendingTaskSaves.clear();
     this.batchSavePromises.clear();
 
@@ -408,7 +437,7 @@ export class TaskQueueStorage {
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve();
       });
-      
+
       // Resolve the pending promise if it existed
       if (pendingPromise) {
         pendingPromise.resolve();
@@ -506,7 +535,8 @@ export class TaskQueueStorage {
         const index = store.index('createdAt');
 
         // Use cursor to iterate with pagination (filteredTotal is calculated during iteration)
-        const direction: IDBCursorDirection = sortOrder === 'desc' ? 'prev' : 'next';
+        const direction: IDBCursorDirection =
+          sortOrder === 'desc' ? 'prev' : 'next';
         const cursorRequest = index.openCursor(null, direction);
 
         const tasks: SWTask[] = [];
@@ -515,7 +545,8 @@ export class TaskQueueStorage {
 
         cursorRequest.onerror = () => reject(cursorRequest.error);
         cursorRequest.onsuccess = (event) => {
-          const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+          const cursor = (event.target as IDBRequest<IDBCursorWithValue>)
+            .result;
 
           if (!cursor) {
             // No more entries
@@ -598,7 +629,10 @@ export class TaskQueueStorage {
         request.onerror = () => reject(request.error);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to get config:', getSafeErrorMessage(error));
+      console.error(
+        '[SWStorage] Failed to get config:',
+        getSafeErrorMessage(error)
+      );
       return null;
     }
   }
@@ -607,14 +641,17 @@ export class TaskQueueStorage {
    * Save a configuration by key
    * 持久化配置到 IndexedDB，确保 SW 重启后可恢复
    */
-  async saveConfig<T extends object>(key: 'gemini' | 'video', config: T): Promise<void> {
+  async saveConfig<T extends object>(
+    key: 'gemini' | 'video',
+    config: T
+  ): Promise<void> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
         const transaction = db.transaction(CONFIG_STORE, 'readwrite');
         const store = transaction.objectStore(CONFIG_STORE);
-        store.put({ 
-          key, 
+        store.put({
+          key,
           ...config,
           updatedAt: Date.now(),
         });
@@ -623,7 +660,10 @@ export class TaskQueueStorage {
         transaction.onerror = () => reject(transaction.error);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to save config:', getSafeErrorMessage(error));
+      console.error(
+        '[SWStorage] Failed to save config:',
+        getSafeErrorMessage(error)
+      );
       throw error;
     }
   }
@@ -645,7 +685,10 @@ export class TaskQueueStorage {
    * Save both gemini and video configurations
    * 便捷方法，一次性保存两个配置
    */
-  async saveAllConfig(geminiConfig: GeminiConfig, videoConfig: VideoAPIConfig): Promise<void> {
+  async saveAllConfig(
+    geminiConfig: GeminiConfig,
+    videoConfig: VideoAPIConfig
+  ): Promise<void> {
     await this.saveConfig('gemini', geminiConfig);
     await this.saveConfig('video', videoConfig);
   }
@@ -664,8 +707,8 @@ export class TaskQueueStorage {
       return new Promise((resolve, reject) => {
         const transaction = db.transaction(CONFIG_STORE, 'readwrite');
         const store = transaction.objectStore(CONFIG_STORE);
-        store.put({ 
-          key: 'systemPrompt', 
+        store.put({
+          key: 'systemPrompt',
           value: systemPrompt,
           updatedAt: Date.now(),
         });
@@ -884,7 +927,10 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve(request.result || []);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to get chat workflows by status:', error);
+      console.error(
+        '[SWStorage] Failed to get chat workflows by status:',
+        error
+      );
       return [];
     }
   }
@@ -915,11 +961,16 @@ export class TaskQueueStorage {
   /**
    * Save a pending tool request to IndexedDB
    */
-  async savePendingToolRequest(request: StoredPendingToolRequest): Promise<void> {
+  async savePendingToolRequest(
+    request: StoredPendingToolRequest
+  ): Promise<void> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_TOOL_REQUESTS_STORE, 'readwrite');
+        const transaction = db.transaction(
+          PENDING_TOOL_REQUESTS_STORE,
+          'readwrite'
+        );
         const store = transaction.objectStore(PENDING_TOOL_REQUESTS_STORE);
         const req = store.put(request);
 
@@ -938,7 +989,10 @@ export class TaskQueueStorage {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_TOOL_REQUESTS_STORE, 'readonly');
+        const transaction = db.transaction(
+          PENDING_TOOL_REQUESTS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(PENDING_TOOL_REQUESTS_STORE);
         const request = store.getAll();
 
@@ -946,7 +1000,10 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve(request.result || []);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to get all pending tool requests:', error);
+      console.error(
+        '[SWStorage] Failed to get all pending tool requests:',
+        error
+      );
       return [];
     }
   }
@@ -954,11 +1011,16 @@ export class TaskQueueStorage {
   /**
    * Get pending tool requests by workflow ID
    */
-  async getPendingToolRequestsByWorkflow(workflowId: string): Promise<StoredPendingToolRequest[]> {
+  async getPendingToolRequestsByWorkflow(
+    workflowId: string
+  ): Promise<StoredPendingToolRequest[]> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_TOOL_REQUESTS_STORE, 'readonly');
+        const transaction = db.transaction(
+          PENDING_TOOL_REQUESTS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(PENDING_TOOL_REQUESTS_STORE);
         const index = store.index('workflowId');
         const request = index.getAll(workflowId);
@@ -967,7 +1029,10 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve(request.result || []);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to get pending tool requests by workflow:', error);
+      console.error(
+        '[SWStorage] Failed to get pending tool requests by workflow:',
+        error
+      );
       return [];
     }
   }
@@ -975,11 +1040,16 @@ export class TaskQueueStorage {
   /**
    * Get a pending tool request by requestId
    */
-  async getPendingToolRequest(requestId: string): Promise<StoredPendingToolRequest | null> {
+  async getPendingToolRequest(
+    requestId: string
+  ): Promise<StoredPendingToolRequest | null> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_TOOL_REQUESTS_STORE, 'readonly');
+        const transaction = db.transaction(
+          PENDING_TOOL_REQUESTS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(PENDING_TOOL_REQUESTS_STORE);
         const request = store.get(requestId);
 
@@ -999,7 +1069,10 @@ export class TaskQueueStorage {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_TOOL_REQUESTS_STORE, 'readwrite');
+        const transaction = db.transaction(
+          PENDING_TOOL_REQUESTS_STORE,
+          'readwrite'
+        );
         const store = transaction.objectStore(PENDING_TOOL_REQUESTS_STORE);
         const request = store.delete(requestId);
 
@@ -1007,7 +1080,10 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve();
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to delete pending tool request:', error);
+      console.error(
+        '[SWStorage] Failed to delete pending tool request:',
+        error
+      );
     }
   }
 
@@ -1021,7 +1097,10 @@ export class TaskQueueStorage {
         await this.deletePendingToolRequest(request.requestId);
       }
     } catch (error) {
-      console.error('[SWStorage] Failed to delete pending tool requests by workflow:', error);
+      console.error(
+        '[SWStorage] Failed to delete pending tool requests by workflow:',
+        error
+      );
     }
   }
 
@@ -1051,15 +1130,15 @@ export class TaskQueueStorage {
         };
 
         tx.oncomplete = () => {
-          if (deleted > 0) {
-            console.log(`[SWStorage] Cleaned up ${deleted} stale pending tool requests`);
-          }
           resolve(deleted);
         };
         tx.onerror = () => reject(tx.error);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to cleanup stale pending tool requests:', error);
+      console.error(
+        '[SWStorage] Failed to cleanup stale pending tool requests:',
+        error
+      );
       return 0;
     }
   }
@@ -1076,7 +1155,10 @@ export class TaskQueueStorage {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_DOM_OPERATIONS_STORE, 'readwrite');
+        const transaction = db.transaction(
+          PENDING_DOM_OPERATIONS_STORE,
+          'readwrite'
+        );
         const store = transaction.objectStore(PENDING_DOM_OPERATIONS_STORE);
         const request = store.put(operation);
 
@@ -1095,7 +1177,10 @@ export class TaskQueueStorage {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_DOM_OPERATIONS_STORE, 'readonly');
+        const transaction = db.transaction(
+          PENDING_DOM_OPERATIONS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(PENDING_DOM_OPERATIONS_STORE);
         const request = store.getAll();
 
@@ -1103,7 +1188,10 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve(request.result || []);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to get all pending DOM operations:', error);
+      console.error(
+        '[SWStorage] Failed to get all pending DOM operations:',
+        error
+      );
       return [];
     }
   }
@@ -1111,11 +1199,16 @@ export class TaskQueueStorage {
   /**
    * Get pending DOM operations by workflow ID
    */
-  async getPendingDomOperationsByWorkflow(workflowId: string): Promise<PendingDomOperation[]> {
+  async getPendingDomOperationsByWorkflow(
+    workflowId: string
+  ): Promise<PendingDomOperation[]> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_DOM_OPERATIONS_STORE, 'readonly');
+        const transaction = db.transaction(
+          PENDING_DOM_OPERATIONS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(PENDING_DOM_OPERATIONS_STORE);
         const index = store.index('workflowId');
         const request = index.getAll(workflowId);
@@ -1124,7 +1217,10 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve(request.result || []);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to get pending DOM operations by workflow:', error);
+      console.error(
+        '[SWStorage] Failed to get pending DOM operations by workflow:',
+        error
+      );
       return [];
     }
   }
@@ -1132,11 +1228,16 @@ export class TaskQueueStorage {
   /**
    * Get pending DOM operations by chat ID
    */
-  async getPendingDomOperationsByChatId(chatId: string): Promise<PendingDomOperation[]> {
+  async getPendingDomOperationsByChatId(
+    chatId: string
+  ): Promise<PendingDomOperation[]> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_DOM_OPERATIONS_STORE, 'readonly');
+        const transaction = db.transaction(
+          PENDING_DOM_OPERATIONS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(PENDING_DOM_OPERATIONS_STORE);
         const index = store.index('chatId');
         const request = index.getAll(chatId);
@@ -1145,7 +1246,10 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve(request.result || []);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to get pending DOM operations by chat ID:', error);
+      console.error(
+        '[SWStorage] Failed to get pending DOM operations by chat ID:',
+        error
+      );
       return [];
     }
   }
@@ -1153,11 +1257,16 @@ export class TaskQueueStorage {
   /**
    * Get a pending DOM operation by ID
    */
-  async getPendingDomOperation(operationId: string): Promise<PendingDomOperation | null> {
+  async getPendingDomOperation(
+    operationId: string
+  ): Promise<PendingDomOperation | null> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_DOM_OPERATIONS_STORE, 'readonly');
+        const transaction = db.transaction(
+          PENDING_DOM_OPERATIONS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(PENDING_DOM_OPERATIONS_STORE);
         const request = store.get(operationId);
 
@@ -1177,7 +1286,10 @@ export class TaskQueueStorage {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_DOM_OPERATIONS_STORE, 'readwrite');
+        const transaction = db.transaction(
+          PENDING_DOM_OPERATIONS_STORE,
+          'readwrite'
+        );
         const store = transaction.objectStore(PENDING_DOM_OPERATIONS_STORE);
         const request = store.delete(operationId);
 
@@ -1185,21 +1297,31 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve();
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to delete pending DOM operation:', error);
+      console.error(
+        '[SWStorage] Failed to delete pending DOM operation:',
+        error
+      );
     }
   }
 
   /**
    * Delete all pending DOM operations for a workflow
    */
-  async deletePendingDomOperationsByWorkflow(workflowId: string): Promise<void> {
+  async deletePendingDomOperationsByWorkflow(
+    workflowId: string
+  ): Promise<void> {
     try {
-      const operations = await this.getPendingDomOperationsByWorkflow(workflowId);
+      const operations = await this.getPendingDomOperationsByWorkflow(
+        workflowId
+      );
       for (const op of operations) {
         await this.deletePendingDomOperation(op.id);
       }
     } catch (error) {
-      console.error('[SWStorage] Failed to delete pending DOM operations by workflow:', error);
+      console.error(
+        '[SWStorage] Failed to delete pending DOM operations by workflow:',
+        error
+      );
     }
   }
 
@@ -1213,7 +1335,10 @@ export class TaskQueueStorage {
         await this.deletePendingDomOperation(op.id);
       }
     } catch (error) {
-      console.error('[SWStorage] Failed to delete pending DOM operations by chat ID:', error);
+      console.error(
+        '[SWStorage] Failed to delete pending DOM operations by chat ID:',
+        error
+      );
     }
   }
 
@@ -1228,7 +1353,10 @@ export class TaskQueueStorage {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(TASK_STEP_MAPPINGS_STORE, 'readwrite');
+        const transaction = db.transaction(
+          TASK_STEP_MAPPINGS_STORE,
+          'readwrite'
+        );
         const store = transaction.objectStore(TASK_STEP_MAPPINGS_STORE);
         const request = store.put(mapping);
 
@@ -1247,7 +1375,10 @@ export class TaskQueueStorage {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(TASK_STEP_MAPPINGS_STORE, 'readonly');
+        const transaction = db.transaction(
+          TASK_STEP_MAPPINGS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(TASK_STEP_MAPPINGS_STORE);
         const request = store.getAll();
 
@@ -1267,7 +1398,10 @@ export class TaskQueueStorage {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(TASK_STEP_MAPPINGS_STORE, 'readonly');
+        const transaction = db.transaction(
+          TASK_STEP_MAPPINGS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(TASK_STEP_MAPPINGS_STORE);
         const request = store.get(taskId);
 
@@ -1283,11 +1417,16 @@ export class TaskQueueStorage {
   /**
    * Get task-step mappings by workflow ID
    */
-  async getTaskStepMappingsByWorkflow(workflowId: string): Promise<TaskStepMapping[]> {
+  async getTaskStepMappingsByWorkflow(
+    workflowId: string
+  ): Promise<TaskStepMapping[]> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(TASK_STEP_MAPPINGS_STORE, 'readonly');
+        const transaction = db.transaction(
+          TASK_STEP_MAPPINGS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(TASK_STEP_MAPPINGS_STORE);
         const index = store.index('workflowId');
         const request = index.getAll(workflowId);
@@ -1296,7 +1435,10 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve(request.result || []);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to get task-step mappings by workflow:', error);
+      console.error(
+        '[SWStorage] Failed to get task-step mappings by workflow:',
+        error
+      );
       return [];
     }
   }
@@ -1308,7 +1450,10 @@ export class TaskQueueStorage {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(TASK_STEP_MAPPINGS_STORE, 'readwrite');
+        const transaction = db.transaction(
+          TASK_STEP_MAPPINGS_STORE,
+          'readwrite'
+        );
         const store = transaction.objectStore(TASK_STEP_MAPPINGS_STORE);
         const request = store.delete(taskId);
 
@@ -1330,7 +1475,10 @@ export class TaskQueueStorage {
         await this.deleteTaskStepMapping(mapping.taskId);
       }
     } catch (error) {
-      console.error('[SWStorage] Failed to delete task-step mappings by workflow:', error);
+      console.error(
+        '[SWStorage] Failed to delete task-step mappings by workflow:',
+        error
+      );
     }
   }
 
@@ -1341,11 +1489,16 @@ export class TaskQueueStorage {
   /**
    * Save a pending canvas operation to IndexedDB
    */
-  async savePendingCanvasOperation(operation: PendingCanvasOperation): Promise<void> {
+  async savePendingCanvasOperation(
+    operation: PendingCanvasOperation
+  ): Promise<void> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_CANVAS_OPERATIONS_STORE, 'readwrite');
+        const transaction = db.transaction(
+          PENDING_CANVAS_OPERATIONS_STORE,
+          'readwrite'
+        );
         const store = transaction.objectStore(PENDING_CANVAS_OPERATIONS_STORE);
         const request = store.put(operation);
 
@@ -1353,7 +1506,10 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve();
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to save pending canvas operation:', error);
+      console.error(
+        '[SWStorage] Failed to save pending canvas operation:',
+        error
+      );
     }
   }
 
@@ -1364,7 +1520,10 @@ export class TaskQueueStorage {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_CANVAS_OPERATIONS_STORE, 'readonly');
+        const transaction = db.transaction(
+          PENDING_CANVAS_OPERATIONS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(PENDING_CANVAS_OPERATIONS_STORE);
         const request = store.getAll();
 
@@ -1372,7 +1531,10 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve(request.result || []);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to get all pending canvas operations:', error);
+      console.error(
+        '[SWStorage] Failed to get all pending canvas operations:',
+        error
+      );
       return [];
     }
   }
@@ -1380,11 +1542,16 @@ export class TaskQueueStorage {
   /**
    * Get pending canvas operations by workflow ID
    */
-  async getPendingCanvasOperationsByWorkflow(workflowId: string): Promise<PendingCanvasOperation[]> {
+  async getPendingCanvasOperationsByWorkflow(
+    workflowId: string
+  ): Promise<PendingCanvasOperation[]> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_CANVAS_OPERATIONS_STORE, 'readonly');
+        const transaction = db.transaction(
+          PENDING_CANVAS_OPERATIONS_STORE,
+          'readonly'
+        );
         const store = transaction.objectStore(PENDING_CANVAS_OPERATIONS_STORE);
         const index = store.index('workflowId');
         const request = index.getAll(workflowId);
@@ -1393,7 +1560,10 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve(request.result || []);
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to get pending canvas operations by workflow:', error);
+      console.error(
+        '[SWStorage] Failed to get pending canvas operations by workflow:',
+        error
+      );
       return [];
     }
   }
@@ -1405,7 +1575,10 @@ export class TaskQueueStorage {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(PENDING_CANVAS_OPERATIONS_STORE, 'readwrite');
+        const transaction = db.transaction(
+          PENDING_CANVAS_OPERATIONS_STORE,
+          'readwrite'
+        );
         const store = transaction.objectStore(PENDING_CANVAS_OPERATIONS_STORE);
         const request = store.delete(operationId);
 
@@ -1413,21 +1586,31 @@ export class TaskQueueStorage {
         request.onsuccess = () => resolve();
       });
     } catch (error) {
-      console.error('[SWStorage] Failed to delete pending canvas operation:', error);
+      console.error(
+        '[SWStorage] Failed to delete pending canvas operation:',
+        error
+      );
     }
   }
 
   /**
    * Delete all pending canvas operations for a workflow
    */
-  async deletePendingCanvasOperationsByWorkflow(workflowId: string): Promise<void> {
+  async deletePendingCanvasOperationsByWorkflow(
+    workflowId: string
+  ): Promise<void> {
     try {
-      const operations = await this.getPendingCanvasOperationsByWorkflow(workflowId);
+      const operations = await this.getPendingCanvasOperationsByWorkflow(
+        workflowId
+      );
       for (const op of operations) {
         await this.deletePendingCanvasOperation(op.id);
       }
     } catch (error) {
-      console.error('[SWStorage] Failed to delete pending canvas operations by workflow:', error);
+      console.error(
+        '[SWStorage] Failed to delete pending canvas operations by workflow:',
+        error
+      );
     }
   }
 
@@ -1449,7 +1632,10 @@ export class TaskQueueStorage {
 
         cursorReq.onsuccess = () => {
           const cursor = cursorReq.result;
-          if (!cursor) { resolve(results); return; }
+          if (!cursor) {
+            resolve(results);
+            return;
+          }
           const task = cursor.value as SWTask;
           if (!task.archived) {
             results.push(task);
@@ -1465,7 +1651,7 @@ export class TaskQueueStorage {
       // 从最旧的开始，归档终态任务
       const terminalStatuses = ['completed', 'failed', 'cancelled'];
       const toArchive = allTasks
-        .filter(t => terminalStatuses.includes(t.status as string))
+        .filter((t) => terminalStatuses.includes(t.status as string))
         .slice(0, toArchiveCount);
 
       if (toArchive.length === 0) return 0;
@@ -1480,7 +1666,6 @@ export class TaskQueueStorage {
           store.put(task);
         }
         tx.oncomplete = () => {
-          console.log(`[SWStorage] Archived ${toArchive.length} old tasks`);
           resolve(toArchive.length);
         };
         tx.onerror = () => reject(tx.error);

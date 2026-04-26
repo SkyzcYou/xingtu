@@ -31,7 +31,6 @@ import React, {
 import { withGroup } from '@plait/common';
 import { withDraw, BasicShapes, DrawTransforms } from '@plait/draw';
 import { MindThemeColors, withMind } from '@plait/mind';
-import MobileDetect from 'mobile-detect';
 import { withMindExtend } from './plugins/with-mind-extend';
 import { withCommonPlugin } from './plugins/with-common';
 import { PopupToolbar } from './components/toolbar/popup-toolbar/popup-toolbar';
@@ -242,6 +241,19 @@ const shouldAutoCloseToolboxDrawer = (): boolean =>
 const shouldAutoCloseTaskDrawer = (): boolean =>
   !getDrawerPinned(DRAWER_PIN_KEYS.task);
 
+function detectMobileViewport(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  const compactViewport = window.matchMedia?.('(max-width: 768px)').matches ?? false;
+  const touchCapable =
+    navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+
+  return compactViewport || (coarsePointer && touchCapable);
+}
+
 export const Drawnix: React.FC<DrawnixProps> = ({
   value,
   viewport,
@@ -266,10 +278,9 @@ export const Drawnix: React.FC<DrawnixProps> = ({
 
   const [appState, setAppState] = useState<DrawnixState>(() => {
     // TODO: need to consider how to maintenance the pointer state in future
-    const md = new MobileDetect(window.navigator.userAgent);
     return {
       pointer: PlaitPointerType.hand,
-      isMobile: md.mobile() !== null,
+      isMobile: detectMobileViewport(),
       isPencilMode: false,
       openDialogTypes: new Set(),
       dialogInitialData: null,
@@ -593,11 +604,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
 
       // idle prefetch 只是优化项，不应阻塞常驻工具条显示。
       // 开发态或 manifest 缺失时，超时后直接放行显示，点击工具时再按需启完整运行时。
-      if (isLocalDevHost) {
-        console.info(
-          '[Drawnix] SW idle prefetch status unresolved in dev, enabling minimized tools bar fallback'
-        );
-      } else {
+      if (!isLocalDevHost) {
         console.warn(
           '[Drawnix] SW idle prefetch status unresolved, enabling minimized tools bar fallback'
         );
@@ -1566,7 +1573,11 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
           )}
           <CleanConfirm container={containerRef.current}></CleanConfirm>
           <Suspense fallback={null}>
-            <DeferredAIInputBar isDataReady={isDataReady} activationKey={0} />
+            <DeferredAIInputBar
+              isDataReady={isDataReady}
+              activationKey={0}
+              onEnableToolWindows={enableToolWindows}
+            />
           </Suspense>
           {/* Quick Creation Toolbar - 双击空白区域显示的快捷工具栏 */}
           <QuickCreationToolbar

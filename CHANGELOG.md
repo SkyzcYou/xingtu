@@ -1,3 +1,30 @@
+## 0.6.79 (2026-04-26)
+
+### 🚀 Features
+
+- 添加提示词历史工具并集成到AI输入栏 ([d3e63998](https://github.com/ljquan/aitu/commit/d3e63998))
+- 为歌曲创作页面添加提示词优化功能 ([ff373c31](https://github.com/ljquan/aitu/commit/ff373c31))
+
+### 🩹 Fixes
+
+- sync prompt history selectors ([f82a39fe](https://github.com/ljquan/aitu/commit/f82a39fe))
+- 本地开发默认启用 Service Worker ([d27c8494](https://github.com/ljquan/aitu/commit/d27c8494))
+- 确保虚拟图片链接在当前页由 SW 接管 ([f5f556ad](https://github.com/ljquan/aitu/commit/f5f556ad))
+- 恢复画布图片稳定虚拟 URL 缓存链路 ([26433192](https://github.com/ljquan/aitu/commit/26433192))
+- 修复粘贴图片画布展示兜底 ([fd800afa](https://github.com/ljquan/aitu/commit/fd800afa))
+
+### 🔧 Chores
+
+- slim npm dependencies ([56232ee6](https://github.com/ljquan/aitu/commit/56232ee6))
+- 移除开发调试日志并添加PPT与提示词分析文档 ([835aa9c1](https://github.com/ljquan/aitu/commit/835aa9c1))
+- 更新应用版本至0.6.78并刷新构建时间 ([9b5c478b](https://github.com/ljquan/aitu/commit/9b5c478b))
+- test(ai-input-bar): 添加打开我的提示词弹窗前回调测试 ([7a5c257e](https://github.com/ljquan/aitu/commit/7a5c257e))
+- refactor: centralize prompt optimization ([a41c5e57](https://github.com/ljquan/aitu/commit/a41c5e57))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
 ## 0.6.78 (2026-04-26)
 
 ### 🚀 Features

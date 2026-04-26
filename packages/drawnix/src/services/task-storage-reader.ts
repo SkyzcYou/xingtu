@@ -120,6 +120,53 @@ export interface AssetTaskRecord {
   };
 }
 
+export interface PromptHistoryTaskSummary {
+  id: string;
+  type: TaskType;
+  status: TaskStatus;
+  createdAt: number;
+  updatedAt: number;
+  completedAt?: number;
+  params: Pick<
+    GenerationParams,
+    | 'prompt'
+    | 'promptMeta'
+    | 'sourcePrompt'
+    | 'rawInput'
+    | 'workflowId'
+    | 'batchIndex'
+    | 'batchTotal'
+    | 'model'
+    | 'title'
+    | 'tags'
+    | 'pptSlideImage'
+    | 'pptSlidePrompt'
+  >;
+  result?: Pick<
+    NonNullable<SWTask['result']>,
+    | 'url'
+    | 'urls'
+    | 'thumbnailUrl'
+    | 'thumbnailUrls'
+    | 'previewImageUrl'
+    | 'title'
+    | 'resultKind'
+    | 'duration'
+    | 'chatResponse'
+    | 'lyricsText'
+    | 'lyricsTitle'
+    | 'lyricsTags'
+    | 'clips'
+  >;
+  error?: SWTask['error'];
+}
+
+export interface PromptHistoryTaskPage {
+  items: PromptHistoryTaskSummary[];
+  nextOffset: number;
+  hasMore: boolean;
+}
+
 /**
  * 将 SWTask 转换为 Task
  */
@@ -216,6 +263,84 @@ function convertSWTaskToAssetTask(swTask: SWTask): AssetTaskRecord | null {
           })),
         }
       : undefined,
+  };
+}
+
+function hasPromptHistoryPrompt(swTask: SWTask): boolean {
+  return Boolean(
+    swTask.params?.prompt?.trim() ||
+      (typeof swTask.params?.sourcePrompt === 'string' &&
+        swTask.params.sourcePrompt.trim()) ||
+      (typeof swTask.params?.rawInput === 'string' &&
+        swTask.params.rawInput.trim()) ||
+      swTask.params?.promptMeta?.initialPrompt?.trim() ||
+      swTask.params?.promptMeta?.sentPrompt?.trim()
+  );
+}
+
+function convertSWTaskToPromptHistorySummary(
+  swTask: SWTask
+): PromptHistoryTaskSummary | null {
+  if (!hasPromptHistoryPrompt(swTask)) {
+    return null;
+  }
+
+  const result = swTask.result
+    ? {
+        url: swTask.result.url,
+        urls: swTask.result.urls,
+        thumbnailUrl: swTask.result.thumbnailUrl,
+        thumbnailUrls: swTask.result.thumbnailUrls,
+        previewImageUrl: swTask.result.previewImageUrl,
+        title: swTask.result.title,
+        resultKind: swTask.result.resultKind,
+        duration: swTask.result.duration,
+        chatResponse: swTask.result.chatResponse
+          ? swTask.result.chatResponse.slice(0, 500)
+          : undefined,
+        lyricsText: swTask.result.lyricsText
+          ? swTask.result.lyricsText.slice(0, 500)
+          : undefined,
+        lyricsTitle: swTask.result.lyricsTitle,
+        lyricsTags: swTask.result.lyricsTags,
+        clips: swTask.result.clips?.slice(0, 3).map((clip) => ({
+          id: clip.id,
+          clipId: clip.clipId,
+          title: clip.title,
+          status: clip.status,
+          audioUrl: clip.audioUrl,
+          imageUrl: clip.imageUrl,
+          imageLargeUrl: clip.imageLargeUrl,
+          duration: clip.duration,
+          modelName: clip.modelName,
+          majorModelVersion: clip.majorModelVersion,
+        })),
+      }
+    : undefined;
+
+  return {
+    id: swTask.id,
+    type: swTask.type,
+    status: swTask.status,
+    createdAt: swTask.createdAt,
+    updatedAt: swTask.updatedAt,
+    completedAt: swTask.completedAt,
+    params: {
+      prompt: swTask.params?.prompt,
+      promptMeta: swTask.params?.promptMeta,
+      sourcePrompt: swTask.params?.sourcePrompt,
+      rawInput: swTask.params?.rawInput,
+      workflowId: swTask.params?.workflowId,
+      batchIndex: swTask.params?.batchIndex,
+      batchTotal: swTask.params?.batchTotal,
+      model: swTask.params?.model,
+      title: swTask.params?.title,
+      tags: swTask.params?.tags,
+      pptSlideImage: swTask.params?.pptSlideImage,
+      pptSlidePrompt: swTask.params?.pptSlidePrompt,
+    },
+    result,
+    error: swTask.error,
   };
 }
 
@@ -396,6 +521,98 @@ class TaskStorageReader extends BaseStorageReader<TaskCache> {
     } catch (error) {
       console.error('[TaskStorageReader] Error getting asset tasks:', error);
       return [];
+    }
+  }
+
+  /**
+   * 分页读取提示词历史所需的轻量任务摘要，避免把大字段暴露给 UI。
+   */
+  async getPromptHistoryTaskSummaries(options?: {
+    offset?: number;
+    limit?: number;
+    includeArchived?: boolean;
+    types?: TaskType[];
+    statuses?: TaskStatus[];
+  }): Promise<PromptHistoryTaskPage> {
+    const includeArchived = options?.includeArchived ?? false;
+    const limit = Math.min(Math.max(options?.limit ?? 40, 1), 100);
+    const offset = Math.max(options?.offset ?? 0, 0);
+    const typeFilter = options?.types?.length ? new Set(options.types) : null;
+    const statusFilter = options?.statuses?.length
+      ? new Set(options.statuses)
+      : new Set([TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]);
+
+    try {
+      const db = await this.getDB();
+
+      if (!db.objectStoreNames.contains(TASKS_STORE)) {
+        return { items: [], nextOffset: offset, hasMore: false };
+      }
+
+      return await new Promise<PromptHistoryTaskPage>((resolve, reject) => {
+        const transaction = db.transaction(TASKS_STORE, 'readonly');
+        const store = transaction.objectStore(TASKS_STORE);
+        const index = store.index('createdAt');
+        const items: PromptHistoryTaskSummary[] = [];
+        let matched = 0;
+        let hasMore = false;
+        const cursorReq = index.openCursor(null, 'prev');
+
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result;
+          if (!cursor) {
+            resolve({ items, nextOffset: matched, hasMore });
+            return;
+          }
+
+          const task = cursor.value as SWTask;
+          if (!includeArchived && task.archived) {
+            cursor.continue();
+            return;
+          }
+          if (typeFilter && !typeFilter.has(task.type)) {
+            cursor.continue();
+            return;
+          }
+          if (statusFilter && !statusFilter.has(task.status)) {
+            cursor.continue();
+            return;
+          }
+
+          const summary = convertSWTaskToPromptHistorySummary(task);
+          if (!summary) {
+            cursor.continue();
+            return;
+          }
+
+          if (matched < offset) {
+            matched++;
+            cursor.continue();
+            return;
+          }
+
+          if (items.length >= limit) {
+            hasMore = true;
+            resolve({ items, nextOffset: matched, hasMore });
+            return;
+          }
+
+          items.push(summary);
+          matched++;
+          cursor.continue();
+        };
+
+        cursorReq.onerror = () => {
+          reject(
+            new Error(
+              `Failed to get prompt history tasks: ${cursorReq.error?.message}`
+            )
+          );
+        };
+      });
+    } catch (error) {
+      console.error('[TaskStorageReader] Error getting prompt history tasks:', error);
+      return { items: [], nextOffset: offset, hasMore: false };
     }
   }
 

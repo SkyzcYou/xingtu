@@ -16,8 +16,12 @@ import { swChannelClient } from './sw-channel/client';
 import {
   AI_GENERATED_AUDIO_URL_PREFIX,
   isVirtualMediaUrl,
+  normalizeVirtualMediaUrl,
 } from '../utils/virtual-media-url';
-import type { CacheWarning, CacheWarningReasonCode } from '../types/cache-warning.types';
+import type {
+  CacheWarning,
+  CacheWarningReasonCode,
+} from '../types/cache-warning.types';
 
 // ==================== 常量定义 ====================
 
@@ -215,7 +219,10 @@ function classifyCacheWarningReason(error: unknown): CacheWarningReasonCode {
   if (normalized.includes('quota') || normalized.includes('storage')) {
     return 'storage_error';
   }
-  if (normalized.includes('http') || normalized.includes('failed to fetch image:')) {
+  if (
+    normalized.includes('http') ||
+    normalized.includes('failed to fetch image:')
+  ) {
     return 'http_error';
   }
   if (normalized.includes('body') || normalized.includes('blob')) {
@@ -235,8 +242,7 @@ function createCacheWarning(
     status: 'failed',
     reasonCode,
     message:
-      message ||
-      '该资源未能缓存到浏览器，原始链接可能会过期，请尽快下载保存。',
+      message || '该资源未能缓存到浏览器，原始链接可能会过期，请尽快下载保存。',
     detectedAt: Date.now(),
     expiresHint: '原始链接可能带有效期',
   };
@@ -296,7 +302,9 @@ class UnifiedCacheService {
         const db = (event.target as IDBOpenDBRequest).result;
 
         if (!db.objectStoreNames.contains(UNIFIED_STORE_NAME)) {
-          const store = db.createObjectStore(UNIFIED_STORE_NAME, { keyPath: 'url' });
+          const store = db.createObjectStore(UNIFIED_STORE_NAME, {
+            keyPath: 'url',
+          });
           store.createIndex('cachedAt', 'cachedAt', { unique: false });
           store.createIndex('lastUsed', 'lastUsed', { unique: false });
           store.createIndex('type', 'type', { unique: false });
@@ -381,13 +389,14 @@ class UnifiedCacheService {
     mimeType?: string
   ): string {
     const extension = getFileExtension('', mimeType);
-    const resolvedExtension = extension !== 'bin'
-      ? extension
-      : type === 'video'
-      ? 'mp4'
-      : type === 'audio'
-      ? 'mp3'
-      : 'png';
+    const resolvedExtension =
+      extension !== 'bin'
+        ? extension
+        : type === 'video'
+        ? 'mp4'
+        : type === 'audio'
+        ? 'mp3'
+        : 'png';
     if (type === 'audio') {
       return `${AI_GENERATED_AUDIO_URL_PREFIX}content-${contentHash}.${resolvedExtension}`;
     }
@@ -395,7 +404,16 @@ class UnifiedCacheService {
   }
 
   private normalizeRemoteCacheUrl(url: string): string {
-    if (!url || url.startsWith('/') || url.startsWith('blob:') || url.startsWith('data:')) {
+    if (isVirtualMediaUrl(url)) {
+      return normalizeVirtualMediaUrl(url);
+    }
+
+    if (
+      !url ||
+      url.startsWith('/') ||
+      url.startsWith('blob:') ||
+      url.startsWith('data:')
+    ) {
       return url;
     }
 
@@ -440,7 +458,7 @@ class UnifiedCacheService {
         setTimeout(setupSubscriptions, 500);
         return;
       }
-      
+
       // 订阅缓存事件
       swChannelClient.setEventHandlers({
         onCacheImageCached: async (event) => {
@@ -468,7 +486,7 @@ class UnifiedCacheService {
         },
       });
     };
-    
+
     setupSubscriptions();
   }
 
@@ -514,7 +532,10 @@ class UnifiedCacheService {
         // swChannelClient 尚未初始化，静默跳过
         return;
       }
-      await swChannelClient.publish(message.type, message as unknown as Record<string, unknown>);
+      await swChannelClient.publish(
+        message.type,
+        message as unknown as Record<string, unknown>
+      );
     } catch (error) {
       console.warn('[UnifiedCache] Failed to send message to SW:', error);
     }
@@ -625,7 +646,7 @@ class UnifiedCacheService {
       // 对于虚拟 URL，直接从 Cache API 读取（不依赖 SW）
       // 对于普通 URL，通过 fetch 获取
       let blob: Blob | null = null;
-      
+
       if (isVirtualUrl) {
         // 虚拟路径：直接从 Cache API 读取，不依赖 SW 拦截
         blob = await this.getCachedBlob(url);
@@ -665,7 +686,9 @@ class UnifiedCacheService {
   private async compressImage(blob: Blob, quality: number): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const img = new Image();
+      const objectUrl = URL.createObjectURL(blob);
       img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
         const canvas = document.createElement('canvas');
         canvas.width = img.width;
         canvas.height = img.height;
@@ -687,8 +710,11 @@ class UnifiedCacheService {
           quality
         );
       };
-      img.onerror = () => reject(new Error('Failed to load image'));
-      img.src = URL.createObjectURL(blob);
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Failed to load image'));
+      };
+      img.src = objectUrl;
     });
   }
 
@@ -847,7 +873,10 @@ class UnifiedCacheService {
         });
         this.notifyListeners();
       } catch (recordError) {
-        console.warn('[UnifiedCache] Failed to record cache warning:', recordError);
+        console.warn(
+          '[UnifiedCache] Failed to record cache warning:',
+          recordError
+        );
       }
 
       return false;
@@ -891,7 +920,11 @@ class UnifiedCacheService {
           this.cachedUrls.delete(url);
           deletedCount++;
         } catch (error) {
-          console.warn('[UnifiedCache] Failed to delete item in batch:', url, error);
+          console.warn(
+            '[UnifiedCache] Failed to delete item in batch:',
+            url,
+            error
+          );
         }
       }
 
@@ -1027,16 +1060,19 @@ class UnifiedCacheService {
   /**
    * 更新缓存媒体的元数据（如重命名）
    */
-  async updateCachedMedia(url: string, updates: Partial<Pick<CachedMedia, 'metadata'>>): Promise<boolean> {
+  async updateCachedMedia(
+    url: string,
+    updates: Partial<Pick<CachedMedia, 'metadata'>>
+  ): Promise<boolean> {
     try {
       const item = await this.getItem(url);
       if (!item) return false;
-      
+
       if (updates.metadata) {
         item.metadata = { ...item.metadata, ...updates.metadata };
       }
       item.lastUsed = Date.now();
-      
+
       await this.putItem(item);
       this.notifyListeners();
       return true;
@@ -1076,10 +1112,7 @@ class UnifiedCacheService {
    * 仅将 Blob 存入 Cache Storage（不存 IndexedDB 元数据）
    * 设置 sw-cache-date 响应头用于记录添加时间
    */
-  async cacheToCacheStorageOnly(
-    url: string,
-    blob: Blob
-  ): Promise<boolean> {
+  async cacheToCacheStorageOnly(url: string, blob: Blob): Promise<boolean> {
     try {
       if (typeof caches === 'undefined') {
         console.warn('[UnifiedCache] caches API not available');
@@ -1114,21 +1147,26 @@ class UnifiedCacheService {
     options?: CacheMediaMetadata | CacheMediaFromBlobOptions
   ): Promise<string> {
     try {
+      const cacheUrl = this.normalizeRemoteCacheUrl(url);
       const normalizedOptions =
-        options && !('metadata' in options) && !('cachedAt' in options) && !('lastUsed' in options)
+        options &&
+        !('metadata' in options) &&
+        !('cachedAt' in options) &&
+        !('lastUsed' in options)
           ? { metadata: options }
           : options;
       const cachedAt =
-        typeof normalizedOptions?.cachedAt === 'number' && Number.isFinite(normalizedOptions.cachedAt)
+        typeof normalizedOptions?.cachedAt === 'number' &&
+        Number.isFinite(normalizedOptions.cachedAt)
           ? normalizedOptions.cachedAt
           : Date.now();
       const lastUsed =
-        typeof normalizedOptions?.lastUsed === 'number' && Number.isFinite(normalizedOptions.lastUsed)
+        typeof normalizedOptions?.lastUsed === 'number' &&
+        Number.isFinite(normalizedOptions.lastUsed)
           ? normalizedOptions.lastUsed
           : cachedAt;
       const contentHash =
-        normalizedOptions?.contentHash ||
-        await calculateBlobChecksum(blob);
+        normalizedOptions?.contentHash || (await calculateBlobChecksum(blob));
 
       // 1. 将 blob 放入 Cache API（通过创建 Response）
       if (typeof caches !== 'undefined') {
@@ -1142,24 +1180,39 @@ class UnifiedCacheService {
             'sw-image-size': blob.size.toString(),
           },
         });
-        await cache.put(url, response);
-        
+        await cache.put(cacheUrl, response);
+
         // 异步生成预览图（不阻塞主流程）
         // 通过 swChannelClient 发送消息到 SW 生成缩略图
-        if (typeof navigator !== 'undefined' && navigator.serviceWorker && swChannelClient.isInitialized()) {
+        if (
+          typeof navigator !== 'undefined' &&
+          navigator.serviceWorker &&
+          swChannelClient.isInitialized()
+        ) {
           // 将 Blob 转换为 ArrayBuffer 以便传递
-          blob.arrayBuffer().then((arrayBuffer) => {
-            swChannelClient.publish('GENERATE_THUMBNAIL', {
-              url,
-              mediaType: type, // 'image' | 'video'
-              blob: arrayBuffer,
-              mimeType: blob.type,
-            }).catch((err) => {
-              console.warn('[UnifiedCache] Failed to request thumbnail generation:', err);
+          blob
+            .arrayBuffer()
+            .then((arrayBuffer) => {
+              swChannelClient
+                .publish('GENERATE_THUMBNAIL', {
+                  url: cacheUrl,
+                  mediaType: type, // 'image' | 'video'
+                  blob: arrayBuffer,
+                  mimeType: blob.type,
+                })
+                .catch((err) => {
+                  console.warn(
+                    '[UnifiedCache] Failed to request thumbnail generation:',
+                    err
+                  );
+                });
+            })
+            .catch((err) => {
+              console.warn(
+                '[UnifiedCache] Failed to convert blob to arrayBuffer:',
+                err
+              );
             });
-          }).catch((err) => {
-            console.warn('[UnifiedCache] Failed to convert blob to arrayBuffer:', err);
-          });
         }
       } else {
         console.warn('[UnifiedCache] caches API not available');
@@ -1167,7 +1220,7 @@ class UnifiedCacheService {
 
       // 2. 存储元数据到 IndexedDB
       const item: CachedMedia = {
-        url,
+        url: cacheUrl,
         type,
         mimeType: blob.type || (type === 'video' ? 'video/mp4' : 'image/png'),
         size: blob.size,
@@ -1178,11 +1231,11 @@ class UnifiedCacheService {
       };
 
       await this.putItem(item);
-      this.cachedUrls.add(url);
+      this.cachedUrls.add(cacheUrl);
       this.notifyListeners();
 
       // console.log('[UnifiedCache] Media cached from blob:', { url, type, size: blob.size });
-      return url;
+      return cacheUrl;
     } catch (error) {
       this.handleQuotaError(error);
       console.error('[UnifiedCache] Failed to cache media from blob:', error);
@@ -1198,17 +1251,25 @@ class UnifiedCacheService {
     try {
       // 检查是否为虚拟 URL（素材库本地 URL 或缓存 URL）
       const isVirtualUrl = isVirtualMediaUrl(url);
+      const cacheUrl = isVirtualUrl ? normalizeVirtualMediaUrl(url) : url;
 
       // 如果是 taskId（不是完整 URL）或虚拟 URL，直接从 Cache API 获取
-      if (isVirtualUrl || (!url.startsWith('http') && !url.startsWith('blob:') && !url.startsWith('/'))) {
+      if (
+        isVirtualUrl ||
+        (!url.startsWith('http') &&
+          !url.startsWith('blob:') &&
+          !url.startsWith('/'))
+      ) {
         if (typeof caches !== 'undefined') {
           const cache = await caches.open(IMAGE_CACHE_NAME);
-          const response = await cache.match(url);
+          let response = await cache.match(cacheUrl);
+          if (!response && cacheUrl !== url) {
+            response = await cache.match(url);
+          }
           if (response) {
             return await response.blob();
           }
         }
-        console.warn('[UnifiedCache] Blob not found in cache:', url);
         return null;
       }
 
@@ -1230,7 +1291,11 @@ class UnifiedCacheService {
     metadata?: CacheMediaMetadata
   ): Promise<{ url: string; contentHash: string; reused: boolean }> {
     const contentHash = await calculateBlobChecksum(blob);
-    const canonicalUrl = this.buildContentAddressedUrl(type, contentHash, blob.type);
+    const canonicalUrl = this.buildContentAddressedUrl(
+      type,
+      contentHash,
+      blob.type
+    );
     const existing = await this.getItem(canonicalUrl);
 
     if (existing) {
@@ -1320,7 +1385,8 @@ class UnifiedCacheService {
   private handleQuotaError(error: any): void {
     if (
       error instanceof Error &&
-      (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')
+      (error.name === 'QuotaExceededError' ||
+        error.name === 'NS_ERROR_DOM_QUOTA_REACHED')
     ) {
       console.error('[UnifiedCache] Storage quota exceeded');
       this.notifyQuotaExceededListeners();
@@ -1418,14 +1484,20 @@ class UnifiedCacheService {
           this.cachedUrls.add(url);
           migratedCount++;
         } catch (error) {
-          console.warn('[UnifiedCache] Failed to migrate item from media-cache:', error);
+          console.warn(
+            '[UnifiedCache] Failed to migrate item from media-cache:',
+            error
+          );
         }
       }
 
       await this.deleteLegacyDB(LEGACY_DB_NAMES.MEDIA_CACHE);
       // console.log(`[UnifiedCache] Migrated ${migratedCount} items from media-cache`);
     } catch (error) {
-      console.error('[UnifiedCache] Failed to migrate from media-cache:', error);
+      console.error(
+        '[UnifiedCache] Failed to migrate from media-cache:',
+        error
+      );
     }
   }
 
@@ -1474,7 +1546,10 @@ class UnifiedCacheService {
               mimeType: existing.mimeType || item.mimeType || 'image/png',
               size: existing.size || item.size || 0,
               // 保留更早的缓存时间
-              cachedAt: Math.min(existing.cachedAt, item.cachedAt || Date.now()),
+              cachedAt: Math.min(
+                existing.cachedAt,
+                item.cachedAt || Date.now()
+              ),
               lastUsed: Date.now(),
             };
 
@@ -1499,7 +1574,10 @@ class UnifiedCacheService {
 
           this.cachedUrls.add(url);
         } catch (error) {
-          console.warn('[UnifiedCache] Failed to migrate item from url-cache:', error);
+          console.warn(
+            '[UnifiedCache] Failed to migrate item from url-cache:',
+            error
+          );
         }
       }
 
@@ -1538,7 +1616,10 @@ class UnifiedCacheService {
   /**
    * 从 store 获取所有数据
    */
-  private async getAllFromStore(db: IDBDatabase, storeName: string): Promise<any[]> {
+  private async getAllFromStore(
+    db: IDBDatabase,
+    storeName: string
+  ): Promise<any[]> {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(storeName, 'readonly');
       const store = transaction.objectStore(storeName);
@@ -1559,7 +1640,9 @@ class UnifiedCacheService {
         resolve();
       };
       request.onerror = () => {
-        console.warn(`[UnifiedCache] Failed to delete legacy database: ${dbName}`);
+        console.warn(
+          `[UnifiedCache] Failed to delete legacy database: ${dbName}`
+        );
         reject(request.error);
       };
     });

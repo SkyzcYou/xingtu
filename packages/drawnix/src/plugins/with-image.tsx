@@ -14,9 +14,16 @@ import {
   toViewBoxPoint,
   WritableClipboardOperationType,
 } from '@plait/core';
-import { isSupportedImageFileType, isSupportedAudioFileType } from '../data/blob';
+import {
+  isSupportedImageFileType,
+  isSupportedAudioFileType,
+} from '../data/blob';
 import { insertImage, insertImageFromUrlAndSelect } from '../data/image';
-import { insertAudioFromUrl, getAudioFileDuration, extractAudioCoverArt } from '../data/audio';
+import {
+  insertAudioFromUrl,
+  getAudioFileDuration,
+  extractAudioCoverArt,
+} from '../data/audio';
 import { unifiedCacheService } from '../services/unified-cache-service';
 import { assetStorageService } from '../services/asset-storage-service';
 import { isHitImage, MindElement, ImageData } from '@plait/mind';
@@ -27,12 +34,16 @@ import { AssetSource, AssetType } from '../types/asset.types';
  * 从 dataTransfer 中提取图片 URL
  * 支持从 iframe 拖拽图片的场景
  */
-function extractImageUrlFromDataTransfer(dataTransfer: DataTransfer): string | null {
+function extractImageUrlFromDataTransfer(
+  dataTransfer: DataTransfer
+): string | null {
   // 尝试获取 text/uri-list（标准的 URI 列表格式）
   const uriList = dataTransfer.getData('text/uri-list');
   if (uriList) {
     // URI 列表可能包含多行，取第一个非注释行
-    const urls = uriList.split('\n').filter(line => line && !line.startsWith('#'));
+    const urls = uriList
+      .split('\n')
+      .filter((line) => line && !line.startsWith('#'));
     if (urls.length > 0 && isImageUrl(urls[0])) {
       return urls[0].trim();
     }
@@ -61,7 +72,7 @@ function extractImageUrlFromDataTransfer(dataTransfer: DataTransfer): string | n
  */
 function isImageUrl(url: string): boolean {
   if (!url) return false;
-  
+
   // 检查是否是有效的 URL
   try {
     new URL(url);
@@ -70,11 +81,20 @@ function isImageUrl(url: string): boolean {
   }
 
   // 检查常见的图片扩展名
-  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.ico'];
+  const imageExtensions = [
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.gif',
+    '.webp',
+    '.svg',
+    '.bmp',
+    '.ico',
+  ];
   const lowerUrl = url.toLowerCase();
-  
+
   // 检查扩展名
-  if (imageExtensions.some(ext => lowerUrl.includes(ext))) {
+  if (imageExtensions.some((ext) => lowerUrl.includes(ext))) {
     return true;
   }
 
@@ -89,7 +109,7 @@ function isImageUrl(url: string): boolean {
     /blob:/i,
   ];
 
-  return imagePatterns.some(pattern => pattern.test(url));
+  return imagePatterns.some((pattern) => pattern.test(url));
 }
 
 export const withImagePlugin = (board: PlaitBoard) => {
@@ -112,7 +132,7 @@ export const withImagePlugin = (board: PlaitBoard) => {
       isSupportedImageFileType(clipboardData.files[0].type)
     ) {
       const imageFile = clipboardData.files[0];
-      insertImage(board, imageFile, targetPoint, false);
+      insertImage(board, imageFile, targetPoint, false).catch(() => {});
       return;
     }
     insertFragment(clipboardData, targetPoint, operationType);
@@ -161,20 +181,34 @@ export const withImagePlugin = (board: PlaitBoard) => {
             let previewImageUrl: string | undefined;
             if (coverBlob) {
               const coverUrl = `/__aitu_cache__/image/${asset.id}-cover.png`;
-              await unifiedCacheService.cacheMediaFromBlob(coverUrl, coverBlob, 'image', {
-                taskId: `${asset.id}-cover`,
-                name: `${title}-cover`,
-              });
+              await unifiedCacheService.cacheMediaFromBlob(
+                coverUrl,
+                coverBlob,
+                'image',
+                {
+                  taskId: `${asset.id}-cover`,
+                  name: `${title}-cover`,
+                }
+              );
               previewImageUrl = coverUrl;
             }
 
-            await insertAudioFromUrl(board, asset.url, {
-              title,
-              duration,
-              previewImageUrl,
-            }, point, true);
+            await insertAudioFromUrl(
+              board,
+              asset.url,
+              {
+                title,
+                duration,
+                previewImageUrl,
+              },
+              point,
+              true
+            );
           } catch (err) {
-            console.error('[withImagePlugin] Failed to insert audio from drop:', err);
+            console.error(
+              '[withImagePlugin] Failed to insert audio from drop:',
+              err
+            );
           }
         })();
         return true;
@@ -190,8 +224,11 @@ export const withImagePlugin = (board: PlaitBoard) => {
           toHostPoint(board, event.x, event.y)
         );
         // 异步插入图片并选中
-        insertImageFromUrlAndSelect(board, imageUrl, point).catch(err => {
-          console.error('[withImagePlugin] Failed to insert image from URL:', err);
+        insertImageFromUrlAndSelect(board, imageUrl, point).catch((err) => {
+          console.error(
+            '[withImagePlugin] Failed to insert image from URL:',
+            err
+          );
         });
         return true;
       }

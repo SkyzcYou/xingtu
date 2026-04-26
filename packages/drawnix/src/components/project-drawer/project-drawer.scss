@@ -742,6 +742,13 @@
     color: var(--td-text-color-placeholder);
   }
 
+  &__empty-action {
+    margin-top: 6px;
+    min-width: 116px;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
   &__list {
     display: flex;
     flex-direction: column;

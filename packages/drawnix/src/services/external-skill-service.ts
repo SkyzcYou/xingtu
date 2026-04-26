@@ -6,7 +6,10 @@
  */
 
 import type { ExternalSkill, ExternalSkillPackage } from '../constants/skills';
-import { SKILL_TYPE_EXTERNAL, registerExternalSkills } from '../constants/skills';
+import {
+  SKILL_TYPE_EXTERNAL,
+  registerExternalSkills,
+} from '../constants/skills';
 import {
   parseSkillMarkdown,
   parseMarketplaceJson,
@@ -68,21 +71,31 @@ async function initialize(): Promise<void> {
   if (_initialized) return;
 
   try {
-    let packages = await kvStorageService.get<ExternalSkillPackage[]>(STORAGE_KEY_PACKAGES);
+    let packages = await kvStorageService.get<ExternalSkillPackage[]>(
+      STORAGE_KEY_PACKAGES
+    );
 
     // 加载预构建 bundle（始终加载，用于版本检查）
     let prebuiltBundle: ExternalSkillPackage | null = null;
     try {
       prebuiltBundle = await loadPrebuiltBundle();
     } catch (bundleErr) {
-      console.warn('[ExternalSkillService] 预构建 bundle 加载失败（非致命）:', bundleErr);
+      console.warn(
+        '[ExternalSkillService] 预构建 bundle 加载失败（非致命）:',
+        bundleErr
+      );
     }
 
-    const hasStoredPackages = packages && Array.isArray(packages) && packages.length > 0;
+    const hasStoredPackages =
+      packages && Array.isArray(packages) && packages.length > 0;
 
     if (!hasStoredPackages) {
       // 本地无数据：直接使用 bundle
-      if (prebuiltBundle && prebuiltBundle.skills && prebuiltBundle.skills.length > 0) {
+      if (
+        prebuiltBundle &&
+        prebuiltBundle.skills &&
+        prebuiltBundle.skills.length > 0
+      ) {
         const pkg: ExternalSkillPackage = {
           name: prebuiltBundle.name || 'baoyu-skills',
           skills: prebuiltBundle.skills,
@@ -90,13 +103,20 @@ async function initialize(): Promise<void> {
         };
         packages = [pkg];
         await kvStorageService.set(STORAGE_KEY_PACKAGES, packages);
-        console.log(`[ExternalSkillService] 已加载预构建 bundle: ${prebuiltBundle.skills.length} 个 Skill`);
       }
-    } else if (prebuiltBundle && prebuiltBundle.skills && prebuiltBundle.skills.length > 0) {
+    } else if (
+      prebuiltBundle &&
+      prebuiltBundle.skills &&
+      prebuiltBundle.skills.length > 0
+    ) {
       // 本地有数据：检查 bundle 版本是否更新
-      const bundleVersion = (prebuiltBundle.metadata as Record<string, unknown>)?.bundleVersion as string | undefined;
-      const storedPkg = packages!.find(p => p.name === (prebuiltBundle!.name || 'baoyu-skills'));
-      const storedVersion = (storedPkg?.metadata as Record<string, unknown>)?.bundleVersion as string | undefined;
+      const bundleVersion = (prebuiltBundle.metadata as Record<string, unknown>)
+        ?.bundleVersion as string | undefined;
+      const storedPkg = packages!.find(
+        (p) => p.name === (prebuiltBundle!.name || 'baoyu-skills')
+      );
+      const storedVersion = (storedPkg?.metadata as Record<string, unknown>)
+        ?.bundleVersion as string | undefined;
 
       if (bundleVersion && bundleVersion !== storedVersion) {
         // 版本不同，用新 bundle 替换旧的预构建包（保留用户手动添加的其他包）
@@ -105,10 +125,11 @@ async function initialize(): Promise<void> {
           skills: prebuiltBundle.skills,
           metadata: prebuiltBundle.metadata,
         };
-        const otherPackages = packages!.filter(p => p.name !== updatedPkg.name);
+        const otherPackages = packages!.filter(
+          (p) => p.name !== updatedPkg.name
+        );
         packages = [updatedPkg, ...otherPackages];
         await kvStorageService.set(STORAGE_KEY_PACKAGES, packages);
-        console.log(`[ExternalSkillService] 预构建 bundle 已更新: ${storedVersion || '无'} → ${bundleVersion} (${prebuiltBundle.skills.length} 个 Skill)`);
       } else if (!bundleVersion && !storedVersion) {
         // 两边都没版本号（旧版本），强制用新 bundle 替换
         const updatedPkg: ExternalSkillPackage = {
@@ -116,10 +137,11 @@ async function initialize(): Promise<void> {
           skills: prebuiltBundle.skills,
           metadata: prebuiltBundle.metadata,
         };
-        const otherPackages = packages!.filter(p => p.name !== updatedPkg.name);
+        const otherPackages = packages!.filter(
+          (p) => p.name !== updatedPkg.name
+        );
         packages = [updatedPkg, ...otherPackages];
         await kvStorageService.set(STORAGE_KEY_PACKAGES, packages);
-        console.log(`[ExternalSkillService] 预构建 bundle 已强制刷新（旧版本无版本号）: ${prebuiltBundle.skills.length} 个 Skill`);
       }
     }
 
@@ -139,7 +161,9 @@ async function initialize(): Promise<void> {
 async function loadPrebuiltBundle(): Promise<ExternalSkillPackage | null> {
   try {
     // 动态导入 JSON bundle（Vite 会在构建时内联）
-    const bundle = await import('../generated/external-skills-bundle.json') as { default?: ExternalSkillPackage; } & ExternalSkillPackage;
+    const bundle = (await import(
+      '../generated/external-skills-bundle.json'
+    )) as { default?: ExternalSkillPackage } & ExternalSkillPackage;
     return bundle.default || bundle;
   } catch {
     // bundle 文件不存在时静默忽略
@@ -168,11 +192,13 @@ async function addPackage(pkg: ExternalSkillPackage): Promise<void> {
   await initialize();
 
   // 检查同名包是否已存在
-  const existing = await kvStorageService.get<ExternalSkillPackage[]>(STORAGE_KEY_PACKAGES);
+  const existing = await kvStorageService.get<ExternalSkillPackage[]>(
+    STORAGE_KEY_PACKAGES
+  );
   const packages = existing && Array.isArray(existing) ? [...existing] : [];
 
   // 如果已有同名包，替换
-  const existIndex = packages.findIndex(p => p.name === pkg.name);
+  const existIndex = packages.findIndex((p) => p.name === pkg.name);
   if (existIndex >= 0) {
     packages[existIndex] = pkg;
   } else {
@@ -193,10 +219,12 @@ async function addPackage(pkg: ExternalSkillPackage): Promise<void> {
 async function removePackage(packageName: string): Promise<void> {
   await initialize();
 
-  const existing = await kvStorageService.get<ExternalSkillPackage[]>(STORAGE_KEY_PACKAGES);
+  const existing = await kvStorageService.get<ExternalSkillPackage[]>(
+    STORAGE_KEY_PACKAGES
+  );
   if (!existing || !Array.isArray(existing)) return;
 
-  const packages = existing.filter(p => p.name !== packageName);
+  const packages = existing.filter((p) => p.name !== packageName);
   await kvStorageService.set(STORAGE_KEY_PACKAGES, packages);
 
   // 刷新缓存
@@ -206,13 +234,17 @@ async function removePackage(packageName: string): Promise<void> {
 /**
  * 获取指定包的 Skill 列表
  */
-async function getSkillsByPackage(packageName: string): Promise<ExternalSkill[]> {
+async function getSkillsByPackage(
+  packageName: string
+): Promise<ExternalSkill[]> {
   await initialize();
 
-  const packages = await kvStorageService.get<ExternalSkillPackage[]>(STORAGE_KEY_PACKAGES);
+  const packages = await kvStorageService.get<ExternalSkillPackage[]>(
+    STORAGE_KEY_PACKAGES
+  );
   if (!packages) return [];
 
-  const pkg = packages.find(p => p.name === packageName);
+  const pkg = packages.find((p) => p.name === packageName);
   return pkg?.skills ?? [];
 }
 
@@ -230,10 +262,12 @@ async function getAllExternalSkillsMeta(): Promise<ExternalSkillMeta[]> {
 async function getAllExternalSkills(): Promise<ExternalSkill[]> {
   await initialize();
 
-  const packages = await kvStorageService.get<ExternalSkillPackage[]>(STORAGE_KEY_PACKAGES);
+  const packages = await kvStorageService.get<ExternalSkillPackage[]>(
+    STORAGE_KEY_PACKAGES
+  );
   if (!packages) return [];
 
-  return packages.flatMap(pkg => pkg.skills);
+  return packages.flatMap((pkg) => pkg.skills);
 }
 
 /**
@@ -242,11 +276,13 @@ async function getAllExternalSkills(): Promise<ExternalSkill[]> {
 async function getSkillById(id: string): Promise<ExternalSkill | null> {
   await initialize();
 
-  const packages = await kvStorageService.get<ExternalSkillPackage[]>(STORAGE_KEY_PACKAGES);
+  const packages = await kvStorageService.get<ExternalSkillPackage[]>(
+    STORAGE_KEY_PACKAGES
+  );
   if (!packages) return null;
 
   for (const pkg of packages) {
-    const skill = pkg.skills.find(s => s.id === id);
+    const skill = pkg.skills.find((s) => s.id === id);
     if (skill) return skill;
   }
 
@@ -282,24 +318,27 @@ async function getSkillContentById(id: string): Promise<string | null> {
  * @param file - ZIP 文件
  * @param packageName - 包名（可选，默认从 marketplace.json 或文件名提取）
  */
-async function importFromZip(file: File, packageName?: string): Promise<ExternalSkillPackage> {
+async function importFromZip(
+  file: File,
+  packageName?: string
+): Promise<ExternalSkillPackage> {
   // 动态加载 JSZip（避免打包体积影响）
   const JSZip = (await import('jszip')).default;
   const zip = await JSZip.loadAsync(file);
 
   // 尝试读取 marketplace.json
   let marketplace: ParsedMarketplace | null = null;
-  const marketplaceFile = zip.file(/\.claude-plugin\/marketplace\.json$/)?.[0]
-    || zip.file('marketplace.json');
+  const marketplaceFile =
+    zip.file(/\.claude-plugin\/marketplace\.json$/)?.[0] ||
+    zip.file('marketplace.json');
   if (marketplaceFile) {
     const content = await marketplaceFile.async('text');
     marketplace = parseMarketplaceJson(content);
   }
 
   // 确定包名
-  const pkgName = packageName
-    || marketplace?.name
-    || file.name.replace(/\.zip$/i, '');
+  const pkgName =
+    packageName || marketplace?.name || file.name.replace(/\.zip$/i, '');
 
   // 扫描 skills/*/SKILL.md
   const skillFiles: SkillFileData[] = [];
@@ -321,7 +360,10 @@ async function importFromZip(file: File, packageName?: string): Promise<External
         if (refEntry.dir) continue;
         if (refPath.startsWith(skillDirPrefix) && refPath !== path) {
           const relativePath = refPath.substring(skillDirPrefix.length);
-          if (relativePath.startsWith('references/') || relativePath.startsWith('prompts/')) {
+          if (
+            relativePath.startsWith('references/') ||
+            relativePath.startsWith('prompts/')
+          ) {
             const refContent = await refEntry.async('text');
             references.set(relativePath, refContent);
           }
@@ -337,7 +379,9 @@ async function importFromZip(file: File, packageName?: string): Promise<External
   }
 
   if (skillFiles.length === 0) {
-    throw new Error(`ZIP 文件中未找到有效的 Skill（预期路径: skills/*/SKILL.md）`);
+    throw new Error(
+      `ZIP 文件中未找到有效的 Skill（预期路径: skills/*/SKILL.md）`
+    );
   }
 
   // 批量解析
@@ -368,7 +412,9 @@ async function importFromPastedContent(
 ): Promise<ExternalSkill | null> {
   const parsed = parseSkillMarkdown(skillMdContent);
   if (!parsed) {
-    throw new Error('无法解析 SKILL.md 内容，请检查格式是否正确（需包含 YAML front matter）');
+    throw new Error(
+      '无法解析 SKILL.md 内容，请检查格式是否正确（需包含 YAML front matter）'
+    );
   }
 
   const skill: ExternalSkill = {
@@ -382,18 +428,24 @@ async function importFromPastedContent(
 
   // 读取已有包
   await initialize();
-  const existing = await kvStorageService.get<ExternalSkillPackage[]>(STORAGE_KEY_PACKAGES);
+  const existing = await kvStorageService.get<ExternalSkillPackage[]>(
+    STORAGE_KEY_PACKAGES
+  );
   const packages = existing && Array.isArray(existing) ? [...existing] : [];
 
   // 查找或创建目标包
-  let pkg = packages.find(p => p.name === packageName);
+  let pkg = packages.find((p) => p.name === packageName);
   if (!pkg) {
-    pkg = { name: packageName, skills: [], metadata: { description: '手动导入的 Skill' } };
+    pkg = {
+      name: packageName,
+      skills: [],
+      metadata: { description: '手动导入的 Skill' },
+    };
     packages.push(pkg);
   }
 
   // 检查是否已有同 ID 的 Skill
-  const existIndex = pkg.skills.findIndex(s => s.id === skill.id);
+  const existIndex = pkg.skills.findIndex((s) => s.id === skill.id);
   if (existIndex >= 0) {
     pkg.skills[existIndex] = skill;
   } else {
@@ -413,7 +465,9 @@ async function importFromPastedContent(
  *
  * @param bundleData - JSON bundle 数据
  */
-async function importFromBundle(bundleData: ExternalSkillPackage): Promise<void> {
+async function importFromBundle(
+  bundleData: ExternalSkillPackage
+): Promise<void> {
   await addPackage(bundleData);
 }
 
@@ -425,7 +479,7 @@ async function importFromBundle(bundleData: ExternalSkillPackage): Promise<void>
  * 刷新内存缓存
  */
 async function refreshCache(packages: ExternalSkillPackage[]): Promise<void> {
-  _packagesMeta = packages.map(pkg => ({
+  _packagesMeta = packages.map((pkg) => ({
     name: pkg.name,
     url: pkg.url,
     skillCount: pkg.skills.length,
@@ -448,7 +502,7 @@ async function refreshCache(packages: ExternalSkillPackage[]): Promise<void> {
   }
 
   // 注册到全局运行时
-  const allSkills = packages.flatMap(pkg => pkg.skills);
+  const allSkills = packages.flatMap((pkg) => pkg.skills);
   registerExternalSkills(allSkills);
 }
 

@@ -1,6 +1,6 @@
 /**
  * LLM API Logger for Service Worker
- * 
+ *
  * 记录所有大模型 API 调用，用于成本追踪和调试。
  * 此日志记录不受调试模式影响，始终运行。
  * 数据持久化到 IndexedDB，可在 sw-debug.html 查看和导出。
@@ -9,42 +9,42 @@
 import { sanitizeRequestBody } from './utils/sanitize-utils';
 
 export interface LLMReferenceImage {
-  url: string;      // Base64 或虚拟路径 URL (用于预览)
-  size: number;     // 大小 (字节)
-  width: number;    // 宽度 (像素)
-  height: number;   // 高度 (像素)
-  name?: string;    // 可选名称
+  url: string; // Base64 或虚拟路径 URL (用于预览)
+  size: number; // 大小 (字节)
+  width: number; // 宽度 (像素)
+  height: number; // 高度 (像素)
+  name?: string; // 可选名称
 }
 
 export interface LLMApiLog {
   id: string;
   timestamp: number;
-  
+
   // 请求信息
-  endpoint: string;        // API endpoint (e.g., /images/generations, /chat/completions)
-  model: string;           // 使用的模型
+  endpoint: string; // API endpoint (e.g., /images/generations, /chat/completions)
+  model: string; // 使用的模型
   taskType: 'image' | 'video' | 'audio' | 'chat' | 'character' | 'other';
-  
+
   // 请求参数（脱敏后）
-  prompt?: string;         // 提示词
-  requestBody?: string;    // 完整请求体（JSON 格式，用于调试）
-  hasReferenceImages?: boolean;  // 是否有参考图
-  referenceImageCount?: number;  // 参考图数量
+  prompt?: string; // 提示词
+  requestBody?: string; // 完整请求体（JSON 格式，用于调试）
+  hasReferenceImages?: boolean; // 是否有参考图
+  referenceImageCount?: number; // 参考图数量
   referenceImages?: LLMReferenceImage[]; // 参考图详情
-  
+
   // 响应信息
   status: 'pending' | 'success' | 'error';
   httpStatus?: number;
-  duration?: number;       // 耗时（毫秒）
-  
+  duration?: number; // 耗时（毫秒）
+
   // 结果
-  resultType?: string;     // 结果类型 (image/video/text)
-  resultCount?: number;    // 生成数量
-  resultUrl?: string;      // 生成的图片/视频 URL
-  resultText?: string;     // 聊天响应文本（截断）
-  responseBody?: string;   // 原始响应体（超大时限长截断）
-  errorMessage?: string;   // 错误信息
-  remoteId?: string;       // API 厂商的任务 ID (用于异步任务恢复)
+  resultType?: string; // 结果类型 (image/video/text)
+  resultCount?: number; // 生成数量
+  resultUrl?: string; // 生成的图片/视频 URL
+  resultText?: string; // 聊天响应文本（截断）
+  responseBody?: string; // 原始响应体（超大时限长截断）
+  errorMessage?: string; // 错误信息
+  remoteId?: string; // API 厂商的任务 ID (用于异步任务恢复)
 
   // 关联任务
   taskId?: string;
@@ -71,14 +71,14 @@ let broadcastCallback: ((log: LLMApiLog) => void) | null = null;
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    
+
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
-    
+
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
       const oldVersion = event.oldVersion;
-      
+
       let store: IDBObjectStore;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         // 全新创建
@@ -95,7 +95,6 @@ function openDB(): Promise<IDBDatabase> {
           // 确保 taskId 索引存在（修复之前版本升级的问题）
           if (oldVersion < 4 && !store.indexNames.contains('taskId')) {
             store.createIndex('taskId', 'taskId', { unique: false });
-            console.log('[LLMApiLogger] Created taskId index during upgrade to v4');
           }
         }
       }
@@ -163,7 +162,7 @@ export async function getAllLLMApiLogs(): Promise<LLMApiLog[]> {
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
     const index = store.index('timestamp');
-    
+
     return new Promise((resolve, reject) => {
       const request = index.getAll();
       request.onsuccess = () => {
@@ -193,7 +192,11 @@ function compactLog(log: LLMApiLog): Partial<LLMApiLog> {
     model: log.model,
     taskType: log.taskType,
     taskId: log.taskId,
-    prompt: log.prompt ? (log.prompt.length > 200 ? log.prompt.substring(0, 200) + '...' : log.prompt) : undefined,
+    prompt: log.prompt
+      ? log.prompt.length > 200
+        ? log.prompt.substring(0, 200) + '...'
+        : log.prompt
+      : undefined,
     status: log.status,
     httpStatus: log.httpStatus,
     duration: log.duration,
@@ -234,7 +237,7 @@ function matchesTaskTypeFilter(log: LLMApiLog, taskType?: string): boolean {
  * @param filter 过滤条件
  */
 export async function getLLMApiLogsPaginated(
-  page = 1, 
+  page = 1,
   pageSize = 20,
   filter?: { taskType?: string; status?: string }
 ): Promise<{
@@ -245,20 +248,22 @@ export async function getLLMApiLogsPaginated(
   totalPages: number;
 }> {
   let allLogs = await getAllLLMApiLogs();
-  
+
   // 应用过滤条件
   if (filter?.taskType) {
-    allLogs = allLogs.filter(log => matchesTaskTypeFilter(log, filter.taskType));
+    allLogs = allLogs.filter((log) =>
+      matchesTaskTypeFilter(log, filter.taskType)
+    );
   }
   if (filter?.status) {
-    allLogs = allLogs.filter(log => log.status === filter.status);
+    allLogs = allLogs.filter((log) => log.status === filter.status);
   }
-  
+
   const total = allLogs.length;
   const totalPages = Math.ceil(total / pageSize);
   const startIndex = (page - 1) * pageSize;
   const logs = allLogs.slice(startIndex, startIndex + pageSize).map(compactLog);
-  
+
   return {
     logs,
     total,
@@ -271,21 +276,23 @@ export async function getLLMApiLogsPaginated(
 /**
  * 获取单条日志的完整数据（用于展开详情）
  */
-export async function getLLMApiLogById(logId: string): Promise<LLMApiLog | null> {
+export async function getLLMApiLogById(
+  logId: string
+): Promise<LLMApiLog | null> {
   // 先从内存查找
-  const memoryLog = memoryLogs.find(l => l.id === logId);
+  const memoryLog = memoryLogs.find((l) => l.id === logId);
   if (memoryLog) return memoryLog;
-  
+
   // 从 IndexedDB 查找
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
-    
+
     return new Promise((resolve, reject) => {
       const request = store.get(logId);
       request.onsuccess = () => {
-        resolve(request.result as LLMApiLog || null);
+        resolve((request.result as LLMApiLog) || null);
       };
       request.onerror = () => {
         reject(request.error);
@@ -301,29 +308,31 @@ export async function getLLMApiLogById(logId: string): Promise<LLMApiLog | null>
  * 通过 taskId 查找成功的 LLM API 日志
  * 用于恢复已完成但状态未更新的任务
  */
-export async function findSuccessLogByTaskId(taskId: string): Promise<LLMApiLog | null> {
+export async function findSuccessLogByTaskId(
+  taskId: string
+): Promise<LLMApiLog | null> {
   // 先从内存缓存查找
   const memoryLog = memoryLogs.find(
-    log => log.taskId === taskId && log.status === 'success' && log.resultUrl
+    (log) => log.taskId === taskId && log.status === 'success' && log.resultUrl
   );
   if (memoryLog) {
     return memoryLog;
   }
-  
+
   // 从 IndexedDB 查找
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
     const index = store.index('taskId');
-    
+
     return new Promise((resolve) => {
       const request = index.getAll(taskId);
       request.onsuccess = () => {
         const results = request.result as LLMApiLog[];
         // 查找成功的且有结果 URL 的，按时间降序
         const successLog = results
-          .filter(l => l.status === 'success' && l.resultUrl)
+          .filter((l) => l.status === 'success' && l.resultUrl)
           .sort((a, b) => b.timestamp - a.timestamp)[0];
         resolve(successLog || null);
       };
@@ -341,42 +350,46 @@ export async function findSuccessLogByTaskId(taskId: string): Promise<LLMApiLog 
  * 通过 taskId 查找最新的 LLM API 日志（不论状态）
  * 用于恢复中断的异步任务（获取 remoteId）
  */
-export async function findLatestLogByTaskId(taskId: string): Promise<LLMApiLog | null> {
+export async function findLatestLogByTaskId(
+  taskId: string
+): Promise<LLMApiLog | null> {
   // 先从内存缓存查找
-  const memoryLog = memoryLogs.find(log => log.taskId === taskId);
+  const memoryLog = memoryLogs.find((log) => log.taskId === taskId);
   if (memoryLog) {
     return memoryLog;
   }
-  
+
   // 从 IndexedDB 查找
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
-    
+
     return new Promise((resolve) => {
       // 尝试使用 taskId 索引，如果不存在则回退到全表扫描
       let request: IDBRequest<LLMApiLog[]>;
       let useIndex = false;
-      
+
       if (store.indexNames.contains('taskId')) {
         const index = store.index('taskId');
         request = index.getAll(taskId);
         useIndex = true;
       } else {
         // 回退：全表扫描后过滤
-        console.warn('[LLMApiLogger] taskId index not found, falling back to full scan');
+        console.warn(
+          '[LLMApiLogger] taskId index not found, falling back to full scan'
+        );
         request = store.getAll();
       }
-      
+
       request.onsuccess = () => {
         let results = request.result as LLMApiLog[];
-        
+
         // 如果是全表扫描，需要手动过滤
         if (!useIndex) {
-          results = results.filter(log => log.taskId === taskId);
+          results = results.filter((log) => log.taskId === taskId);
         }
-        
+
         // 按时间降序，取最新的一条
         const latestLog = results.sort((a, b) => b.timestamp - a.timestamp)[0];
         resolve(latestLog || null);
@@ -396,13 +409,13 @@ export async function findLatestLogByTaskId(taskId: string): Promise<LLMApiLog |
  */
 export async function clearAllLLMApiLogs(): Promise<void> {
   memoryLogs.length = 0;
-  
+
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
     store.clear();
-    
+
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => {
         resolve();
@@ -421,9 +434,9 @@ export async function clearAllLLMApiLogs(): Promise<void> {
  */
 export async function deleteLLMApiLogs(logIds: string[]): Promise<number> {
   if (!logIds || logIds.length === 0) return 0;
-  
+
   const idsSet = new Set(logIds);
-  
+
   // 从内存中删除
   const beforeCount = memoryLogs.length;
   for (let i = memoryLogs.length - 1; i >= 0; i--) {
@@ -432,17 +445,17 @@ export async function deleteLLMApiLogs(logIds: string[]): Promise<number> {
     }
   }
   const deletedFromMemory = beforeCount - memoryLogs.length;
-  
+
   // 从 IndexedDB 中删除
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
-    
+
     for (const id of logIds) {
       store.delete(id);
     }
-    
+
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => {
         resolve();
@@ -454,7 +467,7 @@ export async function deleteLLMApiLogs(logIds: string[]): Promise<number> {
   } catch (error) {
     console.warn('[LLMApiLogger] Failed to delete logs from DB:', error);
   }
-  
+
   return deletedFromMemory;
 }
 
@@ -481,7 +494,7 @@ export function startLLMApiLog(params: {
   model: string;
   taskType: LLMApiLog['taskType'];
   prompt?: string;
-  requestBody?: string;  // 完整请求体（JSON 格式，用于调试）
+  requestBody?: string; // 完整请求体（JSON 格式，用于调试）
   hasReferenceImages?: boolean;
   referenceImageCount?: number;
   referenceImages?: LLMReferenceImage[];
@@ -489,7 +502,7 @@ export function startLLMApiLog(params: {
   workflowId?: string;
 }): string {
   const id = `llm-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-  
+
   const log: LLMApiLog = {
     id,
     timestamp: Date.now(),
@@ -498,7 +511,9 @@ export function startLLMApiLog(params: {
     taskType: params.taskType,
     prompt: params.prompt ? truncatePrompt(params.prompt) : undefined,
     // 对请求体进行脱敏处理，过滤 API Key 等敏感信息
-    requestBody: params.requestBody ? sanitizeRequestBody(params.requestBody) : undefined,
+    requestBody: params.requestBody
+      ? sanitizeRequestBody(params.requestBody)
+      : undefined,
     hasReferenceImages: params.hasReferenceImages,
     referenceImageCount: params.referenceImageCount,
     referenceImages: params.referenceImages,
@@ -506,21 +521,21 @@ export function startLLMApiLog(params: {
     taskId: params.taskId,
     workflowId: params.workflowId,
   };
-  
+
   // 添加到内存缓存
   memoryLogs.unshift(log);
   if (memoryLogs.length > MAX_MEMORY_LOGS) {
     memoryLogs.pop();
   }
-  
+
   // 保存到 IndexedDB
   saveLogToDB(log);
-  
+
   // 广播
   if (broadcastCallback) {
     broadcastCallback({ ...log });
   }
-  
+
   return id;
 }
 
@@ -540,7 +555,7 @@ export function completeLLMApiLog(
     remoteId?: string;
   }
 ): void {
-  const log = memoryLogs.find(l => l.id === logId);
+  const log = memoryLogs.find((l) => l.id === logId);
   if (log) {
     log.status = 'success';
     log.httpStatus = params.httpStatus;
@@ -548,13 +563,17 @@ export function completeLLMApiLog(
     log.resultType = params.resultType;
     log.resultCount = params.resultCount;
     log.resultUrl = params.resultUrl;
-    log.resultText = params.resultText ? truncateText(params.resultText, 1000) : undefined;
-    log.responseBody = params.responseBody ? truncateResponseBody(params.responseBody) : undefined;
+    log.resultText = params.resultText
+      ? truncateText(params.resultText, 1000)
+      : undefined;
+    log.responseBody = params.responseBody
+      ? truncateResponseBody(params.responseBody)
+      : undefined;
     if (params.remoteId) log.remoteId = params.remoteId;
-    
+
     // 更新 IndexedDB
     updateLogInDB(log);
-    
+
     // 广播
     if (broadcastCallback) {
       broadcastCallback({ ...log });
@@ -574,15 +593,16 @@ export function updateLLMApiLogMetadata(
     httpStatus?: number;
   }
 ): void {
-  const log = memoryLogs.find(l => l.id === logId);
+  const log = memoryLogs.find((l) => l.id === logId);
   if (log) {
     if (params.remoteId) log.remoteId = params.remoteId;
-    if (params.responseBody) log.responseBody = truncateResponseBody(params.responseBody);
+    if (params.responseBody)
+      log.responseBody = truncateResponseBody(params.responseBody);
     if (params.httpStatus) log.httpStatus = params.httpStatus;
-    
+
     // 更新 IndexedDB
     updateLogInDB(log);
-    
+
     // 广播
     if (broadcastCallback) {
       broadcastCallback({ ...log });
@@ -603,18 +623,20 @@ export function failLLMApiLog(
     remoteId?: string;
   }
 ): void {
-  const log = memoryLogs.find(l => l.id === logId);
+  const log = memoryLogs.find((l) => l.id === logId);
   if (log) {
     log.status = 'error';
     log.httpStatus = params.httpStatus;
     log.duration = params.duration;
     log.errorMessage = truncateError(params.errorMessage);
-    log.responseBody = params.responseBody ? truncateResponseBody(params.responseBody) : undefined;
+    log.responseBody = params.responseBody
+      ? truncateResponseBody(params.responseBody)
+      : undefined;
     if (params.remoteId) log.remoteId = params.remoteId;
-    
+
     // 更新 IndexedDB
     updateLogInDB(log);
-    
+
     // 广播
     if (broadcastCallback) {
       broadcastCallback({ ...log });
@@ -641,7 +663,10 @@ function truncateText(text: string, maxLength: number): string {
 
 function truncateResponseBody(text: string): string {
   if (text.length <= MAX_RESPONSE_BODY_LENGTH) return text;
-  return `${text.substring(0, MAX_RESPONSE_BODY_LENGTH)}\n... [response truncated for log storage]`;
+  return `${text.substring(
+    0,
+    MAX_RESPONSE_BODY_LENGTH
+  )}\n... [response truncated for log storage]`;
 }
 
 /**
@@ -670,10 +695,15 @@ export async function llmFetch(
     workflowId?: string;
   }
 ): Promise<Response> {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  const url =
+    typeof input === 'string'
+      ? input
+      : input instanceof URL
+      ? input.href
+      : input.url;
   const endpoint = new URL(url).pathname;
   const startTime = Date.now();
-  
+
   // 开始记录
   const logId = startLLMApiLog({
     endpoint,
@@ -686,27 +716,35 @@ export async function llmFetch(
     taskId: meta.taskId,
     workflowId: meta.workflowId,
   });
-  
+
   try {
     const response = await fetch(input, init);
     const duration = Date.now() - startTime;
-    
+
     if (response.ok) {
       completeLLMApiLog(logId, {
         httpStatus: response.status,
         duration,
-        resultType: meta.taskType === 'image' ? 'image' : meta.taskType === 'video' ? 'video' : 'text',
+        resultType:
+          meta.taskType === 'image'
+            ? 'image'
+            : meta.taskType === 'video'
+            ? 'video'
+            : 'text',
         resultCount: 1,
       });
     } else {
-      const errorText = await response.clone().text().catch(() => 'Unknown error');
+      const errorText = await response
+        .clone()
+        .text()
+        .catch(() => 'Unknown error');
       failLLMApiLog(logId, {
         httpStatus: response.status,
         duration,
         errorMessage: errorText,
       });
     }
-    
+
     return response;
   } catch (error: unknown) {
     const duration = Date.now() - startTime;

@@ -28,9 +28,11 @@ const CACHE_STORAGE_NAME = 'drawnix-images';
  * Check if Web Crypto API is available
  */
 function isCryptoAvailable() {
-  return typeof crypto !== 'undefined' && 
-         crypto.subtle !== undefined && 
-         typeof crypto.subtle.importKey === 'function';
+  return (
+    typeof crypto !== 'undefined' &&
+    crypto.subtle !== undefined &&
+    typeof crypto.subtle.importKey === 'function'
+  );
 }
 
 /**
@@ -79,9 +81,9 @@ function generatePasswordSeed() {
   const stableInfo = [
     deviceId,
     navigator.language || 'en-US',
-    'drawnix-crypto-key'
+    'drawnix-crypto-key',
   ].join('-');
-  
+
   return `drawnix-v2-${stableInfo}`;
 }
 
@@ -91,7 +93,7 @@ function generatePasswordSeed() {
 async function deriveKey(password, salt) {
   const encoder = new TextEncoder();
   const passwordBuffer = encoder.encode(password);
-  
+
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
     passwordBuffer,
@@ -99,13 +101,13 @@ async function deriveKey(password, salt) {
     false,
     ['deriveKey']
   );
-  
+
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt: salt,
       iterations: PBKDF2_ITERATIONS,
-      hash: 'SHA-256'
+      hash: 'SHA-256',
     },
     keyMaterial,
     { name: ALGORITHM, length: KEY_LENGTH },
@@ -116,34 +118,34 @@ async function deriveKey(password, salt) {
 
 /**
  * Decrypt Token (localStorage)
- * @param {string} encryptedData 
+ * @param {string} encryptedData
  */
 export async function decryptToken(encryptedData) {
   if (encryptedData.startsWith(FALLBACK_PREFIX)) {
     const data = encryptedData.slice(FALLBACK_PREFIX.length);
     return decodeURIComponent(globalThis.atob(data));
   }
-  
+
   if (!isCryptoAvailable()) {
     throw new Error('Web Crypto API not available');
   }
-  
+
   try {
     const parsed = JSON.parse(encryptedData);
-    
+
     const data = base64ToArrayBuffer(parsed.data);
     const iv = base64ToArrayBuffer(parsed.iv);
     const salt = base64ToArrayBuffer(parsed.salt);
-    
+
     const password = generatePasswordSeed();
     const key = await deriveKey(password, new Uint8Array(salt));
-    
+
     const decrypted = await crypto.subtle.decrypt(
       { name: ALGORITHM, iv: iv },
       key,
       data
     );
-    
+
     const decoder = new TextDecoder();
     return decoder.decode(decrypted);
   } catch (error) {
@@ -191,9 +193,9 @@ function decryptCustomPassword(encrypted) {
 function getFromKVStore(key) {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(KV_DB_NAME);
-    
+
     request.onerror = () => reject(request.error);
-    
+
     request.onsuccess = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(KV_STORE_NAME)) {
@@ -201,17 +203,17 @@ function getFromKVStore(key) {
         resolve(null);
         return;
       }
-      
+
       const transaction = db.transaction(KV_STORE_NAME, 'readonly');
       const store = transaction.objectStore(KV_STORE_NAME);
       const getReq = store.get(key);
-      
+
       getReq.onsuccess = () => {
         resolve(getReq.result ? getReq.result.value : null);
       };
-      
+
       getReq.onerror = () => reject(getReq.error);
-      
+
       transaction.oncomplete = () => db.close();
     };
   });
@@ -224,15 +226,15 @@ export async function getGistCredentials() {
   try {
     const config = await getFromKVStore(SYNC_CONFIG_KEY);
     const storedPassword = await getFromKVStore(SYNC_PASSWORD_KEY);
-    
+
     let customPassword = null;
     if (storedPassword && storedPassword.encrypted) {
       customPassword = decryptCustomPassword(storedPassword.encrypted);
     }
-    
+
     return {
       gistId: config ? config.gistId : null,
-      customPassword
+      customPassword,
     };
   } catch (error) {
     console.error('Failed to get gist credentials:', error);
@@ -246,7 +248,7 @@ export async function getGistCredentials() {
 async function deriveGistKey(secret) {
   const encoder = new TextEncoder();
   const passwordData = encoder.encode(secret + FIXED_SALT);
-  
+
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
     passwordData,
@@ -254,15 +256,15 @@ async function deriveGistKey(secret) {
     false,
     ['deriveKey']
   );
-  
+
   const salt = encoder.encode(FIXED_SALT);
-  
+
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt: salt,
       iterations: PBKDF2_ITERATIONS,
-      hash: 'SHA-256'
+      hash: 'SHA-256',
     },
     keyMaterial,
     { name: ALGORITHM, length: KEY_LENGTH },
@@ -277,12 +279,12 @@ async function deriveGistKey(secret) {
 export async function decryptGistFile(content, gistId, customPassword) {
   try {
     const data = JSON.parse(content);
-    
+
     // Check if it's encrypted data
     if (data.encrypted !== true || !data.iv || !data.data) {
       return content; // Return as is if not encrypted
     }
-    
+
     // Determine secret to use
     let secret = gistId;
     if (data.customPassword && customPassword) {
@@ -290,17 +292,17 @@ export async function decryptGistFile(content, gistId, customPassword) {
     } else if (data.customPassword && !customPassword) {
       throw new Error('File encrypted with custom password but none provided');
     }
-    
+
     const key = await deriveGistKey(secret);
     const iv = base64ToArrayBuffer(data.iv);
     const encryptedData = base64ToArrayBuffer(data.data);
-    
+
     const decrypted = await crypto.subtle.decrypt(
       { name: ALGORITHM, iv: iv },
       key,
       encryptedData
     );
-    
+
     const decoder = new TextDecoder();
     return decoder.decode(decrypted);
   } catch (error) {
@@ -383,42 +385,28 @@ export function getDeviceIdExported() {
 function getAllFromStore(dbName, storeName) {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(dbName);
-    
+
     request.onerror = () => reject(request.error);
-    
+
     request.onsuccess = () => {
       const db = request.result;
-      console.log(`[getAllFromStore] Opened ${dbName}, stores:`, [...db.objectStoreNames]);
-      
       if (!db.objectStoreNames.contains(storeName)) {
-        console.log(`[getAllFromStore] Store '${storeName}' not found`);
         db.close();
         resolve([]);
         return;
       }
-      
+
       const transaction = db.transaction(storeName, 'readonly');
       const store = transaction.objectStore(storeName);
       const getAllReq = store.getAll();
-      
+
       getAllReq.onsuccess = () => {
         const results = getAllReq.result || [];
-        console.log(`[getAllFromStore] ${dbName}/${storeName}: ${results.length} items`);
-        
-        // Check if this is localforage format (each item may be the actual value)
-        // localforage stores data directly, but we should verify the structure
-        if (results.length > 0) {
-          const sample = results[0];
-          console.log(`[getAllFromStore] Sample item structure:`, 
-            sample ? Object.keys(sample).slice(0, 5) : 'empty'
-          );
-        }
-        
         resolve(results);
       };
-      
+
       getAllReq.onerror = () => reject(getAllReq.error);
-      
+
       transaction.oncomplete = () => db.close();
     };
   });
@@ -430,9 +418,9 @@ function getAllFromStore(dbName, storeName) {
 export async function diagnoseDatabase(dbName) {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(dbName);
-    
+
     request.onerror = () => reject(request.error);
-    
+
     request.onsuccess = async () => {
       const db = request.result;
       const result = {
@@ -440,38 +428,39 @@ export async function diagnoseDatabase(dbName) {
         version: db.version,
         stores: {},
       };
-      
+
       const storeNames = [...db.objectStoreNames];
-      
+
       for (const storeName of storeNames) {
         try {
           const tx = db.transaction(storeName, 'readonly');
           const store = tx.objectStore(storeName);
-          
+
           const countReq = store.count();
           const count = await new Promise((res) => {
             countReq.onsuccess = () => res(countReq.result);
             countReq.onerror = () => res(-1);
           });
-          
+
           // Get sample item
           const getAllReq = store.getAll(null, 1);
           const samples = await new Promise((res) => {
             getAllReq.onsuccess = () => res(getAllReq.result || []);
             getAllReq.onerror = () => res([]);
           });
-          
+
           result.stores[storeName] = {
             count,
             keyPath: store.keyPath,
             indexNames: [...store.indexNames],
-            sampleKeys: samples.length > 0 ? Object.keys(samples[0]).slice(0, 8) : [],
+            sampleKeys:
+              samples.length > 0 ? Object.keys(samples[0]).slice(0, 8) : [],
           };
         } catch (e) {
           result.stores[storeName] = { error: e.message };
         }
       }
-      
+
       db.close();
       resolve(result);
     };
@@ -511,8 +500,8 @@ export async function listCacheStorageMedia() {
   try {
     const cache = await caches.open(CACHE_STORAGE_NAME);
     const keys = await cache.keys();
-    
-    const mediaList = keys.map(request => {
+
+    const mediaList = keys.map((request) => {
       const url = request.url;
       return {
         url,
@@ -520,7 +509,7 @@ export async function listCacheStorageMedia() {
         filename: url.split('/').pop() || url,
       };
     });
-    
+
     return mediaList;
   } catch (error) {
     console.error('Failed to list cache storage media:', error);
@@ -535,17 +524,17 @@ export async function getCacheStorageStats() {
   try {
     const cache = await caches.open(CACHE_STORAGE_NAME);
     const keys = await cache.keys();
-    
+
     let totalSize = 0;
     let imageCount = 0;
     let videoCount = 0;
-    
+
     for (const request of keys) {
       const response = await cache.match(request);
       if (response) {
         const blob = await response.clone().blob();
         totalSize += blob.size;
-        
+
         const contentType = response.headers.get('content-type') || '';
         if (contentType.startsWith('image/')) {
           imageCount++;
@@ -554,7 +543,7 @@ export async function getCacheStorageStats() {
         }
       }
     }
-    
+
     return {
       totalFiles: keys.length,
       totalSize,
@@ -580,24 +569,27 @@ const UNIFIED_LOG_STORE = 'logs';
 async function openUnifiedLogDb() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(UNIFIED_LOG_DB, 1);
-    
+
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
-    
+
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
       if (!db.objectStoreNames.contains(UNIFIED_LOG_STORE)) {
-        const store = db.createObjectStore(UNIFIED_LOG_STORE, { keyPath: 'id' });
+        const store = db.createObjectStore(UNIFIED_LOG_STORE, {
+          keyPath: 'id',
+        });
         store.createIndex('timestamp', 'timestamp', { unique: false });
         store.createIndex('category', 'category', { unique: false });
         store.createIndex('level', 'level', { unique: false });
         store.createIndex('sessionId', 'sessionId', { unique: false });
-        store.createIndex('category_timestamp', ['category', 'timestamp'], { unique: false });
+        store.createIndex('category_timestamp', ['category', 'timestamp'], {
+          unique: false,
+        });
       }
     };
   });
 }
-
 
 /**
  * Query sync logs from IndexedDB (unified log database)
@@ -607,15 +599,15 @@ async function openUnifiedLogDb() {
 export async function querySyncLogs(query = {}) {
   try {
     const db = await openUnifiedLogDb();
-    
+
     return new Promise((resolve, reject) => {
       const tx = db.transaction(UNIFIED_LOG_STORE, 'readonly');
       const store = tx.objectStore(UNIFIED_LOG_STORE);
       const index = store.index('timestamp');
-      
+
       const results = [];
       const request = index.openCursor(null, 'prev'); // Descending by timestamp
-      
+
       request.onsuccess = () => {
         const cursor = request.result;
         if (!cursor) {
@@ -623,49 +615,52 @@ export async function querySyncLogs(query = {}) {
           resolve(results);
           return;
         }
-        
+
         const entry = cursor.value;
-        
+
         // Only include 'sync' category logs
         if (entry.category !== 'sync') {
           cursor.continue();
           return;
         }
-        
+
         // Apply filters
         if (query.level && entry.level !== query.level) {
           cursor.continue();
           return;
         }
-        
+
         if (query.sessionId && entry.sessionId !== query.sessionId) {
           cursor.continue();
           return;
         }
-        
+
         if (query.search) {
           const searchLower = query.search.toLowerCase();
-          const matchesMessage = entry.message?.toLowerCase().includes(searchLower);
-          const matchesData = entry.data && 
+          const matchesMessage = entry.message
+            ?.toLowerCase()
+            .includes(searchLower);
+          const matchesData =
+            entry.data &&
             JSON.stringify(entry.data).toLowerCase().includes(searchLower);
           if (!matchesMessage && !matchesData) {
             cursor.continue();
             return;
           }
         }
-        
+
         results.push(entry);
-        
+
         // Apply limit
         if (query.limit && results.length >= query.limit) {
           db.close();
           resolve(results);
           return;
         }
-        
+
         cursor.continue();
       };
-      
+
       request.onerror = () => {
         db.close();
         reject(request.error);
@@ -684,19 +679,19 @@ export async function querySyncLogs(query = {}) {
 export async function getSyncLogStats() {
   try {
     const db = await openUnifiedLogDb();
-    
+
     return new Promise((resolve, reject) => {
       const tx = db.transaction(UNIFIED_LOG_STORE, 'readonly');
       const store = tx.objectStore(UNIFIED_LOG_STORE);
-      
+
       const stats = {
         total: 0,
         byLevel: { info: 0, success: 0, warning: 0, error: 0, debug: 0 },
         sessions: new Set(),
       };
-      
+
       const request = store.openCursor();
-      
+
       request.onsuccess = () => {
         const cursor = request.result;
         if (!cursor) {
@@ -706,28 +701,28 @@ export async function getSyncLogStats() {
           resolve(stats);
           return;
         }
-        
+
         const entry = cursor.value;
-        
+
         // Only count 'sync' category logs
         if (entry.category !== 'sync') {
           cursor.continue();
           return;
         }
-        
+
         stats.total++;
-        
+
         if (stats.byLevel[entry.level] !== undefined) {
           stats.byLevel[entry.level]++;
         }
-        
+
         if (entry.sessionId) {
           stats.sessions.add(entry.sessionId);
         }
-        
+
         cursor.continue();
       };
-      
+
       request.onerror = () => {
         db.close();
         reject(request.error);
@@ -746,32 +741,33 @@ export async function getSyncLogStats() {
 export async function getSyncSessions() {
   try {
     const db = await openUnifiedLogDb();
-    
+
     return new Promise((resolve, reject) => {
       const tx = db.transaction(UNIFIED_LOG_STORE, 'readonly');
       const store = tx.objectStore(UNIFIED_LOG_STORE);
-      
+
       const sessionsMap = new Map();
       const request = store.openCursor();
-      
+
       request.onsuccess = () => {
         const cursor = request.result;
         if (!cursor) {
           db.close();
-          const sessions = Array.from(sessionsMap.values())
-            .sort((a, b) => b.startTime - a.startTime);
+          const sessions = Array.from(sessionsMap.values()).sort(
+            (a, b) => b.startTime - a.startTime
+          );
           resolve(sessions);
           return;
         }
-        
+
         const entry = cursor.value;
-        
+
         // Only include 'sync' category logs
         if (entry.category !== 'sync') {
           cursor.continue();
           return;
         }
-        
+
         if (entry.sessionId) {
           const existing = sessionsMap.get(entry.sessionId);
           if (existing) {
@@ -789,10 +785,10 @@ export async function getSyncSessions() {
             });
           }
         }
-        
+
         cursor.continue();
       };
-      
+
       request.onerror = () => {
         db.close();
         reject(request.error);
@@ -812,14 +808,14 @@ export async function getSyncSessions() {
 export async function clearSyncLogs(options = {}) {
   try {
     const db = await openUnifiedLogDb();
-    
+
     return new Promise((resolve, reject) => {
       const tx = db.transaction(UNIFIED_LOG_STORE, 'readwrite');
       const store = tx.objectStore(UNIFIED_LOG_STORE);
-      
+
       let deletedCount = 0;
       const request = store.openCursor();
-      
+
       request.onsuccess = () => {
         const cursor = request.result;
         if (!cursor) {
@@ -827,17 +823,17 @@ export async function clearSyncLogs(options = {}) {
           resolve(deletedCount);
           return;
         }
-        
+
         const entry = cursor.value;
-        
+
         // Only delete 'sync' category logs
         if (entry.category !== 'sync') {
           cursor.continue();
           return;
         }
-        
+
         let shouldDelete = false;
-        
+
         // Clear all sync logs if no options
         if (!options.olderThan && !options.sessionId) {
           shouldDelete = true;
@@ -845,20 +841,20 @@ export async function clearSyncLogs(options = {}) {
           if (options.olderThan && entry.timestamp < options.olderThan) {
             shouldDelete = true;
           }
-          
+
           if (options.sessionId && entry.sessionId === options.sessionId) {
             shouldDelete = true;
           }
         }
-        
+
         if (shouldDelete) {
           cursor.delete();
           deletedCount++;
         }
-        
+
         cursor.continue();
       };
-      
+
       request.onerror = () => {
         db.close();
         reject(request.error);

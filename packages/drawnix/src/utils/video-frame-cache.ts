@@ -123,14 +123,14 @@ export async function extractFrameFromUrl(
     canvas.height = Math.round(video.videoHeight * scale);
 
     // 首帧取 0.1s（避免纯黑），尾帧取 duration - 0.1s
-    const timestamp = position === 'first'
-      ? Math.min(0.1, video.duration)
-      : Math.max(0, video.duration - 0.1);
+    const timestamp =
+      position === 'first'
+        ? Math.min(0.1, video.duration)
+        : Math.max(0, video.duration - 0.1);
 
     const blob = await seekAndCapture(video, canvas, ctx, timestamp);
     return await cacheFrameBlob(blob, shotId, frameType);
   } catch (e) {
-    console.debug('[video-frame-cache] extractFrameFromUrl failed:', e);
     return null;
   } finally {
     video.src = '';

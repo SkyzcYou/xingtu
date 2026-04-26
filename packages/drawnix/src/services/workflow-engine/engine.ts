@@ -55,20 +55,12 @@ export class WorkflowEngine {
    * 提交工作流
    */
   async submitWorkflow(workflow: Workflow): Promise<void> {
-    console.log(
-      '[WorkflowEngine] submitWorkflow 入口, id:',
-      workflow.id,
-      'steps:',
-      workflow.steps.length
-    );
-
     // 保存到内存
     this.workflows.set(workflow.id, workflow);
 
     // 保存到 IndexedDB（降级模式下可能失败，不阻塞执行）
     try {
       await workflowStorageWriter.saveWorkflow(workflow);
-      console.log('[WorkflowEngine] submitWorkflow: IDB 保存完成');
     } catch (e) {
       console.warn(
         '[WorkflowEngine] submitWorkflow: IDB 保存失败，继续执行:',
@@ -79,9 +71,6 @@ export class WorkflowEngine {
     // 创建取消控制器
     const abortController = new AbortController();
     this.abortControllers.set(workflow.id, abortController);
-
-    // 异步执行工作流
-    console.log('[WorkflowEngine] submitWorkflow: 开始异步执行工作流');
     this.executeWorkflow(workflow.id).catch((error) => {
       console.error(
         `[WorkflowEngine] Workflow ${workflow.id} execution error:`,
@@ -174,7 +163,6 @@ export class WorkflowEngine {
    * 执行工作流
    */
   private async executeWorkflow(workflowId: string): Promise<void> {
-    console.log('[WorkflowEngine] executeWorkflow 开始, id:', workflowId);
     const workflow = this.workflows.get(workflowId);
     if (!workflow) {
       console.warn(
@@ -198,8 +186,6 @@ export class WorkflowEngine {
           e
         );
       }
-
-      console.log('[WorkflowEngine] executeWorkflow: 状态已更新为 running');
       this.emitEvent({
         type: 'status',
         workflowId,
@@ -294,12 +280,6 @@ export class WorkflowEngine {
     step: WorkflowStep,
     signal?: AbortSignal
   ): Promise<void> {
-    console.log(
-      '[WorkflowEngine] executeStep 开始:',
-      step.mcp,
-      'stepId:',
-      step.id
-    );
     const startTime = Date.now();
 
     // 更新步骤状态为 running
@@ -363,15 +343,6 @@ export class WorkflowEngine {
     step: WorkflowStep,
     signal?: AbortSignal
   ): Promise<void> {
-    console.log(
-      '[WorkflowEngine] executeToolStep:',
-      step.mcp,
-      'stepId:',
-      step.id,
-      'forceFallback:',
-      this.options.forceFallbackExecutor
-    );
-
     // 根据工具类型执行
     switch (step.mcp) {
       case 'generate_image': {
@@ -400,6 +371,9 @@ export class WorkflowEngine {
             | undefined,
           outputCompression: step.args.outputCompression as number | undefined,
           count: step.args.count as number | undefined,
+          promptMeta: step.args.promptMeta as
+            | import('../../types/shared/core.types').GenerationParams['promptMeta']
+            | undefined,
           params: step.args.params as Record<string, unknown> | undefined,
           forceMainThread: this.options.forceFallbackExecutor,
           signal,
@@ -431,6 +405,9 @@ export class WorkflowEngine {
             | undefined,
           size: step.args.size as string | undefined,
           referenceImages: step.args.referenceImages as string[] | undefined,
+          promptMeta: step.args.promptMeta as
+            | import('../../types/shared/core.types').GenerationParams['promptMeta']
+            | undefined,
           params: step.args.params as Record<string, unknown> | undefined,
           forceMainThread: this.options.forceFallbackExecutor,
           signal,

@@ -15,6 +15,8 @@ import type { GenerationParams } from '../../../types/shared/core.types';
 // ============================================================================
 
 /** 所有媒体生成工具共享的基础参数 */
+export type PromptLineageMeta = NonNullable<GenerationParams['promptMeta']>;
+
 export interface BaseGenerationParams {
   prompt: string;
   model?: string;
@@ -33,6 +35,7 @@ export interface BaseGenerationParams {
   pptSlideImage?: boolean;
   pptSlidePrompt?: string;
   pptReplaceElementId?: string;
+  promptMeta?: PromptLineageMeta;
 }
 
 /** 队列任务创建配置 */

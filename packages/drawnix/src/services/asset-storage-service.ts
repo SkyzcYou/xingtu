@@ -435,7 +435,6 @@ class AssetStorageService {
             if (stored.url.startsWith('/asset-library/')) {
               if (validCacheUrls.size > 0 && !validCacheUrls.has(stored.url)) {
                 // Cache Storage 中没有实际数据，跳过此素材
-                console.warn(`[AssetStorageService] Asset not in Cache Storage, skipping: ${stored.url}`);
                 return null;
               }
             }

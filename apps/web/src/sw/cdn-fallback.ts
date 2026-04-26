@@ -76,7 +76,10 @@ const CDN_CONFIG = {
       : 'https://opentu.local/__sw__/cdn-preference',
 };
 
-const CDN_DEGRADE_POLICIES: Record<Exclude<CDNName, 'local'>, CDNDegradePolicy> = {
+const CDN_DEGRADE_POLICIES: Record<
+  Exclude<CDNName, 'local'>,
+  CDNDegradePolicy
+> = {
   jsdelivr: {
     baseTimeout: 60 * 1000,
     maxTimeout: 5 * 60 * 1000,
@@ -147,11 +150,15 @@ function sanitizeCDNPreference(value: unknown): CDNPreference | null {
     cdn,
     version: version.trim(),
     latency: Number.isFinite(latency) && latency >= 0 ? latency : 0,
-    timestamp: Number.isFinite(timestamp) && timestamp > 0 ? timestamp : Date.now(),
+    timestamp:
+      Number.isFinite(timestamp) && timestamp > 0 ? timestamp : Date.now(),
   };
 }
 
-function isFreshPreference(preference: CDNPreference | null, version?: string): boolean {
+function isFreshPreference(
+  preference: CDNPreference | null,
+  version?: string
+): boolean {
   if (!preference) {
     return false;
   }
@@ -177,7 +184,10 @@ async function readPersistedPreference(): Promise<CDNPreference | null> {
 
     return sanitizeCDNPreference(await response.json());
   } catch (error) {
-    console.warn('[CDN Fallback] Failed to read persisted CDN preference:', error);
+    console.warn(
+      '[CDN Fallback] Failed to read persisted CDN preference:',
+      error
+    );
     return null;
   }
 }
@@ -256,27 +266,29 @@ export function markCDNFailure(cdnName: string, reason?: string): void {
       status.isHealthy = false;
       const cooldown = getCDNCooldownSnapshot(status);
       console.warn(
-        `[CDN Fallback] ${cdnName} marked as unhealthy after ${status.failCount} failures, cooldown=${cooldown.cooldownMs}ms, reason=${reason ?? 'unknown'}`
+        `[CDN Fallback] ${cdnName} marked as unhealthy after ${
+          status.failCount
+        } failures, cooldown=${cooldown.cooldownMs}ms, reason=${
+          reason ?? 'unknown'
+        }`
       );
     } else {
       console.warn(
-        `[CDN Fallback] ${cdnName} failure count=${status.failCount}, reason=${reason ?? 'unknown'}`
+        `[CDN Fallback] ${cdnName} failure count=${status.failCount}, reason=${
+          reason ?? 'unknown'
+        }`
       );
     }
   }
 }
 
 function getCDNDegradeTimeout(cdnName: string, failCount: number): number {
-  const policy =
-    CDN_DEGRADE_POLICIES[cdnName as Exclude<CDNName, 'local'>] ?? {
-      baseTimeout: CDN_CONFIG.degradeTimeout,
-      maxTimeout: CDN_CONFIG.degradeTimeout,
-    };
+  const policy = CDN_DEGRADE_POLICIES[cdnName as Exclude<CDNName, 'local'>] ?? {
+    baseTimeout: CDN_CONFIG.degradeTimeout,
+    maxTimeout: CDN_CONFIG.degradeTimeout,
+  };
 
-  const consecutiveFailures = Math.max(
-    0,
-    failCount - CDN_CONFIG.failThreshold
-  );
+  const consecutiveFailures = Math.max(0, failCount - CDN_CONFIG.failThreshold);
   const multiplier = 2 ** consecutiveFailures;
   return Math.min(policy.baseTimeout * multiplier, policy.maxTimeout);
 }
@@ -306,18 +318,12 @@ export function isCDNAvailable(
   if (status.isHealthy) return true;
 
   if (options.ignoreCooldown) {
-    console.log(
-      `[CDN Fallback] Ignoring cooldown for ${cdnName}, probing CDN directly`
-    );
     return true;
   }
 
   const now = Date.now();
   const degradeTimeout = getCDNDegradeTimeout(cdnName, status.failCount);
   if (now - status.lastCheckTime > degradeTimeout) {
-    console.log(
-      `[CDN Fallback] Trying to recover ${cdnName} after ${degradeTimeout}ms cooldown...`
-    );
     return true;
   }
 
@@ -329,7 +335,11 @@ function getPreferredCDNName(
   options: { ignoreCooldown?: boolean } = {}
 ): Exclude<CDNName, 'local'> | null {
   const preference = persistedCDNPreference;
-  if (!preference || !isFreshPreference(preference, version) || preference.cdn === 'local') {
+  if (
+    !preference ||
+    !isFreshPreference(preference, version) ||
+    preference.cdn === 'local'
+  ) {
     return null;
   }
 
@@ -340,9 +350,7 @@ export function getAvailableCDNs(
   version?: string,
   options: { ignoreCooldown?: boolean } = {}
 ): CDNSource[] {
-  const preferredName = version
-    ? getPreferredCDNName(version, options)
-    : null;
+  const preferredName = version ? getPreferredCDNName(version, options) : null;
 
   return CDN_SOURCES.filter(
     (source) => source.enabled && isCDNAvailable(source.name, options)
@@ -385,9 +393,7 @@ function cleanResourcePath(resourcePath: string): string {
   return normalizedPath;
 }
 
-export function extractVersionFromCDNPath(
-  resourcePath: string
-): string | null {
+export function extractVersionFromCDNPath(resourcePath: string): string | null {
   const match = resourcePath.match(/(?:^|\/)(?:npm\/)?aitu-app@([^/]+)\//);
   return match ? match[1] : null;
 }
@@ -444,7 +450,10 @@ export function buildCDNUrl(
   const cleanPath = cleanResourcePath(resourcePath);
   return source.urlTemplate
     .replace('{version}', version)
-    .replace('{path}', cleanPath.startsWith('/') ? cleanPath.slice(1) : cleanPath);
+    .replace(
+      '{path}',
+      cleanPath.startsWith('/') ? cleanPath.slice(1) : cleanPath
+    );
 }
 
 async function fetchWithTimeout(
@@ -466,7 +475,9 @@ async function fetchWithTimeout(
 
 function getLocalUrl(localOrigin: string, resourcePath: string): string {
   const cleanPath = cleanResourcePath(resourcePath);
-  return `${localOrigin}/${cleanPath.startsWith('/') ? cleanPath.slice(1) : cleanPath}`;
+  return `${localOrigin}/${
+    cleanPath.startsWith('/') ? cleanPath.slice(1) : cleanPath
+  }`;
 }
 
 async function tryFetchFromLocalOrigin(
@@ -476,15 +487,11 @@ async function tryFetchFromLocalOrigin(
 ): Promise<{ response: Response; source: 'local' } | null> {
   try {
     const localUrl = getLocalUrl(localOrigin, resourcePath);
-    console.log(`[CDN Fallback] Trying local server: ${localUrl}`);
-
     const response = await fetchWithTimeout(localUrl, timeout);
     if (!response.ok) {
       console.warn(`[CDN Fallback] Local server returned ${response.status}`);
       return null;
     }
-
-    console.log('[CDN Fallback] Success from local server');
     return { response, source: 'local' };
   } catch (error) {
     console.warn('[CDN Fallback] Local server failed:', error);
@@ -502,7 +509,6 @@ async function tryFetchFromCDNList(
     const url = buildCDNUrl(cdn, version, resourcePath);
 
     try {
-      console.log(`[CDN Fallback] Trying ${cdn.name}: ${url}`);
       const response = await fetchWithTimeout(url, timeout);
 
       if (!response.ok) {
@@ -516,7 +522,6 @@ async function tryFetchFromCDNList(
       }
 
       markCDNSuccess(cdn.name);
-      console.log(`[CDN Fallback] Success from ${cdn.name}`);
       return { response, source: cdn.name, targetUrl: url };
     } catch (error) {
       const reason =
@@ -531,7 +536,10 @@ async function tryFetchFromCDNList(
   return null;
 }
 
-async function isValidCDNResponse(response: Response, cdnName: string): Promise<boolean> {
+async function isValidCDNResponse(
+  response: Response,
+  cdnName: string
+): Promise<boolean> {
   const contentType = response.headers.get('Content-Type') || '';
   const isValidContentType =
     contentType.includes('javascript') ||
@@ -544,7 +552,9 @@ async function isValidCDNResponse(response: Response, cdnName: string): Promise<
 
   if (!isValidContentType) {
     markCDNFailure(cdnName, `invalid-content-type:${contentType}`);
-    console.warn(`[CDN Fallback] ${cdnName} invalid Content-Type: ${contentType}`);
+    console.warn(
+      `[CDN Fallback] ${cdnName} invalid Content-Type: ${contentType}`
+    );
     return false;
   }
 
@@ -603,7 +613,6 @@ export async function fetchFromCDNWithFallback(
   options: FetchFallbackOptions = {}
 ): Promise<{ response: Response; source: string; targetUrl: string } | null> {
   if (isDevelopment) {
-    console.log('[CDN Fallback] 开发模式，跳过 CDN 回退');
     return null;
   }
 
@@ -628,7 +637,10 @@ export async function fetchFromCDNWithFallback(
       localTimeout
     );
     if (localResult) {
-      return { ...localResult, targetUrl: getLocalUrl(localOrigin, resourcePath) };
+      return {
+        ...localResult,
+        targetUrl: getLocalUrl(localOrigin, resourcePath),
+      };
     }
   }
 
@@ -650,13 +662,17 @@ export async function fetchFromCDNWithFallback(
       localTimeout
     );
     if (localResult) {
-      return { ...localResult, targetUrl: getLocalUrl(localOrigin, resourcePath) };
+      return {
+        ...localResult,
+        targetUrl: getLocalUrl(localOrigin, resourcePath),
+      };
     }
   }
 
   const recoveryCDNs = CDN_SOURCES.filter(
     (source) =>
-      source.enabled && !availableCDNs.some((candidate) => candidate.name === source.name)
+      source.enabled &&
+      !availableCDNs.some((candidate) => candidate.name === source.name)
   );
   if (recoveryCDNs.length > 0) {
     console.warn(
@@ -730,7 +746,6 @@ export function getCDNStatusReport(): Array<{
 
 export function resetCDNStatus(): void {
   initHealthStatus(true);
-  console.log('[CDN Fallback] All CDN status reset');
 }
 
 export function getCDNConfig() {
