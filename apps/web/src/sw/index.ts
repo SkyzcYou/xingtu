@@ -1863,9 +1863,15 @@ function isVersionedStaticResource(request: Request, url: URL): boolean {
 
 function normalizeAituPackageResourcePath(pathnameWithSearch: string): string {
   const [pathname, search = ''] = pathnameWithSearch.split(/([?#].*)/, 2);
-  const normalizedPathname = pathname
-    .replace(/^\/npm\/aitu-app@[^/]+\//, '/')
-    .replace(/^\/aitu-app@[^/]+\//, '/');
+  let normalizedPathname = pathname;
+  let previousPathname = '';
+
+  while (previousPathname !== normalizedPathname) {
+    previousPathname = normalizedPathname;
+    normalizedPathname = normalizedPathname
+      .replace(/^\/npm\/aitu-app@[^/]+\//, '/')
+      .replace(/^\/aitu-app@[^/]+\//, '/');
+  }
 
   return `${normalizedPathname}${search}`;
 }

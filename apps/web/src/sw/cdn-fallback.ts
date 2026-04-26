@@ -374,9 +374,13 @@ function cleanResourcePath(resourcePath: string): string {
     // 保持原始路径，继续走后续正则归一化。
   }
 
-  normalizedPath = normalizedPath
-    .replace(/^\/?npm\/aitu-app@[^/]+\//, '/')
-    .replace(/^\/?aitu-app@[^/]+\//, '/');
+  let previousPath = '';
+  while (previousPath !== normalizedPath) {
+    previousPath = normalizedPath;
+    normalizedPath = normalizedPath
+      .replace(/^\/?npm\/aitu-app@[^/]+\//, '/')
+      .replace(/^\/?aitu-app@[^/]+\//, '/');
+  }
 
   return normalizedPath;
 }

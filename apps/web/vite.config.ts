@@ -679,80 +679,6 @@ function deferEntryAssetsPlugin(): Plugin {
   };
 }
 
-function rewriteEntryAssetsToCDNPlugin(): Plugin {
-  return {
-    name: 'rewrite-entry-assets-to-cdn',
-    apply: 'build',
-    closeBundle: {
-      sequential: true,
-      order: 'post',
-      async handler() {
-        const outDir = path.resolve(__dirname, '../../dist/apps/web');
-        const indexHtmlPath = path.join(outDir, 'index.html');
-
-        if (!fs.existsSync(indexHtmlPath)) {
-          return;
-        }
-
-        const html = fs.readFileSync(indexHtmlPath, 'utf8');
-        const cdnBaseUrl = `https://cdn.jsdelivr.net/npm/aitu-app@${appVersion}`;
-        let rewrittenCount = 0;
-
-        const rewriteAssetUrl = (localPath: string) => {
-          const [pathname, suffix = ''] = localPath.split(/([?#].*)/, 2);
-          return `${cdnBaseUrl}/${pathname.replace(/^\.\//, '')}${suffix}`;
-        };
-
-        const rewriteManagedLinkTag = (
-          beforeHref: string,
-          localHref: string,
-          afterHref: string
-        ) => {
-          const hasSelfClosingSlash = /\/\s*$/.test(afterHref);
-          const normalizedAfterHref = afterHref.replace(/\/\s*$/, '');
-          rewrittenCount += 1;
-          return `<link${beforeHref}href="${rewriteAssetUrl(
-            localHref
-          )}" data-local-href="${localHref}" data-cdn-fallback-managed="1"${normalizedAfterHref} onerror="window.__OPENTU_BOOT_ASSET_FALLBACK__&&window.__OPENTU_BOOT_ASSET_FALLBACK__(this)"${
-            hasSelfClosingSlash ? ' /' : ''
-          }>`;
-        };
-
-        let nextHtml = html.replace(
-          /<script\b([^>]*\btype="module"[^>]*)\bsrc="(\.\/assets\/[^"]+)"([^>]*)><\/script>/g,
-          (_match, beforeSrc, localSrc, afterSrc) => {
-            rewrittenCount += 1;
-            return `<script${beforeSrc}src="${rewriteAssetUrl(
-              localSrc
-            )}" data-local-src="${localSrc}" data-cdn-fallback-managed="1"${afterSrc} onerror="window.__OPENTU_BOOT_ASSET_FALLBACK__&&window.__OPENTU_BOOT_ASSET_FALLBACK__(this)"></script>`;
-          }
-        );
-
-        nextHtml = nextHtml.replace(
-          /<link\b([^>]*\brel="stylesheet"[^>]*)\bhref="(\.\/assets\/[^"]+)"([^>]*)>/g,
-          (_match, beforeHref, localHref, afterHref) =>
-            rewriteManagedLinkTag(beforeHref, localHref, afterHref)
-        );
-
-        nextHtml = nextHtml.replace(
-          /<link\b([^>]*\brel="(?:manifest|icon|apple-touch-icon)"[^>]*)\bhref="(\.\/[^"]+)"([^>]*)>/g,
-          (_match, beforeHref, localHref, afterHref) =>
-            rewriteManagedLinkTag(beforeHref, localHref, afterHref)
-        );
-
-        if (rewrittenCount === 0) {
-          return;
-        }
-
-        fs.writeFileSync(indexHtmlPath, nextHtml);
-        console.log(
-          `[EntryAssets] Rewrote ${rewrittenCount} entry asset tag(s) to prefer CDN`
-        );
-      },
-    },
-  };
-}
-
 function rewriteManifestAssetsToCDNPlugin(): Plugin {
   return {
     name: 'rewrite-manifest-assets-to-cdn',
@@ -867,7 +793,6 @@ export default defineConfig({
       brotliSize: true,
     }),
     deferEntryAssetsPlugin(),
-    rewriteEntryAssetsToCDNPlugin(),
     rewriteManifestAssetsToCDNPlugin(),
     precacheManifestPlugin(),
     idlePrefetchManifestPlugin(),
