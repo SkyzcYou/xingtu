@@ -37,6 +37,11 @@ export const LS_KEYS = {
   AI_VIDEO_AUTO_INSERT: 'aitu_video_auto_insert_canvas',
   /** 底部 AI 输入栏参数偏好 */
   AI_INPUT_PREFERENCES: 'aitu_ai_input_preferences',
+  /** 提示词优化文本模型选择 */
+  PROMPT_OPTIMIZE_TEXT_MODEL: 'aitu_prompt_optimize_text_model',
+  /** 提示词优化补充要求历史 */
+  PROMPT_OPTIMIZE_REQUIREMENTS_HISTORY:
+    'aitu_prompt_optimize_requirements_history',
   /** AI 图片工具参数偏好 */
   AI_IMAGE_TOOL_PREFERENCES: 'aitu_ai_image_tool_preferences',
   /** AI 视频工具参数偏好 */

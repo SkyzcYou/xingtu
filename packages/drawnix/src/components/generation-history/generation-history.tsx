@@ -26,6 +26,7 @@ export interface VideoHistoryItem extends BaseHistoryItem {
   imageUrl: string; // 视频缩略图URL，适配图片格式
   width: number;    // 视频宽度，适配图片格式
   height: number;   // 视频高度，适配图片格式
+  duration?: number; // 视频时长（秒）
   // 视频特有字段
   previewUrl: string;
   downloadUrl?: string;

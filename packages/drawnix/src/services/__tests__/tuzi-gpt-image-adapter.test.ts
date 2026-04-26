@@ -163,4 +163,51 @@ describe('tuzi GPT image adapter', () => {
       quality: 'medium',
     });
   });
+
+  it('preserves explicit GPT Image pixel size for Tuzi edit requests', async () => {
+    mocks.sendAdapterRequest.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ url: 'https://example.com/tuzi-edit.png' }],
+      }),
+    });
+
+    await tuziGPTImageAdapter.generateImage(
+      {
+        baseUrl: 'https://api.tu-zi.com/v1',
+        apiKey: 'test-key',
+        authType: 'bearer',
+        binding: {
+          id: 'binding',
+          profileId: 'tuzi',
+          modelId: 'gpt-image-2',
+          operation: 'image',
+          protocol: 'openai.images.edits',
+          requestSchema: 'tuzi.image.gpt-edit-json',
+          responseSchema: 'openai.image.data',
+          submitPath: '/images/edits',
+          priority: 10,
+          confidence: 'high',
+          source: 'template',
+        },
+      },
+      {
+        model: 'gpt-image-2',
+        prompt: 'Continue this PPT slide style',
+        size: '2736x1536',
+        referenceImages: ['data:image/png;base64,source'],
+        generationMode: 'image_to_image',
+      }
+    );
+
+    const request = mocks.sendAdapterRequest.mock.calls[0]?.[1];
+    expect(request.path).toBe('/images/edits');
+    expect(JSON.parse(request.body)).toMatchObject({
+      model: 'gpt-image-2',
+      prompt: 'Continue this PPT slide style',
+      size: '2736x1536',
+      image: ['data:image/png;base64,source'],
+      response_format: 'url',
+    });
+  });
 });

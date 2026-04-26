@@ -45,7 +45,7 @@ export interface ExternalSkillMeta {
   source: string;
   sourceUrl?: string;
   category?: string;
-  outputType?: 'image' | 'text' | 'video' | 'ppt';
+  outputType?: 'image' | 'text' | 'video' | 'audio' | 'ppt';
 }
 
 /** 内存中的包元数据列表 */

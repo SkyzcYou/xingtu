@@ -1185,3 +1185,117 @@
   - 默认组完成
   - follow-up 组已排队
   - follow-up 组已开始
+
+## 版本目录回滚与 SW Scope 经验
+
+更新日期：2026-04-25
+
+### 现象
+
+发布 `0.6.76` 后，后台仍然疯狂下载 `0.6.74` 的资源，升级提示也显示 `0.6.74`，但进入应用后版本号又是 `0.6.76`。
+
+这类问题本质上是：
+
+- 页面入口、`version.json`、SW、预热清单不在同一个版本目录语义下解析
+- 旧 SW 可能消费了新目录或根目录的清单
+- CDN fallback 又用旧 `APP_VERSION` 拼出了旧包资源地址
+
+最终表现为：
+
+- UI 认为自己是新版本
+- SW 后台按旧版本预热
+- CDN 日志里出现旧 npm 包版本资源
+
+### 根因
+
+#### 1. 根路径注册 SW 会破坏 release 目录隔离
+
+如果在 `https://opentu.ai/releases/0.6.68/` 页面里执行：
+
+```ts
+navigator.serviceWorker.register('/sw.js')
+```
+
+注册的是根路径 `/sw.js`，而不是当前 release 目录里的 `./sw.js`。
+
+这会导致：
+
+- 回滚目录无法拥有自己的 SW scope
+- 根 SW 可能控制多个 release 页面
+- `version.json`、manifest、App Shell cache key 容易跨版本串读
+
+正确做法是：
+
+```ts
+navigator.serviceWorker.register('./sw.js')
+```
+
+让每个 release 目录注册自己的 SW，并把 scope 固定在当前目录。
+
+#### 2. SW 内部不能默认用 origin 根目录读取清单
+
+这些写法在根部署时看起来没问题：
+
+```ts
+fetch('/version.json')
+new URL('/idle-prefetch-manifest.json', location.origin)
+cache.match('/')
+cache.match('/index.html')
+```
+
+但在 `/releases/{version}/` 下会越过当前版本目录。
+
+SW 内部应基于自身脚本位置创建 scope base：
+
+```ts
+const SW_SCOPE_BASE_URL = new URL('./', self.location.href);
+```
+
+所有入口清单、App Shell alias、本地回源地址都应基于这个 base 解析。
+
+#### 3. 不能用“低于已发布版本”阻断安装
+
+看似合理的保护逻辑是：
+
+- 如果 SW 版本低于线上最新版本，就中止旧 SW 安装或预热
+
+但这会破坏主动回滚：
+
+- `0.6.76` 发布有问题时，需要能访问 `/releases/0.6.68/`
+- 旧版本目录的 `version.json` 本来就应该是 `0.6.68`
+- 不能因为它小于当前最新版本就拒绝安装
+
+正确规则是：
+
+- **允许回滚到任意明确版本目录**
+- **只拒绝当前 SW 消费与自身 `APP_VERSION` 不一致的 manifest**
+- 不按 semver 大小判断“是否允许安装”
+
+### 修复策略
+
+- SW 注册统一使用相对路径 `./sw.js`。
+- 升级弹窗读取 `./version.json`，避免读取根目录版本信息。
+- SW 内部新增 scope base，基于当前 SW 所在目录解析：
+  - `version.json`
+  - `precache-manifest.json`
+  - `idle-prefetch-manifest.json`
+  - App Shell alias `/` 与 `index.html`
+  - CDN fallback 的本地源站兜底地址
+- manifest 加载后校验 `manifest.version === APP_VERSION`，不一致则跳过该清单。
+- 不引入“低版本 SW 直接中止”的逻辑，保留版本目录回滚能力。
+
+### 后续守则
+
+- 支持版本目录发布时，禁止在前端启动链路里使用根绝对 SW 注册路径。
+- SW 里凡是代表“当前应用入口”的 URL，都要问一句：这是 origin 根路径，还是当前 SW scope？
+- CDN URL、同源 URL、release 目录 URL 必须先归一为 scope-relative 资源路径，再生成 cache key。
+- 升级提示只应忽略“版本相等”，不要因为版本号更小就压制提示或安装；更小版本可能是有意回滚。
+- 预热清单是版本绑定资产，旧 SW 只能消费旧 manifest，新 SW 只能消费新 manifest。
+
+### 推荐验证
+
+```bash
+pnpm nx run web:typecheck
+pnpm nx run drawnix:typecheck
+pnpm exec vitest run apps/web/src/sw/app-shell-routing.spec.ts apps/web/src/sw/cdn-fallback.spec.ts
+```

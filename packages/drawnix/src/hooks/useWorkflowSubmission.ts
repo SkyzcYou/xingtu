@@ -265,6 +265,7 @@ export function useWorkflowSubmission(
                 video: globalSettings.videoModelName || 'veo3.1',
                 audio: globalSettings.audioModelName || 'suno_music',
               } as any,
+              defaultModelRefs: undefined,
               params: {
                 count: recoveredWorkflow.metadata?.count,
                 size: recoveredWorkflow.metadata?.size,
@@ -509,11 +510,22 @@ export function useWorkflowSubmission(
           type: parsedInput.generationType,
           isExplicit: parsedInput.isModelExplicit,
         },
+        modelRef: parsedInput.modelRef,
         defaultModels: {
-          image: globalSettings.imageModelName || getDefaultImageModel(),
-          video: globalSettings.videoModelName || 'veo3.1',
-          audio: globalSettings.audioModelName || 'suno_music',
+          image:
+            parsedInput.defaultModels?.image ||
+            globalSettings.imageModelName ||
+            getDefaultImageModel(),
+          video:
+            parsedInput.defaultModels?.video ||
+            globalSettings.videoModelName ||
+            'veo3.1',
+          audio:
+            parsedInput.defaultModels?.audio ||
+            globalSettings.audioModelName ||
+            'suno_music',
         },
+        defaultModelRefs: parsedInput.defaultModelRefs,
         params: {
           count: parsedInput.count,
           size: parsedInput.size,
@@ -569,6 +581,9 @@ export function useWorkflowSubmission(
       userInstruction: retryContext.aiContext.userInstruction,
       rawInput: retryContext.aiContext.rawInput,
       modelId: retryContext.aiContext.model.id,
+      modelRef: retryContext.aiContext.modelRef,
+      defaultModels: retryContext.aiContext.defaultModels,
+      defaultModelRefs: retryContext.aiContext.defaultModelRefs,
       isModelExplicit: retryContext.aiContext.model.isExplicit,
       generationType: retryContext.aiContext.model.type as
         | 'image'

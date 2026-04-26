@@ -8,9 +8,11 @@ import {
   PlaitElement,
   getSelectedElements,
   getRectangleByElements,
-  Transforms,
-  Path,
 } from '@plait/core';
+import {
+  getFrameAwareSelection,
+  moveElementWithFrameRelations,
+} from './frame-aware';
 
 export type AlignmentType =
   | 'left'
@@ -28,25 +30,6 @@ const getElementRect = (board: PlaitBoard, element: PlaitElement) => {
 };
 
 /**
- * 计算元素新位置后的 points
- * 仅支持有 points 属性的元素
- */
-const calculateNewPoints = (
-  element: PlaitElement,
-  deltaX: number,
-  deltaY: number
-): [number, number][] | null => {
-  if (!element.points || !Array.isArray(element.points)) {
-    return null;
-  }
-
-  return element.points.map((point: [number, number]) => [
-    point[0] + deltaX,
-    point[1] + deltaY,
-  ]);
-};
-
-/**
  * 对齐选中的元素
  */
 export const alignElements = (
@@ -60,11 +43,20 @@ export const alignElements = (
     return;
   }
 
+  const { primaryElements, relatedByFrameId } = getFrameAwareSelection(
+    board,
+    selectedElements
+  );
+  if (primaryElements.length < 2) {
+    return;
+  }
+
   // 获取所有选中元素的整体边界
-  const boundingRect = getRectangleByElements(board, selectedElements, false);
+  const boundingRect = getRectangleByElements(board, primaryElements, false);
+  const movedElementIds = new Set<string>();
 
   // 根据对齐类型计算每个元素的偏移量
-  selectedElements.forEach((element) => {
+  primaryElements.forEach((element) => {
     const elementRect = getElementRect(board, element);
     let deltaX = 0;
     let deltaY = 0;
@@ -114,18 +106,14 @@ export const alignElements = (
       return;
     }
 
-    // 计算新的 points
-    const newPoints = calculateNewPoints(element, deltaX, deltaY);
-    if (newPoints) {
-      // 找到元素在 board.children 中的索引
-      const elementIndex = board.children.findIndex(
-        (child) => child.id === element.id
-      );
-      if (elementIndex >= 0) {
-        const path: Path = [elementIndex];
-        Transforms.setNode(board, { points: newPoints }, path);
-      }
-    }
+    moveElementWithFrameRelations(
+      board,
+      element,
+      deltaX,
+      deltaY,
+      relatedByFrameId,
+      movedElementIds
+    );
   });
 };
 

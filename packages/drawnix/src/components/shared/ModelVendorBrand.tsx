@@ -2,8 +2,8 @@ import React from 'react';
 import { ModelVendor } from '../../constants/model-config';
 
 export const DISCOVERY_VENDOR_ORDER: ModelVendor[] = [
-  ModelVendor.DEEPSEEK,
   ModelVendor.GPT,
+  ModelVendor.DEEPSEEK,
   ModelVendor.ANTHROPIC,
   ModelVendor.GEMINI,
   ModelVendor.GROK,

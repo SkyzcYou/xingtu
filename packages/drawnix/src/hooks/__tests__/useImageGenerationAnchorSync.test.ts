@@ -8,7 +8,10 @@ import {
   TaskType,
   type Task,
 } from '../../types/task.types';
-import type { PlaitImageGenerationAnchor } from '../../types/image-generation-anchor.types';
+import {
+  IMAGE_GENERATION_ANCHOR_RETRY_EVENT,
+  type PlaitImageGenerationAnchor,
+} from '../../types/image-generation-anchor.types';
 
 const taskListeners: Array<(event: { task: Task }) => void> = [];
 const completionListeners: Array<(event: { taskId: string }) => void> = [];
@@ -450,5 +453,68 @@ describe('useImageGenerationAnchorSync', () => {
       [200, 300],
       [690, 578],
     ]);
+  });
+
+  it('reconciles stale completed anchors before dispatching retry', () => {
+    vi.useFakeTimers();
+
+    const board = createBoard(
+      createAnchor({
+        taskIds: ['task-1'],
+        primaryTaskId: 'task-1',
+        phase: 'developing',
+      }),
+      [createImageElement()]
+    );
+    taskState.tasks = [
+      createTask({
+        status: TaskStatus.PROCESSING,
+      }),
+    ];
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+
+    renderHook(() => useImageGenerationAnchorSync({ board, enabled: true }));
+
+    const boardState = board as unknown as {
+      children: PlaitImageGenerationAnchor[];
+    };
+    boardState.children[0] = {
+      ...boardState.children[0],
+      phase: 'developing',
+    };
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+
+    taskState.tasks = [
+      createTask({
+        status: TaskStatus.COMPLETED,
+        insertedToCanvas: true,
+        result: {
+          url: 'https://example.com/generated.png',
+        },
+      }),
+    ];
+    completionState.byTaskId.set('task-1', {
+      taskId: 'task-1',
+      status: 'completed',
+      type: 'direct_insert',
+      firstElementPosition: [200, 300],
+      firstElementId: 'image-1',
+      firstElementSize: { width: 480, height: 278 },
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(50_000);
+    });
+
+    const retryEvents = dispatchSpy.mock.calls.filter(
+      ([event]) => event.type === IMAGE_GENERATION_ANCHOR_RETRY_EVENT
+    );
+    expect(retryEvents).toHaveLength(0);
+    expect(boardState.children[0]?.phase).toBe('completed');
+
+    dispatchSpy.mockRestore();
   });
 });

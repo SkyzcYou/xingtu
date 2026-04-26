@@ -29,6 +29,8 @@ export interface SystemSkill {
   description: string;
   /** 类型标记 */
   type: typeof SKILL_TYPE_SYSTEM;
+  /** 输出类型：ppt 归类为图片生成模型选择 */
+  outputType?: 'image' | 'text' | 'video' | 'audio' | 'ppt';
 }
 
 /** 外部 Skill 接口，继承 SystemSkill 并扩展来源信息 */
@@ -52,7 +54,7 @@ export interface ExternalSkill {
   /** 分类（来自 marketplace.json） */
   category?: string;
   /** 输出类型：image 表示图片生成类 Skill，text 表示文本处理类 Skill，video 表示视频生成类 Skill */
-outputType?: 'image' | 'text' | 'video' | 'ppt';
+  outputType?: 'image' | 'text' | 'video' | 'audio' | 'ppt';
 }
 
 /** 外部 Skill 包接口 */
@@ -83,6 +85,7 @@ export const SYSTEM_SKILLS: SystemSkill[] = [
     description:
       '灵感图\n\n生成创意灵感拼贴图，将多张图片以不规则分割的方式拼合，以散落的横向布局插入画布，营造富有创意感的视觉效果。\n\n**使用方式：** 在 AI 输入框中描述你的主题或灵感关键词，选择「灵感图」Skill 后提交，AI 将直接生成灵感拼贴图并插入画布。\n\n**适用场景：** 创意头脑风暴、情绪板制作、视觉灵感收集。\n\n**工作流：**\n\n调用 generate_inspiration_board\n- imageCount: 9\n- imageSize: 16x9',
     type: SKILL_TYPE_SYSTEM,
+    outputType: 'image',
   },
   {
     id: 'generate_grid_image',
@@ -91,6 +94,7 @@ export const SYSTEM_SKILLS: SystemSkill[] = [
     description:
       '宫格图\n\n生成整齐排列的宫格图片墙，将多张主题相关图片按网格布局排列在画布上，适合产品展示、表情包制作等场景。\n\n**使用方式：** 在 AI 输入框中描述你的主题，选择「宫格图」Skill 后提交，AI 将直接生成宫格图并插入画布。\n\n**适用场景：** 产品展示墙、表情包制作、图片集合展示。\n\n**工作流：**\n\n调用 generate_grid_image\n- rows: 3\n- cols: 3\n- layoutStyle: scattered',
     type: SKILL_TYPE_SYSTEM,
+    outputType: 'image',
   },
   {
     id: 'generate_flowchart',
@@ -115,11 +119,12 @@ export const SYSTEM_SKILLS: SystemSkill[] = [
   },
   {
     id: 'generate_ppt',
-    name: 'PPT演示',
+    name: '生成PPT大纲',
     mcpTool: 'generate_ppt',
     description:
-      'PPT演示\n\n生成 PPT 演示文稿大纲并自动布局。\n\n**使用方式：** 输入 PPT 主题，选择「PPT演示」Skill 后提交。\n\n**适用场景：** 演示文稿、课件制作、汇报材料。\n\n**工作流：**\n\n调用 generate_ppt',
+      '生成PPT大纲\n\n生成 PPT 演示文稿大纲、公共风格提示词和每页整图提示词，并自动创建可编辑的 PPT 页面占位。同一画布只保留一套 PPT；再次生成会替换已有 PPT 页面及其内容。\n\n**使用方式：** 输入 PPT 主题，选择「生成PPT大纲」Skill 后提交。生成后会展开「PPT 编辑」并切换到大纲视图，确认提示词后再生成图片。\n\n**适用场景：** 演示文稿、课件制作、汇报材料。\n\n**工作流：**\n\n调用 generate_ppt',
     type: SKILL_TYPE_SYSTEM,
+    outputType: 'ppt',
   },
   {
     id: 'role_chat_pm',

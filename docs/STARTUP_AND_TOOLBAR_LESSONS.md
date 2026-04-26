@@ -188,3 +188,35 @@
 1. 先看 `navigator.serviceWorker.controller` 和 `navigator.serviceWorker.ready.active` 是否分叉
 2. 再看显示链路是否被 runtime 初始化、manifest、预取完成状态串联阻塞
 3. 最后才看图标数据源、launcher 恢复、工具定义是否缺字段
+
+---
+
+## 2026-04-26：SW 关闭场景下的通道初始化超时经验
+
+### 现象
+
+- 控制台持续出现 `[SWChannelClient] Attempt 4 failed: Error: SW activation timeout`
+- 调试状态里 `supported: true`，但 `controller: null`、`registration: null`
+- 本地开发默认关闭 SW 或 URL 带 `?sw=0` 时仍然触发了 `swChannelClient.initialize()`
+
+### 根因
+
+- 页面只用“浏览器支持 `serviceWorker`”判断是否启动 SW 诊断链路，没有复用真正的 SW 启用开关
+- `sw-console-capture` 为了尽早捕获日志，会主动初始化 `swChannelClient`，结果在 SW 未注册时反复等待不存在的 `controllerchange`
+- SW 通道自身没有识别 `?sw=0`，其他调用点即使绕过主入口，也可能重新进入初始化重试
+- 日志队列在通道不可用时只进不出，虽然单条较小，但长期打开页面会形成不必要内存占用
+
+### 固化规则
+
+- SW 相关入口必须共享同一个开关语义：
+  生产默认启用；本地仅 `VITE_ENABLE_SW_DEV=1` 或 `?sw=1` 启用；`?sw=0` 显式关闭
+- 调试、崩溃、控制台捕获这类旁路能力，不能因为“想诊断 SW”而绕过 SW 开关主动拉起通道
+- `SWChannelClient.initialize()` 自身也要兜底识别 `?sw=0`，避免未来新增调用点造成重复超时
+- 离线日志队列必须有容量上限，通道不可用时丢弃最旧项，不能无限积压
+- 控制台捕获要过滤 `[SWChannelClient]`、`[ServiceWorkerChannel]` 这类自身通道日志，避免错误日志再次驱动初始化与上报
+
+### 排障顺序建议
+
+1. 先看当前 URL 是否带 `?sw=0` / `?sw=1`，以及是否本地开发环境
+2. 再看是否存在 `registration`；如果没有注册，不要继续等 `controllerchange`
+3. 最后排查是谁调用了 `swChannelClient.initialize()`，优先检查控制台捕获、崩溃上报、调试面板等旁路链路

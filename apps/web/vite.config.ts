@@ -88,11 +88,76 @@ const PRECACHE_ALWAYS_INCLUDE = new Set([
   '/favicon.ico',
 ]);
 
+function isFileDescriptorLimitError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    ((error as NodeJS.ErrnoException).code === 'EMFILE' ||
+      (error as NodeJS.ErrnoException).code === 'ENFILE')
+  );
+}
+
+function waitForFileDescriptorRetry(attempt: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 120 * (attempt + 1));
+  });
+}
+
+async function readFileWithFdRetry(
+  fullPath: string,
+  encoding?: BufferEncoding
+): Promise<string | Buffer> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      return encoding
+        ? await fs.promises.readFile(fullPath, encoding)
+        : await fs.promises.readFile(fullPath);
+    } catch (error) {
+      lastError = error;
+      if (!isFileDescriptorLimitError(error) || attempt === 5) {
+        throw error;
+      }
+      await waitForFileDescriptorRetry(attempt);
+    }
+  }
+
+  throw lastError;
+}
+
+async function writeFileWithFdRetry(
+  fullPath: string,
+  content: string
+): Promise<void> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      await fs.promises.writeFile(fullPath, content);
+      return;
+    } catch (error) {
+      if (!isFileDescriptorLimitError(error) || attempt === 5) {
+        throw error;
+      }
+      await waitForFileDescriptorRetry(attempt);
+    }
+  }
+}
+
 function createRevision(fullPath: string): string {
   const content = fs.readFileSync(fullPath);
   return crypto
     .createHash('md5')
     .update(new Uint8Array(content))
+    .digest('hex')
+    .substring(0, 8);
+}
+
+async function createRevisionWithFdRetry(fullPath: string): Promise<string> {
+  const content = await readFileWithFdRetry(fullPath);
+  return crypto
+    .createHash('md5')
+    .update(new Uint8Array(content as Buffer))
     .digest('hex')
     .substring(0, 8);
 }
@@ -197,11 +262,11 @@ function normalizeStaticUrlCandidate(candidate: string): string | null {
   return `/${withoutQuery}`;
 }
 
-function collectSelectedEntries(
+async function collectSelectedEntries(
   outDir: string,
   urls: Iterable<string>,
   shouldInclude: (url: string, ext: string) => boolean
-): ManifestEntry[] {
+): Promise<ManifestEntry[]> {
   const manifest: ManifestEntry[] = [];
   const normalizedUrls = new Set<string>();
 
@@ -227,7 +292,7 @@ function collectSelectedEntries(
 
     manifest.push({
       url,
-      revision: createRevision(fullPath),
+      revision: await createRevisionWithFdRetry(fullPath),
     });
   }
 
@@ -235,14 +300,16 @@ function collectSelectedEntries(
   return manifest;
 }
 
-function collectHtmlShellPrecacheUrls(indexHtmlPath: string): Set<string> {
+async function collectHtmlShellPrecacheUrls(
+  indexHtmlPath: string
+): Promise<Set<string>> {
   const urls = new Set<string>(PRECACHE_ALWAYS_INCLUDE);
 
   if (!fs.existsSync(indexHtmlPath)) {
     return urls;
   }
 
-  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const html = (await readFileWithFdRetry(indexHtmlPath, 'utf8')) as string;
   const attrPattern = /\b(?:data-local-(?:src|href)|src|href)="([^"]+)"/g;
 
   for (const match of html.matchAll(attrPattern)) {
@@ -497,8 +564,8 @@ function precacheManifestPlugin(): Plugin {
       async handler() {
         const outDir = path.resolve(__dirname, '../../dist/apps/web');
         const indexHtmlPath = path.join(outDir, 'index.html');
-        const precacheUrls = collectHtmlShellPrecacheUrls(indexHtmlPath);
-        const manifest = collectSelectedEntries(
+        const precacheUrls = await collectHtmlShellPrecacheUrls(indexHtmlPath);
+        const manifest = await collectSelectedEntries(
           outDir,
           precacheUrls,
           (url, ext) =>
@@ -514,7 +581,7 @@ function precacheManifestPlugin(): Plugin {
           files: manifest,
         };
 
-        fs.writeFileSync(
+        await writeFileWithFdRetry(
           manifestPath,
           JSON.stringify(manifestContent, null, 2)
         );
@@ -563,7 +630,7 @@ function idlePrefetchManifestPlugin(): Plugin {
         if (fs.existsSync(precacheManifestPath)) {
           try {
             const precacheManifest = JSON.parse(
-              fs.readFileSync(precacheManifestPath, 'utf8')
+              (await readFileWithFdRetry(precacheManifestPath, 'utf8')) as string
             ) as { files?: Array<{ url?: string }> };
             for (const entry of precacheManifest.files || []) {
               if (typeof entry.url === 'string' && entry.url.length > 0) {
@@ -653,7 +720,7 @@ function deferEntryAssetsPlugin(): Plugin {
           return;
         }
 
-        const html = fs.readFileSync(indexHtmlPath, 'utf8');
+        const html = (await readFileWithFdRetry(indexHtmlPath, 'utf8')) as string;
         const deferredTags: string[] = [];
         const assetTagPattern =
           /^[ \t]*(<script\b[^>]*type="module"[^>]*src="\.\/assets\/[^"]+"[^>]*><\/script>|<link\b[^>]*rel="stylesheet"[^>]*href="\.\/assets\/[^"]+"[^>]*>)\s*$/gm;
@@ -670,7 +737,7 @@ function deferEntryAssetsPlugin(): Plugin {
         const injection = `  ${deferredTags.join('\n  ')}\n`;
         const nextHtml = strippedHtml.replace('</body>', `${injection}</body>`);
 
-        fs.writeFileSync(indexHtmlPath, nextHtml);
+        await writeFileWithFdRetry(indexHtmlPath, nextHtml);
         console.log(
           `[EntryAssets] Deferred ${deferredTags.length} entry asset tag(s) to body end`
         );
@@ -694,7 +761,9 @@ function rewriteManifestAssetsToCDNPlugin(): Plugin {
           return;
         }
 
-        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        const manifest = JSON.parse(
+          (await readFileWithFdRetry(manifestPath, 'utf8')) as string
+        );
         const cdnBaseUrl = `https://cdn.jsdelivr.net/npm/aitu-app@${appVersion}`;
         let rewrittenCount = 0;
 

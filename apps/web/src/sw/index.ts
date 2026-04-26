@@ -244,6 +244,8 @@ import('./task-queue/llm-api-logger').then(({ setLLMApiLogBroadcast }) => {
 declare const __APP_VERSION__: string;
 const APP_VERSION =
   typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
+const SW_SCOPE_BASE_URL = new URL('./', self.location.href);
+const SW_SCOPE_BASE_PATH = SW_SCOPE_BASE_URL.pathname;
 const CACHE_NAME = `drawnix-v${APP_VERSION}`;
 const IMAGE_CACHE_NAME = `drawnix-images`;
 const STATIC_CACHE_NAME = `drawnix-static-v${APP_VERSION}`;
@@ -272,6 +274,18 @@ const ASSET_LIBRARY_PREFIX = '/asset-library/';
 // 这里使用 location 判断也行，但通常构建时会注入
 const isDevelopment =
   location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+
+function createScopeUrl(pathname: string): URL {
+  return new URL(pathname.replace(/^\//, ''), SW_SCOPE_BASE_URL);
+}
+
+function getScopeRelativePathname(pathname: string): string {
+  if (SW_SCOPE_BASE_PATH !== '/' && pathname.startsWith(SW_SCOPE_BASE_PATH)) {
+    return `/${pathname.slice(SW_SCOPE_BASE_PATH.length)}`;
+  }
+
+  return pathname;
+}
 
 interface CorsDomain {
   hostname: string;
@@ -1365,9 +1379,12 @@ async function loadPrecacheManifest(): Promise<
   { url: string; revision: string }[] | null
 > {
   try {
-    const response = await fetch('./precache-manifest.json', {
-      cache: 'reload',
-    });
+    const response = await fetch(
+      createScopeUrl('precache-manifest.json').href,
+      {
+        cache: 'reload',
+      }
+    );
     if (!response.ok) {
       logSWDebug('loadPrecacheManifest: response not ok', {
         status: response.status,
@@ -1382,6 +1399,13 @@ async function loadPrecacheManifest(): Promise<
       version: manifest.version,
       fileCount: manifest.files.length,
     });
+    if (manifest.version && manifest.version !== APP_VERSION) {
+      logSWDebug('loadPrecacheManifest: version mismatch', {
+        manifestVersion: manifest.version,
+        workerVersion: APP_VERSION,
+      });
+      return null;
+    }
     return manifest.files;
   } catch (error) {
     logSWDebug('loadPrecacheManifest: failed', {
@@ -1422,10 +1446,7 @@ async function loadIdlePrefetchManifest(): Promise<IdlePrefetchManifest | null> 
     return null;
   }
 
-  const manifestUrl = new URL(
-    '/idle-prefetch-manifest.json',
-    self.location.origin
-  ).href;
+  const manifestUrl = createScopeUrl('idle-prefetch-manifest.json').href;
 
   try {
     const response = await fetch(manifestUrl, {
@@ -1478,6 +1499,15 @@ async function loadIdlePrefetchManifest(): Promise<IdlePrefetchManifest | null> 
         manifestUrl,
         contentType,
         preview,
+      });
+      return null;
+    }
+
+    if (manifest.version && manifest.version !== APP_VERSION) {
+      logSWDebug('loadIdlePrefetchManifest: version mismatch', {
+        manifestUrl,
+        manifestVersion: manifest.version,
+        workerVersion: APP_VERSION,
       });
       return null;
     }
@@ -1803,6 +1833,7 @@ function shouldKickIdlePrefetchFromFetch(
   event: FetchEvent,
   url: URL
 ): boolean {
+  const scopeRelativePathname = getScopeRelativePathname(url.pathname);
   if (
     event.request.method !== 'GET' ||
     !event.clientId ||
@@ -1814,9 +1845,9 @@ function shouldKickIdlePrefetchFromFetch(
   if (
     url.pathname.startsWith(CACHE_URL_PREFIX) ||
     url.pathname.startsWith(AI_GENERATED_AUDIO_CACHE_PREFIX) ||
-    url.pathname === '/sw.js' ||
-    url.pathname === '/precache-manifest.json' ||
-    url.pathname === '/idle-prefetch-manifest.json'
+    scopeRelativePathname === '/sw.js' ||
+    scopeRelativePathname === '/precache-manifest.json' ||
+    scopeRelativePathname === '/idle-prefetch-manifest.json'
   ) {
     return false;
   }
@@ -1834,7 +1865,7 @@ function shouldKickIdlePrefetchFromFetch(
 }
 
 function isOriginFirstStaticPath(pathname: string): boolean {
-  return shouldUseOriginFirstPreload(pathname);
+  return shouldUseOriginFirstPreload(getScopeRelativePathname(pathname));
 }
 
 function isVersionedStaticResource(request: Request, url: URL): boolean {
@@ -1876,6 +1907,11 @@ function normalizeAituPackageResourcePath(pathnameWithSearch: string): string {
   return `${normalizedPathname}${search}`;
 }
 
+function normalizeScopedResourcePath(pathnameWithSearch: string): string {
+  const [pathname, search = ''] = pathnameWithSearch.split(/([?#].*)/, 2);
+  return `${getScopeRelativePathname(pathname)}${search}`;
+}
+
 function resolveStaticResourceFetchTargets(inputUrl: string): {
   requestUrl: URL;
   resourcePath: string;
@@ -1884,12 +1920,9 @@ function resolveStaticResourceFetchTargets(inputUrl: string): {
 } {
   const requestUrl = new URL(inputUrl, self.location.origin);
   const resourcePath = normalizeAituPackageResourcePath(
-    `${requestUrl.pathname}${requestUrl.search}`
+    normalizeScopedResourcePath(`${requestUrl.pathname}${requestUrl.search}`)
   );
-  const normalizedResourceUrl = new URL(
-    resourcePath,
-    self.location.origin
-  );
+  const normalizedResourceUrl = createScopeUrl(resourcePath);
 
   return {
     requestUrl,
@@ -2101,11 +2134,15 @@ async function cacheFile(
     let source = 'server';
     let fetchTarget = targets.originFetchUrl;
 
-    if (shouldUseCDNFirstPreload(targets.requestUrl.pathname)) {
+    if (
+      shouldUseCDNFirstPreload(
+        getScopeRelativePathname(targets.requestUrl.pathname)
+      )
+    ) {
       const cdnResult = await fetchFromCDNWithFallback(
         targets.resourcePath,
         APP_VERSION,
-        location.origin,
+        SW_SCOPE_BASE_URL.href.replace(/\/$/, ''),
         {
           preferLocal: false,
           requestKind: 'background-prefetch',
@@ -2151,7 +2188,7 @@ async function cacheFile(
 
       // index.html 额外存一份 '/' 的 key，导航请求直接命中无需回退查找
       if (targets.resourcePath === '/index.html') {
-        const rootUrl = new URL('/', self.location.origin).href;
+        const rootUrl = createScopeUrl('/').href;
         const rootResponse = await cache.match(targets.cacheKey);
         if (rootResponse) {
           await cache.put(rootUrl, rootResponse.clone());
@@ -2658,28 +2695,14 @@ async function prewarmAllIdlePrefetchGroupsForUpdateReady(): Promise<void> {
       const manifest = await getIdlePrefetchManifest();
       if (!manifest) {
         const elapsedMs = Date.now() - startedAt;
-        if (elapsedMs >= UPDATE_FULL_PREWARM_TIMEOUT_MS) {
-          throw new Error(
-            `idle-prefetch manifest unavailable after ${elapsedMs}ms`
-          );
-        }
-
-        const waitMs = Math.min(
-          IDLE_PREFETCH_MANIFEST_RETRY_DELAY_MS,
-          UPDATE_FULL_PREWARM_TIMEOUT_MS - elapsedMs
-        );
         logSWDebug(
-          'prewarmAllIdlePrefetchGroupsForUpdateReady waiting for manifest',
+          'prewarmAllIdlePrefetchGroupsForUpdateReady skipped: manifest unavailable',
           {
             elapsedMs,
-            waitMs,
             lastFailureReason: idlePrefetchManifestLastFailureReason,
           }
         );
-        await new Promise((resolve) => {
-          setTimeout(resolve, waitMs);
-        });
-        continue;
+        return;
       }
 
       orderedGroups = getOrderedIdlePrefetchGroups(manifest);
@@ -3003,7 +3026,7 @@ async function tryFetchStaticResourceFromCDN(
     const cdnResult = await fetchFromCDNWithFallback(
       resourcePath,
       appVersion,
-      location.origin,
+      SW_SCOPE_BASE_URL.href.replace(/\/$/, ''),
       {
         // 运行时 hash 资源优先走 CDN，失败后再回源站兜底。
         preferLocal: false,
@@ -5408,9 +5431,10 @@ async function handleStaticRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const staticTargets = resolveStaticResourceFetchTargets(request.url);
   const normalizedCacheKey = staticTargets.cacheKey;
+  const scopeRelativePathname = getScopeRelativePathname(url.pathname);
   const isAppShellRequest = shouldUseAppShellStrategy(
     request.mode,
-    url.pathname
+    scopeRelativePathname
   );
   const versionState = await readVersionState();
   const committedVersion = versionState.committedVersion || APP_VERSION;
@@ -5440,9 +5464,11 @@ async function handleStaticRequest(request: Request): Promise<Response> {
         let cachedResponse = await cache.match(request);
 
         if (!cachedResponse && isAppShellRequest) {
-          cachedResponse = await cache.match('/');
+          cachedResponse = await cache.match(createScopeUrl('/').href);
           if (!cachedResponse) {
-            cachedResponse = await cache.match('/index.html');
+            cachedResponse = await cache.match(
+              createScopeUrl('index.html').href
+            );
           }
         }
 
@@ -5463,9 +5489,11 @@ async function handleStaticRequest(request: Request): Promise<Response> {
 
       // For SPA navigation, fall back to index.html
       if (!cachedResponse && isAppShellRequest) {
-        cachedResponse = await cache.match('/');
+        cachedResponse = await cache.match(createScopeUrl('/').href);
         if (!cachedResponse) {
-          cachedResponse = await cache.match('/index.html');
+          cachedResponse = await cache.match(
+            createScopeUrl('index.html').href
+          );
         }
       }
 
@@ -5493,10 +5521,10 @@ async function handleStaticRequest(request: Request): Promise<Response> {
     let cachedResponse = await cache.match(request);
 
     if (!cachedResponse) {
-      cachedResponse = await cache.match('/');
+      cachedResponse = await cache.match(createScopeUrl('/').href);
     }
     if (!cachedResponse) {
-      cachedResponse = await cache.match('/index.html');
+      cachedResponse = await cache.match(createScopeUrl('index.html').href);
     }
 
     if (!cachedResponse) {
@@ -5507,8 +5535,8 @@ async function handleStaticRequest(request: Request): Promise<Response> {
             const oldCache = await caches.open(cacheName);
             cachedResponse =
               (await oldCache.match(request)) ||
-              (await oldCache.match('/')) ||
-              (await oldCache.match('/index.html'));
+              (await oldCache.match(createScopeUrl('/').href)) ||
+              (await oldCache.match(createScopeUrl('index.html').href));
             if (cachedResponse) {
               break;
             }
@@ -5540,9 +5568,13 @@ async function handleStaticRequest(request: Request): Promise<Response> {
         cache.put(request, response.clone());
         // 同时存 '/' 和 '/index.html'，确保后续导航请求直接命中
         const reqUrl = new URL(request.url);
-        if (shouldMirrorToAppShellAliases(reqUrl.pathname)) {
-          const rootUrl = new URL('/', reqUrl.origin).href;
-          const indexUrl = new URL('/index.html', reqUrl.origin).href;
+        if (
+          shouldMirrorToAppShellAliases(
+            getScopeRelativePathname(reqUrl.pathname)
+          )
+        ) {
+          const rootUrl = createScopeUrl('/').href;
+          const indexUrl = createScopeUrl('index.html').href;
           if (request.url !== rootUrl) cache.put(rootUrl, response.clone());
           if (request.url !== indexUrl) cache.put(indexUrl, response.clone());
         }

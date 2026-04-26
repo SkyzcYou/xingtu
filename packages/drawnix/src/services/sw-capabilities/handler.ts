@@ -101,12 +101,45 @@ export class SWCapabilitiesHandler {
       case 'generate_audio':
         return this.handleGenerateAudio(args as unknown as AudioGenerationParams);
 
+      case 'generate_ppt':
+        return this.handleGeneratePPT(args);
+
       default:
         return {
           success: false,
           error: `Unknown operation: ${opType}`,
           type: 'error',
         };
+    }
+  }
+
+  private async handleGeneratePPT(
+    params: Record<string, unknown>
+  ): Promise<CapabilityResult> {
+    const board = boardRef;
+    if (!board) {
+      return { success: false, error: '画布未初始化', type: 'error' };
+    }
+
+    try {
+      const [{ setBoard }, { generatePPT }] = await Promise.all([
+        import('../../mcp/tools/shared'),
+        import('../../mcp/tools/ppt-generation'),
+      ]);
+      setBoard(board);
+      const result = await generatePPT(params as any);
+      return {
+        success: result.success,
+        data: result.data,
+        error: result.error,
+        type: result.type,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'PPT 生成失败',
+        type: 'error',
+      };
     }
   }
 

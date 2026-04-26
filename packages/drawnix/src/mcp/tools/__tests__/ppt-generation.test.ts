@@ -1,0 +1,220 @@
+import { createTestingBoard } from '@plait/core';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setBoard } from '../shared';
+
+const mocks = vi.hoisted(() => ({
+  sendChat: vi.fn(),
+}));
+
+vi.mock('../../../utils/gemini-api', () => ({
+  defaultGeminiClient: {
+    sendChat: mocks.sendChat,
+  },
+}));
+
+vi.mock('../../../services/unified-cache-service', () => ({
+  CacheStatus: {
+    IDLE: 'idle',
+    LOADING: 'loading',
+    CACHED: 'cached',
+    ERROR: 'error',
+  },
+  unifiedCacheService: {
+    subscribe: vi.fn(() => vi.fn()),
+    getCacheStatus: vi.fn(() => 'idle'),
+    getCachedBlob: vi.fn(),
+    getCachedUrl: vi.fn(),
+    getAllCachedUrls: vi.fn(() => []),
+    getStorageUsage: vi.fn(() => Promise.resolve({ used: 0, quota: 0 })),
+    formatSize: vi.fn((size) => `${size}`),
+  },
+}));
+
+vi.mock('../../../utils/settings-manager', () => ({
+  settingsManager: {
+    getSetting: vi.fn(),
+    updateSettings: vi.fn(),
+    updateSetting: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    getActiveInvocationPreset: vi.fn(() => null),
+    resolveInvocationRoute: vi.fn(() => null),
+    hasInvocationRouteCredentials: vi.fn(() => false),
+    updateActiveInvocationRouteModel: vi.fn(),
+  },
+  geminiSettings: {
+    get: () => ({
+      textModelName: 'mock-text-model',
+    }),
+    update: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  },
+  ttsSettings: {
+    get: vi.fn(() => ({})),
+    update: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  },
+  providerProfilesSettings: {
+    get: vi.fn(() => []),
+    update: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  },
+  providerCatalogsSettings: {
+    get: vi.fn(() => []),
+    update: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  },
+  providerPricingCacheSettings: {
+    get: vi.fn(() => []),
+    update: vi.fn(),
+  },
+  invocationPresetsSettings: {
+    get: vi.fn(() => []),
+    update: vi.fn(),
+    getActivePresetId: vi.fn(() => null),
+    setActivePresetId: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  },
+  getActiveInvocationPreset: vi.fn(() => null),
+  resolveInvocationRoute: vi.fn(() => null),
+  hasInvocationRouteCredentials: vi.fn(() => false),
+  updateActiveInvocationRouteModel: vi.fn(),
+}));
+
+import { pptGenerationTool } from '../ppt-generation';
+
+function createFrame(id: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    type: 'frame',
+    name: id,
+    points: [
+      [0, 0],
+      [1920, 1080],
+    ],
+    children: [],
+    ...overrides,
+  };
+}
+
+function mockOutlineResponse() {
+  mocks.sendChat.mockResolvedValue({
+    choices: [
+      {
+        message: {
+          content: JSON.stringify({
+            title: '新产品发布',
+            styleSpec: {
+              visualStyle: 'premium launch deck',
+              colorPalette: 'white background, black text, blue accent',
+              typography: 'bold title, readable body',
+              layout: 'stable grid with visual anchor',
+              decorativeElements: 'thin blue lines and cards',
+              avoid: 'avoid mixed style',
+            },
+            pages: [
+              { layout: 'cover', title: '新品发布' },
+              {
+                layout: 'title-body',
+                title: '核心亮点',
+                bullets: ['性能全面提升', '体验更加稳定'],
+              },
+              { layout: 'ending', title: '谢谢' },
+            ],
+          }),
+        },
+      },
+    ],
+  });
+}
+
+describe('ppt-generation MCP tool', () => {
+  beforeEach(() => {
+    mocks.sendChat.mockReset();
+    mockOutlineResponse();
+  });
+
+  afterEach(() => {
+    setBoard(null);
+  });
+
+  it('replaces existing PPT outline instead of appending to it', async () => {
+    const board = createTestingBoard([], [
+      createFrame('regular-frame'),
+      createFrame('old-ppt-frame', {
+        pptMeta: {
+          pageIndex: 1,
+          slidePrompt: 'old slide prompt',
+          slideImageElementId: 'old-slide-image',
+          slideImageHistory: [
+            {
+              id: 'history-1',
+              imageUrl: 'https://example.com/history.png',
+              elementId: 'old-history-image',
+              createdAt: 1,
+            },
+          ],
+        },
+      }),
+      {
+        id: 'old-bound-note',
+        type: 'text',
+        frameId: 'old-ppt-frame',
+      },
+      {
+        id: 'old-slide-image',
+        type: 'image',
+        frameId: 'old-ppt-frame',
+        pptSlideImage: true,
+      },
+      {
+        id: 'old-history-image',
+        type: 'image',
+        pptSlideImage: true,
+      },
+    ]) as any;
+    setBoard(board);
+
+    const chunks: string[] = [];
+    const result = await pptGenerationTool.execute(
+      {
+        topic: '新产品发布',
+        pageCount: 'short',
+        language: '中文',
+      },
+      {
+        onChunk: (chunk) => chunks.push(chunk),
+      }
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        pageCount: 3,
+      },
+    });
+    expect(board.children.some((element: any) => element.id === 'regular-frame'))
+      .toBe(true);
+    expect(board.children.some((element: any) => element.id === 'old-ppt-frame'))
+      .toBe(false);
+    expect(board.children.some((element: any) => element.id === 'old-bound-note'))
+      .toBe(false);
+    expect(board.children.some((element: any) => element.id === 'old-slide-image'))
+      .toBe(false);
+    expect(
+      board.children.some((element: any) => element.id === 'old-history-image')
+    ).toBe(false);
+
+    const pptFrames = board.children.filter((element: any) => element.pptMeta);
+    expect(pptFrames).toHaveLength(3);
+    expect(pptFrames.map((frame: any) => frame.pptMeta.pageIndex)).toEqual([
+      1, 2, 3,
+    ]);
+    expect(chunks.join('')).toContain('已替换画布中原有 1 个 PPT 页面');
+  });
+});

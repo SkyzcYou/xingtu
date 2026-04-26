@@ -30,8 +30,16 @@ const isVideoElement = (imageItem: any): boolean => {
   }
 
   // 检查URL扩展名（用于普通 URL 的视频识别）
-  const videoExtensions = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv'];
-  return videoExtensions.some(ext => url.toLowerCase().includes(ext));
+  const videoExtensions = [
+    '.mp4',
+    '.avi',
+    '.mov',
+    '.wmv',
+    '.flv',
+    '.webm',
+    '.mkv',
+  ];
+  return videoExtensions.some((ext) => url.toLowerCase().includes(ext));
 };
 
 export const Image: React.FC<ImageProps> = (props: ImageProps) => {
@@ -48,9 +56,20 @@ export const Image: React.FC<ImageProps> = (props: ImageProps) => {
     | undefined;
   const pptPrompt = elementData?.pptImagePrompt as string | undefined;
   const pptFrameId = elementData?.frameId as string | undefined;
+  const isLegacyAudioElement =
+    elementData?.isAudio === true ||
+    elementData?.audioType === 'music-card' ||
+    (typeof elementData?.audioUrl === 'string' &&
+      elementData.audioUrl.length > 0);
+  const isVideo = isVideoElement(props.imageItem);
+  const shouldContainFrameImage =
+    !isLegacyAudioElement &&
+    !isVideo &&
+    typeof elementData?.frameId === 'string';
 
   const handlePPTImageGenerate = useCallback(async () => {
-    if (!props.board || !pptFrameId || !pptPrompt || pptStatus === 'loading') return;
+    if (!props.board || !pptFrameId || !pptPrompt || pptStatus === 'loading')
+      return;
 
     setPPTImagePlaceholderStatus(props.board, pptFrameId, 'loading');
     setFramePPTImageStatus(props.board, pptFrameId, 'loading');
@@ -64,7 +83,9 @@ export const Image: React.FC<ImageProps> = (props: ImageProps) => {
       if (result.success && (result.data as any)?.url) {
         removePPTImagePlaceholder(props.board, pptFrameId);
 
-        const frame = props.board.children.find((el: any) => el.id === pptFrameId);
+        const frame = props.board.children.find(
+          (el: any) => el.id === pptFrameId
+        );
         if (frame) {
           const frameRect = RectangleClient.getRectangleByPoints(frame.points!);
           const imgRegion = getImageRegion({
@@ -127,7 +148,7 @@ export const Image: React.FC<ImageProps> = (props: ImageProps) => {
   }
 
   // 如果是视频元素，使用视频组件渲染
-  if (isVideoElement(props.imageItem)) {
+  if (isVideo) {
     return (
       <Video
         videoItem={{
@@ -148,10 +169,26 @@ export const Image: React.FC<ImageProps> = (props: ImageProps) => {
   const imgProps = {
     src: props.imageItem.url,
     draggable: false,
-    width: '100%',
+    ...(shouldContainFrameImage
+      ? {
+          style: {
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain' as const,
+            display: 'block',
+          },
+        }
+      : {
+          width: '100%',
+        }),
   };
   return (
-    <div>
+    <div
+      data-slideshow-legacy-audio={isLegacyAudioElement ? 'true' : undefined}
+      style={
+        shouldContainFrameImage ? { width: '100%', height: '100%' } : undefined
+      }
+    >
       <img
         {...imgProps}
         className={classNames('image-origin', {

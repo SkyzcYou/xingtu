@@ -585,6 +585,7 @@ export class WorkflowEngine {
       // 主线程工具（需要访问 Board/Canvas 或由 swCapabilitiesHandler 统一处理，与 SW 工具集一致）
       case 'generate_grid_image':
       case 'generate_inspiration_board':
+      case 'generate_ppt':
       case 'split_image':
       case 'generate_long_video':
       case 'insert_mermaid':

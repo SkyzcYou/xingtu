@@ -6,14 +6,15 @@
 
 import type { MCPExecuteOptions, AgentExecutionContext, WorkflowStepInfo } from '../../mcp/types';
 import {
+  getDefaultAudioModel,
   getDefaultImageModel,
   getDefaultTextModel,
   getDefaultVideoModel,
-  getModelType,
 } from '../../constants/model-config';
 import { agentExecutor } from '../agent';
 import { geminiSettings, type ModelRef } from '../../utils/settings-manager';
 import { getPreferredModels } from '../../utils/runtime-model-discovery';
+import { applyMediaModelDefaultsToArgs } from '../agent/media-model-routing';
 
 /**
  * AI 分析参数
@@ -50,6 +51,10 @@ function getToolDescription(toolName: string, args?: Record<string, unknown>): s
       return `生成图片: ${((args?.prompt as string) || '').substring(0, 30)}...`;
     case 'generate_video':
       return `生成视频: ${((args?.prompt as string) || '').substring(0, 30)}...`;
+    case 'generate_audio':
+      return `生成音频: ${((args?.prompt as string) || '').substring(0, 30)}...`;
+    case 'generate_ppt':
+      return `生成PPT: ${((args?.topic as string) || '').substring(0, 30)}...`;
     case 'generate_grid_image':
       return `生成宫格图: ${((args?.theme as string) || '').substring(0, 30)}...`;
     case 'insert_svg':
@@ -89,68 +94,30 @@ export async function analyzeWithAI(
       },
       onToolCall: (toolCall) => {
         // 注入模型参数到工具参数中
-        const toolArgs = { ...toolCall.arguments };
-        const generationTools = ['generate_image', 'generate_video', 'generate_grid_image', 'generate_photo_wall'];
-        
-        if (generationTools.includes(toolCall.name)) {
-          const specifiedModel = toolArgs.model as string | undefined;
-          const isVideoTool = toolCall.name === 'generate_video';
-          const contextModelType = context.model?.type;
-          const contextModelId = context.model?.id;
-          const preferredContextModelId =
-            contextModelType === (isVideoTool ? 'video' : 'image')
-              ? contextModelId
-              : undefined;
-          const preferredContextModelRef =
-            preferredContextModelId && modelRef?.modelId === preferredContextModelId
-              ? modelRef
-              : null;
-
-          // 获取用户设置的默认模型
-          const defaultImageModel =
-            settings.imageModelName || getPreferredModels('image')[0]?.id || getDefaultImageModel();
-          const defaultVideoModel =
-            settings.videoModelName || getPreferredModels('video')[0]?.id || getDefaultVideoModel();
-          const fallbackModel =
-            preferredContextModelId ||
-            (isVideoTool ? defaultVideoModel : defaultImageModel);
-
-          if (specifiedModel) {
-            // AI 指定了模型，检查类型是否匹配
-            const modelType = getModelType(specifiedModel);
-            const needsCorrection = isVideoTool
-              ? modelType !== 'video'
-              : modelType !== 'image';
-
-            if (needsCorrection) {
-              toolArgs.model = fallbackModel;
-              if (
-                preferredContextModelRef &&
-                preferredContextModelRef.modelId === fallbackModel
-              ) {
-                toolArgs.modelRef = preferredContextModelRef;
-              } else {
-                delete toolArgs.modelRef;
-              }
-            } else if (
-              preferredContextModelRef &&
-              preferredContextModelRef.modelId === specifiedModel
-            ) {
-              toolArgs.modelRef = preferredContextModelRef;
-            }
-          } else {
-            // AI 没有指定模型，优先沿用当前上下文显式模型，否则回退默认模型
-            toolArgs.model = fallbackModel;
-            if (
-              preferredContextModelRef &&
-              preferredContextModelRef.modelId === fallbackModel
-            ) {
-              toolArgs.modelRef = preferredContextModelRef;
-            } else {
-              delete toolArgs.modelRef;
-            }
+        const toolArgs = applyMediaModelDefaultsToArgs(
+          toolCall.name,
+          { ...toolCall.arguments },
+          {
+            defaultModels: context.defaultModels,
+            defaultModelRefs: context.defaultModelRefs,
+            contextModel: context.model,
+            contextModelRef: modelRef || null,
+            fallbackModels: {
+              image:
+                settings.imageModelName ||
+                getPreferredModels('image')[0]?.id ||
+                getDefaultImageModel(),
+              video:
+                settings.videoModelName ||
+                getPreferredModels('video')[0]?.id ||
+                getDefaultVideoModel(),
+              audio:
+                settings.audioModelName ||
+                getPreferredModels('audio')[0]?.id ||
+                getDefaultAudioModel(),
+            },
           }
-        }
+        );
 
         // 创建新的工作流步骤
         const newStep: WorkflowStepInfo = {

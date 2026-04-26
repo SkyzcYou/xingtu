@@ -10,6 +10,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   promptStorageService,
   type PromptHistoryItem,
+  type PromptType,
 } from '../services/prompt-storage-service';
 import { AI_COLD_START_SUGGESTIONS } from '../constants/prompts';
 
@@ -20,13 +21,19 @@ export interface UsePromptHistoryOptions {
   deduplicateWithPresets?: boolean;
   /** 自定义预设内容集合（用于自定义去重逻辑） */
   customPresetContents?: string[];
+  /** 仅返回指定生成类型的历史记录 */
+  modelTypeFilter?: PromptType;
 }
 
 export interface UsePromptHistoryReturn {
   /** 历史提示词列表（已去重） */
   history: PromptHistoryItem[];
   /** 添加历史记录 */
-  addHistory: (content: string, hasSelection?: boolean, modelType?: 'image' | 'video' | 'audio' | 'text' | 'agent') => void;
+  addHistory: (
+    content: string,
+    hasSelection?: boolean,
+    modelType?: PromptType
+  ) => void;
   /** 删除指定历史记录 */
   removeHistory: (id: string) => void;
   /** 清空所有历史记录 */
@@ -42,7 +49,12 @@ export interface UsePromptHistoryReturn {
  * @param options 可选配置，支持语言和预设去重
  */
 export function usePromptHistory(options: UsePromptHistoryOptions = {}): UsePromptHistoryReturn {
-  const { language = 'zh', deduplicateWithPresets = true, customPresetContents } = options;
+  const {
+    language = 'zh',
+    deduplicateWithPresets = true,
+    customPresetContents,
+    modelTypeFilter,
+  } = options;
   const [rawHistory, setRawHistory] = useState<PromptHistoryItem[]>([]);
 
   // 构建预设提示词内容集合（用于去重）
@@ -61,13 +73,18 @@ export function usePromptHistory(options: UsePromptHistoryOptions = {}): UseProm
 
   // 过滤掉与预设重复的历史记录
   const history = useMemo(() => {
+    const filteredHistory = modelTypeFilter
+      ? rawHistory.filter((item) => item.modelType === modelTypeFilter)
+      : rawHistory;
+
     if (!deduplicateWithPresets || presetContents.size === 0) {
-      return rawHistory;
+      return filteredHistory;
     }
-    return rawHistory.filter(
-      item => !presetContents.has(item.content.trim().toLowerCase())
+
+    return filteredHistory.filter(
+      (item) => !presetContents.has(item.content.trim().toLowerCase())
     );
-  }, [rawHistory, presetContents, deduplicateWithPresets]);
+  }, [rawHistory, presetContents, deduplicateWithPresets, modelTypeFilter]);
 
   // 刷新历史记录
   const refreshHistory = useCallback(() => {
@@ -95,10 +112,13 @@ export function usePromptHistory(options: UsePromptHistoryOptions = {}): UseProm
   }, [refreshHistory]);
 
   // 添加历史记录
-  const addHistory = useCallback((content: string, hasSelection?: boolean, modelType?: 'image' | 'video' | 'audio' | 'text' | 'agent') => {
-    promptStorageService.addHistory(content, hasSelection, modelType);
-    refreshHistory();
-  }, [refreshHistory]);
+  const addHistory = useCallback(
+    (content: string, hasSelection?: boolean, modelType?: PromptType) => {
+      promptStorageService.addHistory(content, hasSelection, modelType);
+      refreshHistory();
+    },
+    [refreshHistory]
+  );
 
   // 删除指定历史记录
   const removeHistory = useCallback((id: string) => {

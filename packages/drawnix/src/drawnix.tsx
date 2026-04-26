@@ -127,6 +127,8 @@ import {
   requestServiceWorkerIdlePrefetch,
   type IdlePrefetchGroup,
 } from './utils/startup-prefetch';
+import { DRAWER_PIN_KEYS, getDrawerPinned } from './utils/drawer-pin';
+import { PPT_EDITOR_OPEN_EVENT } from './services/ppt/ppt-ui-events';
 const DeferredAIInputBar = lazy(() =>
   import('./components/startup/DeferredAIInputBar').then((module) => ({
     default: module.DeferredAIInputBar,
@@ -143,7 +145,9 @@ import { SelectionMode } from './types/asset.types';
 type MediaLibraryOpenConfig = Pick<
   MediaLibraryModalProps,
   'mode' | 'filterType' | 'onSelect' | 'selectButtonText'
->;
+> & {
+  keepProjectDrawerOpen?: boolean;
+};
 
 interface SWIdlePrefetchStatusMessage {
   type: 'SW_IDLE_PREFETCH_STATUS';
@@ -211,6 +215,32 @@ export type DrawnixProps = {
 } & Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
 const DEFAULT_IDLE_PREFETCH_GROUPS: IdlePrefetchGroup[] = [];
+const PROJECT_DRAWER_ACTIVE_TAB_KEY = 'project-drawer-active-tab';
+const PROJECT_DRAWER_PPT_EDIT_TAB = 'frames';
+
+const isProjectDrawerInPPTEditMode = (): boolean => {
+  try {
+    return (
+      localStorage.getItem(PROJECT_DRAWER_ACTIVE_TAB_KEY) ===
+      PROJECT_DRAWER_PPT_EDIT_TAB
+    );
+  } catch {
+    return false;
+  }
+};
+
+const shouldAutoCloseProjectDrawer = (): boolean => {
+  return !getDrawerPinned(DRAWER_PIN_KEYS.project);
+};
+
+const shouldAutoCloseProjectDrawerOnCanvasClick = (): boolean =>
+  shouldAutoCloseProjectDrawer() && !isProjectDrawerInPPTEditMode();
+
+const shouldAutoCloseToolboxDrawer = (): boolean =>
+  !getDrawerPinned(DRAWER_PIN_KEYS.toolbox);
+
+const shouldAutoCloseTaskDrawer = (): boolean =>
+  !getDrawerPinned(DRAWER_PIN_KEYS.task);
 
 export const Drawnix: React.FC<DrawnixProps> = ({
   value,
@@ -273,9 +303,15 @@ export const Drawnix: React.FC<DrawnixProps> = ({
 
   // 关闭所有抄屉
   const closeAllDrawers = useCallback(() => {
-    setProjectDrawerOpen(false);
-    setToolboxDrawerOpen(false);
-    setTaskPanelExpanded(false);
+    if (shouldAutoCloseProjectDrawer()) {
+      setProjectDrawerOpen(false);
+    }
+    if (shouldAutoCloseToolboxDrawer()) {
+      setToolboxDrawerOpen(false);
+    }
+    if (shouldAutoCloseTaskDrawer()) {
+      setTaskPanelExpanded(false);
+    }
     setMediaLibraryOpen(false);
   }, []);
 
@@ -361,11 +397,33 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       return;
     }
 
-    setToolboxDrawerOpen(false);
-    setTaskPanelExpanded(false);
+    if (shouldAutoCloseToolboxDrawer()) {
+      setToolboxDrawerOpen(false);
+    }
+    if (shouldAutoCloseTaskDrawer()) {
+      setTaskPanelExpanded(false);
+    }
     setMediaLibraryOpen(false);
     setProjectDrawerOpen(true);
   }, [enableToolWindows, projectDrawerOpen]);
+
+  useEffect(() => {
+    const handleOpenPPTEditor = () => {
+      enableToolWindows(TOOL_WINDOW_GROUPS);
+      if (shouldAutoCloseToolboxDrawer()) {
+        setToolboxDrawerOpen(false);
+      }
+      if (shouldAutoCloseTaskDrawer()) {
+        setTaskPanelExpanded(false);
+      }
+      setMediaLibraryOpen(false);
+      setProjectDrawerOpen(true);
+    };
+
+    window.addEventListener(PPT_EDITOR_OPEN_EVENT, handleOpenPPTEditor);
+    return () =>
+      window.removeEventListener(PPT_EDITOR_OPEN_EVENT, handleOpenPPTEditor);
+  }, [enableToolWindows]);
 
   // 处理工具箱抽屉切换（互斥逻辑）
   const handleToolboxDrawerToggle = useCallback(() => {
@@ -375,8 +433,12 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       return;
     }
 
-    setProjectDrawerOpen(false);
-    setTaskPanelExpanded(false);
+    if (shouldAutoCloseProjectDrawer()) {
+      setProjectDrawerOpen(false);
+    }
+    if (shouldAutoCloseTaskDrawer()) {
+      setTaskPanelExpanded(false);
+    }
     setMediaLibraryOpen(false);
     setToolboxDrawerOpen(true);
   }, [enableToolWindows, toolboxDrawerOpen]);
@@ -389,22 +451,40 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       return;
     }
 
-    setProjectDrawerOpen(false);
-    setToolboxDrawerOpen(false);
+    if (shouldAutoCloseProjectDrawer()) {
+      setProjectDrawerOpen(false);
+    }
+    if (shouldAutoCloseToolboxDrawer()) {
+      setToolboxDrawerOpen(false);
+    }
     setMediaLibraryOpen(false);
     setTaskPanelExpanded(true);
   }, [enableDeferredRuntime, taskPanelExpanded]);
 
   // 打开素材库（用于缓存满提示）
-  const handleOpenMediaLibrary = useCallback((config?: MediaLibraryOpenConfig) => {
-    enableToolWindows(TOOL_WINDOW_GROUPS);
-    closeAllDrawers();
-    setMediaLibraryConfig({
-      mode: SelectionMode.BROWSE,
-      ...config,
-    });
-    setMediaLibraryOpen(true);
-  }, [closeAllDrawers, enableToolWindows]);
+  const handleOpenMediaLibrary = useCallback(
+    (config?: MediaLibraryOpenConfig) => {
+      enableToolWindows(TOOL_WINDOW_GROUPS);
+      const { keepProjectDrawerOpen, ...mediaLibraryConfig } = config || {};
+      if (keepProjectDrawerOpen) {
+        if (shouldAutoCloseToolboxDrawer()) {
+          setToolboxDrawerOpen(false);
+        }
+        if (shouldAutoCloseTaskDrawer()) {
+          setTaskPanelExpanded(false);
+        }
+        setMediaLibraryOpen(false);
+      } else {
+        closeAllDrawers();
+      }
+      setMediaLibraryConfig({
+        mode: SelectionMode.BROWSE,
+        ...mediaLibraryConfig,
+      });
+      setMediaLibraryOpen(true);
+    },
+    [closeAllDrawers, enableToolWindows]
+  );
 
   const handleOpenBackupRestore = useCallback(() => {
     enableDeferredRuntime(TOOL_WINDOW_GROUPS);
@@ -757,6 +837,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                       handleOpenCloudSync={handleOpenCloudSync}
                       setProjectDrawerOpen={setProjectDrawerOpen}
                       setToolboxDrawerOpen={setToolboxDrawerOpen}
+                      setTaskPanelExpanded={setTaskPanelExpanded}
                       setMediaLibraryOpen={setMediaLibraryOpen}
                       setBackupRestoreOpen={setBackupRestoreOpen}
                       cloudSyncOpen={cloudSyncOpen}
@@ -766,7 +847,9 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                       onCreateProjectForMemory={handleCreateProjectForMemory}
                       currentBoardId={currentBoardId}
                       deferredRuntimeEnabled={deferredRuntimeEnabled}
-                      shouldRenderDeferredFeatures={shouldRenderDeferredFeatures}
+                      shouldRenderDeferredFeatures={
+                        shouldRenderDeferredFeatures
+                      }
                       versionUpdateEnabled={versionUpdateEnabled}
                       performancePanelEnabled={performancePanelEnabled}
                       toolWindowManagerEnabled={toolWindowManagerEnabled}
@@ -825,6 +908,7 @@ interface DrawnixContentProps {
   handleOpenCloudSync: () => void;
   setProjectDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setToolboxDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setTaskPanelExpanded: React.Dispatch<React.SetStateAction<boolean>>;
   setMediaLibraryOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setBackupRestoreOpen: React.Dispatch<React.SetStateAction<boolean>>;
   cloudSyncOpen: boolean;
@@ -876,6 +960,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   handleOpenCloudSync,
   setProjectDrawerOpen,
   setToolboxDrawerOpen,
+  setTaskPanelExpanded,
   setMediaLibraryOpen,
   setBackupRestoreOpen,
   setCloudSyncOpen,
@@ -1297,6 +1382,10 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
     const handleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
 
+      if (target.closest('.side-drawer') || target.closest('.project-drawer')) {
+        return;
+      }
+
       // 只处理画布区域内的点击
       const isInsideCanvas =
         target.closest('.board-host-svg') ||
@@ -1360,12 +1449,15 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
         }
       }
 
-      // 关闭项目抽屉和工具箱抽屉
-      if (projectDrawerOpen) {
+      // 关闭未固定的自动收起抽屉
+      if (projectDrawerOpen && shouldAutoCloseProjectDrawerOnCanvasClick()) {
         setProjectDrawerOpen(false);
       }
-      if (toolboxDrawerOpen) {
+      if (toolboxDrawerOpen && shouldAutoCloseToolboxDrawer()) {
         setToolboxDrawerOpen(false);
+      }
+      if (taskPanelExpanded && shouldAutoCloseTaskDrawer()) {
+        setTaskPanelExpanded(false);
       }
     };
 
@@ -1384,8 +1476,10 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
     containerRef,
     projectDrawerOpen,
     toolboxDrawerOpen,
+    taskPanelExpanded,
     setProjectDrawerOpen,
     setToolboxDrawerOpen,
+    setTaskPanelExpanded,
   ]);
 
   return (
@@ -1570,6 +1664,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
               setMediaLibraryOpen={setMediaLibraryOpen}
               setBackupRestoreOpen={setBackupRestoreOpen}
               setCloudSyncOpen={setCloudSyncOpen}
+              handleOpenMediaLibrary={handleOpenMediaLibrary}
               handleBeforeSwitch={handleBeforeSwitch}
               onCreateProjectForMemory={onCreateProjectForMemory}
             />

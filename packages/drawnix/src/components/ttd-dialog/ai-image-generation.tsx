@@ -24,7 +24,6 @@ import {
   ReferenceImageUpload,
   type ReferenceImage,
   PromptInput,
-  AspectRatioSelector,
   getMergedPresetPrompts,
   savePromptToHistory as savePromptToHistoryUtil,
   ResizableDivider,
@@ -35,7 +34,6 @@ import {
 import {
   DEFAULT_ASPECT_RATIO,
   ASPECT_RATIO_OPTIONS,
-  type AspectRatioOption,
   convertAspectRatioToSize,
 } from '../../constants/image-aspect-ratios';
 import { getDefaultImageModel } from '../../constants/model-config';
@@ -78,6 +76,9 @@ interface AIImageGenerationProps {
   initialAspectRatio?: string;
   targetFrameId?: string;
   targetFrameDimensions?: { width: number; height: number };
+  pptSlideImage?: boolean;
+  pptSlidePrompt?: string;
+  pptReplaceElementId?: string;
   selectedModel?: string;
   selectedModelRef?: ModelRef | null;
   onModelChange?: (value: string) => void;
@@ -92,6 +93,50 @@ interface AIImageGenerationProps {
   }) => void | Promise<void>;
 }
 
+function getAspectRatioFromSizeParam(size?: string): string | undefined {
+  if (!size) return undefined;
+  if (size === 'auto') return DEFAULT_ASPECT_RATIO;
+
+  const aspectRatio = size.replace(/[xX]/g, ':');
+  return ASPECT_RATIO_OPTIONS.some((option) => option.value === aspectRatio)
+    ? aspectRatio
+    : undefined;
+}
+
+function getAspectRatioFromParams(
+  params: Record<string, string>,
+  fallbackAspectRatio?: string
+): string {
+  return (
+    getAspectRatioFromSizeParam(params.size) ||
+    fallbackAspectRatio ||
+    DEFAULT_ASPECT_RATIO
+  );
+}
+
+function applyAspectRatioToParams(
+  modelId: string,
+  params: Record<string, string>,
+  nextAspectRatio?: string
+): Record<string, string> {
+  if (modelId.startsWith('mj') || !nextAspectRatio) {
+    return params;
+  }
+
+  const nextSize =
+    nextAspectRatio === DEFAULT_ASPECT_RATIO
+      ? 'auto'
+      : convertAspectRatioToSize(nextAspectRatio);
+  if (
+    !nextSize ||
+    !getSizeOptionsForModel(modelId).some((option) => option.value === nextSize)
+  ) {
+    return params;
+  }
+
+  return params.size === nextSize ? params : { ...params, size: nextSize };
+}
+
 const AIImageGeneration = ({
   initialPrompt = '',
   initialImages = [],
@@ -102,6 +147,9 @@ const AIImageGeneration = ({
   initialAspectRatio,
   targetFrameId,
   targetFrameDimensions,
+  pptSlideImage,
+  pptSlidePrompt,
+  pptReplaceElementId,
   selectedModel,
   selectedModelRef,
   onModelChange,
@@ -169,7 +217,11 @@ const AIImageGeneration = ({
   const [width, setWidth] = useState<number | string>(initialWidth || 1024);
   const [height, setHeight] = useState<number | string>(initialHeight || 1024);
   const [aspectRatio, setAspectRatio] = useState<string>(
-    initialAspectRatio || initialScopedPreferences.aspectRatio || DEFAULT_ASPECT_RATIO
+    initialAspectRatio ||
+      getAspectRatioFromParams(
+        initialScopedPreferences.extraParams,
+        initialScopedPreferences.aspectRatio
+      )
   );
   const [error, setError] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] =
@@ -193,37 +245,9 @@ const AIImageGeneration = ({
   const generatingLockRef = useRef(false);
 
   const isMJModel = currentModel.startsWith('mj');
-  const modelAspectRatioOptions = React.useMemo<AspectRatioOption[]>(() => {
-    if (isMJModel) return [];
-
-    const sizeOptions = getSizeOptionsForModel(currentModel);
-    if (sizeOptions.length === 0) return ASPECT_RATIO_OPTIONS;
-
-    const byValue = new Map(
-      ASPECT_RATIO_OPTIONS.map((option) => [option.value, option])
-    );
-    const mapped: AspectRatioOption[] = [];
-
-    sizeOptions.forEach((sizeOption) => {
-      const normalized =
-        sizeOption.value === 'auto'
-          ? 'auto'
-          : sizeOption.value.replace('x', ':');
-      const option = byValue.get(normalized);
-      if (option && !mapped.some((item) => item.value === option.value)) {
-        mapped.push(option);
-      }
-    });
-
-    return mapped.length > 0 ? mapped : ASPECT_RATIO_OPTIONS;
-  }, [currentModel, isMJModel]);
-
   const hasCompatibleParams = React.useMemo(() => {
-    const params = getCompatibleParams(currentModel);
-    // MJ 模型所有参数都走 dropdown；非 MJ 模型排除 size（已有 AspectRatioSelector）
-    if (isMJModel) return params.length > 0;
-    return params.some((p) => p.id !== 'size');
-  }, [currentModel, isMJModel]);
+    return getCompatibleParams(currentModel).length > 0;
+  }, [currentModel]);
 
   // Track if we're in manual edit mode (from handleEditTask) to prevent props from overwriting
   const [isManualEdit, setIsManualEdit] = useState(false);
@@ -238,18 +262,38 @@ const AIImageGeneration = ({
       currentModel,
       getSelectionKey(currentModel, currentModelRef)
     );
-    setMjSelectedParams(scopedPreferences.extraParams);
-    setAspectRatio(scopedPreferences.aspectRatio);
-  }, [currentModel, currentModelRef, isManualEdit]);
+    const nextParams = initialAspectRatio
+      ? applyAspectRatioToParams(
+          currentModel,
+          scopedPreferences.extraParams,
+          initialAspectRatio
+        )
+      : scopedPreferences.extraParams;
+    setMjSelectedParams(nextParams);
+    setAspectRatio(
+      getAspectRatioFromParams(
+        nextParams,
+        initialAspectRatio || scopedPreferences.aspectRatio
+      )
+    );
+  }, [currentModel, currentModelRef, initialAspectRatio, isManualEdit]);
 
   const handleMJParamChange = useCallback((paramId: string, value: string) => {
     if (!value || value === 'default') {
+      if (paramId === 'size') {
+        setAspectRatio(DEFAULT_ASPECT_RATIO);
+      }
       setMjSelectedParams((prev) => {
         const next = { ...prev };
         delete next[paramId];
         return next;
       });
       return;
+    }
+    if (paramId === 'size') {
+      setAspectRatio(
+        getAspectRatioFromSizeParam(value) || DEFAULT_ASPECT_RATIO
+      );
     }
     setMjSelectedParams((prev) => ({
       ...prev,
@@ -285,6 +329,10 @@ const AIImageGeneration = ({
       height: initialHeight,
       result: initialResultUrl,
       aspectRatio: initialAspectRatio,
+      targetFrameId,
+      pptSlideImage,
+      pptSlidePrompt,
+      pptReplaceElementId,
     });
 
     // Skip if we've already processed these exact props
@@ -302,7 +350,12 @@ const AIImageGeneration = ({
     if (initialWidth) setWidth(initialWidth);
     if (initialHeight) setHeight(initialHeight);
     // 如果有 Frame 匹配的宽高比，自动设置
-    if (initialAspectRatio) setAspectRatio(initialAspectRatio);
+    if (initialAspectRatio) {
+      setAspectRatio(initialAspectRatio);
+      setMjSelectedParams((prev) =>
+        applyAspectRatioToParams(currentModel, prev, initialAspectRatio)
+      );
+    }
   }, [
     initialPrompt,
     initialImages,
@@ -311,7 +364,12 @@ const AIImageGeneration = ({
     initialHeight,
     initialResultUrl,
     initialAspectRatio,
+    targetFrameId,
+    pptSlideImage,
+    pptSlidePrompt,
+    pptReplaceElementId,
     isManualEdit,
+    currentModel,
   ]);
 
   const lastDraftRef = useRef('');
@@ -378,10 +436,13 @@ const AIImageGeneration = ({
       setCurrentModel(fallback.id);
       // 避免每次创建新对象引用导致级联重渲染
       const nextRef = getModelRefFromConfig(fallback);
-      setCurrentModelRef(prev => {
-        if (prev && nextRef &&
-            prev.profileId === nextRef.profileId &&
-            prev.modelId === nextRef.modelId) {
+      setCurrentModelRef((prev) => {
+        if (
+          prev &&
+          nextRef &&
+          prev.profileId === nextRef.profileId &&
+          prev.modelId === nextRef.modelId
+        ) {
           return prev;
         }
         return nextRef;
@@ -405,11 +466,15 @@ const AIImageGeneration = ({
         selectedModel,
         selectedModelRef
       );
-      const nextRef = getModelRefFromConfig(matchedModel) || selectedModelRef || null;
-      setCurrentModelRef(prev => {
-        if (prev && nextRef &&
-            prev.profileId === nextRef.profileId &&
-            prev.modelId === nextRef.modelId) {
+      const nextRef =
+        getModelRefFromConfig(matchedModel) || selectedModelRef || null;
+      setCurrentModelRef((prev) => {
+        if (
+          prev &&
+          nextRef &&
+          prev.profileId === nextRef.profileId &&
+          prev.modelId === nextRef.modelId
+        ) {
           return prev;
         }
         return nextRef;
@@ -428,19 +493,6 @@ const AIImageGeneration = ({
       setMjSelectedParams({});
     }
   }, [hasCompatibleParams, mjSelectedParams]);
-
-  useEffect(() => {
-    if (isMJModel || modelAspectRatioOptions.length === 0) return;
-    const supportedValues = new Set(
-      modelAspectRatioOptions.map((option) => option.value)
-    );
-    if (!supportedValues.has(aspectRatio)) {
-      const nextValue = supportedValues.has('auto')
-        ? 'auto'
-        : modelAspectRatioOptions[0]?.value || DEFAULT_ASPECT_RATIO;
-      setAspectRatio(nextValue);
-    }
-  }, [aspectRatio, isMJModel, modelAspectRatioOptions]);
 
   useEffect(() => {
     saveAIImageToolPreferences({
@@ -464,11 +516,12 @@ const AIImageGeneration = ({
 
   // 重置所有状态
   const handleReset = () => {
+    const resetParams = sanitizeImageToolExtraParams(currentModel, {});
     setPrompt('');
-    setMjSelectedParams({});
+    setMjSelectedParams(resetParams);
     setUploadedImages([]);
     setError(null);
-    setAspectRatio(DEFAULT_ASPECT_RATIO); // 重置比例
+    setAspectRatio(getAspectRatioFromParams(resetParams));
     setMobilePanel('config');
     // Clear manual edit mode
     setIsManualEdit(false);
@@ -497,6 +550,7 @@ const AIImageGeneration = ({
     const taskModel = task.params.model || currentModel;
     const taskExtraParams = {
       ...(task.params.params || {}),
+      ...(task.params.size !== undefined ? { size: task.params.size } : {}),
       ...(task.params.resolution !== undefined
         ? { resolution: task.params.resolution }
         : {}),
@@ -504,6 +558,10 @@ const AIImageGeneration = ({
         ? { quality: task.params.quality }
         : {}),
     };
+    const sanitizedTaskParams =
+      Object.keys(taskExtraParams).length > 0
+        ? sanitizeImageToolExtraParams(taskModel, taskExtraParams)
+        : sanitizeImageToolExtraParams(taskModel, {});
 
     // 标记为手动编辑模式,防止 props 的 useEffect 覆盖我们的更改
     setIsManualEdit(true);
@@ -511,11 +569,7 @@ const AIImageGeneration = ({
 
     // 直接更新表单状态
     setPrompt(task.params.prompt || '');
-    setMjSelectedParams(
-      Object.keys(taskExtraParams).length > 0
-        ? sanitizeImageToolExtraParams(taskModel, taskExtraParams)
-        : {}
-    );
+    setMjSelectedParams(sanitizedTaskParams);
     setWidth(task.params.width || 1024);
     setHeight(task.params.height || 1024);
 
@@ -541,11 +595,9 @@ const AIImageGeneration = ({
       // console.log('Updated settings:', geminiSettings.get());
     }
 
-    // 更新宽高比（如果有）
-    if (task.params.aspectRatio) {
-      // console.log('Setting aspectRatio to:', task.params.aspectRatio);
-      setAspectRatio(task.params.aspectRatio);
-    }
+    setAspectRatio(
+      getAspectRatioFromParams(sanitizedTaskParams, task.params.aspectRatio)
+    );
 
     setError(null);
   };
@@ -578,49 +630,128 @@ const AIImageGeneration = ({
   };
 
   const handleGenerate = async (count = 1) => {
+    const effectiveCount = count;
     // 防止快速双击/重复触发导致多次创建任务
     if (generatingLockRef.current) return;
     generatingLockRef.current = true;
     try {
-    if (!prompt || !prompt.trim()) {
-      setError(
-        language === 'zh' ? '请输入图像描述' : 'Please enter image description'
-      );
-      return;
-    }
-
-    // 先检查 API Key，没有则弹窗获取（只弹一次，避免批量生成时多次弹窗）
-    if (
-      !hasInvocationRouteCredentials('image', currentModelRef || currentModel)
-    ) {
-      const newApiKey = await promptForApiKey();
-      if (!newApiKey) {
+      if (!prompt || !prompt.trim()) {
         setError(
           language === 'zh'
-            ? '需要 API Key 才能生成图片'
-            : 'API Key is required to generate images'
+            ? '请输入图像描述'
+            : 'Please enter image description'
         );
         return;
       }
-    }
 
-    if (isMJModel) {
-      setError(null);
-    }
+      // 先检查 API Key，没有则弹窗获取（只弹一次，避免批量生成时多次弹窗）
+      if (
+        !hasInvocationRouteCredentials('image', currentModelRef || currentModel)
+      ) {
+        const newApiKey = await promptForApiKey();
+        if (!newApiKey) {
+          setError(
+            language === 'zh'
+              ? '需要 API Key 才能生成图片'
+              : 'API Key is required to generate images'
+          );
+          return;
+        }
+      }
 
-    try {
-      const finalWidth =
-        typeof width === 'string' ? parseInt(width) || 1024 : width;
-      const finalHeight =
-        typeof height === 'string' ? parseInt(height) || 1024 : height;
-      // Convert File objects to base64 data URLs for serialization
-      const convertedImages = await convertImagesToSerializable();
+      if (isMJModel) {
+        setError(null);
+      }
 
-      // 如果数量大于1，使用批量生成
-      if (count > 1) {
-        const batchTaskIds: string[] = [];
-        const batchId = `batch_${Date.now()}`;
+      try {
+        const finalWidth =
+          typeof width === 'string' ? parseInt(width) || 1024 : width;
+        const finalHeight =
+          typeof height === 'string' ? parseInt(height) || 1024 : height;
+        // Convert File objects to base64 data URLs for serialization
+        const convertedImages = await convertImagesToSerializable();
 
+        // 如果数量大于1，使用批量生成
+        if (effectiveCount > 1) {
+          const batchTaskIds: string[] = [];
+          const batchId = `batch_${Date.now()}`;
+
+          const currentImageModel =
+            currentModel || resolveInvocationRoute('image').modelId;
+
+          const finalPrompt = currentImageModel.startsWith('mj')
+            ? [prompt.trim(), buildMJPromptSuffix(mjSelectedParams)]
+                .filter(Boolean)
+                .join(' ')
+            : (prompt || '').trim();
+
+          // 非 MJ 模型的额外参数（如 seedream_quality）透传给 adapter
+          const extraParams =
+            !currentImageModel.startsWith('mj') &&
+            Object.keys(mjSelectedParams).length > 0
+              ? mjSelectedParams
+              : undefined;
+
+          // 如果参数中有 size，优先使用参数中的 size
+          const finalSize = extraParams?.size
+            ? extraParams.size
+            : convertAspectRatioToSize(aspectRatio);
+
+          for (let i = 0; i < effectiveCount; i++) {
+            const taskParams = {
+              prompt: finalPrompt,
+              width: finalWidth,
+              height: finalHeight,
+              aspectRatio,
+              size: finalSize,
+              model: currentImageModel,
+              modelRef: currentModelRef || null,
+              uploadedImages: convertedImages,
+              batchId,
+              batchIndex: i + 1,
+              batchTotal: effectiveCount,
+              autoInsertToCanvas:
+                initialAutoInsertToCanvas ??
+                getAutoInsertValue(LS_KEYS.AI_IMAGE_AUTO_INSERT),
+              targetFrameId,
+              targetFrameDimensions,
+              pptSlideImage,
+              pptSlidePrompt,
+              pptReplaceElementId,
+              ...(extraParams ? { params: extraParams } : {}),
+            };
+
+            const task = createTask(taskParams, TaskType.IMAGE);
+            if (task) {
+              batchTaskIds.push(task.id);
+            }
+          }
+
+          if (batchTaskIds.length > 0) {
+            MessagePlugin.success(
+              language === 'zh'
+                ? `已添加 ${batchTaskIds.length} 个任务到队列`
+                : `Added ${batchTaskIds.length} tasks to queue`
+            );
+
+            savePromptToHistory(finalPrompt);
+            setError(null);
+            setMobilePanel('tasks');
+            // Clear manual edit mode after batch generating
+            setIsManualEdit(false);
+          } else {
+            setError(
+              language === 'zh'
+                ? '批量任务创建失败，请稍后重试'
+                : 'Failed to create batch tasks, please try again later'
+            );
+          }
+          return;
+        }
+
+        // 单个任务生成
+
+        // Get current image model from settings
         const currentImageModel =
           currentModel || resolveInvocationRoute('image').modelId;
 
@@ -642,159 +773,89 @@ const AIImageGeneration = ({
           ? extraParams.size
           : convertAspectRatioToSize(aspectRatio);
 
-        for (let i = 0; i < count; i++) {
-          const taskParams = {
-            prompt: finalPrompt,
-            width: finalWidth,
-            height: finalHeight,
-            aspectRatio,
-            size: finalSize,
-            model: currentImageModel,
-            modelRef: currentModelRef || null,
-            uploadedImages: convertedImages,
-            batchId,
-            batchIndex: i + 1,
-            batchTotal: count,
-            autoInsertToCanvas:
-              initialAutoInsertToCanvas ??
-              getAutoInsertValue(LS_KEYS.AI_IMAGE_AUTO_INSERT),
-            targetFrameId,
-            targetFrameDimensions,
-            ...(extraParams ? { params: extraParams } : {}),
-          };
+        // 创建任务参数（单个任务也需要 batchId 以跳过 SW 重复检测）
+        const taskParams = {
+          prompt: finalPrompt,
+          width: finalWidth,
+          height: finalHeight,
+          aspectRatio,
+          size: finalSize,
+          model: currentImageModel,
+          modelRef: currentModelRef || null,
+          // 保存上传的图片（已转换为可序列化的格式）
+          uploadedImages: convertedImages,
+          autoInsertToCanvas:
+            initialAutoInsertToCanvas ??
+            getAutoInsertValue(LS_KEYS.AI_IMAGE_AUTO_INSERT),
+          // 始终包含 batchId 以跳过重复检测
+          batchId: externalBatchId || `image_single_${Date.now()}`,
+          batchIndex: 1,
+          batchTotal: 1,
+          targetFrameId,
+          targetFrameDimensions,
+          pptSlideImage,
+          pptSlidePrompt,
+          pptReplaceElementId,
+          ...(extraParams ? { params: extraParams } : {}),
+        };
 
-          const task = createTask(taskParams, TaskType.IMAGE);
-          if (task) {
-            batchTaskIds.push(task.id);
+        // 创建任务并添加到队列
+        const task = createTask(taskParams, TaskType.IMAGE);
+
+        if (task) {
+          // 任务创建成功
+          MessagePlugin.success(
+            language === 'zh'
+              ? '任务已添加到队列，将在后台生成'
+              : 'Task added to queue, will be generated in background'
+          );
+
+          // 保存提示词到历史记录
+          savePromptToHistory(finalPrompt);
+
+          // 只清除预览和错误，保留表单数据（prompt和参考图）
+          setError(null);
+          setMobilePanel('tasks');
+          // Clear manual edit mode after generating
+          setIsManualEdit(false);
+        } else {
+          // 任务创建失败（可能是重复提交）
+          setError(
+            language === 'zh'
+              ? '任务创建失败，请检查参数或稍后重试'
+              : 'Failed to create task, please check parameters or try again later'
+          );
+        }
+      } catch (err: any) {
+        console.error('Failed to create task:', err);
+
+        // 提取更友好的错误信息
+        let errorMessage =
+          language === 'zh'
+            ? '任务创建失败，请检查参数或稍后重试'
+            : 'Failed to create task, please check parameters or try again later';
+
+        if (err.message) {
+          if (err.message.includes('exceed 5000 characters')) {
+            errorMessage =
+              language === 'zh'
+                ? '提示词不能超过 5000 字符'
+                : 'Prompt must not exceed 5000 characters';
+          } else if (err.message.includes('Duplicate submission')) {
+            errorMessage =
+              language === 'zh'
+                ? '请勿重复提交，请等待 5 秒后再试'
+                : 'Duplicate submission. Please wait 5 seconds.';
+          } else if (err.message.includes('Invalid parameters')) {
+            errorMessage =
+              language === 'zh'
+                ? `参数错误: ${err.message.replace('Invalid parameters: ', '')}`
+                : err.message;
           }
         }
 
-        if (batchTaskIds.length > 0) {
-          MessagePlugin.success(
-            language === 'zh'
-              ? `已添加 ${batchTaskIds.length} 个任务到队列`
-              : `Added ${batchTaskIds.length} tasks to queue`
-          );
-
-          savePromptToHistory(finalPrompt);
-          setError(null);
-          setMobilePanel('tasks');
-          // Clear manual edit mode after batch generating
-          setIsManualEdit(false);
-        } else {
-          setError(
-            language === 'zh'
-              ? '批量任务创建失败，请稍后重试'
-              : 'Failed to create batch tasks, please try again later'
-          );
-        }
-        return;
+        setError(errorMessage);
       }
-
-      // 单个任务生成
-
-      // Get current image model from settings
-      const currentImageModel =
-        currentModel || resolveInvocationRoute('image').modelId;
-
-      const finalPrompt = currentImageModel.startsWith('mj')
-        ? [prompt.trim(), buildMJPromptSuffix(mjSelectedParams)]
-            .filter(Boolean)
-            .join(' ')
-        : (prompt || '').trim();
-
-      // 非 MJ 模型的额外参数（如 seedream_quality）透传给 adapter
-      const extraParams =
-        !currentImageModel.startsWith('mj') &&
-        Object.keys(mjSelectedParams).length > 0
-          ? mjSelectedParams
-          : undefined;
-
-      // 如果参数中有 size，优先使用参数中的 size
-      const finalSize = extraParams?.size
-        ? extraParams.size
-        : convertAspectRatioToSize(aspectRatio);
-
-      // 创建任务参数（单个任务也需要 batchId 以跳过 SW 重复检测）
-      const taskParams = {
-        prompt: finalPrompt,
-        width: finalWidth,
-        height: finalHeight,
-        aspectRatio,
-        size: finalSize,
-        model: currentImageModel,
-        modelRef: currentModelRef || null,
-        // 保存上传的图片（已转换为可序列化的格式）
-        uploadedImages: convertedImages,
-        autoInsertToCanvas:
-          initialAutoInsertToCanvas ??
-          getAutoInsertValue(LS_KEYS.AI_IMAGE_AUTO_INSERT),
-        // 始终包含 batchId 以跳过重复检测
-        batchId: externalBatchId || `image_single_${Date.now()}`,
-        batchIndex: 1,
-        batchTotal: 1,
-        targetFrameId,
-        targetFrameDimensions,
-        ...(extraParams ? { params: extraParams } : {}),
-      };
-
-      // 创建任务并添加到队列
-      const task = createTask(taskParams, TaskType.IMAGE);
-
-      if (task) {
-        // 任务创建成功
-        MessagePlugin.success(
-          language === 'zh'
-            ? '任务已添加到队列，将在后台生成'
-            : 'Task added to queue, will be generated in background'
-        );
-
-        // 保存提示词到历史记录
-        savePromptToHistory(finalPrompt);
-
-        // 只清除预览和错误，保留表单数据（prompt和参考图）
-        setError(null);
-        setMobilePanel('tasks');
-        // Clear manual edit mode after generating
-        setIsManualEdit(false);
-      } else {
-        // 任务创建失败（可能是重复提交）
-        setError(
-          language === 'zh'
-            ? '任务创建失败，请检查参数或稍后重试'
-            : 'Failed to create task, please check parameters or try again later'
-        );
-      }
-    } catch (err: any) {
-      console.error('Failed to create task:', err);
-
-      // 提取更友好的错误信息
-      let errorMessage =
-        language === 'zh'
-          ? '任务创建失败，请检查参数或稍后重试'
-          : 'Failed to create task, please check parameters or try again later';
-
-      if (err.message) {
-        if (err.message.includes('exceed 5000 characters')) {
-          errorMessage =
-            language === 'zh'
-              ? '提示词不能超过 5000 字符'
-              : 'Prompt must not exceed 5000 characters';
-        } else if (err.message.includes('Duplicate submission')) {
-          errorMessage =
-            language === 'zh'
-              ? '请勿重复提交，请等待 5 秒后再试'
-              : 'Duplicate submission. Please wait 5 seconds.';
-        } else if (err.message.includes('Invalid parameters')) {
-          errorMessage =
-            language === 'zh'
-              ? `参数错误: ${err.message.replace('Invalid parameters: ', '')}`
-              : err.message;
-        }
-      }
-
-      setError(errorMessage);
-    }
     } finally {
       generatingLockRef.current = false;
     }
@@ -879,7 +940,7 @@ const AIImageGeneration = ({
               </div>
             )}
 
-            {/* 模型参数（排除 size，已有 AspectRatioSelector） */}
+            {/* 模型参数：与底部 AI 输入框保持同一套 size / resolution / quality 逻辑 */}
             {hasCompatibleParams && (
               <div className="model-params-row">
                 <ParametersDropdown
@@ -888,7 +949,7 @@ const AIImageGeneration = ({
                   modelId={currentModel}
                   language={language}
                   disabled={isGenerating}
-                  excludeParamIds={isMJModel ? undefined : ['size']}
+                  placement="down"
                 />
               </div>
             )}
@@ -930,20 +991,10 @@ const AIImageGeneration = ({
             onGenerate={handleGenerate}
             onReset={handleReset}
             leftContent={
-              <>
-                <AutoInsertCheckbox
-                  storageKey={LS_KEYS.AI_IMAGE_AUTO_INSERT}
-                  language={language}
-                />
-                {!isMJModel && (
-                  <AspectRatioSelector
-                    value={aspectRatio}
-                    onChange={setAspectRatio}
-                    compact={true}
-                    options={modelAspectRatioOptions}
-                  />
-                )}
-              </>
+              <AutoInsertCheckbox
+                storageKey={LS_KEYS.AI_IMAGE_AUTO_INSERT}
+                language={language}
+              />
             }
           />
         </div>

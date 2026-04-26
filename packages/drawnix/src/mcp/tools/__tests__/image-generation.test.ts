@@ -211,4 +211,37 @@ describe('image-generation MCP tool', () => {
       },
     });
   });
+
+  it('passes PPT slide replacement metadata into queue task params', async () => {
+    mocks.createQueueTask.mockReturnValue({
+      success: true,
+      type: 'image',
+      taskId: 'task-1',
+    });
+
+    await imageGenerationTool.execute(
+      {
+        prompt: 'Regenerate a PPT slide',
+        model: 'gpt-image-2',
+        size: '16x9',
+        autoInsertToCanvas: true,
+        targetFrameId: 'frame-1',
+        targetFrameDimensions: { width: 1920, height: 1080 },
+        pptSlideImage: true,
+        pptReplaceElementId: 'old-image',
+      },
+      { mode: 'queue' }
+    );
+
+    const queueConfig = mocks.createQueueTask.mock.calls[0]?.[2];
+
+    expect(queueConfig.buildTaskPayload()).toMatchObject({
+      prompt: 'Regenerate a PPT slide',
+      size: '16x9',
+      targetFrameId: 'frame-1',
+      targetFrameDimensions: { width: 1920, height: 1080 },
+      pptSlideImage: true,
+      pptReplaceElementId: 'old-image',
+    });
+  });
 });

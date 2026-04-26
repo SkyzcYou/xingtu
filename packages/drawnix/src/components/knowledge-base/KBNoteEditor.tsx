@@ -87,12 +87,12 @@ export const KBNoteEditor: React.FC<KBNoteEditorProps> = ({
   const selectedTagIds = useMemo(() => noteTags.map((t) => t.id), [noteTags]);
 
   // MCP 输出类型（仅 Skill 目录下有效）
-  const [outputType, setOutputType] = useState<'image' | 'text' | 'video' | 'ppt' | undefined>(undefined);
+  const [outputType, setOutputType] = useState<'image' | 'text' | 'video' | 'audio' | 'ppt' | undefined>(undefined);
 
   // 笔记切换时同步 outputType
   useEffect(() => {
     if (note && isSkillDirectory) {
-setOutputType((note.metadata?.outputType as 'image' | 'text' | 'video' | 'ppt' | undefined) || undefined);
+setOutputType((note.metadata?.outputType as 'image' | 'text' | 'video' | 'audio' | 'ppt' | undefined) || undefined);
     } else {
       setOutputType(undefined);
     }
@@ -178,7 +178,7 @@ setOutputType((note.metadata?.outputType as 'image' | 'text' | 'video' | 'ppt' |
 
   // 输出类型变化
   const handleOutputTypeChange = useCallback(
-    (newOutputType: 'image' | 'text' | 'video' | 'ppt' | undefined) => {
+    (newOutputType: 'image' | 'text' | 'video' | 'audio' | 'ppt' | undefined) => {
       if (!note) return;
       setOutputType(newOutputType);
       // 立即保存到元数据

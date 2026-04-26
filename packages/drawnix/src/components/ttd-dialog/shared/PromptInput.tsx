@@ -4,11 +4,12 @@ import { Lightbulb, Sparkles } from 'lucide-react';
 import { getPromptExample } from './ai-generation-utils';
 import { CharacterMentionPopup } from '../../character/CharacterMentionPopup';
 import { useMention } from '../../../hooks/useMention';
+import { useGenerationHistory } from '../../../hooks/useGenerationHistory';
 import { Z_INDEX } from '../../../constants/z-index';
 import { promptStorageService } from '../../../services/prompt-storage-service';
-import { PromptListPanel, type PromptItem } from '../../shared';
-import { MessagePlugin } from 'tdesign-react';
+import { HoverTip, PromptListPanel, type PromptItem } from '../../shared';
 import { PromptOptimizeDialog } from '../../shared/PromptOptimizeDialog';
+import { resolvePresetPromptItems } from './prompt-utils';
 import './PromptInput.scss';
 
 interface PromptInputProps {
@@ -42,17 +43,19 @@ export const PromptInput: React.FC<PromptInputProps> = ({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ bottom: number; right: number; maxHeight: number } | null>(null);
   const [updateTrigger, setUpdateTrigger] = useState(0); // 用于触发重新渲染
+  const { imageHistory, videoHistory } = useGenerationHistory();
 
   // 处理后的提示词列表（排序和过滤，转换为 PromptItem 格式）
   const promptItems: PromptItem[] = useMemo(() => {
-    const sorted = promptStorageService.sortPrompts(type, presetPrompts);
-    return sorted.map((content, index) => ({
-      id: `preset-${index}-${content.slice(0, 20)}`,
-      content,
-      pinned: promptStorageService.isPinned(type, content),
-    }));
+    return resolvePresetPromptItems({
+      generationType: type,
+      language,
+      promptContents: presetPrompts,
+      imageHistory,
+      videoHistory,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type, presetPrompts, updateTrigger]);
+  }, [imageHistory, language, type, presetPrompts, updateTrigger, videoHistory]);
 
   // Use mention hook for @ functionality
   // Only enable for video type with Sora provider (@ mention is a Sora-specific feature)
@@ -182,13 +185,6 @@ export const PromptInput: React.FC<PromptInputProps> = ({
       disabled,
     });
 
-    if (!prompt.trim()) {
-      MessagePlugin.warning(
-        language === 'zh' ? '请先输入提示词' : 'Please enter a prompt first'
-      );
-      return;
-    }
-
     setIsOptimizeDialogOpen(true);
   }, [disabled, language, prompt, type]);
 
@@ -261,16 +257,23 @@ export const PromptInput: React.FC<PromptInputProps> = ({
           rows={4}
           disabled={disabled}
         />
-        <button
-          type="button"
-          className="prompt-optimize-button"
-          onClick={handleOpenOptimizeDialog}
+        <HoverTip
+          content={language === 'zh' ? '提示词优化' : 'Prompt optimization'}
+          placement="top"
           disabled={disabled}
-          aria-label={language === 'zh' ? '优化提示词' : 'Optimize prompt'}
-          title={language === 'zh' ? '优化提示词' : 'Optimize prompt'}
         >
-          <Sparkles size={16} />
-        </button>
+          <button
+            type="button"
+            className="prompt-optimize-button"
+            onClick={handleOpenOptimizeDialog}
+            disabled={disabled}
+            aria-label={
+              language === 'zh' ? '提示词优化' : 'Prompt optimization'
+            }
+          >
+            <Sparkles size={16} />
+          </button>
+        </HoverTip>
       </div>
 
       {/* Character mention popup - rendered in portal style with fixed position */}

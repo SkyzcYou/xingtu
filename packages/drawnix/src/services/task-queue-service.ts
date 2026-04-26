@@ -236,6 +236,7 @@ class TaskQueueService {
   private tasks: Map<string, Task>;
   private taskUpdates$: Subject<TaskEvent>;
   private executingTasks = new Set<string>();
+  private taskAbortControllers = new Map<string, AbortController>();
   private blockedTaskIds = new Set<string>();
   private tasksWithStrippedParams = new Set<string>();
 
@@ -284,6 +285,22 @@ class TaskQueueService {
     taskStorageReader.invalidateCache();
   }
 
+  private shouldSkipExecutionWriteback(taskId: string): boolean {
+    const task = this.tasks.get(taskId);
+    return (
+      !task ||
+      task.status === TaskStatus.CANCELLED ||
+      this.blockedTaskIds.has(taskId)
+    );
+  }
+
+  private repersistCancelledTask(taskId: string): void {
+    const task = this.tasks.get(taskId);
+    if (task?.status === TaskStatus.CANCELLED) {
+      this.persistTask(task);
+    }
+  }
+
   /**
    * Delete task from IndexedDB (async, fire-and-forget)
    */
@@ -311,7 +328,14 @@ class TaskQueueService {
       return;
     }
     this.executingTasks.add(task.id);
+    const abortController = new AbortController();
+    this.taskAbortControllers.set(task.id, abortController);
+    const { signal } = abortController;
     try {
+      if (this.shouldSkipExecutionWriteback(task.id)) {
+        return;
+      }
+
       // Check API configuration
       const routeType =
         task.type === TaskType.VIDEO
@@ -372,6 +396,7 @@ class TaskQueueService {
             infillEndS: task.params.infillEndS,
             params: {
               ...(task.params as any).params,
+              signal,
               onProgress: (progress: number) => {
                 this.updateTaskProgress(task.id, progress);
                 this.updateTaskStatus(task.id, TaskStatus.PROCESSING, {
@@ -387,6 +412,10 @@ class TaskQueueService {
             },
           }
         );
+
+        if (this.shouldSkipExecutionWriteback(task.id)) {
+          return;
+        }
 
         // 缓存音频 URL 到 Cache Storage，防止远程链接过期
         const fmt =
@@ -550,7 +579,12 @@ class TaskQueueService {
       // 否则 useTaskQueue 通过 getAllTasks() 获取的对象引用不变，
       // React.memo 比较 prev.task.progress === next.task.progress 时永远相等
       const executionOptions = {
+        signal,
         onProgress: (progress: { progress: number; phase?: string }) => {
+          if (this.shouldSkipExecutionWriteback(task.id)) {
+            return;
+          }
+
           const localTask = this.tasks.get(task.id);
           if (localTask) {
             const updatedTask: Task = {
@@ -755,10 +789,19 @@ class TaskQueueService {
           throw new Error(`Unsupported task type: ${task.type}`);
       }
 
+      if (this.shouldSkipExecutionWriteback(task.id)) {
+        return;
+      }
+
       // Poll for task completion (executor 已完成，此处主要是从 IndexedDB 读取最终结果)
       const result = await waitForTaskCompletion(task.id, {
         timeout: 10 * 60 * 1000, // 10 minutes
+        signal,
         onProgress: (updatedTask) => {
+          if (this.shouldSkipExecutionWriteback(task.id)) {
+            return;
+          }
+
           // Update local state with progress
           // 注意：同时同步 result/error/completedAt，避免 status=completed 但 result 为空的中间状态
           // 创建新对象存入 Map，确保 React 能检测到引用变化
@@ -783,7 +826,11 @@ class TaskQueueService {
 
       // Update final state & persist
       const localTask = this.tasks.get(task.id);
-      if (localTask && result.task) {
+      if (
+        localTask &&
+        result.task &&
+        !this.shouldSkipExecutionWriteback(task.id)
+      ) {
         const finalTask: Task = {
           ...localTask,
           status: result.task.status as TaskStatus,
@@ -799,6 +846,10 @@ class TaskQueueService {
         this.emitEvent('taskUpdated', finalTask);
       }
     } catch (error: any) {
+      if (this.shouldSkipExecutionWriteback(task.id)) {
+        return;
+      }
+
       console.error('[TaskQueueService] Task execution failed:', error);
       const localTask = this.tasks.get(task.id);
       if (localTask) {
@@ -819,6 +870,10 @@ class TaskQueueService {
         this.emitEvent('taskUpdated', failedTask);
       }
     } finally {
+      if (this.taskAbortControllers.get(task.id) === abortController) {
+        this.taskAbortControllers.delete(task.id);
+      }
+      this.repersistCancelledTask(task.id);
       this.executingTasks.delete(task.id);
     }
   }
@@ -832,6 +887,10 @@ class TaskQueueService {
       resultExtras?: Partial<NonNullable<Task['result']>>;
     }
   ): Promise<void> {
+    if (this.shouldSkipExecutionWriteback(task.id)) {
+      return;
+    }
+
     const result: NonNullable<Task['result']> = {
       url: '',
       format: payload.format || 'json',
@@ -843,6 +902,10 @@ class TaskQueueService {
     };
 
     await taskStorageWriter.completeTask(task.id, result);
+
+    if (this.shouldSkipExecutionWriteback(task.id)) {
+      return;
+    }
 
     const now = Date.now();
     const completedTask: Task = {
@@ -1679,6 +1742,7 @@ class TaskQueueService {
     }
 
     this.blockedTaskIds.add(taskId);
+    this.taskAbortControllers.get(taskId)?.abort();
     this.updateTaskStatus(taskId, TaskStatus.CANCELLED);
     // console.log(`[TaskQueueService] Cancelled task ${taskId}`);
   }

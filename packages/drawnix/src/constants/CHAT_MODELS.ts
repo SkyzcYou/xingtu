@@ -62,6 +62,14 @@ export const CHAT_MODELS: ChatModel[] = [
     maxTokens: 128000,
     supportsVision: true,
   },
+  // {
+  //   id: 'gpt-5.5',
+  //   name: 'GPT-5.5',
+  //   description: 'OpenAI 最新旗舰文本模型',
+  //   provider: ModelProvider.OPENAI,
+  //   badges: ['NEW'],
+  //   maxTokens: 128000,
+  // },
   {
     id: 'gpt-5.2',
     name: 'GPT-5.2',

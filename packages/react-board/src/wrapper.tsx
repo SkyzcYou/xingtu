@@ -22,9 +22,11 @@ import {
   PlaitTheme,
   isFromScrolling,
   setIsFromScrolling,
+  setIsFromViewportChange,
   getSelectedElements,
   updateViewportOffset,
   initializeViewBox,
+  initializeViewportContainer,
   withI18n,
   updateViewBox,
   FLUSHING,
@@ -37,6 +39,7 @@ import { PlaitCommonElementRef, withImage, withText } from '@plait/common';
 import { BoardContext, BoardContextValue } from './hooks/use-board';
 import React from 'react';
 import { withPinchZoom } from './plugins/with-pinch-zoom-plugin';
+import { ignoreUpcomingViewportScroll } from './utils/viewport';
 
 export type WrapperProps = {
   value: PlaitElement[];
@@ -128,7 +131,14 @@ export const Wrapper: React.FC<WrapperProps> = ({
       board,
       listRender,
     }));
-  }, [board, onChange, onSelectionChange, onValueChange, onViewportChange, onThemeChange]);
+  }, [
+    board,
+    onChange,
+    onSelectionChange,
+    onValueChange,
+    onViewportChange,
+    onThemeChange,
+  ]);
 
   useEffect(() => {
     BOARD_TO_ON_CHANGE.set(board, () => {
@@ -192,23 +202,17 @@ export const Wrapper: React.FC<WrapperProps> = ({
     const prevViewport = prevViewportRef.current;
     prevViewportRef.current = viewport;
 
+    // 如果本次同时替换 children，等待 children 更新后再同步视口，避免用旧内容计算滚动范围
+    const hasPendingValueUpdate = value !== board.children;
+
     // 如果外部传入了有效的 viewport，且与当前不同，则应用它
-    if (viewport && !FLUSHING.get(board)) {
-      // 检查是否是从 undefined 变为有值，或者值发生了变化
-      const isNewViewport = !prevViewport;
-      const isDifferent = prevViewport && (
-        prevViewport.zoom !== viewport.zoom ||
-        prevViewport.offsetX !== viewport.offsetX ||
-        prevViewport.offsetY !== viewport.offsetY
-      );
-      
-      if (isNewViewport || isDifferent) {
+    if (viewport && !FLUSHING.get(board) && !hasPendingValueUpdate) {
+      if (!isSameViewport(prevViewport, viewport)) {
         board.viewport = viewport;
-        initializeViewBox(board);
-        updateViewportOffset(board);
+        syncViewportContainer(board, 'viewport-prop-change');
       }
     }
-  }, [viewport, board]);
+  }, [viewport, board, value]);
 
   useEffect(() => {
     if (isFirstRender.current) {
@@ -227,6 +231,9 @@ export const Wrapper: React.FC<WrapperProps> = ({
       // 如果传入了 viewport，说明是恢复保存的视图，不应该重置
       if (!viewport) {
         BoardTransforms.fitViewport(board);
+      } else {
+        board.viewport = viewport;
+        syncViewportContainer(board, 'value-with-viewport-change');
       }
     }
   }, [value, viewport]);
@@ -281,4 +288,313 @@ const initializeBoard = (
 const initializeListRender = (board: PlaitBoard) => {
   const listRender = new ListRender(board);
   return listRender;
+};
+
+const VIEWPORT_RESTORE_FRAMES = 30;
+const VIEWPORT_RESTORE_MIN_FRAMES = 6;
+const VIEWPORT_RESTORE_TOLERANCE = 2;
+const VIEWPORT_RESTORE_VERSION = new WeakMap<PlaitBoard, number>();
+const VIEWPORT_RESTORE_INTERACTION_CLEANUP = new WeakMap<
+  PlaitBoard,
+  () => void
+>();
+
+const syncViewportContainer = (board: PlaitBoard, reason: string) => {
+  initializeViewportContainer(board);
+  initializeViewBox(board);
+  updateViewportOffset(board);
+  stabilizeViewportOffset(board, reason);
+};
+
+const isSameViewport = (a?: Viewport, b?: Viewport) => {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+  return (
+    a.zoom === b.zoom &&
+    a.offsetX === b.offsetX &&
+    a.offsetY === b.offsetY &&
+    a.origination?.[0] === b.origination?.[0] &&
+    a.origination?.[1] === b.origination?.[1]
+  );
+};
+
+const VIEWPORT_DEBUG_KEY = 'aitu_debug_viewport';
+
+const isViewportDebugEnabled = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return (
+      params.get('debugViewport') === '1' ||
+      window.localStorage.getItem(VIEWPORT_DEBUG_KEY) === 'true'
+    );
+  } catch {
+    return false;
+  }
+};
+
+const summarizeViewport = (viewport?: Viewport) => ({
+  zoom: viewport?.zoom,
+  originX: viewport?.origination?.[0],
+  originY: viewport?.origination?.[1],
+  offsetX: viewport?.offsetX,
+  offsetY: viewport?.offsetY,
+});
+
+const getViewportDomSnapshot = (board: PlaitBoard) => {
+  try {
+    const viewportContainer = PlaitBoard.getViewportContainer(board);
+    const host = PlaitBoard.getHost(board);
+    return {
+      domScrollLeft: viewportContainer.scrollLeft,
+      domScrollTop: viewportContainer.scrollTop,
+      domScrollWidth: viewportContainer.scrollWidth,
+      domScrollHeight: viewportContainer.scrollHeight,
+      domClientWidth: viewportContainer.clientWidth,
+      domClientHeight: viewportContainer.clientHeight,
+      domOffsetWidth: viewportContainer.offsetWidth,
+      domOffsetHeight: viewportContainer.offsetHeight,
+      styleWidth: viewportContainer.style.width,
+      styleHeight: viewportContainer.style.height,
+      viewBox: host.getAttribute('viewBox'),
+      svgWidth: host.style.width,
+      svgHeight: host.style.height,
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+};
+
+const getExpectedViewportScroll = (board: PlaitBoard) => {
+  try {
+    const origin = board.viewport?.origination;
+    if (!origin) {
+      return null;
+    }
+    const viewBox = PlaitBoard.getHost(board).getAttribute('viewBox');
+    if (!viewBox) {
+      return null;
+    }
+    const [viewBoxX, viewBoxY] = viewBox
+      .trim()
+      .split(/[\s,]+/)
+      .map((value) => Number(value));
+    if (!Number.isFinite(viewBoxX) || !Number.isFinite(viewBoxY)) {
+      return null;
+    }
+    const zoom = board.viewport.zoom;
+    return {
+      targetScrollLeft: (origin[0] - viewBoxX) * zoom,
+      targetScrollTop: (origin[1] - viewBoxY) * zoom,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const stabilizeViewportOffset = (board: PlaitBoard, reason: string) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const version = (VIEWPORT_RESTORE_VERSION.get(board) ?? 0) + 1;
+  VIEWPORT_RESTORE_VERSION.set(board, version);
+  attachViewportRestoreInteractionCancel(board, reason);
+  let frame = 0;
+  const run = () => {
+    if (VIEWPORT_RESTORE_VERSION.get(board) !== version) {
+      return;
+    }
+
+    const target = getExpectedViewportScroll(board);
+    if (!target) {
+      logViewportDebug('wrapper:restore-scroll', board, {
+        reason,
+        status: 'no-target',
+        attempts: frame + 1,
+      });
+      clearViewportRestoreInteractionCancel(board);
+      setIsFromViewportChange(board, false);
+      return;
+    }
+
+    const viewportContainer = PlaitBoard.getViewportContainer(board);
+    const deltaLeft = Math.abs(
+      viewportContainer.scrollLeft - target.targetScrollLeft
+    );
+    const deltaTop = Math.abs(
+      viewportContainer.scrollTop - target.targetScrollTop
+    );
+    const needsRestore =
+      deltaLeft > VIEWPORT_RESTORE_TOLERANCE ||
+      deltaTop > VIEWPORT_RESTORE_TOLERANCE;
+
+    if (needsRestore) {
+      restoreViewportContainerScroll(board, target);
+    }
+
+    const afterDeltaLeft = Math.abs(
+      viewportContainer.scrollLeft - target.targetScrollLeft
+    );
+    const afterDeltaTop = Math.abs(
+      viewportContainer.scrollTop - target.targetScrollTop
+    );
+    const isStable =
+      afterDeltaLeft <= VIEWPORT_RESTORE_TOLERANCE &&
+      afterDeltaTop <= VIEWPORT_RESTORE_TOLERANCE;
+    const shouldContinue =
+      frame + 1 < VIEWPORT_RESTORE_FRAMES &&
+      (!isStable || frame + 1 < VIEWPORT_RESTORE_MIN_FRAMES);
+
+    if (!shouldContinue) {
+      logViewportDebug('wrapper:restore-scroll', board, {
+        reason,
+        status: isStable ? 'ok' : 'mismatch',
+        attempts: frame + 1,
+        ...target,
+        deltaLeft: afterDeltaLeft,
+        deltaTop: afterDeltaTop,
+      });
+      clearViewportRestoreInteractionCancel(board);
+      setIsFromViewportChange(board, false);
+      return;
+    }
+
+    frame += 1;
+    scheduleViewportRestoreFrame(run);
+  };
+
+  scheduleViewportRestoreFrame(run);
+};
+
+const scheduleViewportRestoreFrame = (callback: () => void) => {
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(callback);
+    return;
+  }
+  window.setTimeout(callback, 0);
+};
+
+const restoreViewportContainerScroll = (
+  board: PlaitBoard,
+  target: { targetScrollLeft: number; targetScrollTop: number }
+) => {
+  const viewportContainer = PlaitBoard.getViewportContainer(board);
+  setIsFromViewportChange(board, true);
+  viewportContainer.scrollLeft = target.targetScrollLeft;
+  viewportContainer.scrollTop = target.targetScrollTop;
+
+  const deltaLeft = Math.abs(
+    viewportContainer.scrollLeft - target.targetScrollLeft
+  );
+  const deltaTop = Math.abs(
+    viewportContainer.scrollTop - target.targetScrollTop
+  );
+
+  if (
+    deltaLeft > VIEWPORT_RESTORE_TOLERANCE ||
+    deltaTop > VIEWPORT_RESTORE_TOLERANCE
+  ) {
+    updateViewportOffset(board);
+  }
+};
+
+const attachViewportRestoreInteractionCancel = (
+  board: PlaitBoard,
+  reason: string
+) => {
+  clearViewportRestoreInteractionCancel(board);
+
+  const cancel = (event: Event) => {
+    cancelViewportRestore(board, reason, event);
+  };
+  const options = { capture: true, passive: true };
+
+  window.addEventListener('wheel', cancel, options);
+  window.addEventListener('pointerdown', cancel, options);
+  window.addEventListener('touchstart', cancel, options);
+  window.addEventListener('keydown', cancel, options);
+
+  VIEWPORT_RESTORE_INTERACTION_CLEANUP.set(board, () => {
+    window.removeEventListener('wheel', cancel, options);
+    window.removeEventListener('pointerdown', cancel, options);
+    window.removeEventListener('touchstart', cancel, options);
+    window.removeEventListener('keydown', cancel, options);
+  });
+};
+
+const cancelViewportRestore = (
+  board: PlaitBoard,
+  reason: string,
+  event?: Event
+) => {
+  VIEWPORT_RESTORE_VERSION.set(
+    board,
+    (VIEWPORT_RESTORE_VERSION.get(board) ?? 0) + 1
+  );
+  clearViewportRestoreInteractionCancel(board);
+  if (isZoomWheelEvent(event)) {
+    ignoreUpcomingViewportScroll(board, 2);
+  }
+  setIsFromViewportChange(board, false);
+  logViewportDebug('wrapper:restore-scroll', board, {
+    reason,
+    status: 'cancelled-by-user',
+  });
+};
+
+const isZoomWheelEvent = (event?: Event): event is WheelEvent => {
+  return (
+    typeof WheelEvent !== 'undefined' &&
+    event instanceof WheelEvent &&
+    (event.ctrlKey || event.metaKey)
+  );
+};
+
+const clearViewportRestoreInteractionCancel = (board: PlaitBoard) => {
+  const cleanup = VIEWPORT_RESTORE_INTERACTION_CLEANUP.get(board);
+  if (!cleanup) {
+    return;
+  }
+  cleanup();
+  VIEWPORT_RESTORE_INTERACTION_CLEANUP.delete(board);
+};
+
+const logViewportDebug = (
+  stage: string,
+  board: PlaitBoard,
+  extra?: Record<string, unknown>
+) => {
+  if (!isViewportDebugEnabled()) {
+    return;
+  }
+  console.info(`[ViewportRestore] ${stage} ${formatDebugPayload({
+    ...extra,
+    childrenCount: board.children.length,
+    ...summarizeViewport(board.viewport),
+    ...getViewportDomSnapshot(board),
+  })}`);
+};
+
+const formatDebugPayload = (payload: Record<string, unknown>): string => {
+  return Object.entries(payload)
+    .filter(([, value]) => value !== undefined && value !== null)
+    .map(([key, value]) => {
+      if (typeof value === 'number') {
+        return `${key}=${Number.isInteger(value) ? value : value.toFixed(3)}`;
+      }
+      if (typeof value === 'string' || typeof value === 'boolean') {
+        return `${key}=${value}`;
+      }
+      return `${key}=${JSON.stringify(value)}`;
+    })
+    .join(' ');
 };

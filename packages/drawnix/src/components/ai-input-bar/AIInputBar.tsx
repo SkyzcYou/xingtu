@@ -19,6 +19,7 @@
 import React, {
   useState,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useRef,
   useMemo,
@@ -28,6 +29,7 @@ import { MessagePlugin } from 'tdesign-react';
 import { ImageUploadIcon, MediaLibraryIcon } from '../icons';
 import { useBoard } from '@plait-board/react-board';
 import { SelectedContentPreview } from '../shared/SelectedContentPreview';
+import { HoverTip } from '../shared/hover';
 import {
   getSelectedElements,
   ATTACHED_ELEMENT_CLASS_NAME,
@@ -58,6 +60,11 @@ import { ModelHealthBadge } from '../shared/ModelHealthBadge';
 import { ParametersDropdown } from './ParametersDropdown';
 import { PromptHistoryPopover } from './PromptHistoryPopover';
 import { usePromptHistory } from '../../hooks/usePromptHistory';
+import {
+  addImagePromptHistory,
+  addVideoPromptHistory,
+  type PromptType,
+} from '../../services/prompt-storage-service';
 import { useSelectableModels } from '../../hooks/use-runtime-models';
 import { getPinnedSelectableModel } from '../../utils/runtime-model-discovery';
 import {
@@ -87,7 +94,12 @@ import {
   type WorkflowDefinition,
   type WorkflowStepOptions,
 } from './workflow-converter';
-import { SkillDropdown } from './SkillDropdown';
+import { SkillDropdown, type SkillOption } from './SkillDropdown';
+import {
+  inferSkillMediaTypes,
+  type SkillMediaType,
+  type SkillOutputType,
+} from './skill-media-type';
 import {
   SKILL_AUTO_ID,
   findSystemSkillById,
@@ -242,6 +254,55 @@ function getPromptLengthBucket(length: number): string {
   if (length <= 300) return '101-300';
   if (length <= 800) return '301-800';
   return '800+';
+}
+
+const AI_INPUT_COLLAPSED_ROWS = 1;
+const AI_INPUT_EXPANDED_ROWS = 4;
+const AI_INPUT_MAX_ROWS = 6;
+const AI_INPUT_LINE_HEIGHT = 1.5;
+
+function getTextareaHeightForRows(
+  textarea: HTMLTextAreaElement,
+  rows: number
+) {
+  const styles = window.getComputedStyle(textarea);
+  const fontSize = Number.parseFloat(styles.fontSize) || 15;
+  const lineHeight =
+    Number.parseFloat(styles.lineHeight) || fontSize * AI_INPUT_LINE_HEIGHT;
+  const verticalPadding =
+    Number.parseFloat(styles.paddingTop) +
+    Number.parseFloat(styles.paddingBottom);
+  const verticalBorder =
+    Number.parseFloat(styles.borderTopWidth) +
+    Number.parseFloat(styles.borderBottomWidth);
+
+  return Math.ceil(lineHeight * rows + verticalPadding + verticalBorder);
+}
+
+function resizeAIInputTextarea(
+  textarea: HTMLTextAreaElement | null,
+  isExpanded: boolean
+) {
+  if (!textarea) return;
+
+  if (!isExpanded) {
+    textarea.style.height = '';
+    textarea.style.overflowY = '';
+    return;
+  }
+
+  const minHeight = getTextareaHeightForRows(
+    textarea,
+    AI_INPUT_EXPANDED_ROWS
+  );
+  const maxHeight = getTextareaHeightForRows(textarea, AI_INPUT_MAX_ROWS);
+
+  textarea.style.height = 'auto';
+  const contentHeight = textarea.scrollHeight;
+  const nextHeight = Math.min(Math.max(contentHeight, minHeight), maxHeight);
+
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = contentHeight > maxHeight ? 'auto' : 'hidden';
 }
 
 function findMatchingSelectableModel(
@@ -739,6 +800,12 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const initialImageModel =
       resolvePreferredModelSelection('image', imageModels) ||
       getModelConfig(getDefaultImageModel());
+    const initialVideoModel =
+      resolvePreferredModelSelection('video', videoModels) ||
+      getModelConfig(getDefaultVideoModel());
+    const initialAudioModel =
+      resolvePreferredModelSelection('audio', audioModels) ||
+      getModelConfig(getDefaultAudioModel());
     const initialImageRoute = resolveInvocationRoute('image');
     const initialSelectedModelId =
       initialImageModel?.id ||
@@ -788,6 +855,24 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
       getModelRefFromConfig(initialSelectedModelConfig) || initialSelectedModelRef
     );
+    const [selectedAgentImageModel, setSelectedAgentImageModel] = useState(
+      initialImageModel?.id || getDefaultImageModel()
+    );
+    const [selectedAgentImageModelRef, setSelectedAgentImageModelRef] =
+      useState<ModelRef | null>(getModelRefFromConfig(initialImageModel));
+    const [selectedAgentVideoModel, setSelectedAgentVideoModel] = useState(
+      initialVideoModel?.id || getDefaultVideoModel()
+    );
+    const [selectedAgentVideoModelRef, setSelectedAgentVideoModelRef] =
+      useState<ModelRef | null>(getModelRefFromConfig(initialVideoModel));
+    const [selectedAgentAudioModel, setSelectedAgentAudioModel] = useState(
+      initialAudioModel?.id || getDefaultAudioModel()
+    );
+    const [selectedAgentAudioModelRef, setSelectedAgentAudioModelRef] =
+      useState<ModelRef | null>(getModelRefFromConfig(initialAudioModel));
+    const [selectedSkillMediaTypes, setSelectedSkillMediaTypes] = useState<
+      SkillMediaType[]
+    >([]);
     const visibleImageModels = useMemo(() => {
       if (generationType !== 'image') {
         return imageModels;
@@ -872,6 +957,57 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       );
       return pinnedModel ? [pinnedModel, ...textModels] : textModels;
     }, [generationType, selectedModel, selectedModelRef, textModels]);
+    const visibleAgentImageModels = useMemo(() => {
+      const currentMatch = findMatchingSelectableModel(
+        imageModels,
+        selectedAgentImageModel,
+        selectedAgentImageModelRef
+      );
+      if (currentMatch) {
+        return imageModels;
+      }
+
+      const pinnedModel = getPinnedSelectableModel(
+        'image',
+        selectedAgentImageModel,
+        selectedAgentImageModelRef
+      );
+      return pinnedModel ? [pinnedModel, ...imageModels] : imageModels;
+    }, [imageModels, selectedAgentImageModel, selectedAgentImageModelRef]);
+    const visibleAgentVideoModels = useMemo(() => {
+      const currentMatch = findMatchingSelectableModel(
+        videoModels,
+        selectedAgentVideoModel,
+        selectedAgentVideoModelRef
+      );
+      if (currentMatch) {
+        return videoModels;
+      }
+
+      const pinnedModel = getPinnedSelectableModel(
+        'video',
+        selectedAgentVideoModel,
+        selectedAgentVideoModelRef
+      );
+      return pinnedModel ? [pinnedModel, ...videoModels] : videoModels;
+    }, [selectedAgentVideoModel, selectedAgentVideoModelRef, videoModels]);
+    const visibleAgentAudioModels = useMemo(() => {
+      const currentMatch = findMatchingSelectableModel(
+        audioModels,
+        selectedAgentAudioModel,
+        selectedAgentAudioModelRef
+      );
+      if (currentMatch) {
+        return audioModels;
+      }
+
+      const pinnedModel = getPinnedSelectableModel(
+        'audio',
+        selectedAgentAudioModel,
+        selectedAgentAudioModelRef
+      );
+      return pinnedModel ? [pinnedModel, ...audioModels] : audioModels;
+    }, [audioModels, selectedAgentAudioModel, selectedAgentAudioModelRef]);
     // 当前选中的参数映射 (id -> value)
     const [selectedParams, setSelectedParams] = useState<
       Record<string, string>
@@ -1017,6 +1153,68 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       visibleVideoModels,
     ]);
 
+    useEffect(() => {
+      const syncAgentMediaModel = (
+        type: 'image' | 'video' | 'audio',
+        models: ModelConfig[],
+        selectedModelId: string,
+        selectedRef: ModelRef | null,
+        setModelId: (modelId: string) => void,
+        setModelRef: (modelRef: ModelRef | null) => void
+      ) => {
+        const currentModelConfig = findMatchingSelectableModel(
+          models,
+          selectedModelId,
+          selectedRef
+        );
+        if (currentModelConfig) {
+          return;
+        }
+
+        const nextModelConfig = resolvePreferredModelSelection(type, models);
+        if (nextModelConfig) {
+          setModelId(nextModelConfig.id);
+          setModelRef(getModelRefFromConfig(nextModelConfig));
+        }
+      };
+
+      syncAgentMediaModel(
+        'image',
+        visibleAgentImageModels,
+        selectedAgentImageModel,
+        selectedAgentImageModelRef,
+        setSelectedAgentImageModel,
+        setSelectedAgentImageModelRef
+      );
+      syncAgentMediaModel(
+        'video',
+        visibleAgentVideoModels,
+        selectedAgentVideoModel,
+        selectedAgentVideoModelRef,
+        setSelectedAgentVideoModel,
+        setSelectedAgentVideoModelRef
+      );
+      syncAgentMediaModel(
+        'audio',
+        visibleAgentAudioModels,
+        selectedAgentAudioModel,
+        selectedAgentAudioModelRef,
+        setSelectedAgentAudioModel,
+        setSelectedAgentAudioModelRef
+      );
+    }, [
+      resolvePreferredModelSelection,
+      selectedAgentAudioModel,
+      selectedAgentAudioModelRef,
+      selectedAgentImageModel,
+      selectedAgentImageModelRef,
+      selectedAgentVideoModel,
+      selectedAgentVideoModelRef,
+      visibleAgentAudioModels,
+      visibleAgentImageModels,
+      visibleAgentVideoModels,
+    ]);
+
     // 根据当前生成类型获取模型列表
     const currentModels = useMemo(() => {
       if (generationType === 'video') return visibleVideoModels;
@@ -1031,6 +1229,67 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       visibleTextModels,
       visibleVideoModels,
     ]);
+
+    useEffect(() => {
+      let cancelled = false;
+
+      const resolveSelectedSkillMediaTypes = async () => {
+        if (generationType !== 'agent' || selectedSkillId === SKILL_AUTO_ID) {
+          setSelectedSkillMediaTypes([]);
+          return;
+        }
+
+        const systemSkill = findSystemSkillById(selectedSkillId);
+        if (systemSkill) {
+          setSelectedSkillMediaTypes(inferSkillMediaTypes(systemSkill));
+          return;
+        }
+
+        const registeredExternalSkill = findExternalSkillById(selectedSkillId);
+        if (registeredExternalSkill) {
+          setSelectedSkillMediaTypes(
+            inferSkillMediaTypes(registeredExternalSkill)
+          );
+          return;
+        }
+
+        const externalSkill = await externalSkillService.getSkillById(
+          selectedSkillId
+        );
+        if (cancelled) return;
+        if (externalSkill) {
+          setSelectedSkillMediaTypes(inferSkillMediaTypes(externalSkill));
+          return;
+        }
+
+        const userNote = await knowledgeBaseService.getNoteById(
+          selectedSkillId
+        );
+        if (cancelled) return;
+        setSelectedSkillMediaTypes(
+          userNote
+            ? inferSkillMediaTypes({
+                id: userNote.id,
+                name: userNote.title,
+                content: userNote.content,
+                outputType: userNote.metadata?.outputType as
+                  | SkillOutputType
+                  | undefined,
+              })
+            : []
+        );
+      };
+
+      resolveSelectedSkillMediaTypes().catch(() => {
+        if (!cancelled) {
+          setSelectedSkillMediaTypes([]);
+        }
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [generationType, selectedSkillId]);
 
     // 预计算当前模型的可用参数，避免子组件内部 stale 计算
     const compatibleParams = useMemo(() => {
@@ -1421,7 +1680,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const handleSelectHistoryPrompt = useCallback(
       (info: {
         content: string;
-        modelType?: 'image' | 'video' | 'audio' | 'text' | 'agent';
+        modelType?: PromptType;
       }) => {
         setPrompt(info.content);
 
@@ -1482,22 +1741,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     }, []);
 
     const handleOpenPromptOptimizer = useCallback(() => {
-      if (
-        generationType !== 'image' &&
-        generationType !== 'video'
-      ) {
-        return;
-      }
-
-      if (!prompt.trim()) {
-        MessagePlugin.warning(
-          language === 'zh' ? '请先输入提示词' : 'Please enter a prompt first'
-        );
-        return;
-      }
-
       setIsPromptOptimizeOpen(true);
-    }, [generationType, language, prompt]);
+    }, []);
 
     // 处理素材库选择
     const handleMediaLibrarySelect = useCallback(async (asset: Asset) => {
@@ -1855,6 +2100,96 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       [applyModelSelection]
     );
 
+    const applyAgentMediaModelSelection = useCallback(
+      (type: SkillMediaType, model: ModelConfig) => {
+        const modelRef = getModelRefFromConfig(model);
+        if (type === 'image') {
+          setSelectedAgentImageModel(model.id);
+          setSelectedAgentImageModelRef(modelRef);
+        } else if (type === 'video') {
+          setSelectedAgentVideoModel(model.id);
+          setSelectedAgentVideoModelRef(modelRef);
+        } else {
+          setSelectedAgentAudioModel(model.id);
+          setSelectedAgentAudioModelRef(modelRef);
+        }
+
+        setPersistedModelSelection(type, {
+          modelId: model.id,
+          modelRef,
+          providerIdHint: model.sourceProfileId || modelRef?.profileId,
+          vendorHint: model.vendor,
+        });
+
+        analytics.track('ai_input_change_agent_media_model', {
+          model: model.id,
+          type,
+          profileId: model.sourceProfileId || null,
+        });
+      },
+      []
+    );
+
+    const handleAgentMediaModelSelect = useCallback(
+      (type: SkillMediaType, modelId: string, modelRef?: ModelRef | null) => {
+        const models =
+          type === 'image'
+            ? visibleAgentImageModels
+            : type === 'video'
+            ? visibleAgentVideoModels
+            : visibleAgentAudioModels;
+        const model =
+          findMatchingSelectableModel(models, modelId, modelRef || null) ||
+          findMatchingSelectableModel(models, modelId, null) ||
+          getModelConfig(modelId);
+        if (!model) return;
+        applyAgentMediaModelSelection(type, model);
+      },
+      [
+        applyAgentMediaModelSelection,
+        visibleAgentAudioModels,
+        visibleAgentImageModels,
+        visibleAgentVideoModels,
+      ]
+    );
+
+    const handleAgentMediaModelConfigSelect = useCallback(
+      (type: SkillMediaType, model: ModelConfig) => {
+        applyAgentMediaModelSelection(type, model);
+      },
+      [applyAgentMediaModelSelection]
+    );
+
+    const handleSkillOptionSelect = useCallback((skill: SkillOption) => {
+      setSelectedSkillMediaTypes(inferSkillMediaTypes(skill));
+    }, []);
+
+    const agentMediaDefaultModels = useMemo(
+      () => ({
+        image: selectedAgentImageModel,
+        video: selectedAgentVideoModel,
+        audio: selectedAgentAudioModel,
+      }),
+      [
+        selectedAgentAudioModel,
+        selectedAgentImageModel,
+        selectedAgentVideoModel,
+      ]
+    );
+
+    const agentMediaDefaultModelRefs = useMemo(
+      () => ({
+        image: selectedAgentImageModelRef,
+        video: selectedAgentVideoModelRef,
+        audio: selectedAgentAudioModelRef,
+      }),
+      [
+        selectedAgentAudioModelRef,
+        selectedAgentImageModelRef,
+        selectedAgentVideoModelRef,
+      ]
+    );
+
     // 当 selectedModel 被外部逻辑更新时（如生成类型切换、设置变更），重新对齐参数
     // 避免无限循环：只有在参数实际变化时才更新 state
     // 当模型或可用参数变化时同步默认参数，保留用户已选值
@@ -2079,6 +2414,12 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           params: selectedParams,
           generationType: generationType,
           count: selectedCount,
+          defaultModels:
+            generationType === 'agent' ? agentMediaDefaultModels : undefined,
+          defaultModelRefs:
+            generationType === 'agent'
+              ? agentMediaDefaultModelRefs
+              : undefined,
         });
 
         // 收集所有参考媒体（图片 + 图形 + 视频）
@@ -2161,6 +2502,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                       | 'image'
                       | 'text'
                       | 'video'
+                      | 'audio'
                       | 'ppt') || undefined;
                   workflow = await convertSkillFlowToWorkflow(
                     parsedParams,
@@ -2490,6 +2832,9 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           }
         }
 
+        const imageRoute = resolveInvocationRoute('image');
+        const videoRoute = resolveInvocationRoute('video');
+        const audioRoute = resolveInvocationRoute('audio');
         const aiContext = {
           rawInput: prompt,
           userInstruction: parsedParams.userInstruction,
@@ -2498,12 +2843,16 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             type: parsedParams.generationType,
             isExplicit: parsedParams.isModelExplicit,
           },
-          defaultModels: {
-            audio:
-              resolveInvocationRoute('audio').modelId || getDefaultAudioModel(),
-            image:
-              resolveInvocationRoute('image').modelId || getDefaultImageModel(),
-            video: resolveInvocationRoute('video').modelId || 'veo3.1',
+          modelRef: parsedParams.modelRef,
+          defaultModels: parsedParams.defaultModels || {
+            audio: audioRoute.modelId || getDefaultAudioModel(),
+            image: imageRoute.modelId || getDefaultImageModel(),
+            video: videoRoute.modelId || getDefaultVideoModel(),
+          },
+          defaultModelRefs: parsedParams.defaultModelRefs || {
+            audio: createModelRef(audioRoute.profileId, audioRoute.modelId),
+            image: createModelRef(imageRoute.profileId, imageRoute.modelId),
+            video: createModelRef(videoRoute.profileId, videoRoute.modelId),
           },
           params: {
             count: parsedParams.count,
@@ -2544,8 +2893,14 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             }
 
             if (prompt.trim()) {
+              const trimmedPrompt = prompt.trim();
               const hasSelection = allContent.length > 0;
-              addPromptHistory(prompt.trim(), hasSelection, generationType);
+              addPromptHistory(trimmedPrompt, hasSelection, generationType);
+              if (generationType === 'image') {
+                addImagePromptHistory(trimmedPrompt);
+              } else if (generationType === 'video') {
+                addVideoPromptHistory(trimmedPrompt);
+              }
             }
             setPrompt('');
             setSelectedContent([]);
@@ -2581,8 +2936,14 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
         // 工作流已提交，立即保存历史、清空输入并解锁，步骤执行在后台继续
         if (prompt.trim()) {
+          const trimmedPrompt = prompt.trim();
           const hasSelection = allContent.length > 0;
-          addPromptHistory(prompt.trim(), hasSelection, generationType);
+          addPromptHistory(trimmedPrompt, hasSelection, generationType);
+          if (generationType === 'image') {
+            addImagePromptHistory(trimmedPrompt);
+          } else if (generationType === 'video') {
+            addVideoPromptHistory(trimmedPrompt);
+          }
         }
         setPrompt('');
         setSelectedContent([]);
@@ -3013,6 +3374,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       submitWorkflowToSW,
       addPromptHistory,
       selectedParams,
+      agentMediaDefaultModels,
+      agentMediaDefaultModelRefs,
       generationType,
       selectedCount,
       bindCurrentImageAnchorTask,
@@ -3070,6 +3433,9 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             userInstruction: retryContext.aiContext.userInstruction,
             rawInput: retryContext.aiContext.rawInput,
             modelId: retryContext.aiContext.model.id,
+            modelRef: retryContext.aiContext.modelRef,
+            defaultModels: retryContext.aiContext.defaultModels,
+            defaultModelRefs: retryContext.aiContext.defaultModelRefs,
             isModelExplicit: retryContext.aiContext.model.isExplicit,
             count: workflowMessageData.count,
             size: retryContext.aiContext.params.size,
@@ -3536,6 +3902,10 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const shouldKeepExpanded =
       isFocused || allContent.length > 0 || isPromptOptimizeOpen;
 
+    useLayoutEffect(() => {
+      resizeAIInputTextarea(inputRef.current, shouldKeepExpanded);
+    }, [shouldKeepExpanded, prompt]);
+
     return (
       <div
         ref={containerRef}
@@ -3616,6 +3986,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
               <SkillDropdown
                 value={selectedSkillId}
                 onSelect={setSelectedSkillId}
+                onSelectSkill={handleSkillOptionSelect}
                 onAddSkill={handleAddSkill}
                 disabled={isSubmitting}
               />
@@ -3633,12 +4004,91 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
               models={currentModels}
               header={
                 language === 'zh'
-                  ? '选择模型 (↑↓ Tab)'
+                  ? generationType === 'agent'
+                    ? '选择文本模型 (↑↓ Tab)'
+                    : '选择模型 (↑↓ Tab)'
+                  : generationType === 'agent'
+                  ? 'Select text model (↑↓ Tab)'
                   : 'Select model (↑↓ Tab)'
               }
               isOpen={modelDropdownOpen}
               onOpenChange={handleModelDropdownChange}
             />
+
+            {generationType === 'agent' &&
+              selectedSkillId !== SKILL_AUTO_ID &&
+              selectedSkillMediaTypes.includes('image') && (
+                <ModelDropdown
+                  selectedModel={selectedAgentImageModel}
+                  selectedSelectionKey={getSelectionKey(
+                    selectedAgentImageModel,
+                    selectedAgentImageModelRef
+                  )}
+                  onSelect={(modelId, modelRef) =>
+                    handleAgentMediaModelSelect('image', modelId, modelRef)
+                  }
+                  onSelectModel={(model) =>
+                    handleAgentMediaModelConfigSelect('image', model)
+                  }
+                  language={language}
+                  models={visibleAgentImageModels}
+                  header={
+                    language === 'zh'
+                      ? '选择图片模型 (↑↓ Tab)'
+                      : 'Select image model (↑↓ Tab)'
+                  }
+                />
+              )}
+
+            {generationType === 'agent' &&
+              selectedSkillId !== SKILL_AUTO_ID &&
+              selectedSkillMediaTypes.includes('video') && (
+                <ModelDropdown
+                  selectedModel={selectedAgentVideoModel}
+                  selectedSelectionKey={getSelectionKey(
+                    selectedAgentVideoModel,
+                    selectedAgentVideoModelRef
+                  )}
+                  onSelect={(modelId, modelRef) =>
+                    handleAgentMediaModelSelect('video', modelId, modelRef)
+                  }
+                  onSelectModel={(model) =>
+                    handleAgentMediaModelConfigSelect('video', model)
+                  }
+                  language={language}
+                  models={visibleAgentVideoModels}
+                  header={
+                    language === 'zh'
+                      ? '选择视频模型 (↑↓ Tab)'
+                      : 'Select video model (↑↓ Tab)'
+                  }
+                />
+              )}
+
+            {generationType === 'agent' &&
+              selectedSkillId !== SKILL_AUTO_ID &&
+              selectedSkillMediaTypes.includes('audio') && (
+                <ModelDropdown
+                  selectedModel={selectedAgentAudioModel}
+                  selectedSelectionKey={getSelectionKey(
+                    selectedAgentAudioModel,
+                    selectedAgentAudioModelRef
+                  )}
+                  onSelect={(modelId, modelRef) =>
+                    handleAgentMediaModelSelect('audio', modelId, modelRef)
+                  }
+                  onSelectModel={(model) =>
+                    handleAgentMediaModelConfigSelect('audio', model)
+                  }
+                  language={language}
+                  models={visibleAgentAudioModels}
+                  header={
+                    language === 'zh'
+                      ? '选择音频模型 (↑↓ Tab)'
+                      : 'Select audio model (↑↓ Tab)'
+                  }
+                />
+              )}
 
             {/* Parameters dropdown selector - Hidden for Agent mode */}
             {generationType !== 'agent' && compatibleParams.length > 0 && (
@@ -3703,72 +4153,89 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
               </div>
             )}
 
-            <PromptHistoryPopover
-              onSelectPrompt={handleSelectHistoryPrompt}
-              language={language}
-              extraActions={
-                shouldKeepExpanded &&
-                (generationType === 'image' || generationType === 'video') ? (
-                  <button
-                    type="button"
-                    className="prompt-history-popover__action-btn"
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setIsFocused(true);
-                    }}
-                    onClick={handleOpenPromptOptimizer}
-                    title={language === 'zh' ? '优化提示词' : 'Optimize prompt'}
-                    aria-label={
-                      language === 'zh' ? '优化提示词' : 'Optimize prompt'
-                    }
-                    data-track="ai_input_click_prompt_optimize"
-                  >
-                    <Sparkles size={16} />
-                  </button>
-                ) : null
-              }
-            />
-
-            <div className="ai-input-bar__rich-input">
-              <textarea
-                ref={inputRef}
-                className={classNames('ai-input-bar__input', {
-                  'ai-input-bar__input--focused': isFocused,
-                })}
-                value={prompt}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-                placeholder={
-                  generationType === 'agent'
-                    ? language === 'zh'
-                      ? '输入指令，让 Agent 为你工作...'
-                      : 'Type instructions for Agent...'
-                    : generationType === 'text'
-                    ? language === 'zh'
-                      ? '输入你想生成的文本内容、文章、摘要或 Markdown'
-                      : 'Describe the text, article, summary, or markdown you want'
-                    : generationType === 'audio'
-                    ? hasSelectedTextContent
+            <div className="ai-input-bar__prompt-row">
+              <div className="ai-input-bar__rich-input">
+                <textarea
+                  ref={inputRef}
+                  className={classNames('ai-input-bar__input', {
+                    'ai-input-bar__input--focused': shouldKeepExpanded,
+                  })}
+                  value={prompt}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
+                  placeholder={
+                    generationType === 'agent'
                       ? language === 'zh'
-                        ? '已有文本，无需额外提示词，直接发送'
-                        : 'Text already selected. No extra prompt needed, just send'
+                        ? '输入指令，让 Agent 为你工作...'
+                        : 'Type instructions for Agent...'
+                      : generationType === 'text'
+                      ? language === 'zh'
+                        ? '输入你想生成的文本内容、文章、摘要或 Markdown'
+                        : 'Describe the text, article, summary, or markdown you want'
+                      : generationType === 'audio'
+                      ? hasSelectedTextContent
+                        ? language === 'zh'
+                          ? '已有文本，无需额外提示词，直接发送'
+                          : 'Text already selected. No extra prompt needed, just send'
+                        : language === 'zh'
+                        ? '描述你想要生成的音乐、风格、歌词或情绪'
+                        : 'Describe the music, style, lyrics, or mood you want'
                       : language === 'zh'
-                      ? '描述你想要生成的音乐、风格、歌词或情绪'
-                      : 'Describe the music, style, lyrics, or mood you want'
-                    : language === 'zh'
-                    ? `描述你想要创建的${
-                        generationType === 'image' ? '图片' : '视频'
-                      }`
-                    : `Describe the ${
-                        generationType === 'image' ? 'image' : 'video'
-                      } you want to create`
+                      ? `描述你想要创建的${
+                          generationType === 'image' ? '图片' : '视频'
+                        }`
+                      : `Describe the ${
+                          generationType === 'image' ? 'image' : 'video'
+                        } you want to create`
+                  }
+                  rows={
+                    shouldKeepExpanded
+                      ? AI_INPUT_EXPANDED_ROWS
+                      : AI_INPUT_COLLAPSED_ROWS
+                  }
+                  disabled={isSubmitting}
+                  data-testid="ai-input-textarea"
+                />
+              </div>
+
+              <PromptHistoryPopover
+                generationType={generationType}
+                onSelectPrompt={handleSelectHistoryPrompt}
+                language={language}
+                extraActions={
+                  shouldKeepExpanded &&
+                  (generationType === 'image' || generationType === 'video') ? (
+                    <HoverTip
+                      content={
+                        language === 'zh' ? '提示词优化' : 'Prompt optimization'
+                      }
+                      placement="top"
+                    >
+                      <button
+                        type="button"
+                        className="prompt-history-popover__action-btn"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setIsFocused(true);
+                        }}
+                        onClick={handleOpenPromptOptimizer}
+                        disabled={isSubmitting}
+                        title={
+                          language === 'zh' ? '优化提示词' : 'Optimize prompt'
+                        }
+                        aria-label={
+                          language === 'zh' ? '提示词优化' : 'Prompt optimization'
+                        }
+                        data-track="ai_input_click_prompt_optimize"
+                      >
+                        <Sparkles size={16} />
+                      </button>
+                    </HoverTip>
+                  ) : null
                 }
-                rows={shouldKeepExpanded ? 4 : 1}
-                disabled={isSubmitting}
-                data-testid="ai-input-textarea"
               />
             </div>
           </div>
@@ -3789,9 +4256,13 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           onOpenChange={setIsPromptOptimizeOpen}
           originalPrompt={prompt}
           language={language}
-          type={generationType === 'video' ? 'video' : 'image'}
+          type={generationType}
           allowStructuredMode={true}
-          defaultMode="structured"
+          defaultMode={
+            generationType === 'image' || generationType === 'video'
+              ? 'structured'
+              : 'polish'
+          }
           onApply={(optimizedPrompt) => {
             setPrompt(optimizedPrompt);
             setIsFocused(true);

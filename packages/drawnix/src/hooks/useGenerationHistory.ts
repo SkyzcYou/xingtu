@@ -52,6 +52,7 @@ export function useGenerationHistory() {
         imageUrl: task.result!.thumbnailUrl || task.result!.url, // Use thumbnail if available
         width: task.result!.width || 400,
         height: task.result!.height || 225,
+        duration: task.result!.duration,
         previewUrl: task.result!.url,
         downloadUrl: task.result!.url,
         uploadedImage: task.params.uploadedImage, // 包含参考图片

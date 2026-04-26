@@ -26,7 +26,11 @@ import {
   toViewBoxPoint,
   createG,
 } from '@plait/core';
-import { PlaitFrame, isFrameElement } from '../types/frame.types';
+import {
+  PlaitFrame,
+  getFrameDisplayName,
+  isFrameElement,
+} from '../types/frame.types';
 import { FrameComponent } from '../components/frame-element/frame.component';
 import {
   FRAME_STROKE_COLOR,
@@ -37,17 +41,85 @@ import {
   isPointInRect,
   createFrameTitleEditor,
 } from '../utils/frame-title-utils';
-import { isElementIntersectingRect } from '../utils/frame-duplicate';
 /** Frame 指针类型 */
 export const FramePointerType = 'frame' as const;
-
-/** Frame 计数器（用于默认命名） */
-let frameCounter = 0;
 
 /** 生成唯一的 Frame ID（避免同毫秒批量创建冲突） */
 const generateFrameId = () => {
   return `frame-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`;
 };
+
+type RectLike = { x: number; y: number; width: number; height: number };
+
+function getElementRect(element: PlaitElement): RectLike | null {
+  const points = (element as PlaitElement & { points?: Point[] }).points;
+  if (points && points.length >= 2) {
+    return RectangleClient.getRectangleByPoints(points);
+  }
+
+  const elementWithBounds = element as PlaitElement & {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+  };
+  if (
+    typeof elementWithBounds.x === 'number' &&
+    typeof elementWithBounds.y === 'number'
+  ) {
+    return {
+      x: elementWithBounds.x,
+      y: elementWithBounds.y,
+      width: elementWithBounds.width ?? 0,
+      height: elementWithBounds.height ?? 0,
+    };
+  }
+
+  return null;
+}
+
+function getIntersectionArea(rect1: RectLike, rect2: RectLike): number {
+  const left = Math.max(rect1.x, rect2.x);
+  const right = Math.min(rect1.x + rect1.width, rect2.x + rect2.width);
+  const top = Math.max(rect1.y, rect2.y);
+  const bottom = Math.min(rect1.y + rect1.height, rect2.y + rect2.height);
+  const width = Math.max(0, right - left);
+  const height = Math.max(0, bottom - top);
+  return width * height;
+}
+
+function getAssociatedFrameIdByMaxIntersection(
+  board: PlaitBoard,
+  element: PlaitElement
+): string | null {
+  if (isFrameElement(element)) return null;
+
+  const currentFrameId = (element as PlaitElement & { frameId?: string })
+    .frameId;
+  const elementRect = getElementRect(element);
+  if (!elementRect) {
+    return currentFrameId ?? null;
+  }
+
+  let bestFrameId: string | null = null;
+  let bestArea = 0;
+
+  for (const candidate of board.children) {
+    if (!isFrameElement(candidate)) continue;
+
+    const frameRect = RectangleClient.getRectangleByPoints(candidate.points);
+    const area = getIntersectionArea(elementRect, frameRect);
+    if (
+      area > bestArea ||
+      (area > 0 && area === bestArea && candidate.id === currentFrameId)
+    ) {
+      bestArea = area;
+      bestFrameId = candidate.id;
+    }
+  }
+
+  return bestArea > 0 ? bestFrameId : null;
+}
 
 /**
  * 判断两个矩形是否相交
@@ -65,36 +137,23 @@ function isRectIntersect(
 }
 
 /**
- * 判断元素是否完全在 Frame 内
- */
-function isElementInFrame(board: PlaitBoard, element: PlaitElement, frame: PlaitFrame): boolean {
-  if (isFrameElement(element)) return false;
-  if (!element.points || element.points.length < 2) return false;
-
-  const frameRect = RectangleClient.getRectangleByPoints(frame.points);
-  const elementRect = RectangleClient.getRectangleByPoints(element.points);
-
-  return (
-    elementRect.x >= frameRect.x &&
-    elementRect.y >= frameRect.y &&
-    elementRect.x + elementRect.width <= frameRect.x + frameRect.width &&
-    elementRect.y + elementRect.height <= frameRect.y + frameRect.height
-  );
-}
-
-/**
  * Frame 操作变换集
  */
 export const FrameTransforms = {
   /**
    * 插入一个新 Frame（始终追加到已有 Frame 列表末尾）
    */
-  insertFrame(board: PlaitBoard, points: [Point, Point], name?: string): PlaitFrame {
-    frameCounter++;
+  insertFrame(
+    board: PlaitBoard,
+    points: [Point, Point],
+    name?: string
+  ): PlaitFrame {
+    const nextFrameIndex =
+      board.children.filter((element) => isFrameElement(element)).length + 1;
     const frame: PlaitFrame = {
       id: generateFrameId(),
       type: 'frame',
-      name: name || `Frame ${frameCounter}`,
+      name: name || getFrameDisplayName(undefined, nextFrameIndex),
       points,
       children: [],
     };
@@ -118,6 +177,48 @@ export const FrameTransforms = {
     return board.children.filter(
       (el) => (el as PlaitElement & { frameId?: string }).frameId === frame.id
     );
+  },
+
+  /**
+   * 获取元素当前归属的 Frame。
+   * 优先按与各 Frame 的最大相交面积判断；无几何信息时回退到已有 frameId。
+   * 有几何信息但未与任何 Frame 相交时视为无归属，避免旧 frameId 误关联。
+   */
+  getAssociatedFrameId(
+    board: PlaitBoard,
+    element: PlaitElement
+  ): string | null {
+    return getAssociatedFrameIdByMaxIntersection(board, element);
+  },
+
+  /**
+   * 获取指定 Frame 及其绑定内容
+   */
+  getFrameContents(board: PlaitBoard, frameIds: Set<string>): PlaitElement[] {
+    const contents: PlaitElement[] = [];
+    const seenIds = new Set<string>();
+
+    const walk = (elements: PlaitElement[]) => {
+      for (const element of elements) {
+        const boundFrameId = (element as PlaitElement & { frameId?: string })
+          .frameId;
+        const shouldDelete =
+          frameIds.has(element.id) ||
+          (!!boundFrameId && frameIds.has(boundFrameId));
+
+        if (shouldDelete && !seenIds.has(element.id)) {
+          contents.push(element);
+          seenIds.add(element.id);
+        }
+
+        if (element.children && element.children.length > 0) {
+          walk(element.children as PlaitElement[]);
+        }
+      }
+    };
+
+    walk(board.children as PlaitElement[]);
+    return contents;
   },
 
   /**
@@ -151,25 +252,29 @@ export const FrameTransforms = {
   },
 
   /**
-   * 更新 Frame 的子元素绑定（基于位置）
+   * 更新 Frame 的子元素绑定（按最大相交面积归属）
    */
   updateFrameMembers(board: PlaitBoard, frame: PlaitFrame): void {
-    for (const element of board.children) {
+    for (let index = 0; index < board.children.length; index += 1) {
+      const element = board.children[index];
       if (element.id === frame.id) continue;
       if (isFrameElement(element)) continue;
 
       const currentFrameId = (element as PlaitElement & { frameId?: string }).frameId;
+      const associatedFrameId = getAssociatedFrameIdByMaxIntersection(
+        board,
+        element
+      );
 
-      if (isElementInFrame(board, element, frame)) {
-        // 元素在 Frame 内且未绑定 → 绑定
-        if (currentFrameId !== frame.id) {
-          FrameTransforms.bindToFrame(board, element, frame);
-        }
-      } else {
-        // 元素不在 Frame 内但绑定到此 Frame → 解绑
-        if (currentFrameId === frame.id) {
-          FrameTransforms.unbindFromFrame(board, element);
-        }
+      if (
+        associatedFrameId !== currentFrameId &&
+        (associatedFrameId === frame.id || currentFrameId === frame.id)
+      ) {
+        Transforms.setNode(
+          board,
+          { frameId: associatedFrameId ?? undefined } as any,
+          [index]
+        );
       }
     }
   },
@@ -204,18 +309,20 @@ export const withFrame: PlaitPlugin = (board: PlaitBoard) => {
   let createStartPoint: Point | null = null;
   let previewG: SVGGElement | null = null;
 
-  // 注册 getDeletedFragment：将选中的 Frame 加入删除列表，并先解绑子元素
+  // 注册 getDeletedFragment：删除选中的 Frame 时一并删除绑定内容
   board.getDeletedFragment = (data: PlaitElement[]) => {
     const selectedElements = getSelectedElements(board);
     const selectedFrames = selectedElements.filter(isFrameElement) as PlaitFrame[];
     if (selectedFrames.length) {
-      for (const frame of selectedFrames) {
-        const children = FrameTransforms.getFrameChildren(board, frame);
-        for (const child of children) {
-          FrameTransforms.unbindFromFrame(board, child);
+      const frameIds = new Set(selectedFrames.map((frame) => frame.id));
+      const existingIds = new Set(data.map((element) => element.id));
+      const contents = FrameTransforms.getFrameContents(board, frameIds);
+      for (const element of contents) {
+        if (!existingIds.has(element.id)) {
+          data.push(element);
+          existingIds.add(element.id);
         }
       }
-      data.push(...selectedFrames);
     }
     return getDeletedFragment(data);
   };
@@ -347,6 +454,36 @@ export const withFrame: PlaitPlugin = (board: PlaitBoard) => {
     dblClick(event);
   };
 
+  const getFrameAtPoint = (point: Point): PlaitFrame | null => {
+    for (let i = board.children.length - 1; i >= 0; i -= 1) {
+      const element = board.children[i];
+      if (isFrameElement(element) && board.isHit(element, point)) {
+        return element as PlaitFrame;
+      }
+    }
+    return null;
+  };
+
+  const startTrackingFrameMove = (frame: PlaitFrame) => {
+    movingFrameId = frame.id;
+    lastFramePoints = [...frame.points] as [Point, Point];
+
+    // 记录拖动开始时与 Frame 关联的元素 ID，避免移动过程中“吸附”路过的元素
+    movingElementIds.clear();
+    board.children.forEach((element) => {
+      if (element.id === movingFrameId) return;
+      if (isFrameElement(element)) return;
+
+      const associatedFrameId = getAssociatedFrameIdByMaxIntersection(
+        board,
+        element
+      );
+      if (associatedFrameId === movingFrameId) {
+        movingElementIds.add(element.id);
+      }
+    });
+  };
+
   // Frame 创建：指针按下
   board.pointerDown = (event: PointerEvent) => {
     if (board.pointer === FramePointerType) {
@@ -358,21 +495,16 @@ export const withFrame: PlaitPlugin = (board: PlaitBoard) => {
     }
 
     // 记录 Frame 移动前的位置
+    const viewBoxPoint = toViewBoxPoint(
+      board,
+      toHostPoint(board, event.x, event.y)
+    ) as Point;
+    const pressedFrame = getFrameAtPoint(viewBoxPoint);
     const selected = getSelectedElements(board);
-    if (selected.length === 1 && isFrameElement(selected[0])) {
-      movingFrameId = selected[0].id;
-      lastFramePoints = [...(selected[0] as PlaitFrame).points] as [Point, Point];
-
-      // 记录拖动开始时与 Frame 相交的元素 ID
-      movingElementIds.clear();
-      const frameRect = RectangleClient.getRectangleByPoints(lastFramePoints);
-      board.children.forEach((el) => {
-        if (el.id === movingFrameId) return;
-        if (isFrameElement(el)) return;
-        if (isElementIntersectingRect(el, frameRect)) {
-          movingElementIds.add(el.id);
-        }
-      });
+    if (pressedFrame) {
+      startTrackingFrameMove(pressedFrame);
+    } else if (selected.length === 1 && isFrameElement(selected[0])) {
+      startTrackingFrameMove(selected[0] as PlaitFrame);
     }
 
     pointerDown(event);

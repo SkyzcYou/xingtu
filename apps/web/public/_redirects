@@ -1,2 +1,7 @@
+# 旧 SEO 重复落地页合并到产品介绍页
+/ai-image-generator.html    /home.html   301
+/flowchart-maker.html       /home.html   301
+/mindmap-maker.html         /home.html   301
+
 # SPA 路由支持
 /*    /index.html   200

@@ -4,15 +4,17 @@
  * 在 SVG 画布上渲染 Frame 容器（虚线矩形 + 可选背景图 + 标题标签）
  */
 import { RectangleClient } from '@plait/core';
-import { PlaitFrame } from '../../types/frame.types';
+import { PlaitFrame, getFrameDisplayName } from '../../types/frame.types';
 
 export const FRAME_STROKE_COLOR = '#a0a0a0';
 export const FRAME_FILL_COLOR = 'rgba(200, 200, 200, 0.04)';
-export const FRAME_TITLE_FONT_SIZE = 12;
-export const FRAME_TITLE_PADDING = 8;
-export const FRAME_TITLE_OFFSET_Y = -6;
-/** 标题区域估算高度（font-size + padding） */
-export const FRAME_TITLE_HEIGHT = FRAME_TITLE_FONT_SIZE + 4;
+export const FRAME_TITLE_FONT_SIZE = 14;
+export const FRAME_TITLE_PADDING = 12;
+export const FRAME_TITLE_OFFSET_Y = -8;
+export const FRAME_TITLE_HEIGHT = 32;
+export const FRAME_TITLE_MIN_WIDTH = 72;
+const FRAME_TITLE_BG_COLOR = 'var(--td-brand-color, #F39C12)';
+const FRAME_TITLE_TEXT_COLOR = '#ffffff';
 
 export class FrameGenerator {
   private rectElement: SVGRectElement | null = null;
@@ -32,7 +34,10 @@ export class FrameGenerator {
     const rect = RectangleClient.getRectangleByPoints(element.points);
 
     // 虚线矩形边框
-    this.rectElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    this.rectElement = document.createElementNS(
+      'http://www.w3.org/2000/svg',
+      'rect'
+    );
     this.rectElement.setAttribute('x', String(rect.x));
     this.rectElement.setAttribute('y', String(rect.y));
     this.rectElement.setAttribute('width', String(rect.width));
@@ -43,6 +48,7 @@ export class FrameGenerator {
     this.rectElement.setAttribute('stroke', FRAME_STROKE_COLOR);
     this.rectElement.setAttribute('stroke-width', '1.5');
     this.rectElement.setAttribute('stroke-dasharray', '8 4');
+    this.rectElement.setAttribute('class', 'frame-element__outline');
     g.appendChild(this.rectElement);
 
     // 背景图（如果有）
@@ -51,18 +57,32 @@ export class FrameGenerator {
     }
 
     // 标题背景
-    this.titleBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    this.titleBg = document.createElementNS(
+      'http://www.w3.org/2000/svg',
+      'rect'
+    );
     g.appendChild(this.titleBg);
 
     // 标题文本
-    this.titleText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    this.titleText = document.createElementNS(
+      'http://www.w3.org/2000/svg',
+      'text'
+    );
     this.titleText.setAttribute('x', String(rect.x + FRAME_TITLE_PADDING));
-    this.titleText.setAttribute('y', String(rect.y + FRAME_TITLE_OFFSET_Y));
+    this.titleText.setAttribute(
+      'y',
+      String(rect.y + FRAME_TITLE_OFFSET_Y - FRAME_TITLE_HEIGHT / 2)
+    );
     this.titleText.setAttribute('font-size', String(FRAME_TITLE_FONT_SIZE));
-    this.titleText.setAttribute('font-family', 'system-ui, -apple-system, sans-serif');
-    this.titleText.setAttribute('fill', FRAME_STROKE_COLOR);
-    this.titleText.setAttribute('dominant-baseline', 'auto');
-    this.titleText.textContent = element.name || 'Frame';
+    this.titleText.setAttribute(
+      'font-family',
+      'system-ui, -apple-system, sans-serif'
+    );
+    this.titleText.setAttribute('font-weight', '600');
+    this.titleText.setAttribute('fill', FRAME_TITLE_TEXT_COLOR);
+    this.titleText.setAttribute('dominant-baseline', 'middle');
+    this.titleText.setAttribute('pointer-events', 'none');
+    this.titleText.textContent = getFrameDisplayName(element);
     g.appendChild(this.titleText);
 
     // 计算标题背景尺寸
@@ -102,8 +122,11 @@ export class FrameGenerator {
 
     if (this.titleText) {
       this.titleText.setAttribute('x', String(rect.x + FRAME_TITLE_PADDING));
-      this.titleText.setAttribute('y', String(rect.y + FRAME_TITLE_OFFSET_Y));
-      this.titleText.textContent = element.name || 'Frame';
+      this.titleText.setAttribute(
+        'y',
+        String(rect.y + FRAME_TITLE_OFFSET_Y - FRAME_TITLE_HEIGHT / 2)
+      );
+      this.titleText.textContent = getFrameDisplayName(element);
     }
 
     this.updateTitleBackground(rect.x, rect.y);
@@ -210,11 +233,26 @@ export class FrameGenerator {
       const bbox = this.titleText.getBBox();
       if (bbox.width > 0) {
         this.titleBg.setAttribute('x', String(frameX));
-        this.titleBg.setAttribute('y', String(frameY + FRAME_TITLE_OFFSET_Y - bbox.height));
-        this.titleBg.setAttribute('width', String(bbox.width + FRAME_TITLE_PADDING * 2));
-        this.titleBg.setAttribute('height', String(bbox.height + 4));
-        this.titleBg.setAttribute('rx', '4');
-        this.titleBg.setAttribute('fill', 'rgba(255, 255, 255, 0.8)');
+        this.titleBg.setAttribute(
+          'y',
+          String(frameY + FRAME_TITLE_OFFSET_Y - FRAME_TITLE_HEIGHT)
+        );
+        this.titleBg.setAttribute(
+          'width',
+          String(
+            Math.max(
+              FRAME_TITLE_MIN_WIDTH,
+              bbox.width + FRAME_TITLE_PADDING * 2
+            )
+          )
+        );
+        this.titleBg.setAttribute('height', String(FRAME_TITLE_HEIGHT));
+        this.titleBg.setAttribute('rx', '8');
+        this.titleBg.setAttribute('fill', FRAME_TITLE_BG_COLOR);
+        this.titleBg.setAttribute('stroke', 'rgba(255, 255, 255, 0.75)');
+        this.titleBg.setAttribute('stroke-width', '1');
+        this.titleBg.style.filter =
+          'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.16))';
       }
     } catch {
       // getBBox 在元素未渲染时可能抛出异常

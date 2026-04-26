@@ -91,7 +91,7 @@ function applyCommonGPTImageOptions(
   const requestedSize = getStringParam(params, 'size') || request.size;
   const size =
     mode === 'edit'
-      ? resolveOfficialGPTImageEditSize(requestedSize)
+      ? resolveOfficialGPTImageEditSize(request.model, requestedSize, params)
       : resolveOfficialGPTImageSize(request.model, requestedSize, params);
   const quality = resolveOfficialGPTImageQuality(params);
   const n = getNumberParam(params, 'n') ?? getNumberParam(params, 'count');

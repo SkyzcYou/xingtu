@@ -7,12 +7,13 @@ export interface StoredModelSelection {
 
 export function readStoredModelSelection(
   key: string,
-  fallbackModel: string
+  fallbackModel: string,
+  fallbackModelRef: ModelRef | null = null
 ): StoredModelSelection {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) {
-      return { modelId: fallbackModel, modelRef: null };
+      return { modelId: fallbackModel, modelRef: fallbackModelRef };
     }
 
     const parsed = JSON.parse(raw) as {
@@ -30,9 +31,16 @@ export function readStoredModelSelection(
     // 兼容旧格式：直接存储 modelId 字符串
   }
 
+  let legacyModelId: string | null = null;
+  try {
+    legacyModelId = localStorage.getItem(key);
+  } catch {
+    // localStorage 不可用时静默降级
+  }
+
   return {
-    modelId: localStorage.getItem(key) || fallbackModel,
-    modelRef: null,
+    modelId: legacyModelId || fallbackModel,
+    modelRef: legacyModelId ? null : fallbackModelRef,
   };
 }
 
@@ -41,11 +49,15 @@ export function writeStoredModelSelection(
   modelId: string,
   modelRef?: ModelRef | null
 ): void {
-  localStorage.setItem(
-    key,
-    JSON.stringify({
-      modelId,
-      profileId: modelRef?.profileId || null,
-    })
-  );
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        modelId,
+        profileId: modelRef?.profileId || null,
+      })
+    );
+  } catch {
+    // localStorage 不可用时静默降级
+  }
 }

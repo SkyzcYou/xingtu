@@ -1,3 +1,88 @@
+## 0.6.78 (2026-04-26)
+
+### 🚀 Features
+
+- add PPT common prompt history ([9c41c60e](https://github.com/ljquan/aitu/commit/9c41c60e))
+- add PPT outline image preview action ([0f1dddae](https://github.com/ljquan/aitu/commit/0f1dddae))
+- 分离公共提示词与单页提示词，优化幻灯片生成流程 ([20854ff0](https://github.com/ljquan/aitu/commit/20854ff0))
+- add ppt outline generation flow ([af35d4ae](https://github.com/ljquan/aitu/commit/af35d4ae))
+- 改造提示词优化多轮交互 ([913ba764](https://github.com/ljquan/aitu/commit/913ba764))
+- 优化 PPT 编辑与生成模型体验 ([f19c02ff](https://github.com/ljquan/aitu/commit/f19c02ff))
+
+### 🩹 Fixes
+
+- align model dropdown checkmark ([095d9f1a](https://github.com/ljquan/aitu/commit/095d9f1a))
+- 优化 PPT 大纲提示词与替换逻辑 ([ff22ecc9](https://github.com/ljquan/aitu/commit/ff22ecc9))
+- 优化 PPT 生图可见文字提示词 ([4179fa8c](https://github.com/ljquan/aitu/commit/4179fa8c))
+- unify ai generation params ([06922627](https://github.com/ljquan/aitu/commit/06922627))
+- 避免关闭 SW 时通道初始化超时 ([8548dfc8](https://github.com/ljquan/aitu/commit/8548dfc8))
+- 用 WinBox 承载优化弹窗 ([2f49bddc](https://github.com/ljquan/aitu/commit/2f49bddc))
+- 调整默认文本模型与选择器顺序 ([53485977](https://github.com/ljquan/aitu/commit/53485977))
+- 提升 PPT 生图风格一致性 ([77a4acb1](https://github.com/ljquan/aitu/commit/77a4acb1))
+- ensure PPT media displays fully ([e5291e64](https://github.com/ljquan/aitu/commit/e5291e64))
+- 稳定 PPT 生图历史顺序 ([c4200a00](https://github.com/ljquan/aitu/commit/c4200a00))
+- 统一 PPT 页面客户术语 ([fb2b2c06](https://github.com/ljquan/aitu/commit/fb2b2c06))
+- 修复生图插入重试重复插入问题 ([6670f8bc](https://github.com/ljquan/aitu/commit/6670f8bc))
+- 修复 GPT Image 编辑尺寸映射 ([f39813ad](https://github.com/ljquan/aitu/commit/f39813ad))
+- align prompt preview flows and refresh default samples ([595d4f03](https://github.com/ljquan/aitu/commit/595d4f03))
+- autosize ai input textarea ([2d2d6441](https://github.com/ljquan/aitu/commit/2d2d6441))
+
+### 🔧 Chores
+
+- 更新应用版本号至0.6.77并刷新构建时间 ([5c32fee5](https://github.com/ljquan/aitu/commit/5c32fee5))
+- docs(home): 添加作者X链接至页眉、页脚和结构化数据 ([89980b72](https://github.com/ljquan/aitu/commit/89980b72))
+- 优化提示词预览与内置提示词 ([82ac84aa](https://github.com/ljquan/aitu/commit/82ac84aa))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+- gongchengtu <1817063960@qq.com>
+- SaulgoodMan-C <271131037+SaulgoodMan-C@users.noreply.github.com>
+
+## 0.6.77 (2026-04-25)
+
+### 🩹 Fixes
+
+- 修复非根路径部署时的资源加载问题 ([9d8d4c8b](https://github.com/ljquan/aitu/commit/9d8d4c8b))
+- 增强 Vite 构建文件句柄重试 ([cee1ab01](https://github.com/ljquan/aitu/commit/cee1ab01))
+
+### 🔧 Chores
+
+- bump version to 0.6.76 ([587a0547](https://github.com/ljquan/aitu/commit/587a0547))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.76 (2026-04-25)
+
+### 🚀 Features
+
+- 新增 OpenTu SEO 首页 ([99fca746](https://github.com/ljquan/aitu/commit/99fca746))
+
+### 🔧 Chores
+
+- 更新版本号至0.6.75并同步构建时间 ([cefc3cb1](https://github.com/ljquan/aitu/commit/cefc3cb1))
+- style(homepage): 优化主页布局与视觉设计 ([e23cdfab](https://github.com/ljquan/aitu/commit/e23cdfab))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.75 (2026-04-25)
+
+### 🩹 Fixes
+
+- 离线时跳过 idle prefetch 清单预热 ([a20393e2](https://github.com/ljquan/aitu/commit/a20393e2))
+
+### 🔧 Chores
+
+- 更新应用版本号至0.6.74并同步构建时间 ([19cecd26](https://github.com/ljquan/aitu/commit/19cecd26))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
 ## 0.6.74 (2026-04-24)
 
 ### 🚀 Features

@@ -28,7 +28,7 @@ async function setupTaskQueueServiceHarness(statusSequence: TaskStatus[]) {
     }),
     archiveTasks: vi.fn(async () => {}),
     invalidateCache: vi.fn(),
-    generateImage: vi.fn(async () => undefined),
+    generateImage: vi.fn(async (_params?: any, _options?: any) => undefined),
   };
 
   const waitForTaskCompletion = vi.fn(async (taskId: string, options?: any) => {
@@ -298,5 +298,63 @@ describe('task-queue-service image edit retry persistence', () => {
       referenceImages: ['data:image/png;base64,restored-source'],
       maskImage: 'data:image/png;base64,restored-mask',
     });
+  });
+
+  it('keeps a cancelled active task from being overwritten by late executor completion', async () => {
+    const { taskQueueService, storedTasks, mocks } =
+      await setupTaskQueueServiceHarness([TaskStatus.COMPLETED]);
+    let finishExecutor!: () => void;
+    let capturedSignal: AbortSignal | undefined;
+
+    mocks.generateImage.mockImplementationOnce(async (_params, options) => {
+      capturedSignal = options?.signal;
+      await new Promise<void>((resolve) => {
+        finishExecutor = resolve;
+      });
+
+      const storedTask = storedTasks.get('task-image-edit-1');
+      storedTasks.set('task-image-edit-1', {
+        ...storedTask,
+        status: TaskStatus.COMPLETED,
+        progress: 100,
+        result: {
+          url: 'https://example.com/late.png',
+          format: 'png',
+          size: 1,
+        },
+        completedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const task = taskQueueService.createTask(
+      {
+        prompt: 'Cancel this image',
+        model: 'gpt-image-2',
+        size: '1x1',
+      },
+      TaskType.IMAGE
+    );
+
+    await flushAsyncWork();
+
+    expect(mocks.generateImage).toHaveBeenCalledTimes(1);
+    expect(capturedSignal?.aborted).toBe(false);
+
+    taskQueueService.cancelTask(task.id);
+
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(taskQueueService.getTask(task.id)?.status).toBe(
+      TaskStatus.CANCELLED
+    );
+
+    finishExecutor();
+    await flushAsyncWork();
+
+    expect(mocks.waitForTaskCompletion).not.toHaveBeenCalled();
+    expect(taskQueueService.getTask(task.id)?.status).toBe(
+      TaskStatus.CANCELLED
+    );
+    expect(storedTasks.get(task.id)?.status).toBe(TaskStatus.CANCELLED);
   });
 });

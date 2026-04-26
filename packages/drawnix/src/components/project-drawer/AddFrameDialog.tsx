@@ -144,7 +144,7 @@ export const AddFrameDialog: React.FC<AddFrameDialogProps> = ({
 
   return (
     <Dialog
-      header="添加 Frame"
+      header="添加 PPT 页面"
       visible={visible}
       onClose={onClose}
       footer={null}
@@ -225,12 +225,12 @@ export const AddFrameDialog: React.FC<AddFrameDialogProps> = ({
               size="small"
               icon={<AddIcon />} 
               onClick={handleCustomAdd}
-              title="添加自定义尺寸 Frame"
+              title="添加自定义尺寸 PPT 页面"
             />
           </div>
           
           <div className="add-frame-dialog__hint">
-            <kbd>F</kbd> 直接绘制
+            <kbd>F</kbd> 直接绘制 PPT 页面
           </div>
         </div>
       </div>

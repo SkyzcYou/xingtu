@@ -604,8 +604,6 @@ async function addFrameSlide(
   frame: PlaitFrame,
   children: PlaitElement[]
 ): Promise<boolean> {
-  if (!children.length) return false;
-
   const frameRect = RectangleClient.getRectangleByPoints(frame.points);
   const slide = pptx.addSlide();
 
@@ -980,7 +978,7 @@ export async function exportFramesToPPT(
   frames: PlaitFrame[],
   options: ExportPPTOptions = {}
 ): Promise<void> {
-  if (!frames.length) throw new Error('没有可导出的 Frame');
+  if (!frames.length) throw new Error('没有可导出的 PPT 页面');
 
   const sortedFrames = sortFramesForPPT(frames);
   const partition = partitionElementsByExportFrames(board, sortedFrames);
@@ -1011,6 +1009,6 @@ export async function exportAllPPTFrames(
   options: ExportPPTOptions = {}
 ): Promise<void> {
   const allFrames = collectAllFramesFromBoard(board);
-  if (!allFrames.length) throw new Error('当前画布没有可导出的 Frame');
+  if (!allFrames.length) throw new Error('当前画布没有可导出的 PPT 页面');
   await exportFramesToPPT(board, allFrames, options);
 }

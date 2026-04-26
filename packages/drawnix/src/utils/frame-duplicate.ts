@@ -15,7 +15,11 @@ import {
   addSelectedElement,
   BoardTransforms,
 } from '@plait/core';
-import { PlaitFrame, isFrameElement } from '../types/frame.types';
+import {
+  PlaitFrame,
+  getFrameDisplayName,
+  isFrameElement,
+} from '../types/frame.types';
 import { MessagePlugin } from 'tdesign-react';
 
 /**
@@ -144,14 +148,14 @@ export function duplicateFrame(
   // 找到 Frame 在 board.children 中的索引
   const frameIndex = board.children.findIndex((child) => child.id === frame.id);
   if (frameIndex === -1) {
-    MessagePlugin.warning(language === 'zh' ? 'Frame 不存在' : 'Frame not found');
+    MessagePlugin.warning(language === 'zh' ? 'PPT 页面不存在' : 'PPT page not found');
     return null;
   }
 
   // 只支持根级别 Frame 的复制
   const isRootFrame = board.children[frameIndex] === frame;
   if (!isRootFrame) {
-    MessagePlugin.warning(language === 'zh' ? '暂不支持复制嵌套 Frame' : 'Nested Frame duplication not supported');
+    MessagePlugin.warning(language === 'zh' ? '暂不支持复制嵌套 PPT 页面' : 'Nested PPT page duplication not supported');
     return null;
   }
 
@@ -225,7 +229,7 @@ export function duplicateFrame(
 
   // 深度克隆并平移 Frame
   let clonedFrame = deepCloneElement(frame) as PlaitFrame;
-  clonedFrame.name = `${frame.name} (${language === 'zh' ? '副本' : 'Copy'})`;
+  clonedFrame.name = `${getFrameDisplayName(frame)} (${language === 'zh' ? '副本' : 'Copy'})`;
   clonedFrame = translateElement(clonedFrame, dx, dy) as PlaitFrame;
 
   // 克隆并平移相交的元素
@@ -284,8 +288,8 @@ export function duplicateFrame(
 
   MessagePlugin.success(
     language === 'zh'
-      ? `已复制 Frame 及 ${clonedElements.length} 个元素`
-      : `Duplicated Frame with ${clonedElements.length} elements`
+      ? `已复制 PPT 页面及 ${clonedElements.length} 个元素`
+      : `Duplicated PPT page with ${clonedElements.length} elements`
   );
 
   return clonedFrame;

@@ -601,6 +601,7 @@ export const AudioNodeContent: React.FC<AudioNodeContentProps> = ({
         <button
           type="button"
           className="audio-node__artwork"
+          data-slideshow-media-control="true"
           onClick={handleToggle}
           onPointerDown={(event) => event.stopPropagation()}
           title={isPlaying ? 'Pause audio' : 'Play audio'}

@@ -8,7 +8,6 @@
 
 import { LS_KEYS_TO_MIGRATE } from '../constants/storage-keys';
 import { kvStorageService } from './kv-storage-service';
-import { generateId } from '@aitu/utils';
 
 const STORAGE_KEY = LS_KEYS_TO_MIGRATE.PROMPT_HISTORY;
 
@@ -21,6 +20,16 @@ const VIDEO_PROMPT_HISTORY_KEY = LS_KEYS_TO_MIGRATE.VIDEO_PROMPT_HISTORY;
 // 图片描述历史记录的存储 key
 const IMAGE_PROMPT_HISTORY_KEY = LS_KEYS_TO_MIGRATE.IMAGE_PROMPT_HISTORY;
 
+export const PROMPT_TYPES = [
+  'image',
+  'video',
+  'audio',
+  'text',
+  'agent',
+  'ppt-common',
+] as const;
+export type PromptType = (typeof PROMPT_TYPES)[number];
+
 export interface PromptHistoryItem {
   id: string;
   content: string;
@@ -29,15 +38,73 @@ export interface PromptHistoryItem {
   hasSelection?: boolean;
   /** 是否置顶 */
   pinned?: boolean;
-  /** 生成类型：image/video/audio/text/agent */
-  modelType?: 'image' | 'video' | 'audio' | 'text' | 'agent';
+  /** 生成类型：image/video/audio/text/agent/ppt-common */
+  modelType?: PromptType;
+}
+
+export interface PresetPromptSettings {
+  /** 置顶的提示词列表（按置顶顺序排列） */
+  pinnedPrompts: string[];
+  /** 已删除的提示词列表 */
+  deletedPrompts: string[];
+}
+
+interface PresetStorageData {
+  image: PresetPromptSettings;
+  video: PresetPromptSettings;
+  audio: PresetPromptSettings;
+  text: PresetPromptSettings;
+  agent: PresetPromptSettings;
+  'ppt-common': PresetPromptSettings;
+}
+
+function createDefaultPresetSettings(): PresetPromptSettings {
+  return {
+    pinnedPrompts: [],
+    deletedPrompts: [],
+  };
+}
+
+function createEmptyPresetStorageData(): PresetStorageData {
+  return {
+    image: createDefaultPresetSettings(),
+    video: createDefaultPresetSettings(),
+    audio: createDefaultPresetSettings(),
+    text: createDefaultPresetSettings(),
+    agent: createDefaultPresetSettings(),
+    'ppt-common': createDefaultPresetSettings(),
+  };
+}
+
+function normalizePresetStorageData(
+  data?: Partial<Record<PromptType, PresetPromptSettings>> | null
+): PresetStorageData {
+  const normalized = createEmptyPresetStorageData();
+
+  if (!data || typeof data !== 'object') {
+    return normalized;
+  }
+
+  for (const type of PROMPT_TYPES) {
+    const settings = data[type];
+    normalized[type] = {
+      pinnedPrompts: Array.isArray(settings?.pinnedPrompts)
+        ? settings.pinnedPrompts
+        : [],
+      deletedPrompts: Array.isArray(settings?.deletedPrompts)
+        ? settings.deletedPrompts
+        : [],
+    };
+  }
+
+  return normalized;
 }
 
 /**
  * 生成唯一 ID
  */
 function generatePromptId(): string {
-  return generateId('prompt');
+  return `prompt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
 // ============================================
@@ -70,10 +137,7 @@ export async function initPromptStorageCache(): Promise<void> {
     promptHistoryCache = promptHistory || [];
     videoPromptHistoryCache = videoHistory || [];
     imagePromptHistoryCache = imageHistory || [];
-    presetDataCache = presetSettings || {
-      image: { pinnedPrompts: [], deletedPrompts: [] },
-      video: { pinnedPrompts: [], deletedPrompts: [] },
-    };
+    presetDataCache = normalizePresetStorageData(presetSettings);
 
     cacheInitialized = true;
   } catch (error) {
@@ -82,10 +146,7 @@ export async function initPromptStorageCache(): Promise<void> {
     promptHistoryCache = [];
     videoPromptHistoryCache = [];
     imagePromptHistoryCache = [];
-    presetDataCache = {
-      image: { pinnedPrompts: [], deletedPrompts: [] },
-      video: { pinnedPrompts: [], deletedPrompts: [] },
-    };
+    presetDataCache = createEmptyPresetStorageData();
     cacheInitialized = true;
   }
 }
@@ -128,10 +189,7 @@ function ensureCacheInitialized(): void {
     promptHistoryCache = promptHistoryCache || [];
     videoPromptHistoryCache = videoPromptHistoryCache || [];
     imagePromptHistoryCache = imagePromptHistoryCache || [];
-    presetDataCache = presetDataCache || {
-      image: { pinnedPrompts: [], deletedPrompts: [] },
-      video: { pinnedPrompts: [], deletedPrompts: [] },
-    };
+    presetDataCache = normalizePresetStorageData(presetDataCache);
   }
 }
 
@@ -205,7 +263,7 @@ export function getPromptHistory(): PromptHistoryItem[] {
 export function addPromptHistory(
   content: string,
   hasSelection?: boolean,
-  modelType?: 'image' | 'video' | 'audio' | 'text' | 'agent'
+  modelType?: PromptType
 ): void {
   if (!content || !content.trim()) return;
 
@@ -340,7 +398,7 @@ export function addVideoPromptHistory(content: string): void {
   const trimmedContent = content.trim();
   ensureCacheInitialized();
 
-  let history = videoPromptHistoryCache || [];
+  const history = videoPromptHistoryCache || [];
 
   // 检查是否已存在相同内容
   const existingIndex = history.findIndex((item) => item.content === trimmedContent);
@@ -442,7 +500,7 @@ export function addImagePromptHistory(content: string): void {
   const trimmedContent = content.trim();
   ensureCacheInitialized();
 
-  let history = imagePromptHistoryCache || [];
+  const history = imagePromptHistoryCache || [];
 
   // 检查是否已存在相同内容
   const existingIndex = history.findIndex((item) => item.content === trimmedContent);
@@ -513,36 +571,12 @@ export function mergeImagePromptHistory(remoteHistory: ImagePromptHistoryItem[])
 }
 
 // ============================================
-// 预设提示词设置功能（用于 AI 图片/视频生成弹窗）
+// 预设提示词设置功能
 // ============================================
-
-export interface PresetPromptSettings {
-  /** 置顶的提示词列表（按置顶顺序排列） */
-  pinnedPrompts: string[];
-  /** 已删除的提示词列表 */
-  deletedPrompts: string[];
-}
-
-export type PromptType = 'image' | 'video';
-
-interface PresetStorageData {
-  image: PresetPromptSettings;
-  video: PresetPromptSettings;
-}
-
-const defaultPresetSettings: PresetPromptSettings = {
-  pinnedPrompts: [],
-  deletedPrompts: [],
-};
 
 function loadPresetData(): PresetStorageData {
   ensureCacheInitialized();
-  return (
-    presetDataCache || {
-      image: { ...defaultPresetSettings },
-      video: { ...defaultPresetSettings },
-    }
-  );
+  return normalizePresetStorageData(presetDataCache);
 }
 
 /**
@@ -550,7 +584,7 @@ function loadPresetData(): PresetStorageData {
  */
 function getPresetSettings(type: PromptType): PresetPromptSettings {
   const data = loadPresetData();
-  return data[type] || { ...defaultPresetSettings };
+  return data[type] || createDefaultPresetSettings();
 }
 
 /**

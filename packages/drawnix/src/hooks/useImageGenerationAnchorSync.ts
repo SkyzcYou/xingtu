@@ -7,7 +7,10 @@ import {
   type WorkflowPostProcessingResult,
 } from '../services/workflow-completion-service';
 import { ImageGenerationAnchorTransforms } from '../plugins/with-image-generation-anchor';
-import type { PlaitImageGenerationAnchor } from '../types/image-generation-anchor.types';
+import {
+  IMAGE_GENERATION_ANCHOR_RETRY_EVENT,
+  type PlaitImageGenerationAnchor,
+} from '../types/image-generation-anchor.types';
 import { TaskStatus, TaskType, type Task } from '../types/task.types';
 import { getImageGenerationAnchorControllerResult } from '../utils/image-generation-anchor-controller';
 import {
@@ -27,6 +30,8 @@ export interface UseImageGenerationAnchorSyncOptions {
 }
 
 const COMPLETED_REMOVAL_DELAY = 1600;
+const STALE_ANCHOR_CHECK_INTERVAL = 10_000;
+const STALE_ANCHOR_THRESHOLD_MS = 45_000;
 
 function isImageTask(task: Task): boolean {
   return task.type === TaskType.IMAGE;
@@ -121,6 +126,39 @@ function deriveAnchorPreviewImageUrl(
     result?.urls?.find((url) => typeof url === 'string' && url.length > 0) ||
     anchor.previewImageUrl
   );
+}
+
+function getStaleAnchorRetryTaskId(
+  anchor: PlaitImageGenerationAnchor,
+  tasks: Task[]
+): string | undefined {
+  const relatedTasks = getTasksForImageGenerationAnchor(anchor, tasks);
+  const primaryTask = selectPrimaryImageGenerationAnchorTask(
+    anchor,
+    relatedTasks
+  );
+  const primaryTaskId =
+    anchor.primaryTaskId || primaryTask?.id || anchor.taskIds[0];
+
+  if (!primaryTaskId) {
+    return undefined;
+  }
+
+  const hasInserted =
+    relatedTasks.length > 0 &&
+    hasResolvedImageGenerationBatchCount(anchor, relatedTasks) &&
+    relatedTasks.every(
+      (task) =>
+        Boolean(task.insertedToCanvas) ||
+        workflowCompletionService.getPostProcessingStatus(task.id)?.status ===
+          'completed'
+    );
+
+  if (hasInserted) {
+    return undefined;
+  }
+
+  return primaryTaskId;
 }
 
 function isSamePoint(left?: Point, right?: Point): boolean {
@@ -507,9 +545,53 @@ export function useImageGenerationAnchorSync({
         reconcileAllAnchors();
       });
 
+    const stalePhaseTimestamps = new Map<string, number>();
+    const staleCheckTimer = setInterval(() => {
+      const anchors = ImageGenerationAnchorTransforms.getAllAnchors(board);
+      const now = Date.now();
+      for (const anchor of anchors) {
+        if (anchor.phase === 'developing' || anchor.phase === 'inserting') {
+          const entered = stalePhaseTimestamps.get(anchor.id);
+          if (!entered) {
+            stalePhaseTimestamps.set(anchor.id, now);
+          } else if (now - entered > STALE_ANCHOR_THRESHOLD_MS) {
+            stalePhaseTimestamps.delete(anchor.id);
+            reconcileAnchor(anchor.id);
+
+            const latestAnchor = ImageGenerationAnchorTransforms.getAnchorById(
+              board,
+              anchor.id
+            );
+            if (
+              !latestAnchor ||
+              (latestAnchor.phase !== 'developing' &&
+                latestAnchor.phase !== 'inserting')
+            ) {
+              continue;
+            }
+
+            const primaryTaskId = getStaleAnchorRetryTaskId(
+              latestAnchor,
+              taskQueueService.getAllTasks()
+            );
+            if (primaryTaskId) {
+              window.dispatchEvent(
+                new CustomEvent(IMAGE_GENERATION_ANCHOR_RETRY_EVENT, {
+                  detail: { taskId: primaryTaskId },
+                })
+              );
+            }
+          }
+        } else {
+          stalePhaseTimestamps.delete(anchor.id);
+        }
+      }
+    }, STALE_ANCHOR_CHECK_INTERVAL);
+
     return () => {
       taskSubscription.unsubscribe();
       completionSubscription.unsubscribe();
+      clearInterval(staleCheckTimer);
       removalTimers.forEach((timer) => clearTimeout(timer));
       removalTimers.clear();
     };

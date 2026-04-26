@@ -289,8 +289,14 @@ export function resolveOfficialGPTImageSize(
 }
 
 export function resolveOfficialGPTImageEditSize(
-  size?: string
+  modelId: string | undefined,
+  size?: string,
+  params?: Record<string, unknown>
 ): string | undefined {
+  if (isGPTImage2Model(modelId)) {
+    return resolveOfficialGPTImageSize(modelId, size, params);
+  }
+
   const normalizedSize = size?.trim().toLowerCase().replace(':', 'x');
   if (!normalizedSize || normalizedSize === 'auto') {
     return undefined;

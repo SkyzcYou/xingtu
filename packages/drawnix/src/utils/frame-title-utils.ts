@@ -4,13 +4,25 @@
  * 标题区域命中检测和画布内编辑器
  */
 import { PlaitBoard, RectangleClient, Point, Transforms } from '@plait/core';
-import { PlaitFrame } from '../types/frame.types';
+import { PlaitFrame, getFrameDisplayName } from '../types/frame.types';
 import {
   FRAME_TITLE_FONT_SIZE,
   FRAME_TITLE_PADDING,
   FRAME_TITLE_OFFSET_Y,
   FRAME_TITLE_HEIGHT,
+  FRAME_TITLE_MIN_WIDTH,
 } from '../components/frame-element/frame.generator';
+
+function estimateTitleTextWidth(name: string): number {
+  return Array.from(name).reduce((width, char) => {
+    return (
+      width +
+      (char.charCodeAt(0) > 255
+        ? FRAME_TITLE_FONT_SIZE
+        : FRAME_TITLE_FONT_SIZE * 0.6)
+    );
+  }, 0);
+}
 
 /**
  * 获取 Frame 标题区域的矩形范围（估算，基于 name 字符数）
@@ -19,15 +31,16 @@ export function getFrameTitleRect(
   frame: PlaitFrame
 ): { x: number; y: number; width: number; height: number } {
   const rect = RectangleClient.getRectangleByPoints(frame.points);
-  const name = frame.name || 'Frame';
-  // 估算文本宽度：每个字符约 7px（12px font-size, monospace-ish）
-  const estimatedCharWidth = FRAME_TITLE_FONT_SIZE * 0.6;
-  const textWidth = name.length * estimatedCharWidth;
+  const name = getFrameDisplayName(frame);
+  const textWidth = estimateTitleTextWidth(name);
   return {
     x: rect.x,
     y: rect.y + FRAME_TITLE_OFFSET_Y - FRAME_TITLE_HEIGHT,
-    width: textWidth + FRAME_TITLE_PADDING * 2,
-    height: FRAME_TITLE_HEIGHT + 4,
+    width: Math.max(
+      FRAME_TITLE_MIN_WIDTH,
+      textWidth + FRAME_TITLE_PADDING * 2
+    ),
+    height: FRAME_TITLE_HEIGHT,
   };
 }
 
@@ -83,15 +96,17 @@ export function createFrameTitleEditor(
 
   const input = document.createElement('input');
   input.type = 'text';
-  input.value = frame.name || 'Frame';
+  input.value = getFrameDisplayName(frame);
   input.style.cssText = `
     font-size: ${FRAME_TITLE_FONT_SIZE * zoom}px;
     font-family: system-ui, -apple-system, sans-serif;
-    color: #333;
-    background: white;
+    font-weight: 600;
+    color: #fff;
+    background: var(--td-brand-color, #F39C12);
     border: 2px solid var(--td-brand-color, #0052d9);
-    border-radius: 4px;
-    padding: 2px ${FRAME_TITLE_PADDING * zoom}px;
+    border-radius: 8px;
+    padding: 0 ${FRAME_TITLE_PADDING * zoom}px;
+    height: ${FRAME_TITLE_HEIGHT * zoom}px;
     outline: none;
     min-width: 60px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
@@ -100,7 +115,14 @@ export function createFrameTitleEditor(
   overlay.appendChild(input);
   document.body.appendChild(overlay);
 
+  let cancelled = false;
   const commitAndClose = () => {
+    if (cancelled) {
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+      return;
+    }
     const newName = input.value.trim();
     if (newName && newName !== frame.name) {
       const index = board.children.findIndex((el) => el.id === frame.id);
@@ -119,7 +141,7 @@ export function createFrameTitleEditor(
       e.preventDefault();
       input.blur();
     } else if (e.key === 'Escape') {
-      input.value = frame.name || 'Frame';
+      cancelled = true;
       input.blur();
     }
     e.stopPropagation();

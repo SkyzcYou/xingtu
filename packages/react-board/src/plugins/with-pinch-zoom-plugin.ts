@@ -2,12 +2,12 @@ import {
   BoardTransforms,
   distanceBetweenPointAndPoint,
   getPointBetween,
-  getViewportOrigination,
   MAX_ZOOM,
   MIN_ZOOM,
   PlaitBoard,
   Point,
 } from '@plait/core';
+import { getCurrentViewportOrigination } from '../utils/viewport';
 
 interface PointerRecord {
   pointerId: number;
@@ -74,9 +74,9 @@ export const withPinchZoom = (board: PlaitBoard) => {
           const halfOfWidth = boardContainerRect.width / 2;
           const halfOfHeight = boardContainerRect.height / 2;
           const zoom = board.viewport.zoom;
-          const origination = getViewportOrigination(board);
-          let centerX = origination![0] + halfOfWidth / zoom - dx / zoom;
-          let centerY = origination![1] + halfOfHeight / zoom - dy / zoom;
+          const origination = getCurrentViewportOrigination(board);
+          let centerX = origination[0] + halfOfWidth / zoom - dx / zoom;
+          let centerY = origination[1] + halfOfHeight / zoom - dy / zoom;
           let newOrigination = [
             centerX - boardContainerRect.width / 2 / zoom,
             centerY - boardContainerRect.height / 2 / zoom,

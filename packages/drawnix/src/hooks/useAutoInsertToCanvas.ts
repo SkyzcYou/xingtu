@@ -46,7 +46,12 @@ import {
   handleSplitAndInsertTask,
   type TaskParams,
 } from '../services/media-result-handler';
-import { insertMediaIntoFrame } from '../utils/frame-insertion-utils';
+import {
+  insertMediaIntoFrame,
+  type PPTSlideImageHistoryInput,
+  replacePPTSlideImage,
+  setFramePPTMeta,
+} from '../utils/frame-insertion-utils';
 import { buildImageGenerationAnchorPresentationPatch } from '../utils/image-generation-anchor-state';
 import {
   getAnchorCurrentPosition,
@@ -58,9 +63,7 @@ import {
   getLyricsTitle,
   isLyricsTask,
 } from '../utils/lyrics-task-utils';
-import {
-  getImageGenerationTaskInsertGroupKey,
-} from '../utils/image-generation-anchor-task';
+import { getImageGenerationTaskInsertGroupKey } from '../utils/image-generation-anchor-task';
 import { findImageGenerationAnchorForTaskOnBoard } from '../utils/image-generation-anchor-lookup';
 
 /**
@@ -83,6 +86,8 @@ const DEFAULT_CONFIG: AutoInsertConfig = {
   groupSimilarTasks: true,
   groupTimeWindow: 5000, // 5秒内完成的同 Prompt 任务会分组
 };
+
+const BOARD_RETRY_DELAY = 500;
 
 /**
  * 已插入任务的记录，防止重复插入
@@ -166,6 +171,73 @@ function assertInsertionSucceeded(result: MCPResult): void {
   if (!result.success) {
     throw new Error(result.error || 'Canvas insertion failed');
   }
+}
+
+function updatePPTSlideImageAfterInsert(
+  task: Task,
+  insertedElementId?: string,
+  imageUrl?: string,
+  options: {
+    targetFrameId?: string;
+    replaceElementId?: string;
+    prompt?: string;
+    historyItems?: PPTSlideImageHistoryInput[];
+    imageCreatedAt?: number;
+  } = {}
+): void {
+  if (!insertedElementId || !imageUrl) {
+    return;
+  }
+
+  const board = getCanvasBoard();
+  const targetFrameId =
+    options.targetFrameId || (task.params.targetFrameId as string | undefined);
+  if (!board || !targetFrameId) {
+    return;
+  }
+
+  replacePPTSlideImage(board, targetFrameId, insertedElementId, imageUrl, {
+    replaceElementId:
+      options.replaceElementId ||
+      (task.params.pptReplaceElementId as string | undefined),
+    prompt: options.prompt || task.params.prompt,
+    slidePrompt:
+      typeof task.params.pptSlidePrompt === 'string'
+        ? task.params.pptSlidePrompt
+        : undefined,
+    historyItems: options.historyItems,
+    imageCreatedAt: options.imageCreatedAt || getTaskImageGeneratedAt(task),
+  });
+}
+
+function getTaskImageGeneratedAt(task: Task): number {
+  const createdAt = task.completedAt || task.updatedAt || task.createdAt;
+  return Number.isFinite(createdAt) && createdAt > 0 ? createdAt : Date.now();
+}
+
+function getImageResultUrls(task: Task): string[] {
+  if (task.result?.urls?.length) {
+    return task.result.urls.filter((url): url is string => !!url);
+  }
+  return task.result?.url ? [task.result.url] : [];
+}
+
+function getTaskBatchIndex(task: Task): number {
+  return typeof task.params.batchIndex === 'number'
+    ? task.params.batchIndex
+    : Number.MAX_SAFE_INTEGER;
+}
+
+function createPPTSlideImageHistoryItems(
+  imageUrls: string[],
+  prompt?: string,
+  createdAt?: number
+): PPTSlideImageHistoryInput[] {
+  return imageUrls.map((imageUrl) => ({
+    imageUrl,
+    ...(prompt ? { prompt } : {}),
+    ...(createdAt ? { createdAt } : {}),
+  }));
 }
 
 function isPoint(value: unknown): value is Point {
@@ -451,9 +523,24 @@ export function useAutoInsertToCanvas(
     let isActive = true;
 
     /**
+     * 调度 flush 操作
+     */
+    function scheduleFlush(delay = mergedConfig.groupTimeWindow) {
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+      }
+      flushTimerRef.current = setTimeout(() => {
+        flushTimerRef.current = null;
+        flushPendingInserts().catch((error) => {
+          console.error('[AutoInsert] Failed to flush pending inserts:', error);
+        });
+      }, delay);
+    }
+
+    /**
      * 执行批量插入
      */
-    const flushPendingInserts = async () => {
+    async function flushPendingInserts() {
       // console.log('[AutoInsert] flushPendingInserts called');
       if (!isActive) {
         return;
@@ -466,8 +553,11 @@ export function useAutoInsertToCanvas(
       }
 
       const board = getCanvasBoard();
-      if (!board) {
-        scheduleFlush();
+      if (!board || !isActive) {
+        // console.log(`[AutoInsert] flushPendingInserts aborted: board=${!!board}, isActive=${isActive}`);
+        if (!board && isActive) {
+          scheduleFlush(BOARD_RETRY_DELAY);
+        }
         return;
       }
 
@@ -478,7 +568,12 @@ export function useAutoInsertToCanvas(
       pendingMap.clear();
 
       for (const [promptKey, inserts] of toInsert) {
-        if (!isActive) break;
+        if (!isActive) {
+          for (const { task } of inserts) {
+            releaseTaskInsertion(task.id);
+          }
+          continue;
+        }
 
         // console.log(`[AutoInsert] Processing prompt group "${promptKey.substring(0, 30)}..." with ${inserts.length} tasks`);
 
@@ -612,8 +707,54 @@ export function useAutoInsertToCanvas(
             let insertedPoint = resolvedInsertionPoint;
             let insertedElementId: string | undefined;
             let insertedSize = targetImageDimensions;
+            let didUpdatePPTSlideImage = false;
 
             if (
+              task.params.pptSlideImage &&
+              taskFrameId &&
+              taskFrameDims &&
+              board &&
+              type === 'image' &&
+              allUrls.length > 0
+            ) {
+              const currentImageUrl = allUrls[allUrls.length - 1];
+              const frameInsert = await insertMediaIntoFrame(
+                board,
+                currentImageUrl,
+                type,
+                taskFrameId,
+                taskFrameDims,
+                undefined
+              );
+              if (frameInsert) {
+                insertedPoint = frameInsert.point;
+                insertedElementId = frameInsert.elementId;
+                insertedSize = frameInsert.size;
+                syncImageAnchorGeometry(board, imageAnchor, {
+                  position: frameInsert.point,
+                  size: frameInsert.size,
+                  transitionMode:
+                    imageAnchor?.anchorType === 'ghost' ? 'morph' : 'hold',
+                });
+                updatePPTSlideImageAfterInsert(
+                  task,
+                  insertedElementId,
+                  currentImageUrl,
+                  {
+                    targetFrameId: taskFrameId,
+                    replaceElementId: task.params.pptReplaceElementId as
+                      | string
+                      | undefined,
+                    historyItems: createPPTSlideImageHistoryItems(
+                      allUrls.slice(0, -1),
+                      task.params.prompt,
+                      getTaskImageGeneratedAt(task)
+                    ),
+                  }
+                );
+                didUpdatePPTSlideImage = true;
+              }
+            } else if (
               taskFrameId &&
               taskFrameDims &&
               board &&
@@ -621,14 +762,16 @@ export function useAutoInsertToCanvas(
               type !== 'text' &&
               allUrls.length === 1
             ) {
-              // 插入到 Frame 内部，contain 模式等比缩放
+              // 插入到 Frame 内部。PPT 页面图和普通媒体都保持 contain，确保图片完整展示。
               const frameInsert = await insertMediaIntoFrame(
                 board,
                 allUrls[0],
                 type,
                 taskFrameId,
                 taskFrameDims,
-                dimensions
+                task.params.pptSlideImage && type === 'image'
+                  ? undefined
+                  : dimensions
               );
               if (frameInsert) {
                 insertedPoint = frameInsert.point;
@@ -655,14 +798,19 @@ export function useAutoInsertToCanvas(
                           title:
                             task.result?.clips?.[index]?.title ||
                             (allUrls.length > 1
-                              ? `${audioMetadata?.title || task.params.title || 'Audio'} ${index + 1}`
+                              ? `${
+                                  audioMetadata?.title ||
+                                  task.params.title ||
+                                  'Audio'
+                                } ${index + 1}`
                               : audioMetadata?.title),
                           previewImageUrl:
                             task.result?.clips?.[index]?.imageLargeUrl ||
                             task.result?.clips?.[index]?.imageUrl ||
                             audioMetadata?.previewImageUrl,
                           duration:
-                            typeof task.result?.clips?.[index]?.duration === 'number'
+                            typeof task.result?.clips?.[index]?.duration ===
+                            'number'
                               ? task.result.clips[index]!.duration || undefined
                               : audioMetadata?.duration,
                           clipId:
@@ -743,7 +891,9 @@ export function useAutoInsertToCanvas(
                     title:
                       task.result?.clips?.[index]?.title ||
                       (allUrls.length > 1
-                        ? `${audioMetadata?.title || task.params.title || 'Audio'} ${index + 1}`
+                        ? `${
+                            audioMetadata?.title || task.params.title || 'Audio'
+                          } ${index + 1}`
                         : audioMetadata?.title),
                     previewImageUrl:
                       task.result?.clips?.[index]?.imageLargeUrl ||
@@ -817,6 +967,20 @@ export function useAutoInsertToCanvas(
               });
             }
 
+            if (type === 'image' && !didUpdatePPTSlideImage) {
+              updatePPTSlideImageAfterInsert(
+                task,
+                insertedElementId,
+                allUrls[0],
+                {
+                  targetFrameId: taskFrameId,
+                  replaceElementId: task.params.pptReplaceElementId as
+                    | string
+                    | undefined,
+                }
+              );
+            }
+
             workflowCompletionService.completePostProcessing(
               task.id,
               allUrls.length,
@@ -871,14 +1035,19 @@ export function useAutoInsertToCanvas(
                         title:
                           task.result?.clips?.[index]?.title ||
                           (taskUrls.length > 1
-                            ? `${taskBaseMetadata.title || task.params.title || 'Audio'} ${index + 1}`
+                            ? `${
+                                taskBaseMetadata.title ||
+                                task.params.title ||
+                                'Audio'
+                              } ${index + 1}`
                             : taskBaseMetadata.title),
                         previewImageUrl:
                           task.result?.clips?.[index]?.imageLargeUrl ||
                           task.result?.clips?.[index]?.imageUrl ||
                           taskBaseMetadata.previewImageUrl,
                         duration:
-                          typeof task.result?.clips?.[index]?.duration === 'number'
+                          typeof task.result?.clips?.[index]?.duration ===
+                          'number'
                             ? task.result.clips[index]!.duration || undefined
                             : taskBaseMetadata.duration,
                         clipId:
@@ -933,7 +1102,69 @@ export function useAutoInsertToCanvas(
 
             // console.log(`[AutoInsert] Inserting group of ${urls.length} ${type}s`);
 
-            if (mergedConfig.insertPrompt && type !== 'text') {
+            if (
+              firstInsertTask.params.pptSlideImage &&
+              targetFrameId &&
+              targetFrameDimensions &&
+              type === 'image'
+            ) {
+              const sortedInserts = inserts
+                .map((insert, sourceIndex) => ({ insert, sourceIndex }))
+                .sort((left, right) => {
+                  const indexDiff =
+                    getTaskBatchIndex(left.insert.task) -
+                    getTaskBatchIndex(right.insert.task);
+                  return indexDiff || left.sourceIndex - right.sourceIndex;
+                })
+                .map(({ insert }) => insert);
+              const historyItems = sortedInserts.flatMap(({ task }) =>
+                createPPTSlideImageHistoryItems(
+                  getImageResultUrls(task),
+                  task.params.prompt,
+                  getTaskImageGeneratedAt(task)
+                )
+              );
+              const currentHistoryItem = historyItems[historyItems.length - 1];
+
+              if (!currentHistoryItem) {
+                for (const { task } of inserts) {
+                  releaseTaskInsertion(task.id);
+                  workflowCompletionService.failPostProcessing(
+                    task.id,
+                    'No result URL'
+                  );
+                }
+                continue;
+              }
+
+              const frameInsert = await insertMediaIntoFrame(
+                board,
+                currentHistoryItem.imageUrl,
+                type,
+                targetFrameId,
+                targetFrameDimensions,
+                undefined
+              );
+
+              if (frameInsert) {
+                insertedPoint = frameInsert.point;
+                insertedElementId = frameInsert.elementId;
+                insertedSize = frameInsert.size;
+                updatePPTSlideImageAfterInsert(
+                  firstInsertTask,
+                  insertedElementId,
+                  currentHistoryItem.imageUrl,
+                  {
+                    targetFrameId,
+                    replaceElementId: firstInsertTask.params
+                      .pptReplaceElementId as string | undefined,
+                    prompt: currentHistoryItem.prompt,
+                    imageCreatedAt: currentHistoryItem.createdAt,
+                    historyItems: historyItems.slice(0, -1),
+                  }
+                );
+              }
+            } else if (mergedConfig.insertPrompt && type !== 'text') {
               const insertionResult = await insertAIFlow(
                 firstInsertTask.params.prompt,
                 urls.map((resultUrl, index) => ({
@@ -1085,19 +1316,7 @@ export function useAutoInsertToCanvas(
           }
         }
       }
-    };
-
-    /**
-     * 调度 flush 操作
-     */
-    const scheduleFlush = () => {
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-      }
-      flushTimerRef.current = setTimeout(() => {
-        flushPendingInserts();
-      }, mergedConfig.groupTimeWindow);
-    };
+    }
 
     /**
      * 处理宫格图/灵感图任务：使用统一的媒体结果处理服务
@@ -1182,6 +1401,17 @@ export function useAutoInsertToCanvas(
           return;
         }
         releaseTaskInsertion(task.id);
+      }
+
+      const postProcessingStatus =
+        workflowCompletionService.getPostProcessingStatus(task.id)?.status;
+      if (postProcessingStatus === 'completed') {
+        insertedTaskIds.add(task.id);
+        return;
+      }
+
+      if (postProcessingStatus === 'processing') {
+        return;
       }
 
       // 只处理图片、视频、音频和文本任务
@@ -1275,7 +1505,9 @@ export function useAutoInsertToCanvas(
         scheduleFlush();
       } else {
         // console.log(`[AutoInsert] Flushing immediately`);
-        flushPendingInserts();
+        flushPendingInserts().catch((error) => {
+          console.error('[AutoInsert] Failed to flush pending inserts:', error);
+        });
       }
     };
 
@@ -1284,8 +1516,17 @@ export function useAutoInsertToCanvas(
      * Note: 步骤状态更新现在由 SW 统一通过 workflow:stepStatus 事件处理
      * 不再需要在这里调用 updateWorkflowStepForTask
      */
-    const handleTaskFailed = (_task: Task) => {
+    const handleTaskFailed = (task: Task) => {
       // image anchor 的失败态由 useImageGenerationAnchorSync 统一推导。
+      if (task.params?.pptSlideImage && task.params?.targetFrameId) {
+        const board = getCanvasBoard();
+        if (board) {
+          setFramePPTMeta(board, task.params.targetFrameId as string, {
+            slideImageStatus: 'failed',
+            imageStatus: 'failed',
+          });
+        }
+      }
     };
 
     // 订阅任务更新事件
@@ -1316,7 +1557,10 @@ export function useAutoInsertToCanvas(
         if (event.type === 'taskUpdated' || event.type === 'taskCompleted') {
           if (event.task.status === TaskStatus.COMPLETED) {
             handleTaskCompleted(event.task);
-          } else if (event.task.status === TaskStatus.FAILED) {
+          } else if (
+            event.task.status === TaskStatus.FAILED ||
+            event.task.status === TaskStatus.CANCELLED
+          ) {
             handleTaskFailed(event.task);
           }
         } else if (event.type === 'taskFailed') {
@@ -1327,6 +1571,8 @@ export function useAutoInsertToCanvas(
           }
         }
       });
+
+    replayRestoredCompletedTasks();
 
     // 订阅后处理完成事件，以便在所有任务插入完成后删除 WorkZone
     const completionSub = workflowCompletionService
@@ -1383,13 +1629,33 @@ export function useAutoInsertToCanvas(
         return;
       }
 
-      releaseTaskInsertion(taskId);
-      workflowCompletionService.clearTask(taskId);
-
       const retryTask = getTaskQueueService().getTask(taskId);
       if (!retryTask) {
         return;
       }
+
+      const postProcessingStatus =
+        workflowCompletionService.getPostProcessingStatus(taskId)?.status;
+
+      if (retryTask.status === TaskStatus.COMPLETED) {
+        if (
+          retryTask.insertedToCanvas ||
+          postProcessingStatus === 'completed'
+        ) {
+          insertedTaskIds.add(taskId);
+          return;
+        }
+
+        if (
+          insertedTaskIds.has(taskId) ||
+          postProcessingStatus === 'processing'
+        ) {
+          return;
+        }
+      }
+
+      releaseTaskInsertion(taskId);
+      workflowCompletionService.clearTask(taskId);
 
       if (
         retryTask.status === TaskStatus.FAILED ||
@@ -1400,10 +1666,7 @@ export function useAutoInsertToCanvas(
       }
 
       if (retryTask.status === TaskStatus.COMPLETED) {
-        handleTaskCompleted({
-          ...retryTask,
-          insertedToCanvas: false,
-        });
+        handleTaskCompleted(retryTask);
       }
     };
 
@@ -1424,7 +1687,16 @@ export function useAutoInsertToCanvas(
       );
       if (flushTimerRef.current) {
         clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
       }
+      // 释放所有未处理的待插入任务，防止它们永久卡在 insertedTaskIds 中
+      const pendingMap = pendingInsertsRef.current;
+      for (const [, inserts] of pendingMap) {
+        for (const { task } of inserts) {
+          releaseTaskInsertion(task.id);
+        }
+      }
+      pendingMap.clear();
     };
   }, [
     mergedConfig.enabled,

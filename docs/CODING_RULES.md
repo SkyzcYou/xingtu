@@ -2330,10 +2330,12 @@ const restored =
 
 **三层配置**:
 1. **`DEFAULT_*_MODEL_ID`**（`model-config.ts`）：代码级默认模型 ID，影响无用户设置时的兜底值
-2. **`DEFAULT_SETTINGS`**（`settings-manager.ts`）：设置面板"默认方案"的预设值，新用户首次看到的默认模型
+2. **`DEFAULT_SETTINGS`**（`settings-manager.ts`）：设置面板"默认方案"的预设值，新用户首次看到的默认模型，文本模型优先复用 `getDefaultTextModel()`，避免默认值双写漂移
 3. **`BUILT_IN_MODEL_RECOMMENDATION_SCORES`**（`model-config.ts`）：模型在选择器内的排序权重，分数越高排越前
 
 **厂商 Tab 排序**: 由 `DISCOVERY_VENDOR_ORDER`（`ModelVendorBrand.tsx`）控制，与模型数组顺序无关。
+
+**下线内置模型**: 注释或移除 `TEXT_MODELS` / `CHAT_MODELS` 中的模型时，同步处理 `BUILT_IN_MODEL_RECOMMENDATION_SCORES` 和默认模型常量；否则模型可能仍通过排序权重、旧聊天清单或默认设置入口残留。
 
 **隐藏模型**: 不在选择器默认展示但保留参数定义的模型放入 `HIDDEN_VIDEO_MODELS`，`ALL_MODELS` 不包含它们，`getStaticModelConfig` 单独兜底查找。
 
@@ -2354,10 +2356,21 @@ const BUILT_IN_VIDEO_MODELS = [kling, seedance, veo, ...];
 // 1. 改常量
 export const DEFAULT_VIDEO_MODEL_ID = 'seedance-1.5-pro';
 // 2. 同步改 settings-manager 默认方案
-const DEFAULT_SETTINGS = { gemini: { videoModelName: 'seedance-1.5-pro' } };
+const DEFAULT_SETTINGS = {
+  gemini: {
+    videoModelName: 'seedance-1.5-pro',
+    textModelName: getDefaultTextModel(),
+  },
+};
 // 3. 给模型加 recommendedScore 控制选择器内排序
 'seedance-1.5-pro': 97,
 // 4. 调整 DISCOVERY_VENDOR_ORDER 控制厂商 Tab 顺序
+// OpenAI 要在 DeepSeek 前面时，把 ModelVendor.GPT 放到 ModelVendor.DEEPSEEK 前
+export const DISCOVERY_VENDOR_ORDER = [ModelVendor.GPT, ModelVendor.DEEPSEEK];
+
+// 5. 下线内置文本模型时，同步注释旧清单与推荐分，并让默认设置引用统一默认函数
+// 'gpt-5.5': 99,
+export const DEFAULT_TEXT_MODEL_ID = 'gpt-5.4';
 ```
 
 ### 中断任务延迟判定

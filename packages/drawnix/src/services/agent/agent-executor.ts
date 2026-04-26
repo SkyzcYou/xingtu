@@ -78,8 +78,15 @@ export function buildStructuredUserMessage(context: AgentExecutionContext): stri
   }
   // 添加默认模型信息，告诉 AI 不需要传 model 参数
   if (context.defaultModels) {
-    parts.push(`- **图片生成模型**: ${context.defaultModels.image}`);
-    parts.push(`- **视频生成模型**: ${context.defaultModels.video}`);
+    if (context.defaultModels.image) {
+      parts.push(`- **图片生成模型**: ${context.defaultModels.image}`);
+    }
+    if (context.defaultModels.video) {
+      parts.push(`- **视频生成模型**: ${context.defaultModels.video}`);
+    }
+    if (context.defaultModels.audio) {
+      parts.push(`- **音频生成模型**: ${context.defaultModels.audio}`);
+    }
   }
   parts.push(`- **数量**: ${context.params.count}`);
   // 始终传递配置的尺寸，但标注为默认值，让 AI 判断是否使用

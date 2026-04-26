@@ -119,11 +119,25 @@ describe('gpt-image-adapter', () => {
     expect(body.get('mask')).toBeInstanceOf(Blob);
   });
 
-  it('normalizes edit requests back to official supported sizes', async () => {
+  it('maps GPT Image 2 edit requests through resolution tiers', async () => {
     const body = await buildGPTImageEditFormData({
       model: 'gpt-image-2',
       prompt: 'Change the style',
       size: '800x600',
+      referenceImages: [tinyPngDataUrl],
+      params: {
+        resolution: '4k',
+      },
+    });
+
+    expect(body.get('size')).toBe('3312x2480');
+  });
+
+  it('keeps legacy GPT Image edit requests on standard edit sizes', async () => {
+    const body = await buildGPTImageEditFormData({
+      model: 'gpt-image-1',
+      prompt: 'Change the style',
+      size: '16x9',
       referenceImages: [tinyPngDataUrl],
       params: {
         resolution: '4k',
@@ -157,7 +171,7 @@ describe('gpt-image-adapter', () => {
       'https://example.com/source.webp'
     );
     expect(fetcher).toHaveBeenNthCalledWith(2, 'https://example.com/mask.png');
-    expect(body.get('size')).toBe('1536x1024');
+    expect(body.get('size')).toBe('1360x768');
     expect(body.get('image[]')).toBeInstanceOf(Blob);
     expect(body.get('mask')).toBeInstanceOf(Blob);
   });

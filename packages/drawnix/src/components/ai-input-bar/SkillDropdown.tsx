@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Check, Zap, Plus, Image, Video, Presentation } from 'lucide-react';
+import { ChevronDown, Check, Zap, Plus, Image, Video, Presentation, Music } from 'lucide-react';
 import { ATTACHED_ELEMENT_CLASS_NAME } from '@plait/core';
 import { Z_INDEX } from '../../constants/z-index';
 import { SYSTEM_SKILLS, SKILL_AUTO_ID } from '../../constants/skills';
@@ -8,22 +8,25 @@ import { knowledgeBaseService } from '../../services/knowledge-base-service';
 import { externalSkillService } from '../../services/external-skill-service';
 import type { KBNoteMeta } from '../../types/knowledge-base.types';
 import { KeyboardDropdown } from './KeyboardDropdown';
+import type { SkillOutputType } from './skill-media-type';
 
 export interface SkillDropdownProps {
   value: string;
   onSelect: (skillId: string) => void;
+  onSelectSkill?: (skill: SkillOption) => void;
   onAddSkill: () => void;
   disabled?: boolean;
 }
 
 /** 下拉选项类型 */
-interface SkillOption {
+export interface SkillOption {
   id: string;
   name: string;
   isSystem?: boolean;
   isExternal?: boolean;
   source?: string;
-  outputType?: 'image' | 'text' | 'video' | 'ppt';
+  mcpTool?: string;
+  outputType?: SkillOutputType;
 }
 
 /** 自动选项 */
@@ -34,11 +37,14 @@ const SYSTEM_OPTIONS: SkillOption[] = SYSTEM_SKILLS.map((s) => ({
   id: s.id,
   name: s.name,
   isSystem: true,
+  mcpTool: s.mcpTool,
+  outputType: s.outputType,
 }));
 
 export const SkillDropdown: React.FC<SkillDropdownProps> = ({
   value,
   onSelect,
+  onSelectSkill,
   onAddSkill,
   disabled = false,
 }) => {
@@ -65,7 +71,7 @@ export const SkillDropdown: React.FC<SkillDropdownProps> = ({
         .map((n: KBNoteMeta) => ({
           id: n.id,
           name: n.title,
-  outputType: (n.metadata?.outputType as 'image' | 'text' | 'video' | 'ppt') || undefined,
+          outputType: (n.metadata?.outputType as SkillOutputType) || undefined,
         }));
       setUserSkills(userOptions);
     } catch {
@@ -128,11 +134,12 @@ export const SkillDropdown: React.FC<SkillDropdownProps> = ({
   );
 
   const handleSelect = useCallback(
-    (skillId: string) => {
-      onSelect(skillId);
+    (skill: SkillOption) => {
+      onSelect(skill.id);
+      onSelectSkill?.(skill);
       setIsOpen(false);
     },
-    [onSelect]
+    [onSelect, onSelectSkill]
   );
 
   const handleAddSkill = useCallback(
@@ -171,7 +178,7 @@ export const SkillDropdown: React.FC<SkillDropdownProps> = ({
       }
       if (key === 'Enter' || key === ' ' || key === 'Tab') {
         if (highlightedIndex < allOptions.length) {
-          handleSelect(allOptions[highlightedIndex].id);
+          handleSelect(allOptions[highlightedIndex]);
         }
         return true;
       }
@@ -253,7 +260,7 @@ export const SkillDropdown: React.FC<SkillDropdownProps> = ({
                       <div
                         key={option.id}
                         className={`skill-dropdown__item ${isSelected ? 'skill-dropdown__item--selected' : ''} ${isHighlighted ? 'skill-dropdown__item--highlighted' : ''}`}
-                        onClick={() => handleSelect(option.id)}
+                        onClick={() => handleSelect(option)}
                         onMouseEnter={() => setHighlightedIndex(index)}
                       >
                         <span className="skill-dropdown__item-label">{option.name}</span>
@@ -265,6 +272,9 @@ export const SkillDropdown: React.FC<SkillDropdownProps> = ({
                         )}
                         {option.outputType === 'ppt' && (
                           <Presentation size={12} className="skill-dropdown__item-image-icon" />
+                        )}
+                        {option.outputType === 'audio' && (
+                          <Music size={12} className="skill-dropdown__item-image-icon" />
                         )}
                         {option.isSystem && (
                           <span className="skill-dropdown__item-badge">系统</span>

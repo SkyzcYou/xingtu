@@ -17,6 +17,7 @@ export type DelegatedOperationType =
   | 'generate_image'
   | 'generate_video'
   | 'generate_audio'
+  | 'generate_ppt'
   | 'generate_grid_image'
   | 'generate_inspiration_board'
   | 'split_image'

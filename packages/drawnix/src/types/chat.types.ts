@@ -4,6 +4,8 @@
  * TypeScript interfaces for the Chat Drawer feature.
  */
 
+import type { ModelRef } from '../utils/settings-manager';
+
 // ============================================================================
 // Enums
 // ============================================================================
@@ -235,6 +237,20 @@ export interface AIInputContext {
     type: 'image' | 'video' | 'audio' | 'text' | 'agent';
     /** 是否为用户显式选择 */
     isExplicit: boolean;
+  };
+  /** 模型来源引用 */
+  modelRef?: ModelRef | null;
+  /** Agent/Skill 后续媒体生成默认模型 */
+  defaultModels?: {
+    image?: string;
+    video?: string;
+    audio?: string;
+  };
+  /** Agent/Skill 后续媒体生成默认模型来源 */
+  defaultModelRefs?: {
+    image?: ModelRef | null;
+    video?: ModelRef | null;
+    audio?: ModelRef | null;
   };
 
   /** 选中的参数 */

@@ -360,7 +360,10 @@ export const insertImageFromUrl = async (
   isDrop?: boolean,
   referenceDimensions?: { width: number; height: number },
   skipScroll?: boolean,
-  skipImageLoad?: boolean // 如果为 true 且提供了 referenceDimensions，则跳过图片加载直接使用提供的尺寸
+  // 如果为 true 且提供了 referenceDimensions，则跳过图片加载直接使用提供的尺寸
+  skipImageLoad?: boolean,
+  // 如果为 true，图片加载后不再按真实比例改写尺寸
+  lockReferenceDimensions?: boolean
 ) => {
   // 外部 URL 和 data URL 先缓存到本地
   let resolvedUrl = normalizeImageDataUrl(imageUrl);
@@ -369,7 +372,12 @@ export const insertImageFromUrl = async (
     resolvedUrl.startsWith('https://') ||
     resolvedUrl.startsWith('data:')
   ) {
-    const cachedUrl = await cacheRemoteUrl(resolvedUrl, `insert-${Date.now()}`, 'image', 'png');
+    const cachedUrl = await cacheRemoteUrl(
+      resolvedUrl,
+      `insert-${Date.now()}`,
+      'image',
+      'png'
+    );
     if (cachedUrl !== resolvedUrl) {
       resolvedUrl = cachedUrl;
     }
@@ -403,7 +411,7 @@ export const insertImageFromUrl = async (
       width: referenceDimensions.width,
       height: referenceDimensions.height,
     };
-    shouldUpdateSizeAfterLoad = true; // 标记需要在图片加载后更新尺寸
+    shouldUpdateSizeAfterLoad = !lockReferenceDimensions; // 标记需要在图片加载后更新尺寸
     // console.log(`[insertImageFromUrl] Using provided dimensions:`, imageItem);
   } else {
     // 使用带重试的图片加载函数，支持自动绕过 SW

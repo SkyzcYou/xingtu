@@ -25,6 +25,68 @@ import { Z_INDEX } from '../../constants/z-index';
 import { analytics } from '../../utils/posthog-analytics';
 import './minimap.scss';
 
+type ViewportSnapshot = {
+  zoom: number;
+  originX: number;
+  originY: number;
+};
+
+const parseViewBox = (viewBox: string | null) => {
+  if (!viewBox) {
+    return null;
+  }
+
+  const [x, y] = viewBox.trim().split(/[\s,]+/).map((value) => Number(value));
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return null;
+  }
+
+  return { x, y };
+};
+
+const getViewportOriginFromScroll = (
+  board: PlaitBoard
+): [number, number] | null => {
+  const zoom = board.viewport.zoom;
+  if (!Number.isFinite(zoom) || zoom <= 0) {
+    return null;
+  }
+
+  try {
+    const viewportContainer = PlaitBoard.getViewportContainer(board);
+    const host = PlaitBoard.getHost(board);
+    const viewBox = parseViewBox(host.getAttribute('viewBox'));
+    if (!viewBox) {
+      return null;
+    }
+
+    return [
+      viewportContainer.scrollLeft / zoom + viewBox.x,
+      viewportContainer.scrollTop / zoom + viewBox.y,
+    ];
+  } catch {
+    return null;
+  }
+};
+
+const getViewportOrigin = (board: PlaitBoard): [number, number] => {
+  const originFromScroll = getViewportOriginFromScroll(board);
+  if (originFromScroll) {
+    return originFromScroll;
+  }
+
+  return getViewportOrigination(board) || board.viewport.origination || [0, 0];
+};
+
+const getViewportSnapshot = (board: PlaitBoard): ViewportSnapshot => {
+  const [originX, originY] = getViewportOrigin(board);
+  return {
+    zoom: board.viewport.zoom,
+    originX,
+    originY,
+  };
+};
+
 /**
  * Minimap 组件
  */
@@ -79,17 +141,7 @@ export const Minimap: React.FC<MinimapProps> = ({
 
   // 记录上次交互时间和视口状态
   const lastInteractionRef = useRef<number>(0);
-  const lastViewportRef = useRef<{
-    zoom: number;
-    offsetX: number;
-    offsetY: number;
-  }>({
-    zoom: board.viewport.zoom,
-    offsetX: board.viewport.offsetX,
-    offsetY: board.viewport.offsetY,
-  });
-  // 是否已完成初始化（跳过首次 viewport 变化检测，避免页面加载时误触发）
-  const initializedRef = useRef<boolean>(false);
+  const lastViewportRef = useRef<ViewportSnapshot | null>(null);
 
   /**
    * 获取所有元素的边界
@@ -136,10 +188,10 @@ export const Minimap: React.FC<MinimapProps> = ({
     const boardContainer = PlaitBoard.getBoardContainer(board);
     const containerRect = boardContainer.getBoundingClientRect();
     const zoom = board.viewport.zoom;
-    const origination = getViewportOrigination(board);
+    const origination = getViewportOrigin(board);
 
-    const x = origination![0];
-    const y = origination![1];
+    const x = origination[0];
+    const y = origination[1];
     const width = containerRect.width / zoom;
     const height = containerRect.height / zoom;
 
@@ -175,29 +227,23 @@ export const Minimap: React.FC<MinimapProps> = ({
 
     // 定时器：主动检查 viewport 变化
     const checkInterval = setInterval(() => {
-      const current = board.viewport;
+      const current = getViewportSnapshot(board);
       const last = lastViewportRef.current;
+      if (!last) {
+        lastViewportRef.current = current;
+        return;
+      }
 
       const hasZoomChanged = Math.abs(current.zoom - last.zoom) > 0.001;
-      const hasOffsetChanged =
-        Math.abs(current.offsetX - last.offsetX) > 0.5 ||
-        Math.abs(current.offsetY - last.offsetY) > 0.5;
+      const hasOriginChanged =
+        Math.abs(current.originX - last.originX) > 0.5 ||
+        Math.abs(current.originY - last.originY) > 0.5;
 
-      const hasInteraction = hasZoomChanged || hasOffsetChanged;
+      const hasInteraction = hasZoomChanged || hasOriginChanged;
 
       if (hasInteraction) {
         // 更新记录
-        lastViewportRef.current = {
-          zoom: current.zoom,
-          offsetX: current.offsetX,
-          offsetY: current.offsetY,
-        };
-
-        // 首次检测到变化时，只更新 ref，不展开小地图（跳过初始化阶段的 viewport 变化）
-        if (!initializedRef.current) {
-          initializedRef.current = true;
-          return;
-        }
+        lastViewportRef.current = current;
 
         lastInteractionRef.current = Date.now();
 

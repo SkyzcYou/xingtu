@@ -310,6 +310,8 @@ export const insertVideoFromUrl = async (
       url: videoWithFragment,
       width: displayDimensions.width,
       height: displayDimensions.height,
+      isVideo: true,
+      videoType: 'video',
     };
 
     // console.log('[insertVideoFromUrl] Creating video as image element:', {

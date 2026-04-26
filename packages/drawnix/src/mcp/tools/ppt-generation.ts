@@ -1,24 +1,27 @@
 /**
  * PPT 生成 MCP 工具
  *
- * 功能：根据用户主题，调用 AI 生成结构化 PPT 大纲，然后自动创建多个 Frame 并布局文本内容。
+ * 功能：根据用户主题，调用 AI 生成结构化 PPT 大纲，然后自动创建多个 PPT Frame 并填充整页图片提示词。
  *
  * 工作流程：
- * 1. 调用文本模型生成 PPT 大纲 JSON（含 imagePrompt）
+ * 1. 调用文本模型生成 PPT 大纲 JSON
  * 2. 逐页创建 Frame（1920x1080）并横向排列
- * 3. 使用布局引擎在 Frame 内放置文本元素
- * 4. 将 imagePrompt 存储到 Frame 的 pptMeta 扩展属性中
- * 5. 聚焦视口到第一个 Frame
+ * 3. 将整页图片提示词存储到 Frame 的 pptMeta 扩展属性中
+ * 4. 聚焦视口到第一个 Frame
+ * 5. 展开 PPT 编辑并切换到大纲视图，等待用户确认后再批量生图
  */
 
 import type { MCPTool, MCPResult, MCPExecuteOptions } from '../types';
-import type { PlaitBoard, Point } from '@plait/core';
-import { Transforms, BoardTransforms, PlaitBoard as PlaitBoardUtils, RectangleClient } from '@plait/core';
-import { DrawTransforms } from '@plait/draw';
+import type { PlaitBoard, PlaitElement, Point } from '@plait/core';
+import {
+  Transforms,
+  BoardTransforms,
+  PlaitBoard as PlaitBoardUtils,
+  RectangleClient,
+} from '@plait/core';
 import { getBoard } from './shared';
 import { FrameTransforms } from '../../plugins/with-frame';
-import { insertPPTImagePlaceholder } from '../../utils/frame-insertion-utils';
-import { isFrameElement, PlaitFrame } from '../../types/frame.types';
+import { PlaitFrame, isFrameElement } from '../../types/frame.types';
 import { defaultGeminiClient } from '../../utils/gemini-api';
 import { geminiSettings } from '../../utils/settings-manager';
 import type { GeminiMessage } from '../../utils/gemini-api/types';
@@ -27,61 +30,64 @@ import {
   type PPTOutline,
   type PPTPageSpec,
   type PPTFrameMeta,
-  type LayoutElement,
-  type FrameRect,
   generateOutlineSystemPrompt,
   generateOutlineUserPrompt,
+  generateSlideImagePrompt,
+  formatPPTCommonPrompt,
   parseOutlineResponse,
-  createStyledTextElement,
-  layoutPageContent,
-  convertToAbsoluteCoordinates,
   PPT_FRAME_WIDTH,
   PPT_FRAME_HEIGHT,
+  calcPPTFrameInsertionStartPosition,
+  getPPTFrameGridPositions,
+  loadPPTFrameLayoutColumns,
+  requestOpenPPTEditor,
 } from '../../services/ppt';
 
-/** Frame 间距 */
-const FRAME_GAP = 60;
+function isPPTFrame(
+  element: PlaitElement
+): element is PlaitFrame & { pptMeta: PPTFrameMeta } {
+  return isFrameElement(element) && !!(element as { pptMeta?: unknown }).pptMeta;
+}
 
-/**
- * 计算 PPT 起始位置（在现有 Frame 最右侧之后）
- */
-function calcPPTStartPosition(board: PlaitBoard): Point {
-  const existingFrames: RectangleClient[] = [];
+function collectReferencedPPTElementIds(frame: PlaitFrame): string[] {
+  const pptMeta = (frame as PlaitFrame & { pptMeta?: PPTFrameMeta }).pptMeta;
+  if (!pptMeta) return [];
 
-  for (const el of board.children) {
-    if (isFrameElement(el)) {
-      existingFrames.push(RectangleClient.getRectangleByPoints(el.points));
+  return [
+    pptMeta.slideImageElementId,
+    ...(pptMeta.slideImageHistory || []).map((item) => item.elementId),
+  ].filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
+function deleteElementsById(board: PlaitBoard, elementIds: Set<string>): void {
+  for (let index = board.children.length - 1; index >= 0; index -= 1) {
+    if (elementIds.has(board.children[index].id)) {
+      Transforms.removeNode(board, [index]);
+    }
+  }
+}
+
+function replaceExistingPPTOutline(board: PlaitBoard): number {
+  const existingPPTFrames = board.children.filter(isPPTFrame);
+  if (existingPPTFrames.length === 0) {
+    return 0;
+  }
+
+  const frameIds = new Set(existingPPTFrames.map((frame) => frame.id));
+  const elementsToDelete = FrameTransforms.getFrameContents(board, frameIds);
+  const existingDeleteIds = new Set(
+    elementsToDelete.map((element) => element.id)
+  );
+
+  for (const frame of existingPPTFrames) {
+    for (const elementId of collectReferencedPPTElementIds(frame)) {
+      existingDeleteIds.add(elementId);
     }
   }
 
-  // 无 Frame 时居中显示
-  if (existingFrames.length === 0) {
-    const zoom = board.viewport?.zoom ?? 1;
-    const orig = board.viewport?.origination;
-    const ox = orig ? orig[0] : 0;
-    const oy = orig ? orig[1] : 0;
+  deleteElementsById(board, existingDeleteIds);
 
-    // getBoardContainer 可能在 DOM 未挂载时返回 undefined
-    const container = PlaitBoardUtils.getBoardContainer(board);
-    const vw = container?.clientWidth ?? 1920;
-    const vh = container?.clientHeight ?? 1080;
-
-    const cx = ox + vw / 2 / zoom;
-    const cy = oy + vh / 2 / zoom;
-    return [cx - PPT_FRAME_WIDTH / 2, cy - PPT_FRAME_HEIGHT / 2];
-  }
-
-  // 横屏：放在最右侧 Frame 的右边
-  let maxRight = -Infinity;
-  let refY = 0;
-  for (const r of existingFrames) {
-    const right = r.x + r.width;
-    if (right > maxRight) {
-      maxRight = right;
-      refY = r.y;
-    }
-  }
-  return [maxRight + FRAME_GAP, refY];
+  return existingPPTFrames.length;
 }
 
 /**
@@ -92,8 +98,8 @@ function focusOnFrame(board: PlaitBoard, frame: PlaitFrame): void {
   const padding = 80;
 
   const container = PlaitBoardUtils.getBoardContainer(board);
-  const viewportWidth = container.clientWidth;
-  const viewportHeight = container.clientHeight;
+  const viewportWidth = container?.clientWidth ?? 1920;
+  const viewportHeight = container?.clientHeight ?? 1080;
 
   // 计算缩放比例，让 Frame 适应视口
   const scaleX = viewportWidth / (rect.width + padding * 2);
@@ -118,11 +124,15 @@ function focusOnFrame(board: PlaitBoard, frame: PlaitFrame): void {
  */
 async function generatePPTOutline(
   topic: string,
-  options: PPTGenerationParams,
-  onChunk?: (chunk: string) => void
+  options: PPTGenerationParams
 ): Promise<PPTOutline> {
   const settings = geminiSettings.get();
-  const textModel = settings.textModelName;
+  const textModel =
+    options.textModelRef ||
+    options.textModel ||
+    options.modelRef ||
+    options.model ||
+    settings.textModelName;
 
   const systemPrompt = generateOutlineSystemPrompt({
     pageCount: options.pageCount,
@@ -144,12 +154,11 @@ async function generatePPTOutline(
 
   let fullResponse = '';
 
+  // PPT 大纲是结构化 JSON，必须等待模型完整返回后再解析。
+  // 传入 onChunk 会强制走流式调用，部分供应商可能提前结束并返回半截 JSON。
   const response = await defaultGeminiClient.sendChat(
     messages,
-    (chunk) => {
-      fullResponse = chunk; // sendChat 返回累积内容
-      onChunk?.(chunk);
-    },
+    undefined,
     undefined,
     textModel
   );
@@ -158,18 +167,20 @@ async function generatePPTOutline(
     fullResponse = response.choices[0].message.content || fullResponse;
   }
 
-  return parseOutlineResponse(fullResponse);
+  return parseOutlineResponse(fullResponse, options);
 }
 
 /**
- * 创建单个 PPT 页面（Frame + 文本内容）
+ * 创建单个 PPT 页面（Frame + 整页图片元数据）
  */
 function createPPTPage(
   board: PlaitBoard,
+  outline: PPTOutline,
   pageSpec: PPTPageSpec,
   pageIndex: number,
-  framePosition: Point
-): PlaitFrame {
+  framePosition: Point,
+  generateOptions: PPTGenerationParams
+): { frame: PlaitFrame; slidePrompt: string } {
   // 1. 创建 Frame
   const framePoints: [Point, Point] = [
     framePosition,
@@ -178,49 +189,24 @@ function createPPTPage(
   const frameName = pageSpec.title || `Slide ${pageIndex}`;
   const frame = FrameTransforms.insertFrame(board, framePoints, frameName);
 
-  // 2. 计算布局
-  const frameRect: FrameRect = {
-    x: framePosition[0],
-    y: framePosition[1],
-    width: PPT_FRAME_WIDTH,
-    height: PPT_FRAME_HEIGHT,
-  };
-  const layoutElements = layoutPageContent(pageSpec, frameRect);
-  const absoluteElements = convertToAbsoluteCoordinates(layoutElements, frameRect);
-
-  // 3. 插入文本元素并绑定到 Frame
-  for (const element of absoluteElements) {
-    const insertPoint: Point = element.point;
-
-    // 跳过占位符文本
-    if (element.text === '[图片区域]') {
-      continue;
-    }
-
-    // 记录插入前的 children 数量
-    const childrenCountBefore = board.children.length;
-
-    // 插入带样式的文本（Slate Element 包含字号/粗细/颜色）
-    const styledText = createStyledTextElement(element);
-    DrawTransforms.insertText(board, insertPoint, styledText);
-
-    // 绑定到 Frame
-    if (board.children.length > childrenCountBefore) {
-      const newElement = board.children[childrenCountBefore];
-      if (newElement) {
-        FrameTransforms.bindToFrame(board, newElement, frame);
-      }
-    }
-  }
-
   // 4. 设置 pptMeta 扩展属性
+  const slidePrompt = generateSlideImagePrompt(
+    outline,
+    pageSpec,
+    pageIndex,
+    generateOptions
+  );
   const pptMeta: PPTFrameMeta = {
     layout: pageSpec.layout,
     pageIndex,
+    slidePrompt,
+    styleSpec: outline.styleSpec,
+    commonPrompt: formatPPTCommonPrompt(outline.styleSpec, generateOptions),
+    slideImageStatus: 'placeholder',
+    imageStatus: 'placeholder',
   };
   if (pageSpec.imagePrompt) {
     pptMeta.imagePrompt = pageSpec.imagePrompt;
-    pptMeta.imageStatus = 'placeholder';
   }
   if (pageSpec.notes) {
     pptMeta.notes = pageSpec.notes;
@@ -232,11 +218,7 @@ function createPPTPage(
     Transforms.setNode(board, { pptMeta } as any, [frameIndex]);
   }
 
-  if (pageSpec.imagePrompt) {
-    insertPPTImagePlaceholder(board, frame, pageSpec.imagePrompt);
-  }
-
-  return frame;
+  return { frame, slidePrompt };
 }
 
 /**
@@ -270,9 +252,7 @@ async function executePPTGeneration(
     options.onChunk?.(`🎯 正在为「${topic}」生成 PPT 大纲...\n\n`);
 
     // 1. 生成大纲
-    const outline = await generatePPTOutline(topic, params, (chunk) => {
-      // 流式输出大纲生成过程
-    });
+    const outline = await generatePPTOutline(topic, params);
 
     options.onChunk?.(`\n\n✓ 大纲生成完成，共 ${outline.pages.length} 页\n\n`);
     options.onChunk?.(`📑 **PPT 结构**：\n`);
@@ -280,20 +260,27 @@ async function executePPTGeneration(
     // 显示大纲结构
     outline.pages.forEach((page, index) => {
       const hasImage = page.imagePrompt ? ' 🖼️' : '';
-      options.onChunk?.(`${index + 1}. ${page.title} (${page.layout})${hasImage}\n`);
+      options.onChunk?.(
+        `${index + 1}. ${page.title} (${page.layout})${hasImage}\n`
+      );
     });
 
-    options.onChunk?.(`\n正在创建 Frame 并布局内容...\n\n`);
-
-    // 2. 预计算所有 Frame 位置（按顺序横向排列）
-    const startPosition = calcPPTStartPosition(board);
-    const framePositions: Point[] = [];
-    for (let i = 0; i < outline.pages.length; i++) {
-      framePositions.push([
-        startPosition[0] + i * (PPT_FRAME_WIDTH + FRAME_GAP),
-        startPosition[1],
-      ]);
+    const replacedFrameCount = replaceExistingPPTOutline(board);
+    if (replacedFrameCount > 0) {
+      options.onChunk?.(
+        `\n已替换画布中原有 ${replacedFrameCount} 个 PPT 页面及其内容。\n`
+      );
     }
+
+    options.onChunk?.(`\n正在创建 PPT 页面并填充提示词...\n\n`);
+
+    // 2. 预计算所有 Frame 位置（按用户设置的每行数量网格排列）
+    const startPosition = calcPPTFrameInsertionStartPosition(board);
+    const framePositions = getPPTFrameGridPositions(
+      outline.pages.length,
+      startPosition,
+      loadPPTFrameLayoutColumns()
+    );
 
     // 3. 按顺序创建 Frame（insertFrame 追加到末尾，故正序创建即可）
     const createdFrames: PlaitFrame[] = new Array(outline.pages.length);
@@ -304,11 +291,20 @@ async function executePPTGeneration(
       const pageIndex = i + 1;
       const framePosition = framePositions[i];
 
-      const frame = createPPTPage(board, pageSpec, pageIndex, framePosition);
+      const { frame } = createPPTPage(
+        board,
+        outline,
+        pageSpec,
+        pageIndex,
+        framePosition,
+        params
+      );
       createdFrames[i] = frame;
 
       createdCount++;
-      options.onChunk?.(`✓ 第 ${createdCount}/${outline.pages.length} 页已创建\n`);
+      options.onChunk?.(
+        `✓ 第 ${createdCount}/${outline.pages.length} 页已创建\n`
+      );
     }
 
     // 4. 聚焦到第一个 Frame（封面页）
@@ -316,25 +312,21 @@ async function executePPTGeneration(
       focusOnFrame(board, createdFrames[0]);
     }
 
-    // 5. 统计配图页面
-    const pagesWithImage = outline.pages.filter((p) => p.imagePrompt).length;
+    requestOpenPPTEditor({ viewMode: 'outline' });
 
-    options.onChunk?.(`\n🎉 **PPT 生成完成！**\n`);
+    options.onChunk?.(`\n🎉 **PPT 大纲已生成！**\n`);
     options.onChunk?.(`- 共创建 ${createdCount} 个 Frame\n`);
-    if (pagesWithImage > 0) {
-      options.onChunk?.(`- 其中 ${pagesWithImage} 页可配图（在 Frame 面板中点击配图按钮）\n`);
-    }
+    options.onChunk?.(`- 已填充公共提示词和每页 PPT 提示词\n`);
     options.onChunk?.(`\n💡 **提示**：\n`);
-    options.onChunk?.(`- 在左侧「Frame」面板查看所有页面\n`);
-    options.onChunk?.(`- 点击页面可聚焦查看\n`);
-    options.onChunk?.(`- 点击「幻灯片播放」可全屏演示\n`);
+    options.onChunk?.(`- 已切换到左侧「PPT 编辑」的大纲视图\n`);
+    options.onChunk?.(`- 确认或修改提示词后，可选择串行/并行生成图片\n`);
 
     return {
       success: true,
       data: {
         title: outline.title,
         pageCount: createdCount,
-        pagesWithImage,
+        imageTaskCount: 0,
         outline,
       },
       type: 'text',
@@ -354,7 +346,7 @@ async function executePPTGeneration(
  */
 export const pptGenerationTool: MCPTool = {
   name: 'generate_ppt',
-  description: `生成 PPT 演示文稿工具。根据用户提供的主题或内容描述，自动生成结构化的 PPT 演示文稿。
+  description: `生成 PPT 演示文稿大纲工具。根据用户提供的主题或内容描述，自动生成结构化 PPT 大纲、公共风格提示词和每页整图提示词。
 
 使用场景：
 - 用户想要创建 PPT、演示文稿、幻灯片
@@ -362,10 +354,11 @@ export const pptGenerationTool: MCPTool = {
 - 关键词：PPT、演示文稿、幻灯片、presentation、slides
 
 工作原理：
-1. 调用 AI 生成 PPT 大纲（包含版式、标题、正文、配图提示词）
+1. 调用 AI 生成 PPT 大纲（包含版式、标题、正文和视觉提示）
 2. 自动创建多个 Frame（1920x1080），每个 Frame 代表一页
-3. 根据版式规则在 Frame 内布局文本内容
-4. 视口自动聚焦到第一页
+3. 为每页写入整页图片提示词，并写入整套 PPT 公共风格提示词
+4. 视口自动聚焦到第一页，打开 PPT 编辑并切换到大纲视图
+5. 用户确认大纲后再从大纲视图批量生成图片
 
 支持的版式：
 - cover: 封面页
@@ -375,10 +368,10 @@ export const pptGenerationTool: MCPTool = {
 - comparison: 对比页
 - ending: 结尾页
 
-配图说明：
-- 生成的 PPT 默认只包含文本内容
-- AI 会为适合配图的页面生成 imagePrompt
-- 用户可在 Frame 面板中选择性地为页面生成配图`,
+生成说明：
+- 每页 PPT 由一张完整图片构成，文字、背景和视觉设计都包含在图片内
+- 此工具只生成大纲和提示词，不会立即提交图片任务
+- 可在「PPT 编辑」大纲视图修改提示词并选择串行/并行生成`,
 
   inputSchema: {
     type: 'object',
@@ -402,6 +395,10 @@ export const pptGenerationTool: MCPTool = {
         type: 'string',
         description: '额外要求，如风格、重点内容等',
       },
+      textModel: {
+        type: 'string',
+        description: 'PPT 大纲生成文本模型，默认使用输入栏当前文本模型',
+      },
     },
     required: ['topic'],
   },
@@ -409,20 +406,25 @@ export const pptGenerationTool: MCPTool = {
   supportedModes: ['async'],
 
   promptGuidance: {
-    whenToUse: '当用户想要创建 PPT、演示文稿、幻灯片时使用。关键词：PPT、演示文稿、幻灯片、presentation、slides、做个汇报、生成演示。',
+    whenToUse:
+      '当用户想要创建 PPT、演示文稿、幻灯片时使用。关键词：PPT、演示文稿、幻灯片、presentation、slides、做个汇报、生成演示。',
 
     parameterGuidance: {
-      topic: '用户的 PPT 主题或内容描述。可以是一个简单的主题词，也可以是详细的内容大纲。',
-      pageCount: '根据用户需求选择：short 适合简短汇报(5-7页)，normal 适合常规演示(8-12页)，long 适合详细讲解(13-18页)。',
-      language: '根据用户语言偏好设置，默认中文。如果用户用英文交流，可以设为 English。',
-      extraRequirements: '用户的额外要求，如"简洁风格"、"重点突出数据"、"适合技术分享"等。',
+      topic:
+        '用户的 PPT 主题或内容描述。可以是一个简单的主题词，也可以是详细的内容大纲。',
+      pageCount:
+        '根据用户需求选择：short 适合简短汇报(5-7页)，normal 适合常规演示(8-12页)，long 适合详细讲解(13-18页)。',
+      language:
+        '根据用户语言偏好设置，默认中文。如果用户用英文交流，可以设为 English。',
+      extraRequirements:
+        '用户的额外要求，如"简洁风格"、"重点突出数据"、"适合技术分享"等。',
     },
 
     bestPractices: [
       '将用户的描述直接作为 topic 传递，工具会自动规划内容结构',
       '如果用户提到"简短"、"快速"，使用 pageCount: "short"',
       '如果用户提到"详细"、"完整"，使用 pageCount: "long"',
-      '生成完成后提醒用户可以在 Frame 面板中为页面添加配图',
+      '生成完成后提醒用户先检查大纲提示词，再在 PPT 编辑面板生成图片',
     ],
 
     examples: [
@@ -463,8 +465,8 @@ export const pptGenerationTool: MCPTool = {
 
     warnings: [
       'PPT 生成需要几秒钟时间，请耐心等待',
-      '生成的 PPT 默认只包含文本，配图需要用户在 Frame 面板中手动触发',
-      '每次生成会创建新的 Frame，不会覆盖已有内容',
+      '此工具只创建页面和提示词，不会立即生图',
+      '一个画布只保留一套 PPT；每次生成会替换已有 PPT 页面及其内容',
     ],
   },
 

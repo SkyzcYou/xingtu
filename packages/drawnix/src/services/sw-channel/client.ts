@@ -96,7 +96,7 @@ export class SWChannelClient {
         : null,
       readyState: document.readyState,
       visibilityState: document.visibilityState,
-      url: location.href,
+      url: window.location.href,
     };
   }
 
@@ -183,6 +183,13 @@ export class SWChannelClient {
    * 支持重试和并发保护
    */
   async initialize(): Promise<boolean> {
+    if (
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('sw') === '0'
+    ) {
+      return false;
+    }
+
     // 已初始化直接返回
     // Note: channel.isReady 可能是数字（0=未就绪, 1=就绪）或布尔值
     if (this.initialized && !!this.channel?.isReady) {
@@ -222,7 +229,11 @@ export class SWChannelClient {
         this.channel = await ServiceWorkerChannel.createFromPage<SWMethods>({
           timeout: 120000,
           autoReconnect: true,
-          log: { log: () => {}, warn: () => {}, error: () => {} },
+          log: {
+            log: () => undefined,
+            warn: () => undefined,
+            error: () => undefined,
+          },
         } as any);  // log 属性在 PageChannelOptions 中不存在，但 BaseChannel 支持
 
         this.log(`attempt ${attempt + 1}: channel created`, {

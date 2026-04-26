@@ -466,9 +466,11 @@ $green-health: #10b981;
   }
 
   &__item-check {
+    align-self: flex-start;
     flex-shrink: 0;
     color: $orange-primary;
     margin-left: 8px;
+    margin-top: 1px;
   }
 
   &__provider-action {

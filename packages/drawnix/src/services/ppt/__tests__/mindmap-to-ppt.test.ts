@@ -248,6 +248,8 @@ describe('convertMindmapToOutline', () => {
     const outline = convertMindmapToOutline(rootInfo);
 
     expect(outline.title).toBe('未命名演示文稿');
+    expect(outline.styleSpec).toBeDefined();
+    expect(outline.styleSpec?.visualStyle).toContain('presentation design');
     expect(outline.pages).toHaveLength(2); // 封面 + 结尾
     expect(outline.pages[0].layout).toBe('cover');
     expect(outline.pages[0].title).toBe('未命名演示文稿');
@@ -287,6 +289,7 @@ describe('convertMindmapToOutline', () => {
 
     // 标题
     expect(outline.title).toBe('App开发计划');
+    expect(outline.styleSpec).toBeDefined();
 
     // 封面页
     expect(outline.pages[0].layout).toBe('cover');

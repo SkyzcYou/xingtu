@@ -228,7 +228,7 @@ const translations: Record<Language, Translations> = {
     'toolbar.eraserShape.circle': '圆形',
     'toolbar.eraserShape.square': '方形',
     'toolbar.laserPointer': '激光笔 — L',
-    'toolbar.frame': 'Frame 容器 — F',
+    'toolbar.frame': 'PPT 页面 — F',
     'toolbar.fillColor': '填充颜色',
     'toolbar.fontColor': '字体颜色',
     'toolbar.fontSize': '字体样式',
@@ -237,7 +237,7 @@ const translations: Record<Language, Translations> = {
     'zoom.in': '放大 — Cmd++',
     'zoom.out': '缩小 — Cmd+-',
     'zoom.fit': '自适应',
-    'zoom.fitFrame': '自适应 Frame',
+    'zoom.fitFrame': '自适应 PPT 页面',
     'zoom.100': '缩放至 100%',
     
     // Themes
@@ -416,7 +416,7 @@ const translations: Record<Language, Translations> = {
     'toolbar.eraserShape.circle': 'Circle',
     'toolbar.eraserShape.square': 'Square',
     'toolbar.laserPointer': 'Laser Pointer — L',
-    'toolbar.frame': 'Frame Container — F',
+    'toolbar.frame': 'PPT Page — F',
     'toolbar.fillColor': 'Fill Color',
     'toolbar.fontColor': 'Font Color',
     'toolbar.fontSize': 'Font Style',
@@ -425,7 +425,7 @@ const translations: Record<Language, Translations> = {
     'zoom.in': 'Zoom In — Cmd++',
     'zoom.out': 'Zoom Out — Cmd+-',
     'zoom.fit': 'Fit to Screen',
-    'zoom.fitFrame': 'Fit Frame',
+    'zoom.fitFrame': 'Fit PPT Page',
     'zoom.100': 'Zoom to 100%',
     
     // Themes

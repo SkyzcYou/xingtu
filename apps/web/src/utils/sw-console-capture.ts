@@ -38,6 +38,7 @@ const logQueue: QueuedLog[] = [];
 let initPromise: Promise<void> | null = null;
 let nextInitRetryAt = 0;
 const INIT_RETRY_COOLDOWN_MS = 15000;
+const MAX_LOG_QUEUE_SIZE = 200;
 
 // 保存原始的 console 方法
 const originalConsole = {
@@ -56,6 +57,8 @@ function sendToSW(level: string, message: string, stack?: string) {
   if (message.includes('[SW]') ||
       message.includes('[SWTaskQueue]') ||
       message.includes('[SWChannelManager]') ||
+      message.includes('[SWChannelClient]') ||
+      message.includes('[ServiceWorkerChannel]') ||
       message.includes('Invalid message structure')) {
     return;
   }
@@ -82,12 +85,15 @@ function sendToSW(level: string, message: string, stack?: string) {
   // 清空队列中的日志
   const flushQueue = () => {
     while (logQueue.length > 0 && swChannelClient.isInitialized()) {
-      const item = logQueue.shift()!;
+      const item = logQueue.shift();
+      if (!item) {
+        continue;
+      }
       swChannelClient.reportConsoleLog(
         item.level,
         [{ message: item.message, stack: item.stack || '', source: window.location.href }],
         Date.now()
-      ).catch(() => {});
+      ).catch(() => undefined);
     }
   };
 
@@ -115,6 +121,9 @@ function sendToSW(level: string, message: string, stack?: string) {
   if (swChannelClient.isInitialized()) {
     doSend();
   } else {
+    if (logQueue.length >= MAX_LOG_QUEUE_SIZE) {
+      logQueue.shift();
+    }
     logQueue.push({ level, message, stack });
     ensureSWChannelReady();
   }
@@ -191,12 +200,15 @@ export function initSWConsoleCapture(): void {
 
           nextInitRetryAt = 0;
           while (logQueue.length > 0 && swChannelClient.isInitialized()) {
-            const item = logQueue.shift()!;
+            const item = logQueue.shift();
+            if (!item) {
+              continue;
+            }
             swChannelClient.reportConsoleLog(
               item.level,
               [{ message: item.message, stack: item.stack || '', source: window.location.href }],
               Date.now()
-            ).catch(() => {});
+            ).catch(() => undefined);
           }
         }).catch(() => {
           nextInitRetryAt = Date.now() + INIT_RETRY_COOLDOWN_MS;

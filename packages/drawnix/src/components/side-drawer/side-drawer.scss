@@ -142,12 +142,23 @@ $drawer-width-wide: min(1024px, 50vw);
     color: var(--td-text-color-placeholder);
   }
 
-  &__close-btn {
+  &__close-btn,
+  &__pin-btn {
     color: var(--td-text-color-placeholder, #999) !important;
 
     &:hover {
       color: var(--td-text-color-primary) !important;
       background: var(--td-bg-color-container-hover) !important;
+    }
+  }
+
+  &__pin-btn--active {
+    color: var(--td-brand-color, #f39c12) !important;
+    background: var(--td-brand-color-light, rgba(243, 156, 18, 0.12)) !important;
+
+    &:hover {
+      color: var(--td-brand-color, #f39c12) !important;
+      background: var(--td-brand-color-light, rgba(243, 156, 18, 0.12)) !important;
     }
   }
 

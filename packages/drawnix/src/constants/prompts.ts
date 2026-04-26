@@ -5,66 +5,105 @@
 // AI 图片默认提示词
 export const AI_IMAGE_PROMPTS = {
   zh: [
-    `一张写实的半身人像，一位身穿水蓝色连身裙的年轻韩国亚洲女人走进旅馆大厅，女人脸上带着温暖的微笑，左手拿着白色棒球帽，右手拉着黄色行李箱。
-场景在济州岛度假感的旅馆大厅里，柔和的光线从窗外洒入室内柔和的打在女人的身上，凸显了女人的脸部表情。
-使用 50mm 人像镜头拍摄，女人在画面中央，背景呈现柔和的模糊（散景）。
-氛围是日系杂志的色调并充满放松度假感。直式人像构图，比例1:1。`,
-    '一只可爱的小猫坐在窗台上，阳光透过窗户洒在它的毛发上',
-    '美丽的山水风景，青山绿水，云雾缭绕',
-    '现代简约风格的室内设计，明亮宽敞',
-    '夜晚的城市天际线，霓虹灯闪烁',
-    '春天的樱花盛开，粉色花瓣飘落',
-    '科幻风格的太空站，星空背景',
-    '温馨的咖啡厅，暖色调灯光',
-    '抽象艺术风格，色彩丰富的几何图形'
+    `产品海报：一款透明玻璃质感的智能水杯放在浅灰色桌面，背景是干净的厨房晨光。
+画面保留顶部留白用于标题，主体居中偏下，真实摄影风格，柔和阴影，细节清晰，1:1。`,
+    `人物形象：年轻创作者坐在整洁书桌前使用平板绘图，窗边自然光，神情专注。
+现代生活方式摄影，色彩清爽，浅景深，主体清晰，适合社交媒体封面，4:5。`,
+    `电商主图：一双白色运动鞋悬浮在浅蓝背景前，周围有轻微速度线和水滴元素。
+高质感商业摄影，干净背景，突出材质和轮廓，可直接用于商品展示，1:1。`,
+    `品牌插画：为效率工具绘制一张扁平矢量插画，包含任务清单、日历、闪电和协作光标。
+线条简洁，颜色克制，适合 SaaS 官网首屏，16:9。`,
+    `概念场景：未来城市里的无人配送站，清晨薄雾中有机器人分拣包裹。
+电影感构图，真实材质，冷暖对比光，细节丰富但画面不杂乱，16:9。`,
   ],
   en: [
-    `young Korean woman in a light blue dress holding a white baseball cap and pulling a yellow suitcase, photography,
-stylish modern hotel lobby, soft sunlight streaming through the window, pastel tones, relaxed vacation mood,
-centered vertical portrait with bokeh background, medium shot.`,
-    'A cute kitten sitting on a windowsill with sunlight streaming through',
-    'Beautiful mountain landscape with green hills and misty clouds',
-    'Modern minimalist interior design, bright and spacious',
-    'City skyline at night with neon lights glowing',
-    'Cherry blossoms in spring with pink petals falling',
-    'Sci-fi space station with starry background',
-    'Cozy coffee shop with warm ambient lighting',
-    'Abstract art with colorful geometric shapes'
+    `Product poster: a transparent glass smart water bottle on a light gray tabletop, clean kitchen morning light.
+Leave clear space at the top for a headline, subject centered slightly low, realistic photography, soft shadows, crisp details, 1:1.`,
+    `Character image: a young creator drawing on a tablet at a tidy desk near a window, focused expression.
+Modern lifestyle photography, fresh colors, shallow depth of field, clear subject, suitable for a social cover, 4:5.`,
+    `E-commerce hero image: white running shoes floating on a pale blue background with subtle speed lines and water droplets.
+Premium commercial photography, clean backdrop, emphasize material and silhouette, ready for product display, 1:1.`,
+    `Brand illustration: create a flat vector illustration for a productivity tool with task list, calendar, lightning bolt, and collaboration cursor.
+Clean lines, restrained colors, suitable for a SaaS hero section, 16:9.`,
+    `Concept scene: an autonomous delivery hub in a future city, robots sorting parcels in early morning mist.
+Cinematic composition, realistic materials, cool-warm contrast lighting, rich details without clutter, 16:9.`,
   ]
 } as const;
 
 // AI 视频默认提示词
 export const AI_VIDEO_PROMPTS = {
   zh: [
-    `场景：日落时分，一座宏伟的城堡庭院，金色的光线透过彩色玻璃窗，营造出温暖而充满希望的氛围。
-相机：对两位公主进行中特写跟踪拍摄，然后进行广角拉出，露出整个庭院，最后缓慢向上倾斜到天空。
-动作：公主们互相微笑，然后开始和谐地唱歌，然后在灯光亮起时向天空举手。
-音频：柔和的管弦乐，伴随着令人振奋的弦乐和合唱，沙沙作响的树叶和远处鸟儿的环绕声，对话："我们相信明天会更加光明。"
-风格：迪士尼风格的动画，鲜艳的色彩，梦幻般的灯光。`,
-    '一个美丽的日出场景，阳光从山峰后缓缓升起，云朵轻柔地飘动',
-    '一个森林中的场景，树叶在微风中轻轻摇摆，阳光斑驳',
-    '一个海边场景，海浪轻拍岸边，海鸟在空中盘旋',
-    '一个花园场景，花朵在微风中轻摆，蝴蝶翩翩起舞',
-    '一个雨后场景，水滴从树叶上缓缓滴落，彩虹出现在天空',
-    '一个雪花飘落的冬日场景，雪花轻柔地降落',
-    '一个星空场景，星星闪烁，云朵缓缓飘过月亮',
-    '一个溪流场景，清水在石头间潺潺流淌，鱼儿游过'
+    `产品展示视频：一款智能手表在深色桌面上缓慢旋转，屏幕亮起显示健康数据。
+镜头从超近景滑到中景，金属边框有细腻高光，节奏稳定，适合 8 秒广告。`,
+    `人物短片：创作者在咖啡馆整理灵感板，便利贴、平板和笔记本依次入镜。
+手持轻微移动，暖色自然光，动作真实流畅，结尾停在完整桌面构图。`,
+    `应用场景：电动自行车穿过清晨城市街道，路面有微弱反光，背景行人自然虚化。
+低机位跟拍，速度感适中，画面干净，有品牌宣传片质感。`,
+    `教程演示：一张空白画布逐步生成流程图节点、连线和高亮标记。
+俯视 UI 动效风格，步骤清晰，转场简洁，适合产品功能介绍。`,
+    `氛围镜头：雨后植物叶片上的水珠缓慢滑落，远处有柔和散景灯光。
+微距摄影，浅景深，安静治愈，动作细腻，循环感自然。`,
   ],
   en: [
-    `Scene: A grand castle courtyard at sunset, golden light filtering through stained glass windows, creating a warm and hopeful atmosphere.
-Camera: Medium close-up tracking shot of the two princesses, then a wide-angle pull-out to reveal the entire courtyard, ending with a slow upward tilt to the sky.
-Action: The princesses smile at each other, then begin singing in harmony, then raise their hands toward the sky as the light brightens.
-Audio: Soft orchestral music with uplifting strings and choir, ambient sounds of rustling leaves and distant birds, dialogue: "Together, we believe tomorrow will be brighter."
-Style: Disney-style animation, vibrant colors, dreamy lighting.`,
-    'a beautiful sunrise scene where the sun slowly rises from behind mountains with clouds gently floating',
-    'a forest scene with leaves gently swaying in the breeze and dappled sunlight',
-    'a seaside scene with waves gently lapping the shore and seagulls circling overhead',
-    'a garden scene with flowers swaying in the breeze and butterflies dancing',
-    'a post-rain scene with water drops slowly dripping from leaves and a rainbow appearing in the sky',
-    'a winter scene with snowflakes gently falling',
-    'a starry night scene with twinkling stars and clouds slowly drifting across the moon',
-    'a stream scene with clear water flowing gently between stones and fish swimming by'
+    `Product demo video: a smart watch slowly rotates on a dark tabletop, the screen lights up with health data.
+Camera glides from extreme close-up to medium shot, refined metal highlights, steady pacing, suitable for an 8-second ad.`,
+    `Lifestyle short: a creator organizes an inspiration board in a cafe, sticky notes, tablet, and notebook enter the frame one by one.
+Subtle handheld movement, warm natural light, realistic actions, ending on a complete desktop composition.`,
+    `Use case: an electric bike rides through early morning city streets, slight reflections on the road, pedestrians softly blurred.
+Low-angle tracking shot, moderate speed, clean frame, polished brand-film feel.`,
+    `Tutorial demo: a blank canvas gradually creates flowchart nodes, connectors, and highlight marks.
+Top-down UI motion style, clear steps, simple transitions, suitable for a product feature intro.`,
+    `Atmospheric shot: raindrops slowly slide across plant leaves after rain, soft bokeh lights in the distance.
+Macro photography, shallow depth of field, quiet healing mood, delicate motion, natural loop feel.`,
   ]
+} as const;
+
+// AI 音频默认提示词
+export const AI_AUDIO_PROMPTS = {
+  zh: [
+    '创作一段温柔治愈的钢琴纯音乐，节奏舒缓，适合作为夜晚阅读或冥想背景。',
+    '生成一首轻快的城市流行歌曲，明亮鼓点，朗朗上口的副歌，适合短视频开场。',
+    '写一段梦幻电子氛围音乐，层次逐渐推进，适合作为科技产品宣传片配乐。',
+    '生成一段电影预告片风格配乐，从低沉铺垫逐步推向高潮，结尾有清晰记忆点。',
+  ],
+  en: [
+    'Compose a soft healing piano instrumental with a slow tempo for reading or meditation.',
+    'Generate an upbeat city pop song with bright drums and a catchy chorus for a short video intro.',
+    'Create dreamy electronic ambient music with layered progression for a tech product promo.',
+    'Generate a cinematic trailer soundtrack that builds from low tension to a memorable climax.',
+  ],
+} as const;
+
+// AI 文本默认提示词
+export const AI_TEXT_PROMPTS = {
+  zh: [
+    '把下面的信息整理成结构化总结：背景、关键事实、风险、下一步，并提炼 5 个结论。',
+    '将这段内容改写得更简洁、更有说服力，适合对外发布，保留关键信息。',
+    '根据这个主题生成一份可直接演讲的 Markdown 大纲，包含标题、核心论点和结尾。',
+    '把这些零散想法扩展成一段完整文案，语气专业但易懂，避免空泛表达。',
+  ],
+  en: [
+    'Turn the information below into a structured summary: context, key facts, risks, next steps, and 5 takeaways.',
+    'Rewrite this content to be more concise and persuasive for external publishing while preserving key information.',
+    'Create a presentation-ready Markdown outline with a title, core arguments, and a closing section.',
+    'Expand these rough ideas into complete copy with a professional but accessible tone and no vague filler.',
+  ],
+} as const;
+
+// AI Agent 默认提示词
+export const AI_AGENT_PROMPTS = {
+  zh: [
+    '把这个目标拆解成可执行计划：里程碑、任务清单、优先级、风险和下一步行动。',
+    '围绕这个主题生成一份结构清晰的思维导图，突出层级关系、关键节点和遗漏点。',
+    '把这段内容转换成流程图方案，明确步骤、判断节点、异常分支和输出结果。',
+    '分析这个问题的成因、影响、可选方案和取舍，并给出推荐方案。',
+  ],
+  en: [
+    'Break this goal into an actionable plan: milestones, task list, priorities, risks, and next steps.',
+    'Generate a clear mind map for this topic with hierarchy, key branches, and missing areas.',
+    'Turn this content into a flowchart outline with steps, decision points, exception paths, and outputs.',
+    'Analyze the causes, impact, options, tradeoffs, and recommended approach for this problem.',
+  ],
 } as const;
 
 // AI 指令项接口 - 用于 AI 输入框的指令建议
@@ -77,42 +116,6 @@ export interface InstructionItemData {
 // AI 指令 - 用于文本模型工作流（AI 输入框使用）
 export const AI_INSTRUCTIONS: Record<'zh' | 'en', InstructionItemData[]> = {
   zh: [
-    // {
-    //   content: '将选中的内容整理成思维导图',
-    //   scene: '知识梳理、内容结构化、学习笔记'
-    // },
-    // {
-    //   content: '为选中的主题详细的分析框架',
-    //   scene: '项目分析、问题拆解、决策支持'
-    // },
-    // {
-    //   content: '将文本内容转换为流程图',
-    //   scene: '流程可视化、步骤说明、操作指南'
-    // },
-    // {
-    //   content: '为这个概念相关的扩展内容',
-    //   scene: '头脑风暴、创意发散、内容扩展'
-    // },
-    // {
-    //   content: '总结并提炼关键要点',
-    //   scene: '内容摘要、报告总结、快速了解'
-    // },
-    // {
-    //   content: '分析这些内容之间的关联关系',
-    //   scene: '关系分析、逻辑梳理、知识图谱'
-    // },
-    // {
-    //   content: '为当前内容行动计划',
-    //   scene: '任务规划、项目管理、执行方案'
-    // },
-    // {
-    //   content: '对比分析这些选项的优缺点',
-    //   scene: '方案对比、决策分析、选型评估'
-    // },
-    // {
-    //   content: '一张与主题相关的配图',
-    //   scene: '视觉辅助、内容配图、演示美化'
-    // },
     {
       content: '优化提示词并生成',
       scene: '提示词',
@@ -125,42 +128,6 @@ export const AI_INSTRUCTIONS: Record<'zh' | 'en', InstructionItemData[]> = {
     }
   ],
   en: [
-    // {
-    //   content: 'Organize the selected content into a mind map',
-    //   scene: 'Knowledge organization, content structuring, study notes'
-    // },
-    // {
-    //   content: 'a detailed analysis framework for the selected topic',
-    //   scene: 'Project analysis, problem breakdown, decision support'
-    // },
-    // {
-    //   content: 'Convert the text content into a flowchart',
-    //   scene: 'Process visualization, step explanation, operation guide'
-    // },
-    // {
-    //   content: 'related extended content for this concept',
-    //   scene: 'Brainstorming, creative expansion, content extension'
-    // },
-    // {
-    //   content: 'Summarize and extract key points',
-    //   scene: 'Content summary, report summary, quick overview'
-    // },
-    // {
-    //   content: 'Analyze the relationships between these contents',
-    //   scene: 'Relationship analysis, logic organization, knowledge graph'
-    // },
-    // {
-    //   content: 'an action plan for the current content',
-    //   scene: 'Task planning, project management, execution plan'
-    // },
-    // {
-    //   content: 'Compare and analyze the pros and cons of these options',
-    //   scene: 'Solution comparison, decision analysis, selection evaluation'
-    // },
-    // {
-    //   content: 'an image related to the topic',
-    //   scene: 'Visual aid, content illustration, presentation enhancement'
-    // },
     {
       content: 'Optimize prompt and generate',
       scene: 'Optimization',
@@ -182,15 +149,15 @@ export interface ColdStartSuggestion {
 export const AI_COLD_START_SUGGESTIONS: Record<'zh' | 'en', ColdStartSuggestion[]> = {
   zh: [
     {
-      content: '灵感图：咖啡文化，16图',
+      content: '灵感图：咖啡文化品牌视觉，12图',
       scene: '灵感图',
-      tips: '调用1次文本模型 + 1次生图模型，一张图排布n张子图（最多16张）',
+      tips: '调用1次文本模型 + 1次生图模型，生成一组可参考的视觉方向',
       modelType: 'agent',
     },
     {
-      content: '宫格图：可爱猫咪表情包，16宫格',
+      content: '宫格图：可爱猫咪表情包，12宫格',
       scene: '宫格图',
-      tips: '调用1次文本模型 + 1次生图模型，一张图排布n张正方形子图（最多16张）',
+      tips: '调用1次文本模型 + 1次生图模型，适合角色表情探索',
       modelType: 'agent',
     },
     {
@@ -199,48 +166,30 @@ export const AI_COLD_START_SUGGESTIONS: Record<'zh' | 'en', ColdStartSuggestion[
       tips: '调用1次文本模型 + 1次生视频模型',
       modelType: 'video',
     },
-    // {
-    //   content: '长视频：一只猫咪从早到晚的一天生活，1分钟',
-    //   scene: '长视频',
-    //   tips: '调用1次文本模型生成分段脚本 + 多次生视频模型，尾帧接首帧保证连贯',
-    //   modelType: 'agent',
-    // },
     {
       content: '画一个AI工作流的流程图',
       scene: 'mermaid图',
-      tips: '调用1次文本模型，支持流程图、泳道图、',
+      tips: '调用1次文本模型，生成可编辑的流程图',
       modelType: 'agent',
     },
     {
-      content: '大模型发展趋势的思维导图',
-      scene: '知识梳理',
-      tips: '调用1次文本模型',
-      modelType: 'agent',
-    },
-    {
-      content: '矢量图：一个简约风格的火箭作为公司logo',
-      scene: 'SVG矢量图',
-      tips: '调用1次文本模型生成SVG图标，可无损缩放',
-      modelType: 'agent',
-    },
-    {
-      content: '生成一份关于人工智能发展的PPT',
+      content: '生成一份关于AI产品规划的PPT',
       scene: 'PPT演示',
-      tips: '调用1次文本模型生成大纲 + 自动布局为多页PPT幻灯片',
+      tips: '调用1次文本模型生成大纲，并自动布局为多页幻灯片',
       modelType: 'agent',
     }
   ],
   en: [
     {
-      content: 'inspiration board: Coffee culture mood board, beans, latte art, cafe scenes',
+      content: 'inspiration board: Coffee culture brand visuals, 12 images',
       scene: 'Inspiration board',
-      tips: '1 text model + 1 image model',
+      tips: '1 text model + 1 image model for visual direction exploration',
       modelType: 'agent',
     },
     {
-      content: 'grid image: Cute cat emoji pack, 4x4 scattered layout',
+      content: 'grid image: Cute cat emoji pack, 12-panel layout',
       scene: 'Grid image',
-      tips: '1 text model + 1 image model',
+      tips: '1 text model + 1 image model for character expression exploration',
       modelType: 'agent',
     },
     {
@@ -249,34 +198,16 @@ export const AI_COLD_START_SUGGESTIONS: Record<'zh' | 'en', ColdStartSuggestion[
       tips: '1 text model + 1 video model',
       modelType: 'video',
     },
-    // {
-    //   content: 'long video: A day in the life of a cat, 1 minute',
-    //   scene: 'Long video',
-    //   tips: '1 text model for script + multiple video models, last frame connects to first frame',
-    //   modelType: 'agent',
-    // },
     {
       content: 'Draw a flowchart of AI workflow',
       scene: 'Tech docs',
-      tips: '1 text model',
+      tips: '1 text model for an editable flowchart',
       modelType: 'agent',
     },
     {
-      content: 'Draw a mind map of LLM development trends',
-      scene: 'Knowledge organization',
-      tips: '1 text model',
-      modelType: 'agent',
-    },
-    {
-      content: 'SVG: A minimalist rocket icon',
-      scene: 'SVG vector',
-      tips: '1 text model to generate SVG code, scalable and lossless',
-      modelType: 'agent',
-    },
-    {
-      content: 'Generate a PPT about artificial intelligence development',
+      content: 'Generate a PPT about AI product planning',
       scene: 'PPT slides',
-      tips: '1 text model for outline + auto layout into multi-page PPT slides',
+      tips: '1 text model for outline and auto layout into multi-page slides',
       modelType: 'agent',
     },
   ],
@@ -284,15 +215,76 @@ export const AI_COLD_START_SUGGESTIONS: Record<'zh' | 'en', ColdStartSuggestion[
 
 // 类型定义
 export type Language = 'zh' | 'en';
+export type PromptGenerationType =
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'text'
+  | 'agent'
+  | 'ppt-common';
+export type PromptPreviewExample =
+  | {
+      kind: 'image';
+      src: string;
+      alt: string;
+    }
+  | {
+      kind: 'video';
+      src: string;
+      alt: string;
+      posterSrc?: string;
+      playable?: boolean;
+    };
+
+const normalizePromptLanguage = (language: Language): Language =>
+  language === 'en' ? 'en' : 'zh';
 
 // 获取图片提示词的辅助函数
 export const getImagePrompts = (language: Language): readonly string[] => {
-  return AI_IMAGE_PROMPTS[language];
+  return AI_IMAGE_PROMPTS[normalizePromptLanguage(language)];
 };
 
 // 获取视频提示词的辅助函数
 export const getVideoPrompts = (language: Language): readonly string[] => {
-  return AI_VIDEO_PROMPTS[language];
+  return AI_VIDEO_PROMPTS[normalizePromptLanguage(language)];
+};
+
+// 获取音频提示词的辅助函数
+export const getAudioPrompts = (language: Language): readonly string[] => {
+  return AI_AUDIO_PROMPTS[normalizePromptLanguage(language)];
+};
+
+// 获取文本提示词的辅助函数
+export const getTextPrompts = (language: Language): readonly string[] => {
+  return AI_TEXT_PROMPTS[normalizePromptLanguage(language)];
+};
+
+// 获取 Agent 提示词的辅助函数
+export const getAgentPrompts = (language: Language): readonly string[] => {
+  return AI_AGENT_PROMPTS[normalizePromptLanguage(language)];
+};
+
+// 获取指定生成类型默认提示词的辅助函数
+export const getDefaultPromptsByGenerationType = (
+  generationType: PromptGenerationType,
+  language: Language
+): readonly string[] => {
+  switch (generationType) {
+    case 'image':
+      return getImagePrompts(language);
+    case 'video':
+      return getVideoPrompts(language);
+    case 'audio':
+      return getAudioPrompts(language);
+    case 'text':
+      return getTextPrompts(language);
+    case 'agent':
+      return getAgentPrompts(language);
+    case 'ppt-common':
+      return [];
+    default:
+      return [];
+  }
 };
 
 // 获取 AI 指令的辅助函数

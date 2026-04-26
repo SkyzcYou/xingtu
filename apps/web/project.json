@@ -29,10 +29,13 @@
     "serve": {
       "executor": "nx:run-commands",
       "options": {
-        "commands": [
-          "nx run web:watch-sw",
-          "nx run web:serve-app"
-        ],
+        "command": "nx run web:serve-app"
+      }
+    },
+    "serve-pwa": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["nx run web:watch-sw", "nx run web:serve-app"],
         "parallel": true
       }
     },

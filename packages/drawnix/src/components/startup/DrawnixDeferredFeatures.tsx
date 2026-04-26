@@ -78,6 +78,11 @@ interface DrawnixDeferredFeaturesProps {
   setMediaLibraryOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setBackupRestoreOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setCloudSyncOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  handleOpenMediaLibrary: (
+    config?: Partial<MediaLibraryConfig> & {
+      selectButtonText?: string;
+    }
+  ) => void;
   handleBeforeSwitch: () => Promise<void>;
   onCreateProjectForMemory: () => Promise<void>;
 }
@@ -101,6 +106,7 @@ export function DrawnixDeferredFeatures({
   setMediaLibraryOpen,
   setBackupRestoreOpen,
   setCloudSyncOpen,
+  handleOpenMediaLibrary,
   handleBeforeSwitch,
   onCreateProjectForMemory,
 }: DrawnixDeferredFeaturesProps) {
@@ -209,6 +215,7 @@ export function DrawnixDeferredFeatures({
             onOpenChange={setProjectDrawerOpen}
             onBeforeSwitch={handleBeforeSwitch}
             onBoardSwitch={onBoardSwitch}
+            onOpenMediaLibrary={handleOpenMediaLibrary}
           />
         </Suspense>
       )}

@@ -22,6 +22,7 @@ import { BaseDrawer } from '../side-drawer';
 import { useConfirmDialog } from '../dialog/ConfirmDialog';
 import { needsApiKeyConfiguration } from '../../utils/url-template';
 import { geminiSettings } from '../../utils/settings-manager';
+import { DRAWER_PIN_KEYS } from '../../utils/drawer-pin';
 import './toolbox-drawer.scss';
 
 export interface ToolboxDrawerProps {
@@ -503,6 +504,7 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
         position="toolbar-right"
         width="narrow"
         storageKey={TOOLBOX_DRAWER_WIDTH_KEY}
+        pinStorageKey={DRAWER_PIN_KEYS.toolbox}
         resizable={true}
         className="toolbox-drawer"
         contentClassName="toolbox-drawer__content"

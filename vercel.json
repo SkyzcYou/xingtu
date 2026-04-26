@@ -4,6 +4,26 @@
   "installCommand": "pnpm install",
   "framework": null,
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/ai-image-generator.html",
+      "destination": "/home.html",
+      "permanent": true
+    },
+    {
+      "source": "/flowchart-maker.html",
+      "destination": "/home.html",
+      "permanent": true
+    },
+    {
+      "source": "/mindmap-maker.html",
+      "destination": "/home.html",
+      "permanent": true
+    }
   ]
 }

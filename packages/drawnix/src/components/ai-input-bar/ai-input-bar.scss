@@ -15,6 +15,21 @@ $gray-medium: #9CA3AF;
 $gray-dark: #6B7280;
 $text-dark: #1F2937;
 $vip-color: #E91E63;
+$ai-input-font-size: 15px;
+$ai-input-line-height-ratio: 1.5;
+$ai-input-line-height: $ai-input-font-size * $ai-input-line-height-ratio;
+$ai-input-vertical-padding: 12px;
+$ai-input-expanded-min-height: $ai-input-line-height * 4 + $ai-input-vertical-padding;
+$ai-input-expanded-max-height: $ai-input-line-height * 6 + $ai-input-vertical-padding;
+$ai-input-mobile-font-size: 14px;
+$ai-input-mobile-line-height: $ai-input-mobile-font-size * $ai-input-line-height-ratio;
+$ai-input-mobile-vertical-padding: 8px;
+$ai-input-mobile-expanded-min-height: $ai-input-mobile-line-height * 4 + $ai-input-mobile-vertical-padding;
+$ai-input-mobile-expanded-max-height: $ai-input-mobile-line-height * 6 + $ai-input-mobile-vertical-padding;
+$ai-input-small-font-size: 13px;
+$ai-input-small-line-height: $ai-input-small-font-size * $ai-input-line-height-ratio;
+$ai-input-small-expanded-min-height: $ai-input-small-line-height * 4 + $ai-input-mobile-vertical-padding;
+$ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 + $ai-input-mobile-vertical-padding;
 
 .ai-input-bar {
   position: fixed;
@@ -366,7 +381,7 @@ $vip-color: #E91E63;
 
   // 输入区域 - 向上扩展
   &__input-area {
-    position: relative; // 用于 PromptHistoryPopover 绝对定位
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -386,6 +401,14 @@ $vip-color: #E91E63;
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
+  }
+
+  &__prompt-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
   }
 
   // Generation type toggle (image/video)
@@ -549,8 +572,8 @@ $vip-color: #E91E63;
     bottom: 0;
     padding: 6px 12px;
     padding-right: 20px;
-    font-size: 15px;
-    line-height: 1.5;
+    font-size: $ai-input-font-size;
+    line-height: $ai-input-line-height-ratio;
     letter-spacing: normal;
     word-spacing: normal;
     white-space: pre-wrap;
@@ -607,8 +630,8 @@ $vip-color: #E91E63;
     width: 100%;
     border: none;
     background: transparent;
-    font-size: 15px;
-    line-height: 1.5;
+    font-size: $ai-input-font-size;
+    line-height: $ai-input-line-height-ratio;
     letter-spacing: normal;
     word-spacing: normal;
     text-rendering: auto;
@@ -617,13 +640,13 @@ $vip-color: #E91E63;
     resize: none;
     outline: none;
     min-height: 24px;
-    max-height: 120px;
-    overflow-y: auto;
+    max-height: $ai-input-expanded-max-height;
+    overflow-y: hidden;
     padding: 6px 12px;
     padding-right: 20px;
     margin: 0;
     font-family: 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    transition: all 0.2s ease;
+    transition: height 0.2s ease, min-height 0.2s ease, max-height 0.2s ease;
     position: relative;
     z-index: 2;
     box-sizing: border-box;
@@ -670,10 +693,10 @@ $vip-color: #E91E63;
       opacity: 0.6;
     }
 
-    // When focused, expand height smoothly (controlled by parent container max-height)
+    // Focused input starts at 4 rows and grows to 6 rows via JS auto-resize.
     &--focused {
-      min-height: 80px; // 约 3-4 行
-      max-height: 160px; // 最大高度限制
+      min-height: $ai-input-expanded-min-height;
+      max-height: $ai-input-expanded-max-height;
     }
   }
 
@@ -1528,9 +1551,14 @@ $vip-color: #E91E63;
     }
 
     &__input {
-      font-size: 14px;
+      font-size: $ai-input-mobile-font-size;
       padding: 4px 8px;
       min-height: 20px;
+
+      &--focused {
+        min-height: $ai-input-mobile-expanded-min-height;
+        max-height: $ai-input-mobile-expanded-max-height;
+      }
     }
 
     &__send-btn {
@@ -1596,7 +1624,12 @@ $vip-color: #E91E63;
     }
 
     &__input {
-      font-size: 13px;
+      font-size: $ai-input-small-font-size;
+
+      &--focused {
+        min-height: $ai-input-small-expanded-min-height;
+        max-height: $ai-input-small-expanded-max-height;
+      }
     }
 
     // 隐藏一些次要元素节省空间

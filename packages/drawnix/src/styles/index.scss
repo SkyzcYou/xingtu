@@ -750,6 +750,11 @@
 // Slideshow Mode: 隐藏所有 UI 覆盖层，只保留画布内容
 // ============================================================================
 .slideshow-active {
+  .frame-element__outline {
+    stroke: transparent !important;
+    stroke-dasharray: none !important;
+  }
+
   // 工具栏
   .unified-toolbar,
     .popup-toolbar,

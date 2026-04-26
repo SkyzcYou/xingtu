@@ -28,7 +28,7 @@ import { PlaitDrawElement } from '@plait/draw';
 import { MindElement } from '@plait/mind';
 import { Freehand } from '../../plugins/freehand/type';
 import { PenPath } from '../../plugins/pen/type';
-import { isFrameElement } from '../../types/frame.types';
+import { getFrameDisplayName, isFrameElement } from '../../types/frame.types';
 import { isToolElement } from '../../plugins/with-tool';
 import { useDrawnix } from '../../hooks/use-drawnix';
 import { extractTextFromElement } from '../../utils/selection-utils';
@@ -50,7 +50,7 @@ function getElementTypeInfo(
 ): { typeLabel: string; icon: React.ReactNode } {
   if (isFrameElement(element)) {
     return {
-      typeLabel: 'Frame',
+      typeLabel: 'PPT 页面',
       icon: (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
           <rect
@@ -393,7 +393,7 @@ function getElementDisplayName(
   typeInfo: { typeLabel: string }
 ): string {
   if (isFrameElement(element)) {
-    return element.name || 'Frame';
+    return getFrameDisplayName(element);
   }
 
   if (isToolElement(element) && element.metadata?.name) {

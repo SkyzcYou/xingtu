@@ -1,27 +1,285 @@
-import { getImagePrompts, getVideoPrompts, type Language } from '../../../constants/prompts';
+import {
+  getDefaultPromptsByGenerationType as getDefaultPromptContentsByGenerationType,
+  getImagePrompts,
+  getVideoPrompts,
+  type Language,
+  type PromptPreviewExample,
+  type PromptGenerationType,
+} from '../../../constants/prompts';
 import {
   type ImageHistoryItem,
-  type VideoHistoryItem
+  type VideoHistoryItem,
 } from '../../generation-history';
 import {
   addVideoPromptHistory,
   addImagePromptHistory,
   getVideoPromptHistoryContents,
   getImagePromptHistoryContents,
+  promptStorageService,
+  type PromptHistoryItem,
 } from '../../../services/prompt-storage-service';
+import type { PromptItem } from '../../shared';
 import { PRESET_PROMPTS_LIMIT, USER_PROMPTS_LIMIT } from './size-constants';
 
 export type PromptType = 'image' | 'video';
 export type HistoryItem = ImageHistoryItem | VideoHistoryItem;
+export interface ResolvedPromptItem extends PromptItem {
+  historyId?: string;
+}
+interface ResolvedPromptSeed {
+  content: string;
+  historyId?: string;
+  previewExamples?: PromptPreviewExample[];
+}
+
+export interface ResolvePromptItemsByGenerationTypeParams {
+  generationType: PromptGenerationType;
+  language: Language;
+  aiInputHistory: PromptHistoryItem[];
+  imageHistory: ImageHistoryItem[];
+  videoHistory: VideoHistoryItem[];
+}
+
+export interface ResolvePromptPreviewExamplesParams {
+  generationType: PromptType;
+  language: Language;
+  promptContents: string[];
+  imageHistory: ImageHistoryItem[];
+  videoHistory: VideoHistoryItem[];
+}
+
+export interface ResolvePresetPromptItemsParams {
+  generationType: PromptType;
+  language: Language;
+  promptContents: string[];
+  imageHistory: ImageHistoryItem[];
+  videoHistory: VideoHistoryItem[];
+}
 
 /**
  * 从历史记录中提取用户使用过的提示词（去重，最新的在前）
  */
 function extractUserPromptsFromHistory(historyItems: HistoryItem[]): string[] {
   return historyItems
-    .map(item => item.prompt.trim())
-    .filter(prompt => prompt.length > 0)
+    .map((item) => item.prompt.trim())
+    .filter((prompt) => prompt.length > 0)
     .filter((prompt, index, arr) => arr.indexOf(prompt) === index); // 去重
+}
+
+function dedupePromptContents(prompts: string[]): string[] {
+  return prompts.filter(
+    (prompt, index, arr) => arr.indexOf(prompt) === index
+  );
+}
+
+function buildPromptSeedLookup(promptSeeds: ResolvedPromptSeed[]) {
+  return promptSeeds.reduce<Map<string, ResolvedPromptSeed>>((map, seed) => {
+    const content = seed.content.trim();
+    if (!content) {
+      return map;
+    }
+
+    const normalizedSeed: ResolvedPromptSeed = {
+      ...seed,
+      content,
+      previewExamples: seed.previewExamples?.slice(0, 3),
+    };
+    const existingSeed = map.get(content);
+
+    if (!existingSeed) {
+      map.set(content, normalizedSeed);
+      return map;
+    }
+
+    map.set(content, {
+      ...existingSeed,
+      historyId: existingSeed.historyId || normalizedSeed.historyId,
+      previewExamples:
+        existingSeed.previewExamples?.length
+          ? existingSeed.previewExamples
+          : normalizedSeed.previewExamples,
+    });
+    return map;
+  }, new Map());
+}
+
+function createResolvedPromptItems(
+  generationType: PromptGenerationType,
+  promptContents: string[],
+  promptSeeds: ResolvedPromptSeed[] = []
+): ResolvedPromptItem[] {
+  const promptSeedLookup = buildPromptSeedLookup(promptSeeds);
+  const sortedContents = promptStorageService.sortPrompts(
+    generationType,
+    dedupePromptContents(promptContents)
+  );
+
+  return sortedContents.map((content, index) => {
+    const promptSeed = promptSeedLookup.get(content);
+
+    return {
+      id: promptSeed?.historyId || `${generationType}-prompt-${index}-${content.slice(0, 24)}`,
+      content,
+      pinned: promptStorageService.isPinned(generationType, content),
+      modelType: generationType,
+      historyId: promptSeed?.historyId,
+      previewExamples: promptSeed?.previewExamples,
+    };
+  });
+}
+
+function createDefaultPromptSeeds(
+  generationType: PromptGenerationType,
+  language: Language
+): ResolvedPromptSeed[] {
+  return getDefaultPromptContentsByGenerationType(generationType, language).map(
+    (content) => ({
+      content,
+    })
+  );
+}
+
+function createTypedHistorySeeds(history: PromptHistoryItem[]): ResolvedPromptSeed[] {
+  return history
+    .map((item) => ({
+      content: item.content.trim(),
+      historyId: item.id,
+    }))
+    .filter((item) => item.content.length > 0);
+}
+
+function createMediaPreviewExample(
+  generationType: PromptType,
+  item: HistoryItem,
+  alt: string
+): PromptPreviewExample {
+  if (
+    generationType === 'video' &&
+    'previewUrl' in item &&
+    typeof item.previewUrl === 'string'
+  ) {
+    return {
+      kind: 'video',
+      src: item.previewUrl || item.downloadUrl || item.imageUrl,
+      posterSrc: item.imageUrl,
+      playable: true,
+      alt,
+    };
+  }
+
+  return {
+    kind: 'image',
+    src: item.imageUrl,
+    alt,
+  };
+}
+
+function createMediaHistorySeeds(
+  generationType: PromptType,
+  historyItems: HistoryItem[]
+): ResolvedPromptSeed[] {
+  const previewMap = new Map<string, PromptPreviewExample[]>();
+  const orderedPrompts: string[] = [];
+
+  historyItems.forEach((item) => {
+    const content = item.prompt.trim();
+    if (!content) {
+      return;
+    }
+
+    if (!previewMap.has(content)) {
+      previewMap.set(content, []);
+      orderedPrompts.push(content);
+    }
+
+    const previews = previewMap.get(content);
+    if (!previews) {
+      return;
+    }
+    const previewSrc =
+      generationType === 'video' &&
+      'previewUrl' in item &&
+      typeof item.previewUrl === 'string'
+        ? item.previewUrl || item.downloadUrl || item.imageUrl
+        : item.imageUrl;
+
+    if (
+      previews.length >= 3 ||
+      previews.some((preview) => preview.src === previewSrc)
+    ) {
+      return;
+    }
+
+    previews.push(
+      createMediaPreviewExample(
+        generationType,
+        item,
+        generationType === 'image'
+          ? `Generated image example ${previews.length + 1}`
+          : `Generated video example ${previews.length + 1}`
+      )
+    );
+  });
+
+  return orderedPrompts.map((content) => ({
+    content,
+    previewExamples: previewMap.get(content),
+  }));
+}
+
+function createLocalPromptSeeds(promptContents: string[]): ResolvedPromptSeed[] {
+  return promptContents
+    .map((content) => ({ content: content.trim() }))
+    .filter((item) => item.content.length > 0);
+}
+
+export function resolvePromptPreviewExamples({
+  generationType,
+  promptContents,
+  imageHistory,
+  videoHistory,
+}: ResolvePromptPreviewExamplesParams): Map<string, PromptPreviewExample[]> {
+  const promptSeedLookup = buildPromptSeedLookup(
+    generationType === 'video'
+      ? createMediaHistorySeeds(generationType, videoHistory)
+      : createMediaHistorySeeds(generationType, imageHistory)
+  );
+
+  return promptContents.reduce<Map<string, PromptPreviewExample[]>>(
+    (map, content) => {
+      map.set(content, promptSeedLookup.get(content.trim())?.previewExamples ?? []);
+      return map;
+    },
+    new Map()
+  );
+}
+
+export function resolvePresetPromptItems({
+  generationType,
+  language,
+  promptContents,
+  imageHistory,
+  videoHistory,
+}: ResolvePresetPromptItemsParams): ResolvedPromptItem[] {
+  const sortedPromptContents = promptStorageService.sortPrompts(
+    generationType,
+    promptContents
+  );
+  const previewExampleLookup = resolvePromptPreviewExamples({
+    generationType,
+    language,
+    promptContents: sortedPromptContents,
+    imageHistory,
+    videoHistory,
+  });
+
+  return sortedPromptContents.map((content, index) => ({
+    id: `preset-${index}-${content.slice(0, 20)}`,
+    content,
+    pinned: promptStorageService.isPinned(generationType, content),
+    modelType: generationType,
+    previewExamples: [...(previewExampleLookup.get(content) ?? [])],
+  }));
 }
 
 /**
@@ -62,6 +320,69 @@ export const getMergedPresetPrompts = (
     .slice(0, PRESET_PROMPTS_LIMIT); // 限制总数
 
   return merged;
+};
+
+export const getDefaultPromptsByGenerationType = (
+  generationType: PromptGenerationType,
+  language: Language
+): ResolvedPromptItem[] => {
+  const promptSeeds = createDefaultPromptSeeds(generationType, language);
+
+  return createResolvedPromptItems(
+    generationType,
+    promptSeeds.map((item) => item.content),
+    promptSeeds
+  );
+};
+
+export const resolvePromptItemsByGenerationType = ({
+  generationType,
+  language,
+  aiInputHistory,
+  imageHistory,
+  videoHistory,
+}: ResolvePromptItemsByGenerationTypeParams): ResolvedPromptItem[] => {
+  if (generationType === 'image') {
+    const promptSeeds = [
+      ...createLocalPromptSeeds(getImagePromptHistoryContents()),
+      ...createMediaHistorySeeds('image', imageHistory),
+      ...createDefaultPromptSeeds('image', language),
+    ];
+
+    return createResolvedPromptItems(
+      'image',
+      getMergedPresetPrompts('image', language, imageHistory),
+      promptSeeds
+    );
+  }
+
+  if (generationType === 'video') {
+    const promptSeeds = [
+      ...createLocalPromptSeeds(getVideoPromptHistoryContents()),
+      ...createDefaultPromptSeeds('video', language),
+      ...createMediaHistorySeeds('video', videoHistory),
+    ];
+
+    return createResolvedPromptItems(
+      'video',
+      getMergedPresetPrompts('video', language, videoHistory),
+      promptSeeds
+    );
+  }
+
+  const typedHistory = aiInputHistory.filter(
+    (item) => item.modelType === generationType && item.content.trim().length > 0
+  );
+  const promptSeeds = [
+    ...createTypedHistorySeeds(typedHistory),
+    ...createDefaultPromptSeeds(generationType, language),
+  ];
+
+  return createResolvedPromptItems(
+    generationType,
+    promptSeeds.map((item) => item.content),
+    promptSeeds
+  );
 };
 
 /**

@@ -129,7 +129,13 @@ export type AssetSourceFilter = 'ALL' | AssetSource;
  * Sort Option
  * 排序选项
  */
-export type SortOption = 'DATE_DESC' | 'DATE_ASC' | 'NAME_ASC' | 'NAME_DESC' | 'SIZE_ASC' | 'SIZE_DESC';
+export type SortOption =
+  | 'DATE_DESC'
+  | 'DATE_ASC'
+  | 'NAME_ASC'
+  | 'NAME_DESC'
+  | 'SIZE_ASC'
+  | 'SIZE_DESC';
 
 /**
  * View Mode
@@ -176,6 +182,7 @@ export interface MediaLibraryConfig {
   mode: SelectionMode;
   filterType?: AssetType; // 限制显示的类型（SELECT模式）
   onSelect?: (asset: Asset) => void | Promise<void>; // 选择回调（SELECT模式）
+  keepProjectDrawerOpen?: boolean; // 打开素材库时保留项目抽屉
 }
 
 /**
@@ -249,7 +256,7 @@ export interface AssetContextActions {
     file: File | Blob,
     type: AssetType,
     source: AssetSource,
-    name?: string,
+    name?: string
   ) => Promise<Asset>;
   removeAsset: (id: string) => Promise<void>;
   removeAssets: (ids: string[]) => Promise<void>;

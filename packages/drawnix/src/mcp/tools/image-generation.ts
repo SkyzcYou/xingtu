@@ -95,6 +95,18 @@ export interface ImageGenerationParams {
   globalIndex?: number;
   /** 额外参数（如 seedream_quality） */
   params?: Record<string, unknown>;
+  /** 自动插入的目标 Frame */
+  targetFrameId?: string;
+  /** 自动插入的目标 Frame 尺寸 */
+  targetFrameDimensions?: { width: number; height: number };
+  /** 是否作为 PPT 页整图回填 */
+  pptSlideImage?: boolean;
+  /** PPT 大纲中的单页提示词，不含公共提示词 */
+  pptSlidePrompt?: string;
+  /** 重新生成时需要替换的旧整页图片元素 ID */
+  pptReplaceElementId?: string;
+  /** 是否自动插入画布 */
+  autoInsertToCanvas?: boolean;
 }
 
 function shouldUseEditSchema(params: ImageGenerationParams): boolean {
@@ -234,6 +246,11 @@ function getImageQueueConfig(params: ImageGenerationParams) {
       outputCompression: params.outputCompression,
       model: params.model || getCurrentImageModel(),
       modelRef: params.modelRef || null,
+      targetFrameId: params.targetFrameId,
+      targetFrameDimensions: params.targetFrameDimensions,
+      pptSlideImage: params.pptSlideImage,
+      pptSlidePrompt: params.pptSlidePrompt,
+      pptReplaceElementId: params.pptReplaceElementId,
       ...(buildAdapterParams(params)
         ? { params: buildAdapterParams(params) }
         : {}),

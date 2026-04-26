@@ -35,6 +35,8 @@ import { SkillDSLParser } from './skill-dsl-parser';
 import { SkillLLMParser } from './skill-llm-parser';
 import type { SkillDSLVariables } from './skill-dsl.types';
 import { preprocessExternalSkillContent } from '../../services/external-skill-parser';
+import { applyMediaModelDefaultsToArgs } from '../../services/agent/media-model-routing';
+import type { SkillOutputType } from './skill-media-type';
 
 /**
  * 从 Markdown 卡片内容中解析 Suno 音乐生成字段。
@@ -155,6 +157,10 @@ export interface WorkflowDefinition {
     modelId: string;
     /** 模型来源引用 */
     modelRef?: ModelRef | null;
+    /** Agent/Skill 后续媒体生成默认模型 */
+    defaultModels?: ParsedGenerationParams['defaultModels'];
+    /** Agent/Skill 后续媒体生成默认模型来源 */
+    defaultModelRefs?: ParsedGenerationParams['defaultModelRefs'];
     /** 是否为用户显式选择的模型 */
     isModelExplicit: boolean;
     /** 生成数量 */
@@ -196,6 +202,32 @@ function generateWorkflowId(): string {
   return `wf-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 }
 
+function applyMediaDefaultsToWorkflowSteps(
+  steps: WorkflowStep[],
+  params: Pick<
+    ParsedGenerationParams,
+    'defaultModels' | 'defaultModelRefs' | 'modelId' | 'modelRef' | 'generationType'
+  >,
+  overrideSpecifiedModel = false
+): WorkflowStep[] {
+  return steps.map((step) => ({
+    ...step,
+    args: applyMediaModelDefaultsToArgs(step.mcp, { ...step.args }, {
+      defaultModels: params.defaultModels,
+      defaultModelRefs: params.defaultModelRefs,
+      contextModel: {
+        id: params.modelId,
+        type:
+          params.generationType === 'agent'
+            ? 'text'
+            : (params.generationType as 'text' | 'image' | 'video' | 'audio'),
+      },
+      contextModelRef: params.modelRef,
+      overrideSpecifiedModel,
+    }),
+  }));
+}
+
 /**
  * 场景1-3: 将直接生成场景转换为工作流定义
  *
@@ -219,6 +251,8 @@ export function convertDirectGenerationToWorkflow(
     duration,
     extraParams,
     selection,
+    defaultModels,
+    defaultModelRefs,
   } = params;
 
   const steps: WorkflowStep[] = [];
@@ -449,6 +483,8 @@ export function convertDirectGenerationToWorkflow(
       rawInput,
       modelId,
       modelRef,
+      defaultModels,
+      defaultModelRefs,
       isModelExplicit,
       count,
       size,
@@ -484,6 +520,8 @@ export function convertAgentFlowToWorkflow(
     duration,
     extraParams,
     selection,
+    defaultModels,
+    defaultModelRefs,
   } = params;
 
   // 使用唯一 ID（每次提交都是新的工作流）
@@ -507,6 +545,8 @@ export function convertAgentFlowToWorkflow(
       duration,
       ...extraParams,
     },
+    defaultModels,
+    defaultModelRefs,
     selection,
     finalPrompt: prompt,
   };
@@ -578,6 +618,8 @@ export function convertAgentFlowToWorkflow(
       count,
       size,
       duration,
+      defaultModels,
+      defaultModelRefs,
       referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
       selection,
     },
@@ -666,7 +708,7 @@ export async function convertSkillFlowToWorkflow(
         name: string;
         type: 'user' | 'external';
         content: string;
-        outputType?: 'image' | 'text' | 'video' | 'ppt';
+        outputType?: SkillOutputType;
       },
   referenceImages: string[] = [],
   onLLMParsing?: () => void
@@ -683,6 +725,8 @@ export async function convertSkillFlowToWorkflow(
     size,
     duration,
     selection,
+    defaultModels,
+    defaultModelRefs,
   } = params;
 
   const workflowId = generateWorkflowId();
@@ -722,6 +766,11 @@ export async function convertSkillFlowToWorkflow(
     userInputText
   );
   if (regexResult) {
+    const steps = applyMediaDefaultsToWorkflowSteps(
+      regexResult.steps,
+      params,
+      true
+    );
     return {
       id: workflowId,
       name: skillName,
@@ -729,13 +778,15 @@ export async function convertSkillFlowToWorkflow(
       scenarioType: 'skill_flow',
       skillId,
       generationType,
-      steps: regexResult.steps,
+      steps,
       metadata: {
         prompt,
         userInstruction,
         rawInput,
         modelId,
         modelRef,
+        defaultModels,
+        defaultModelRefs,
         isModelExplicit,
         count,
         size,
@@ -767,6 +818,8 @@ export async function convertSkillFlowToWorkflow(
       isExplicit: isModelExplicit,
     },
     params: { count, size, duration },
+    defaultModels,
+    defaultModelRefs,
     selection,
     finalPrompt: prompt,
   };
@@ -776,9 +829,8 @@ export async function convertSkillFlowToWorkflow(
   const isUserSkill = skill.type === 'user';
 
   // 确定 outputType：优先使用显式配置
-  const skillOutputType = (
-    skill as { outputType?: 'image' | 'text' | 'video' | 'ppt' }
-  ).outputType;
+  const skillOutputType = (skill as { outputType?: SkillOutputType })
+    .outputType;
   const externalOutputType: 'image' | 'text' =
     skillOutputType === 'image' ? 'image' : 'text';
 
@@ -894,6 +946,9 @@ export async function convertSkillFlowToWorkflow(
         userInstruction,
         rawInput,
         modelId,
+        modelRef,
+        defaultModels,
+        defaultModelRefs,
         isModelExplicit,
         count,
         size,
@@ -963,6 +1018,8 @@ export async function convertSkillFlowToWorkflow(
       rawInput,
       modelId,
       modelRef,
+      defaultModels,
+      defaultModelRefs,
       isModelExplicit,
       count,
       size,
@@ -1007,7 +1064,7 @@ export interface AIResponseParseResult {
  */
 export function parseAIResponse(
   response: string,
-  existingStepCount: number = 0
+  existingStepCount = 0
 ): AIResponseParseResult {
   try {
     let parsed = parseWorkflowJson(response);
@@ -1059,7 +1116,7 @@ export function parseAIResponse(
  */
 export function parseAIResponseToSteps(
   response: string,
-  existingStepCount: number = 0
+  existingStepCount = 0
 ): WorkflowStep[] {
   return parseAIResponse(response, existingStepCount).steps;
 }

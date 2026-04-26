@@ -164,8 +164,8 @@ export function buildDefaultCommands(
     },
     {
       id: 'tool-frame',
-      label: isZh ? 'Frame 容器' : 'Frame Container',
-      keywords: ['frame', 'container', 'group', 'section', '容器', '分区', '框架'],
+      label: isZh ? 'PPT 页面' : 'PPT Page',
+      keywords: ['ppt', 'page', 'slide', 'frame', '页面', '幻灯片', '容器', '框架'],
       category: 'tool',
       shortcut: 'F',
       perform: (board) => {
@@ -339,8 +339,8 @@ export function buildDefaultCommands(
     },
     {
       id: 'view-zoom-fit-frame',
-      label: isZh ? '自适应 Frame' : 'Fit Frame',
-      keywords: ['fit', 'frame', '自适应', '幻灯片', 'ppt', 'slide'],
+      label: isZh ? '自适应 PPT 页面' : 'Fit PPT Page',
+      keywords: ['fit', 'frame', 'page', '自适应', '幻灯片', 'ppt', 'slide'],
       category: 'view',
       perform: (board) => fitFrame(board),
     },

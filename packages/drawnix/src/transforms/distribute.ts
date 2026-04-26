@@ -8,9 +8,11 @@ import {
   PlaitElement,
   getSelectedElements,
   getRectangleByElements,
-  Transforms,
-  Path,
 } from '@plait/core';
+import {
+  getFrameAwareSelection,
+  moveElementWithFrameRelations,
+} from './frame-aware';
 
 export type DistributeType = 'horizontal' | 'vertical' | 'auto';
 
@@ -19,24 +21,6 @@ export type DistributeType = 'horizontal' | 'vertical' | 'auto';
  */
 const getElementRect = (board: PlaitBoard, element: PlaitElement) => {
   return getRectangleByElements(board, [element], false);
-};
-
-/**
- * 计算元素新位置后的 points
- */
-const calculateNewPoints = (
-  element: PlaitElement,
-  deltaX: number,
-  deltaY: number
-): [number, number][] | null => {
-  if (!element.points || !Array.isArray(element.points)) {
-    return null;
-  }
-
-  return element.points.map((point: [number, number]) => [
-    point[0] + deltaX,
-    point[1] + deltaY,
-  ]);
 };
 
 /**
@@ -51,8 +35,16 @@ const distributeHorizontal = (board: PlaitBoard) => {
     return;
   }
 
+  const { primaryElements, relatedByFrameId } = getFrameAwareSelection(
+    board,
+    selectedElements
+  );
+  if (primaryElements.length < 3) {
+    return;
+  }
+
   // 获取每个元素的矩形信息，并按 x 坐标排序
-  const elementsWithRect = selectedElements.map((element) => ({
+  const elementsWithRect = primaryElements.map((element) => ({
     element,
     rect: getElementRect(board, element),
   }));
@@ -75,22 +67,21 @@ const distributeHorizontal = (board: PlaitBoard) => {
 
   // 从第二个元素开始调整位置（第一个和最后一个保持不动）
   let currentX = firstRect.x + firstRect.width + gap;
+  const movedElementIds = new Set<string>();
 
   for (let i = 1; i < elementsWithRect.length - 1; i++) {
     const { element, rect } = elementsWithRect[i];
     const deltaX = currentX - rect.x;
 
     if (Math.abs(deltaX) > 0.01) {
-      const newPoints = calculateNewPoints(element, deltaX, 0);
-      if (newPoints) {
-        const elementIndex = board.children.findIndex(
-          (child) => child.id === element.id
-        );
-        if (elementIndex >= 0) {
-          const path: Path = [elementIndex];
-          Transforms.setNode(board, { points: newPoints }, path);
-        }
-      }
+      moveElementWithFrameRelations(
+        board,
+        element,
+        deltaX,
+        0,
+        relatedByFrameId,
+        movedElementIds
+      );
     }
 
     currentX += rect.width + gap;
@@ -109,8 +100,16 @@ const distributeVertical = (board: PlaitBoard) => {
     return;
   }
 
+  const { primaryElements, relatedByFrameId } = getFrameAwareSelection(
+    board,
+    selectedElements
+  );
+  if (primaryElements.length < 3) {
+    return;
+  }
+
   // 获取每个元素的矩形信息，并按 y 坐标排序
-  const elementsWithRect = selectedElements.map((element) => ({
+  const elementsWithRect = primaryElements.map((element) => ({
     element,
     rect: getElementRect(board, element),
   }));
@@ -133,22 +132,21 @@ const distributeVertical = (board: PlaitBoard) => {
 
   // 从第二个元素开始调整位置（第一个和最后一个保持不动）
   let currentY = firstRect.y + firstRect.height + gap;
+  const movedElementIds = new Set<string>();
 
   for (let i = 1; i < elementsWithRect.length - 1; i++) {
     const { element, rect } = elementsWithRect[i];
     const deltaY = currentY - rect.y;
 
     if (Math.abs(deltaY) > 0.01) {
-      const newPoints = calculateNewPoints(element, 0, deltaY);
-      if (newPoints) {
-        const elementIndex = board.children.findIndex(
-          (child) => child.id === element.id
-        );
-        if (elementIndex >= 0) {
-          const path: Path = [elementIndex];
-          Transforms.setNode(board, { points: newPoints }, path);
-        }
-      }
+      moveElementWithFrameRelations(
+        board,
+        element,
+        0,
+        deltaY,
+        relatedByFrameId,
+        movedElementIds
+      );
     }
 
     currentY += rect.height + gap;
@@ -167,11 +165,19 @@ const autoArrange = (board: PlaitBoard) => {
     return;
   }
 
+  const { primaryElements, relatedByFrameId } = getFrameAwareSelection(
+    board,
+    selectedElements
+  );
+  if (primaryElements.length < 2) {
+    return;
+  }
+
   // 获取整体边界
-  const boundingRect = getRectangleByElements(board, selectedElements, false);
+  const boundingRect = getRectangleByElements(board, primaryElements, false);
 
   // 获取每个元素的矩形信息
-  const elementsWithRect = selectedElements.map((element) => ({
+  const elementsWithRect = primaryElements.map((element) => ({
     element,
     rect: getElementRect(board, element),
   }));
@@ -219,6 +225,7 @@ const autoArrange = (board: PlaitBoard) => {
   // 重新排列元素
   const startX = boundingRect.x;
   const startY = boundingRect.y;
+  const movedElementIds = new Set<string>();
 
   elementsWithRect.forEach((item, index) => {
     const col = index % cols;
@@ -231,16 +238,14 @@ const autoArrange = (board: PlaitBoard) => {
     const deltaY = targetY - item.rect.y;
 
     if (Math.abs(deltaX) > 0.01 || Math.abs(deltaY) > 0.01) {
-      const newPoints = calculateNewPoints(item.element, deltaX, deltaY);
-      if (newPoints) {
-        const elementIndex = board.children.findIndex(
-          (child) => child.id === item.element.id
-        );
-        if (elementIndex >= 0) {
-          const path: Path = [elementIndex];
-          Transforms.setNode(board, { points: newPoints }, path);
-        }
-      }
+      moveElementWithFrameRelations(
+        board,
+        item.element,
+        deltaX,
+        deltaY,
+        relatedByFrameId,
+        movedElementIds
+      );
     }
   });
 };

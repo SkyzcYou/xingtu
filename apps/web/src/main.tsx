@@ -25,9 +25,27 @@ import {
 import { sanitizeObject, sanitizeUrl } from '@aitu/utils';
 import { initSWConsoleCapture } from './utils/sw-console-capture';
 
+const isLocalDev =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1');
+const swQueryParam =
+  typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('sw')
+    : null;
+const isDevServiceWorkerEnabled =
+  import.meta.env.VITE_ENABLE_SW_DEV === '1' || swQueryParam === '1';
+const isServiceWorkerExplicitlyDisabled = swQueryParam === '0';
+const hasServiceWorkerSupport =
+  typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
+const shouldUseServiceWorker =
+  hasServiceWorkerSupport &&
+  !isServiceWorkerExplicitlyDisabled &&
+  (!isLocalDev || isDevServiceWorkerEnabled);
+
 // ===== 控制台日志捕获（尽早初始化，确保默认 console 被改写） =====
 // 必须在其他业务代码之前执行，否则后续工具（如 rrweb）可能先改写 console 导致捕获失效
-if ('serviceWorker' in navigator) {
+if (shouldUseServiceWorker) {
   initSWConsoleCapture();
 }
 
@@ -46,10 +64,6 @@ initCrashLogger();
 // 判断是否应该启用上报：
 // - 本地开发环境（localhost/127.0.0.1）默认不上报，除非 URL 带 report=1 参数
 // - 生产环境始终上报
-const isLocalDev =
-  typeof window !== 'undefined' &&
-  (window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1');
 const forceReport =
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('report') === '1';
@@ -86,10 +100,7 @@ interface BootProgressOptions {
 interface BootController {
   markReady: () => void;
   markError: (message?: string) => void;
-  setProgress?: (
-    progress?: number,
-    options?: BootProgressOptions
-  ) => void;
+  setProgress?: (progress?: number, options?: BootProgressOptions) => void;
 }
 
 declare global {
@@ -219,6 +230,15 @@ function scheduleCDNPreferenceSync(
         );
       });
   }
+}
+
+function cleanupDevelopmentServiceWorker(): void {
+  navigator.serviceWorker
+    .getRegistration()
+    .then((registration) => registration?.unregister())
+    .catch((error) => {
+      console.warn('[Main] Development service worker cleanup failed:', error);
+    });
 }
 
 function scheduleAfterFirstFrameIdle(
@@ -395,11 +415,13 @@ if (typeof window !== 'undefined') {
   });
 }
 
+if (hasServiceWorkerSupport && isLocalDev && !isDevServiceWorkerEnabled) {
+  cleanupDevelopmentServiceWorker();
+}
+
 // 注册Service Worker来处理CORS问题和PWA功能
-if ('serviceWorker' in navigator) {
-  const isDevelopment =
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1';
+if (shouldUseServiceWorker) {
+  const isDevelopment = isLocalDev;
 
   // 等待中的新 Worker
   let pendingWorker: ServiceWorker | null = null;
@@ -485,14 +507,20 @@ if ('serviceWorker' in navigator) {
           candidates.push(liveRegistration.waiting);
         }
       } catch (error) {
-        console.warn('[Main] Failed to get live service worker registration:', error);
+        console.warn(
+          '[Main] Failed to get live service worker registration:',
+          error
+        );
       }
 
       try {
         const readyRegistration = await navigator.serviceWorker.ready;
         candidates.push(readyRegistration.waiting);
       } catch (error) {
-        console.warn('[Main] Failed to inspect ready service worker registration:', error);
+        console.warn(
+          '[Main] Failed to inspect ready service worker registration:',
+          error
+        );
       }
 
       for (const worker of candidates) {
@@ -514,12 +542,10 @@ if ('serviceWorker' in navigator) {
 
   const swRegistrationPromise =
     window.__OPENTU_SW_REGISTRATION_PROMISE__ ||
-    navigator.serviceWorker
-      .register('/sw.js')
-      .catch((error) => {
-        console.warn('[Main] Service worker registration failed:', error);
-        return null;
-      });
+    navigator.serviceWorker.register('./sw.js').catch((error) => {
+      console.warn('[Main] Service worker registration failed:', error);
+      return null;
+    });
 
   window.__OPENTU_SW_REGISTRATION_PROMISE__ = swRegistrationPromise;
 
@@ -580,7 +606,11 @@ if ('serviceWorker' in navigator) {
         }
       });
 
-      if (registration.active && !registration.installing && !registration.waiting) {
+      if (
+        registration.active &&
+        !registration.installing &&
+        !registration.waiting
+      ) {
         updateBootStatus({
           tip: '启动缓存服务已就绪，正在恢复工作台状态...',
           source: 'phase',
@@ -741,7 +771,10 @@ if ('serviceWorker' in navigator) {
         );
         requestSWVersionState();
         swRegistration?.update().catch((error) => {
-          console.warn('[Main] Update check after missing waiting worker failed:', error);
+          console.warn(
+            '[Main] Update check after missing waiting worker failed:',
+            error
+          );
         });
         return;
       }

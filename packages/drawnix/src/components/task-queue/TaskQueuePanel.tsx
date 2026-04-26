@@ -62,6 +62,7 @@ import {
 import { resolveAudioResultUrls } from '../../services/audio-task-result-utils';
 import { ConfirmDialog } from '../dialog/ConfirmDialog';
 import { analytics } from '../../utils/posthog-analytics';
+import { DRAWER_PIN_KEYS } from '../../utils/drawer-pin';
 import './task-queue.scss';
 import { HoverTip } from '../shared';
 
@@ -1239,6 +1240,7 @@ export const TaskQueuePanel: React.FC<TaskQueuePanelProps> = ({
         position="toolbar-right"
         width="responsive"
         storageKey={TASK_DRAWER_WIDTH_KEY}
+        pinStorageKey={DRAWER_PIN_KEYS.task}
         showBackdrop={false}
         closeOnEsc={false}
         showCloseButton={true}

@@ -14,7 +14,6 @@ import {
   type ImageFile,
   getMergedPresetPrompts,
   savePromptToHistory as savePromptToHistoryUtil,
-  VideoModelOptions,
   ReferenceImageUpload,
   type ReferenceImage,
   StoryboardEditor,
@@ -52,9 +51,7 @@ import {
   normalizeVideoModel,
 } from '../../constants/video-model-config';
 import {
-  getDefaultVideoExtraParams,
   getEffectiveVideoCompatibleParams,
-  getEffectiveVideoDefaultParams,
   getEffectiveVideoModelConfigForSelection,
 } from '../../services/video-binding-utils';
 import {
@@ -112,23 +109,6 @@ function areUploadedImagesEqual(
   );
 }
 
-function isVideoOptionValueValid(
-  value: string,
-  options: Array<{ value: string }>
-): boolean {
-  return options.some((option) => option.value === value);
-}
-
-function normalizeVideoAspectRatioValue(value?: string | null): string | null {
-  const normalized = value?.trim().replace(/[xX]/g, ':');
-  return normalized && /^\d+:\d+$/.test(normalized) ? normalized : null;
-}
-
-function extractSeedanceResolution(size?: string | null): string | null {
-  const resolution = size?.split('@')[0]?.trim();
-  return resolution && /^\d+p$/.test(resolution) ? resolution : null;
-}
-
 function areModelRefsEqual(
   left?: ModelRef | null,
   right?: ModelRef | null
@@ -159,6 +139,57 @@ function resolveVideoModelRef(
   const alignedRef = getAlignedModelRef(modelId, modelRef);
   const matchedModel = findMatchingSelectableModel(models, modelId, alignedRef);
   return getModelRefFromConfig(matchedModel) || alignedRef;
+}
+
+function getDefaultParamsFromConfigs(
+  params: Array<{ id: string; defaultValue?: string }>
+): Record<string, string> {
+  return params.reduce<Record<string, string>>((acc, param) => {
+    if (param.defaultValue) {
+      acc[param.id] = param.defaultValue;
+    }
+    return acc;
+  }, {});
+}
+
+function getDefaultVideoParamsForSelection(
+  modelId: VideoModel,
+  modelRef?: ModelRef | string | null
+): Record<string, string> {
+  return getDefaultParamsFromConfigs(
+    getEffectiveVideoCompatibleParams(modelId, modelRef || modelId, {})
+  );
+}
+
+function mergeVideoToolParams(
+  extraParams: Record<string, string>,
+  duration?: string | number | null,
+  size?: string | null
+): Record<string, string> {
+  return {
+    ...extraParams,
+    ...(duration !== undefined && duration !== null
+      ? { duration: String(duration) }
+      : {}),
+    ...(size ? { size } : {}),
+  };
+}
+
+function splitVideoToolParams(
+  params: Record<string, string>,
+  fallbackDuration: string,
+  fallbackSize: string
+): {
+  extraParams: Record<string, string>;
+  duration: string;
+  size: string;
+} {
+  const { duration: _duration, size: _size, ...extraParams } = params;
+  return {
+    extraParams,
+    duration: fallbackDuration,
+    size: fallbackSize,
+  };
 }
 
 interface AIVideoGenerationProps {
@@ -278,11 +309,16 @@ const AIVideoGeneration = ({
     return pinnedModel ? [pinnedModel, ...videoModels] : videoModels;
   }, [currentModel, currentModelRef, videoModels]);
 
-  // Use useMemo to ensure modelConfig and defaultParams update when currentModel changes
-  // 额外参数（如 aspect_ratio）
+  // 所有视频参数（duration / size / provider params）统一放在同一个 selectedParams 中
   const [videoSelectedParams, setVideoSelectedParams] = useState<
     Record<string, string>
-  >(() => initialScopedVideoPreferences.extraParams);
+  >(() =>
+    mergeVideoToolParams(
+      initialScopedVideoPreferences.extraParams,
+      initialDuration?.toString() || initialScopedVideoPreferences.duration,
+      initialSize || initialScopedVideoPreferences.size
+    )
+  );
   const compatibleVideoParams = React.useMemo(
     () =>
       getEffectiveVideoCompatibleParams(
@@ -301,59 +337,13 @@ const AIVideoGeneration = ({
       ),
     [currentModel, currentModelRef, videoSelectedParams]
   );
-  const videoOptionsConfig = React.useMemo(() => {
-    if (modelConfig.provider !== 'seedance') {
-      return modelConfig;
-    }
-
-    const selectedAspectRatio =
-      normalizeVideoAspectRatioValue(videoSelectedParams.aspect_ratio) ||
-      normalizeVideoAspectRatioValue(videoSelectedParams.aspectRatio) ||
-      '16:9';
-    const seenResolutions = new Set<string>();
-    const resolutionOptions = modelConfig.sizeOptions
-      .map((option) => extractSeedanceResolution(option.value))
-      .filter((value): value is string => {
-        if (!value || seenResolutions.has(value)) {
-          return false;
-        }
-        seenResolutions.add(value);
-        return true;
-      });
-    const sizeOptions = resolutionOptions.map((resolution) => ({
-      label: resolution,
-      value: `${resolution}@${selectedAspectRatio}`,
-      aspectRatio: selectedAspectRatio,
-    }));
-    const defaultResolution =
-      extractSeedanceResolution(modelConfig.defaultSize) ||
-      resolutionOptions[0] ||
-      '720p';
-
-    return {
-      ...modelConfig,
-      sizeOptions,
-      defaultSize: `${defaultResolution}@${selectedAspectRatio}`,
-    };
-  }, [modelConfig, videoSelectedParams.aspectRatio, videoSelectedParams.aspect_ratio]);
-  const defaultParams = React.useMemo(
-    () =>
-      getEffectiveVideoDefaultParams(
-        currentModel,
-        currentModelRef || currentModel,
-        videoSelectedParams
-      ),
-    [currentModel, currentModelRef, videoSelectedParams]
-  );
   const imageUploadLabelsSignature = React.useMemo(
     () => (modelConfig.imageUpload.labels || []).join('|'),
     [modelConfig.imageUpload.labels]
   );
   const stableImageUploadLabels = React.useMemo(
     () =>
-      imageUploadLabelsSignature
-        ? imageUploadLabelsSignature.split('|')
-        : [],
+      imageUploadLabelsSignature ? imageUploadLabelsSignature.split('|') : [],
     [imageUploadLabelsSignature]
   );
   const imageUploadConfig = React.useMemo(() => {
@@ -370,43 +360,38 @@ const AIVideoGeneration = ({
     imageUploadLabelsSignature,
   ]);
 
-  // Duration and size state
-  const [duration, setDuration] = useState(
-    initialDuration?.toString() || initialScopedVideoPreferences.duration
-  );
-  const [size, setSize] = useState(initialSize || initialScopedVideoPreferences.size);
-  const effectiveDuration = React.useMemo(
-    () =>
-      isVideoOptionValueValid(duration, videoOptionsConfig.durationOptions)
-        ? duration
-        : videoOptionsConfig.defaultDuration,
-    [duration, videoOptionsConfig.defaultDuration, videoOptionsConfig.durationOptions]
-  );
-  const effectiveSize = React.useMemo(
-    () => {
-      if (isVideoOptionValueValid(size, videoOptionsConfig.sizeOptions)) {
-        return size;
-      }
-
-      if (videoOptionsConfig.provider === 'seedance') {
-        const resolution = extractSeedanceResolution(size);
-        const matchedOption = videoOptionsConfig.sizeOptions.find(
-          (option) => extractSeedanceResolution(option.value) === resolution
-        );
-        if (matchedOption) {
-          return matchedOption.value;
-        }
-      }
-
-      return videoOptionsConfig.defaultSize;
-    },
-    [size, videoOptionsConfig]
-  );
-  const hasCompatibleParams = React.useMemo(() => {
-    // 排除 size 和 duration（已有专用 UI），只看是否有额外参数
-    return compatibleVideoParams.some(
-      (p) => p.id !== 'size' && p.id !== 'duration'
+  const effectiveDuration = React.useMemo(() => {
+    const durationParam = compatibleVideoParams.find(
+      (param) => param.id === 'duration'
     );
+    const selectedDuration = videoSelectedParams.duration;
+    return selectedDuration &&
+      durationParam?.options?.some(
+        (option) => option.value === selectedDuration
+      )
+      ? selectedDuration
+      : durationParam?.defaultValue || modelConfig.defaultDuration;
+  }, [
+    compatibleVideoParams,
+    modelConfig.defaultDuration,
+    videoSelectedParams.duration,
+  ]);
+  const effectiveSize = React.useMemo(() => {
+    const sizeParam = compatibleVideoParams.find(
+      (param) => param.id === 'size'
+    );
+    const selectedSize = videoSelectedParams.size;
+    return selectedSize &&
+      sizeParam?.options?.some((option) => option.value === selectedSize)
+      ? selectedSize
+      : sizeParam?.defaultValue || modelConfig.defaultSize;
+  }, [
+    compatibleVideoParams,
+    modelConfig.defaultSize,
+    videoSelectedParams.size,
+  ]);
+  const hasCompatibleParams = React.useMemo(() => {
+    return compatibleVideoParams.length > 0;
   }, [compatibleVideoParams]);
   const handleVideoParamChange = useCallback(
     (paramId: string, value: string) => {
@@ -615,7 +600,10 @@ const AIVideoGeneration = ({
     }
 
     // 如果 initialModel 已被应用且外部传来的是不同模型（全局偏好回写），忽略这次覆盖
-    if (initialModelAppliedRef.current && initialModelAppliedRef.current !== selectedModel) {
+    if (
+      initialModelAppliedRef.current &&
+      initialModelAppliedRef.current !== selectedModel
+    ) {
       return;
     }
 
@@ -632,12 +620,7 @@ const AIVideoGeneration = ({
       }
       return nextModelRef;
     });
-  }, [
-    selectedModel,
-    selectedModelRef,
-    visibleVideoModels,
-    initialModel,
-  ]);
+  }, [selectedModel, selectedModelRef, visibleVideoModels, initialModel]);
 
   // Track if we're in manual edit mode (from handleEditTask) to prevent props from overwriting
   const [isManualEdit, setIsManualEdit] = useState(false);
@@ -655,33 +638,16 @@ const AIVideoGeneration = ({
       currentModel,
       getSelectionKey(currentModel, currentModelRef)
     );
-    const scopedModelConfig = getEffectiveVideoModelConfigForSelection(
-      currentModel,
-      currentModelRef || currentModel,
-      scopedPreferences.extraParams
+    const nextParams = mergeVideoToolParams(
+      scopedPreferences.extraParams,
+      initialDuration !== undefined
+        ? initialDuration.toString()
+        : scopedPreferences.duration,
+      initialSize || scopedPreferences.size
     );
-    const nextDuration = scopedModelConfig.durationOptions.some(
-      (option) => option.value === scopedPreferences.duration
-    )
-      ? scopedPreferences.duration
-      : scopedModelConfig.defaultDuration;
-    const nextSize = scopedModelConfig.sizeOptions.some(
-      (option) => option.value === scopedPreferences.size
-    )
-      ? scopedPreferences.size
-      : scopedModelConfig.defaultSize;
     setVideoSelectedParams((prev) =>
-      areStringMapsEqual(prev, scopedPreferences.extraParams)
-        ? prev
-        : scopedPreferences.extraParams
+      areStringMapsEqual(prev, nextParams) ? prev : nextParams
     );
-    // initialDuration/initialSize 优先级高于模型偏好，避免被覆盖
-    const effectiveDurationStr = initialDuration !== undefined
-      ? initialDuration.toString()
-      : nextDuration;
-    const effectiveSizeStr = initialSize || nextSize;
-    setDuration((prev) => (prev === effectiveDurationStr ? prev : effectiveDurationStr));
-    setSize((prev) => (prev === effectiveSizeStr ? prev : effectiveSizeStr));
 
     // Disable storyboard mode if new model doesn't support it
     if (!supportsStoryboardMode(currentModel)) {
@@ -701,7 +667,9 @@ const AIVideoGeneration = ({
         : [];
 
     setUploadedImages((prev) =>
-      areUploadedImagesEqual(prev, nextUploadedImages) ? prev : nextUploadedImages
+      areUploadedImagesEqual(prev, nextUploadedImages)
+        ? prev
+        : nextUploadedImages
     );
   }, [
     allSelectedImages,
@@ -711,12 +679,17 @@ const AIVideoGeneration = ({
   ]);
 
   useEffect(() => {
+    const splitParams = splitVideoToolParams(
+      videoSelectedParams,
+      effectiveDuration,
+      effectiveSize
+    );
     saveAIVideoToolPreferences({
       currentModel,
       currentSelectionKey: getSelectionKey(currentModel, currentModelRef),
-      extraParams: videoSelectedParams,
-      duration: effectiveDuration,
-      size: effectiveSize,
+      extraParams: splitParams.extraParams,
+      duration: splitParams.duration,
+      size: splitParams.size,
     });
   }, [
     currentModel,
@@ -791,12 +764,10 @@ const AIVideoGeneration = ({
     );
     setUploadedImages(filteredImages);
 
-    // 更新 duration 和 size（如果有初始值）
-    if (initialDuration !== undefined) {
-      setDuration(initialDuration.toString());
-    }
-    if (initialSize) {
-      setSize(initialSize);
+    if (initialDuration !== undefined || initialSize) {
+      setVideoSelectedParams((prev) =>
+        mergeVideoToolParams(prev, initialDuration, initialSize)
+      );
     }
 
     setError(null);
@@ -827,17 +798,16 @@ const AIVideoGeneration = ({
     setUploadedImages([]);
     setError(null);
     setMobilePanel('config');
-    // Reset duration and size to defaults
-    setDuration(defaultParams.duration);
-    setSize(defaultParams.size);
     // Clear manual edit mode
     setIsManualEdit(false);
     // Clear storyboard mode
     setStoryboardEnabled(false);
     setStoryboardScenes([]);
-    // Clear extra params
     setVideoSelectedParams(
-      getDefaultVideoExtraParams(currentModel, currentModelRef || currentModel)
+      getDefaultVideoParamsForSelection(
+        currentModel,
+        currentModelRef || currentModel
+      )
     );
     window.dispatchEvent(new CustomEvent('ai-video-clear'));
   };
@@ -975,16 +945,6 @@ const AIVideoGeneration = ({
       }
     }
 
-    // 更新视频参数
-    if (task.params.seconds !== undefined) {
-      const durationValue =
-        typeof task.params.seconds === 'string'
-          ? task.params.seconds
-          : task.params.seconds.toString();
-      // console.log('Setting duration to:', durationValue);
-      setDuration(durationValue);
-    }
-
     const restoredParams =
       task.params.params && typeof task.params.params === 'object'
         ? Object.entries(task.params.params as Record<string, unknown>).reduce<
@@ -996,12 +956,13 @@ const AIVideoGeneration = ({
             return acc;
           }, {})
         : {};
-    setVideoSelectedParams(restoredParams);
-
-    if (task.params.size) {
-      // console.log('Setting size to:', task.params.size);
-      setSize(task.params.size);
-    }
+    setVideoSelectedParams(
+      mergeVideoToolParams(
+        restoredParams,
+        task.params.duration ?? task.params.seconds,
+        task.params.size
+      )
+    );
 
     // 更新上传的图片 - 保存原始图片并按模型过滤
     if (task.params.uploadedImages && task.params.uploadedImages.length > 0) {
@@ -1039,170 +1000,175 @@ const AIVideoGeneration = ({
     if (generatingLockRef.current) return;
     generatingLockRef.current = true;
     try {
-    // 验证输入
-    if (storyboardEnabled) {
-      // 故事场景模式验证
-      const validation = validateSceneDurations(
-        storyboardScenes,
-        parseFloat(effectiveDuration),
-        storyboardConfig.minSceneDuration
-      );
-      if (!validation.valid) {
-        setError(validation.error || '场景配置无效');
-        return;
-      }
-    } else {
-      // 普通模式验证
-      if (!prompt || !prompt.trim()) {
-        setError(
-          language === 'zh'
-            ? '请输入视频描述'
-            : 'Please enter video description'
+      // 验证输入
+      if (storyboardEnabled) {
+        // 故事场景模式验证
+        const validation = validateSceneDurations(
+          storyboardScenes,
+          parseFloat(effectiveDuration),
+          storyboardConfig.minSceneDuration
         );
-        return;
-      }
-    }
-
-    try {
-      // Convert uploaded images to serializable format
-      const convertedImages: UploadedVideoImage[] = [];
-      for (const img of uploadedImages) {
-        if (img.file) {
-          // Convert File to base64 data URL
-          const base64Url = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(img.file!);
-          });
-          convertedImages.push({
-            ...img,
-            url: base64Url,
-            file: undefined, // Remove File object for serialization
-          });
-        } else {
-          convertedImages.push({
-            ...img,
-            file: undefined,
-          });
+        if (!validation.valid) {
+          setError(validation.error || '场景配置无效');
+          return;
         }
-      }
-
-      // 构建最终提示词
-      const finalPrompt = storyboardEnabled
-        ? formatStoryboardPrompt(storyboardScenes)
-        : (prompt || '').trim();
-
-      // 批量生成逻辑
-      const batchTaskIds: string[] = [];
-      // 始终生成 batchId，即使 count=1，这样可以跳过 SW 的重复检测
-      const batchId = externalBatchId || `video_batch_${Date.now()}`;
-
-      for (let i = 0; i < count; i++) {
-        // 额外参数（如 aspect_ratio）透传给 adapter
-        const extraParams =
-          Object.keys(videoSelectedParams).length > 0
-            ? videoSelectedParams
-            : undefined;
-
-        // 创建任务参数（包含新的 duration, size, uploadedImages）
-        const taskParams = {
-          prompt: finalPrompt,
-          model: currentModel,
-          modelRef: currentModelRef || null,
-          seconds: effectiveDuration,
-          size: effectiveSize,
-          // 保存上传的图片（已转换为可序列化的格式）
-          uploadedImages: convertedImages,
-          // 故事场景配置（用于编辑恢复）
-          ...(storyboardEnabled && {
-            storyboard: {
-              enabled: true,
-              scenes: storyboardScenes,
-              totalDuration: parseFloat(effectiveDuration),
-            },
-          }),
-          // 批量生成信息（始终包含 batchId 以跳过重复检测）
-          batchId,
-          batchIndex: i + 1,
-          batchTotal: count,
-          autoInsertToCanvas:
-            initialAutoInsertToCanvas ??
-            getAutoInsertValue(LS_KEYS.AI_VIDEO_AUTO_INSERT),
-          ...(extraParams ? { params: extraParams } : {}),
-        };
-
-        // 创建任务并添加到队列
-        const task = createTask(taskParams, TaskType.VIDEO);
-
-        if (task) {
-          batchTaskIds.push(task.id);
-        }
-      }
-
-      if (batchTaskIds.length > 0) {
-        // 任务创建成功
-        MessagePlugin.success(
-          language === 'zh'
-            ? count > 1
-              ? `${batchTaskIds.length} 个视频任务已添加到队列，将在后台生成`
-              : '视频任务已添加到队列，将在后台生成'
-            : count > 1
-            ? `${batchTaskIds.length} video tasks added to queue, will be generated in background`
-            : 'Video task added to queue, will be generated in background'
-        );
-
-        // 保存提示词到历史记录
-        savePromptToHistory(finalPrompt);
-
-        // 清空表单（保留模型选择和尺寸设置）
-        setPrompt('');
-        setAllSelectedImages([]); // 清空原始图片
-        setUploadedImages([]);
-        setStoryboardEnabled(false);
-        setStoryboardScenes([]);
-        setError(null);
-        setMobilePanel('tasks');
-        // Clear manual edit mode after generating
-        setIsManualEdit(false);
       } else {
-        // 任务创建失败
-        setError(
+        // 普通模式验证
+        if (!prompt || !prompt.trim()) {
+          setError(
+            language === 'zh'
+              ? '请输入视频描述'
+              : 'Please enter video description'
+          );
+          return;
+        }
+      }
+
+      try {
+        // Convert uploaded images to serializable format
+        const convertedImages: UploadedVideoImage[] = [];
+        for (const img of uploadedImages) {
+          if (img.file) {
+            // Convert File to base64 data URL
+            const base64Url = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(img.file!);
+            });
+            convertedImages.push({
+              ...img,
+              url: base64Url,
+              file: undefined, // Remove File object for serialization
+            });
+          } else {
+            convertedImages.push({
+              ...img,
+              file: undefined,
+            });
+          }
+        }
+
+        // 构建最终提示词
+        const finalPrompt = storyboardEnabled
+          ? formatStoryboardPrompt(storyboardScenes)
+          : (prompt || '').trim();
+
+        // 批量生成逻辑
+        const batchTaskIds: string[] = [];
+        // 始终生成 batchId，即使 count=1，这样可以跳过 SW 的重复检测
+        const batchId = externalBatchId || `video_batch_${Date.now()}`;
+
+        for (let i = 0; i < count; i++) {
+          const splitParams = splitVideoToolParams(
+            videoSelectedParams,
+            effectiveDuration,
+            effectiveSize
+          );
+          // 额外参数（如 provider mode/action）透传给 adapter，duration/size 单独收口
+          const extraParams =
+            Object.keys(splitParams.extraParams).length > 0
+              ? splitParams.extraParams
+              : undefined;
+
+          // 创建任务参数（包含新的 duration, size, uploadedImages）
+          const taskParams = {
+            prompt: finalPrompt,
+            model: currentModel,
+            modelRef: currentModelRef || null,
+            seconds: splitParams.duration,
+            size: splitParams.size,
+            // 保存上传的图片（已转换为可序列化的格式）
+            uploadedImages: convertedImages,
+            // 故事场景配置（用于编辑恢复）
+            ...(storyboardEnabled && {
+              storyboard: {
+                enabled: true,
+                scenes: storyboardScenes,
+                totalDuration: parseFloat(effectiveDuration),
+              },
+            }),
+            // 批量生成信息（始终包含 batchId 以跳过重复检测）
+            batchId,
+            batchIndex: i + 1,
+            batchTotal: count,
+            autoInsertToCanvas:
+              initialAutoInsertToCanvas ??
+              getAutoInsertValue(LS_KEYS.AI_VIDEO_AUTO_INSERT),
+            ...(extraParams ? { params: extraParams } : {}),
+          };
+
+          // 创建任务并添加到队列
+          const task = createTask(taskParams, TaskType.VIDEO);
+
+          if (task) {
+            batchTaskIds.push(task.id);
+          }
+        }
+
+        if (batchTaskIds.length > 0) {
+          // 任务创建成功
+          MessagePlugin.success(
+            language === 'zh'
+              ? count > 1
+                ? `${batchTaskIds.length} 个视频任务已添加到队列，将在后台生成`
+                : '视频任务已添加到队列，将在后台生成'
+              : count > 1
+              ? `${batchTaskIds.length} video tasks added to queue, will be generated in background`
+              : 'Video task added to queue, will be generated in background'
+          );
+
+          // 保存提示词到历史记录
+          savePromptToHistory(finalPrompt);
+
+          // 清空表单（保留模型选择和尺寸设置）
+          setPrompt('');
+          setAllSelectedImages([]); // 清空原始图片
+          setUploadedImages([]);
+          setStoryboardEnabled(false);
+          setStoryboardScenes([]);
+          setError(null);
+          setMobilePanel('tasks');
+          // Clear manual edit mode after generating
+          setIsManualEdit(false);
+        } else {
+          // 任务创建失败
+          setError(
+            language === 'zh'
+              ? '任务创建失败，请检查参数或稍后重试'
+              : 'Failed to create task, please check parameters or try again later'
+          );
+        }
+      } catch (err: any) {
+        console.error('Failed to create task:', err);
+
+        // 提取更友好的错误信息
+        let errorMessage =
           language === 'zh'
             ? '任务创建失败，请检查参数或稍后重试'
-            : 'Failed to create task, please check parameters or try again later'
-        );
-      }
-    } catch (err: any) {
-      console.error('Failed to create task:', err);
+            : 'Failed to create task, please check parameters or try again later';
 
-      // 提取更友好的错误信息
-      let errorMessage =
-        language === 'zh'
-          ? '任务创建失败，请检查参数或稍后重试'
-          : 'Failed to create task, please check parameters or try again later';
-
-      if (err.message) {
-        if (err.message.includes('exceed 5000 characters')) {
-          errorMessage =
-            language === 'zh'
-              ? '提示词不能超过 5000 字符'
-              : 'Prompt must not exceed 5000 characters';
-        } else if (err.message.includes('Duplicate submission')) {
-          errorMessage =
-            language === 'zh'
-              ? '请勿重复提交，请等待 5 秒后再试'
-              : 'Duplicate submission. Please wait 5 seconds.';
-        } else if (err.message.includes('Invalid parameters')) {
-          errorMessage =
-            language === 'zh'
-              ? `参数错误: ${err.message.replace('Invalid parameters: ', '')}`
-              : err.message;
+        if (err.message) {
+          if (err.message.includes('exceed 5000 characters')) {
+            errorMessage =
+              language === 'zh'
+                ? '提示词不能超过 5000 字符'
+                : 'Prompt must not exceed 5000 characters';
+          } else if (err.message.includes('Duplicate submission')) {
+            errorMessage =
+              language === 'zh'
+                ? '请勿重复提交，请等待 5 秒后再试'
+                : 'Duplicate submission. Please wait 5 seconds.';
+          } else if (err.message.includes('Invalid parameters')) {
+            errorMessage =
+              language === 'zh'
+                ? `参数错误: ${err.message.replace('Invalid parameters: ', '')}`
+                : err.message;
+          }
         }
-      }
 
-      setError(errorMessage);
-    }
+        setError(errorMessage);
+      }
     } finally {
       generatingLockRef.current = false;
     }
@@ -1275,7 +1241,7 @@ const AIVideoGeneration = ({
                       setCurrentModel(nextModel);
                       setCurrentModelRef(nextModelRef);
                       setVideoSelectedParams(
-                        getDefaultVideoExtraParams(
+                        getDefaultVideoParamsForSelection(
                           nextModel,
                           nextModelRef || nextModel
                         )
@@ -1294,7 +1260,7 @@ const AIVideoGeneration = ({
                       );
                       setCurrentModelRef(nextModelRef);
                       setVideoSelectedParams(
-                        getDefaultVideoExtraParams(
+                        getDefaultVideoParamsForSelection(
                           nextModel,
                           nextModelRef || nextModel
                         )
@@ -1315,31 +1281,20 @@ const AIVideoGeneration = ({
               </div>
             )}
 
-            {/* 模型额外参数（排除 size 和 duration，已有 VideoModelOptions） */}
+            {/* 模型参数 */}
             {hasCompatibleParams && (
               <div className="model-params-row">
-              <ParametersDropdown
+                <ParametersDropdown
                   selectedParams={videoSelectedParams}
                   onParamChange={handleVideoParamChange}
                   compatibleParams={compatibleVideoParams}
                   modelId={currentModel}
                   language={language}
                   disabled={isGenerating}
-                  excludeParamIds={['size', 'duration']}
+                  placement="down"
                 />
               </div>
             )}
-
-            {/* Video model options: duration & size */}
-            <VideoModelOptions
-              model={currentModel}
-              configOverride={videoOptionsConfig}
-              duration={effectiveDuration}
-              size={effectiveSize}
-              onDurationChange={setDuration}
-              onSizeChange={setSize}
-              disabled={isGenerating}
-            />
 
             {/* Multi-image upload based on model config */}
             <ReferenceImageUpload

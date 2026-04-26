@@ -14,6 +14,7 @@ import {
   getModelConfig,
   getImageModelDefaults,
   getDefaultImageModel as getSystemDefaultImageModel,
+  getDefaultTextModel as getSystemDefaultTextModel,
   getDefaultVideoModel as getSystemDefaultVideoModel,
 } from '../constants/model-config';
 import { getEffectiveVideoDefaultParams } from '../services/video-binding-utils';
@@ -104,6 +105,18 @@ export interface ParsedGenerationParams {
   modelId: string;
   /** 使用的模型来源引用 */
   modelRef?: ModelRef | null;
+  /** Agent/Skill 后续媒体生成默认模型 */
+  defaultModels?: {
+    image?: string;
+    video?: string;
+    audio?: string;
+  };
+  /** Agent/Skill 后续媒体生成默认模型来源 */
+  defaultModelRefs?: {
+    image?: ModelRef | null;
+    video?: ModelRef | null;
+    audio?: ModelRef | null;
+  };
   /** 是否为用户显式选择的模型 */
   isModelExplicit: boolean;
   /** 最终生成用的提示词（选中文本 + 默认 prompt） */
@@ -157,7 +170,7 @@ function getDefaultAudioModel(): string {
  */
 function getDefaultTextModel(): string {
   const settings = geminiSettings.get();
-  return settings?.textModelName || 'deepseek-v3.2';
+  return settings?.textModelName || getSystemDefaultTextModel();
 }
 
 /**
@@ -211,6 +224,10 @@ export interface ParseAIInputOptions {
   modelId?: string;
   /** 指定使用的模型引用（来自供应商感知的选择器） */
   modelRef?: ModelRef | null;
+  /** Agent/Skill 后续媒体生成默认模型 */
+  defaultModels?: ParsedGenerationParams['defaultModels'];
+  /** Agent/Skill 后续媒体生成默认模型来源 */
+  defaultModelRefs?: ParsedGenerationParams['defaultModelRefs'];
   /** 指定使用的尺寸（来自尺寸选择器，'auto' 表示不传尺寸参数） */
   size?: string;
   /** 指定生成类型（来自下拉选择器） */
@@ -460,6 +477,8 @@ export function parseAIInput(
     generationType,
     modelId,
     modelRef: options?.modelRef || null,
+    defaultModels: options?.defaultModels,
+    defaultModelRefs: options?.defaultModelRefs,
     isModelExplicit,
     prompt,
     userInstruction,

@@ -47,6 +47,44 @@ test.describe('@smoke 核心功能验证', () => {
     await expect(aiInput).toBeVisible();
     await aiInput.fill('测试输入');
     await expect(aiInput).toHaveValue('测试输入');
+
+    const getTextareaMetrics = () =>
+      aiInput.evaluate((element) => {
+        const textarea = element as HTMLTextAreaElement;
+        const styles = window.getComputedStyle(textarea);
+        const fontSize = Number.parseFloat(styles.fontSize) || 15;
+        const lineHeight =
+          Number.parseFloat(styles.lineHeight) || fontSize * 1.5;
+        const verticalSpacing =
+          Number.parseFloat(styles.paddingTop) +
+          Number.parseFloat(styles.paddingBottom) +
+          Number.parseFloat(styles.borderTopWidth) +
+          Number.parseFloat(styles.borderBottomWidth);
+
+        return {
+          height: textarea.getBoundingClientRect().height,
+          fourRowsHeight: lineHeight * 4 + verticalSpacing,
+          sixRowsHeight: lineHeight * 6 + verticalSpacing,
+          overflowY: styles.overflowY,
+        };
+      });
+
+    await page.waitForTimeout(250);
+    const fourRowsMetrics = await getTextareaMetrics();
+    expect(
+      Math.abs(fourRowsMetrics.height - fourRowsMetrics.fourRowsHeight)
+    ).toBeLessThanOrEqual(2);
+
+    await aiInput.fill('第1行\n第2行\n第3行\n第4行\n第5行\n第6行\n第7行');
+    await page.waitForTimeout(250);
+    const maxRowsMetrics = await getTextareaMetrics();
+    expect(maxRowsMetrics.height).toBeGreaterThanOrEqual(
+      maxRowsMetrics.sixRowsHeight - 2
+    );
+    expect(maxRowsMetrics.height).toBeLessThanOrEqual(
+      maxRowsMetrics.sixRowsHeight + 2
+    );
+    expect(maxRowsMetrics.overflowY).toBe('auto');
     
     // 5. 模型选择器（必须通过）
     const modelSelector = page.getByRole('button', { name: /#/ }).first();

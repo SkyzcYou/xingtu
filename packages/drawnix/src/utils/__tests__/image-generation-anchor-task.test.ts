@@ -248,6 +248,41 @@ describe('image-generation-anchor-task', () => {
     );
   });
 
+  it('uses per-frame grouping for PPT slide image tasks', () => {
+    const task = createTask({
+      id: 'task-ppt-1',
+      params: {
+        prompt: '生成 PPT 页面',
+        pptSlideImage: true,
+        targetFrameId: 'frame-1',
+        size: '16x9',
+      },
+    });
+
+    expect(getImageGenerationTaskInsertGroupKey(task)).toBe(
+      'ppt-slide:frame-1:task-ppt-1'
+    );
+  });
+
+  it('groups PPT slide batch image tasks by frame and batch', () => {
+    const task = createTask({
+      id: 'task-ppt-1',
+      params: {
+        prompt: '生成 PPT 页面',
+        pptSlideImage: true,
+        targetFrameId: 'frame-1',
+        batchId: 'batch-1',
+        batchIndex: 2,
+        batchTotal: 3,
+        size: '16x9',
+      },
+    });
+
+    expect(getImageGenerationTaskInsertGroupKey(task)).toBe(
+      'ppt-slide:frame-1:batch-1'
+    );
+  });
+
   it('prefixes non-image tasks to avoid cross-media regrouping', () => {
     const task = createTask({
       type: TaskType.VIDEO,

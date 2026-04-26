@@ -1,9 +1,20 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { SideDrawer, SideDrawerProps } from './SideDrawer';
+import {
+  getDrawerPinned,
+  setDrawerPinned,
+  type DrawerPinKey,
+} from '../../utils/drawer-pin';
 
-export interface BaseDrawerProps extends Omit<SideDrawerProps, 'customWidth' | 'onWidthChange'> {
+export interface BaseDrawerProps
+  extends Omit<
+    SideDrawerProps,
+    'customWidth' | 'onWidthChange' | 'pinned' | 'onPinnedChange'
+  > {
   /** 存储宽度的 localStorage key */
   storageKey?: string;
+  /** 固定状态的 localStorage key；传入后显示固定按钮 */
+  pinStorageKey?: DrawerPinKey;
   /** 默认宽度 */
   defaultWidth?: number;
   /** 测试标识 */
@@ -18,10 +29,12 @@ export interface BaseDrawerProps extends Omit<SideDrawerProps, 'customWidth' | '
  */
 export const BaseDrawer: React.FC<BaseDrawerProps> = ({
   storageKey,
+  pinStorageKey,
   defaultWidth,
   minWidth = 300,
   maxWidth = 1024,
   resizable = true,
+  pinnable,
   ...props
 }) => {
   // 抽屉宽度状态
@@ -40,6 +53,9 @@ export const BaseDrawer: React.FC<BaseDrawerProps> = ({
     }
     return undefined;
   });
+  const [pinned, setPinned] = useState<boolean>(() =>
+    pinStorageKey ? getDrawerPinned(pinStorageKey) : false
+  );
 
   // 宽度变化处理
   const handleWidthChange = useCallback((width: number) => {
@@ -69,9 +85,27 @@ export const BaseDrawer: React.FC<BaseDrawerProps> = ({
     }
   }, [storageKey, minWidth, maxWidth]);
 
+  useEffect(() => {
+    if (!pinStorageKey) return;
+    setPinned(getDrawerPinned(pinStorageKey));
+  }, [pinStorageKey]);
+
+  const handlePinnedChange = useCallback(
+    (nextPinned: boolean) => {
+      setPinned(nextPinned);
+      if (pinStorageKey) {
+        setDrawerPinned(pinStorageKey, nextPinned);
+      }
+    },
+    [pinStorageKey]
+  );
+
   return (
     <SideDrawer
       {...props}
+      pinnable={pinnable || Boolean(pinStorageKey)}
+      pinned={pinned}
+      onPinnedChange={handlePinnedChange}
       resizable={resizable}
       minWidth={minWidth}
       maxWidth={maxWidth}

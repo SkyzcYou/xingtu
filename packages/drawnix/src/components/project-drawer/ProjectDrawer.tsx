@@ -13,6 +13,7 @@ import React, {
   useEffect,
   DragEvent,
 } from 'react';
+import { Presentation } from 'lucide-react';
 import {
   Button,
   Input,
@@ -36,7 +37,6 @@ import {
   MoveIcon,
   DownloadIcon,
   UploadIcon,
-  ViewListIcon,
   LayersIcon,
 } from 'tdesign-icons-react';
 import { useWorkspace } from '../../hooks/useWorkspace';
@@ -58,6 +58,12 @@ import {
 import { ConfirmDialog } from '../dialog/ConfirmDialog';
 import { FramePanel } from './FramePanel';
 import { LayerPanel } from './LayerPanel';
+import { DRAWER_PIN_KEYS } from '../../utils/drawer-pin';
+import type { MediaLibraryConfig } from '../../types/asset.types';
+import {
+  PPT_EDITOR_OPEN_EVENT,
+  type PPTEditorOpenEventDetail,
+} from '../../services/ppt/ppt-ui-events';
 import './project-drawer.scss';
 
 export interface ProjectDrawerProps {
@@ -69,10 +75,45 @@ export interface ProjectDrawerProps {
   onBeforeSwitch?: () => Promise<void>;
   /** Called after board is switched */
   onBoardSwitch?: (board: Board) => void;
+  /** Called when a child panel wants to open the global media library */
+  onOpenMediaLibrary?: (
+    config?: Partial<MediaLibraryConfig> & {
+      selectButtonText?: string;
+    }
+  ) => void;
 }
 
 // Storage key for drawer width
 export const PROJECT_DRAWER_WIDTH_KEY = 'project-drawer-width';
+export const PROJECT_DRAWER_ACTIVE_TAB_KEY = 'project-drawer-active-tab';
+
+type ProjectDrawerTab = 'boards' | 'frames' | 'layers';
+
+const PROJECT_DRAWER_TABS: readonly ProjectDrawerTab[] = [
+  'boards',
+  'frames',
+  'layers',
+];
+
+const isProjectDrawerTab = (value: string | null): value is ProjectDrawerTab =>
+  PROJECT_DRAWER_TABS.includes(value as ProjectDrawerTab);
+
+const getInitialProjectDrawerTab = (): ProjectDrawerTab => {
+  try {
+    const cached = localStorage.getItem(PROJECT_DRAWER_ACTIVE_TAB_KEY);
+    return isProjectDrawerTab(cached) ? cached : 'boards';
+  } catch {
+    return 'boards';
+  }
+};
+
+const saveProjectDrawerTab = (tab: ProjectDrawerTab) => {
+  try {
+    localStorage.setItem(PROJECT_DRAWER_ACTIVE_TAB_KEY, tab);
+  } catch {
+    // 忽略 localStorage 错误
+  }
+};
 
 // Drag data interface
 interface DragData {
@@ -340,7 +381,7 @@ const ProjectDrawerContent: React.FC<{
         { content: '根目录', value: 'root' },
       ];
 
-      const addFolderOptions = (nodes: TreeNode[], prefix: string = '') => {
+      const addFolderOptions = (nodes: TreeNode[], prefix = '') => {
         nodes.forEach((node) => {
           if (node.type === 'folder') {
             const folder = (node as FolderTreeNode).data;
@@ -484,7 +525,7 @@ const ProjectDrawerContent: React.FC<{
   // Render folder node
   const renderFolderNode = (
     node: FolderTreeNode,
-    level: number = 0
+    level = 0
   ): React.ReactNode => {
     const { data: folder, children } = node;
     const isExpanded = folder.isExpanded;
@@ -644,7 +685,7 @@ const ProjectDrawerContent: React.FC<{
   // Render board node
   const renderBoardNode = (
     node: BoardTreeNode,
-    level: number = 0
+    level = 0
   ): React.ReactNode => {
     const { data: board } = node;
     const isActive = board.id === currentBoard?.id;
@@ -975,6 +1016,7 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
   onOpenChange,
   onBeforeSwitch,
   onBoardSwitch,
+  onOpenMediaLibrary,
 }) => {
   const {
     isLoading,
@@ -994,8 +1036,8 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
     switchBoard,
   } = useWorkspace();
 
-  const [activeTab, setActiveTab] = useState<'boards' | 'frames' | 'layers'>(
-    'boards'
+  const [activeTab, setActiveTab] = useState<ProjectDrawerTab>(
+    getInitialProjectDrawerTab
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -1034,6 +1076,28 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
   const handleClose = useCallback(() => {
     onOpenChange?.(false);
   }, [onOpenChange]);
+
+  const handleTabChange = useCallback((tab: ProjectDrawerTab) => {
+    setActiveTab(tab);
+    saveProjectDrawerTab(tab);
+  }, []);
+
+  useEffect(() => {
+    const handleOpenPPTEditor = (
+      event: Event | CustomEvent<PPTEditorOpenEventDetail>
+    ) => {
+      const detail = (event as CustomEvent<PPTEditorOpenEventDetail>).detail;
+      if (detail?.viewMode === 'outline' || detail?.viewMode === 'slides') {
+        handleTabChange('frames');
+      } else {
+        handleTabChange('frames');
+      }
+    };
+
+    window.addEventListener(PPT_EDITOR_OPEN_EVENT, handleOpenPPTEditor);
+    return () =>
+      window.removeEventListener(PPT_EDITOR_OPEN_EVENT, handleOpenPPTEditor);
+  }, [handleTabChange]);
 
   // Handle creating new board
   const handleCreateBoard = useCallback(
@@ -1475,7 +1539,7 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
         className={`project-drawer-tabs__tab${
           activeTab === 'boards' ? ' project-drawer-tabs__tab--active' : ''
         }`}
-        onClick={() => setActiveTab('boards')}
+        onClick={() => handleTabChange('boards')}
       >
         <ArtboardIcon />
         画布管理
@@ -1485,17 +1549,17 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
         className={`project-drawer-tabs__tab${
           activeTab === 'frames' ? ' project-drawer-tabs__tab--active' : ''
         }`}
-        onClick={() => setActiveTab('frames')}
+        onClick={() => handleTabChange('frames')}
       >
-        <ViewListIcon />
-        Frame 管理
+        <Presentation size={16} strokeWidth={1.8} />
+        PPT 编辑
       </button>
       <button
         type="button"
         className={`project-drawer-tabs__tab${
           activeTab === 'layers' ? ' project-drawer-tabs__tab--active' : ''
         }`}
-        onClick={() => setActiveTab('layers')}
+        onClick={() => handleTabChange('layers')}
       >
         <LayersIcon />
         图层
@@ -1607,7 +1671,11 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
         footer={footerSection}
         position="toolbar-right"
         width="narrow"
+        defaultWidth={380}
         storageKey={PROJECT_DRAWER_WIDTH_KEY}
+        pinStorageKey={
+          activeTab === 'frames' ? undefined : DRAWER_PIN_KEYS.project
+        }
         resizable={true}
         className="project-drawer"
         contentClassName="project-drawer__content"
@@ -1616,7 +1684,7 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
         {activeTab === 'layers' ? (
           <LayerPanel />
         ) : activeTab === 'frames' ? (
-          <FramePanel />
+          <FramePanel onOpenMediaLibrary={onOpenMediaLibrary} />
         ) : isLoading ? (
           <div className="project-drawer__loading">加载中...</div>
         ) : filteredTree.length === 0 ? (

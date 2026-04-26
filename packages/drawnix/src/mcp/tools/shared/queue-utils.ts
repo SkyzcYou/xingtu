@@ -28,6 +28,11 @@ export interface BaseGenerationParams {
   referenceImages?: string[];
   params?: Record<string, unknown>;
   autoInsertToCanvas?: boolean;
+  targetFrameId?: string;
+  targetFrameDimensions?: { width: number; height: number };
+  pptSlideImage?: boolean;
+  pptSlidePrompt?: string;
+  pptReplaceElementId?: string;
 }
 
 /** 队列任务创建配置 */

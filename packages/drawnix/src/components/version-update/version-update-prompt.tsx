@@ -25,7 +25,7 @@ export const VersionUpdatePrompt: React.FC = () => {
       
       try {
         // Fetch detailed version info (changelog)
-        const res = await fetch(`/version.json?t=${Date.now()}`);
+        const res = await fetch(`./version.json?t=${Date.now()}`);
         if (res.ok) {
           const data = await res.json();
           

@@ -6,8 +6,16 @@
  * - 支持自定义列表项渲染
  */
 
-import React from 'react';
-import { PromptListItem, type PromptListItemProps } from './PromptListItem';
+import React, { useCallback, useState } from 'react';
+import type { PromptPreviewExample } from '../../constants/prompts';
+import {
+  PromptListItem,
+  type PromptPreviewRequest,
+} from './PromptListItem';
+import {
+  UnifiedMediaViewer,
+  type MediaItem as UnifiedMediaItem,
+} from './media-preview';
 import './prompt-list-panel.scss';
 
 export interface PromptItem {
@@ -19,10 +27,12 @@ export interface PromptItem {
   pinned?: boolean;
   /** 是否是预设提示词（预设不允许删除和置顶） */
   isPreset?: boolean;
-  /** 生成类型：image/video/audio/text/agent */
-  modelType?: 'image' | 'video' | 'audio' | 'text' | 'agent';
+  /** 生成类型：image/video/audio/text/agent/ppt-common */
+  modelType?: 'image' | 'video' | 'audio' | 'text' | 'agent' | 'ppt-common';
   /** 场景描述（用于显示标签） */
   scene?: string;
+  /** 悬浮预览示例图 */
+  previewExamples?: PromptPreviewExample[];
 }
 
 export interface PromptListPanelProps {
@@ -57,35 +67,91 @@ export const PromptListPanel: React.FC<PromptListPanelProps> = ({
   showCount = true,
   className = '',
 }) => {
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewItems, setPreviewItems] = useState<UnifiedMediaItem[]>([]);
+  const [previewInitialIndex, setPreviewInitialIndex] = useState(0);
+
+  const handlePreviewExample = useCallback(
+    (
+      itemId: string,
+      { content, previewExamples, initialIndex }: PromptPreviewRequest
+    ) => {
+      setPreviewItems(
+        previewExamples.map((example, index) => {
+          const shouldPlayVideo =
+            example.kind === 'video' && example.playable !== false;
+
+          return {
+            id: `${itemId}-preview-${index}`,
+            url: shouldPlayVideo
+              ? example.src
+              : example.kind === 'video'
+              ? example.posterSrc || example.src
+              : example.src,
+            type: shouldPlayVideo ? 'video' : 'image',
+            posterUrl: shouldPlayVideo ? example.posterSrc : undefined,
+            alt: example.alt,
+            title: content,
+          } satisfies UnifiedMediaItem;
+        })
+      );
+      setPreviewInitialIndex(initialIndex);
+      setPreviewVisible(true);
+    },
+    []
+  );
+
   return (
-    <div className={`prompt-list-panel ${className}`}>
+    <>
+      <div className={`prompt-list-panel ${className}`}>
       {/* 头部 */}
-      <div className="prompt-list-panel__header">
-        <span className="prompt-list-panel__title">{title}</span>
-        {showCount && (
-          <span className="prompt-list-panel__count">{items.length}</span>
-        )}
-      </div>
+        <div className="prompt-list-panel__header">
+          <span className="prompt-list-panel__title">{title}</span>
+          {showCount && (
+            <span className="prompt-list-panel__count">{items.length}</span>
+          )}
+        </div>
       
-      {/* 列表 */}
-      <div className="prompt-list-panel__list">
-        {items.map((item) => (
-          <PromptListItem
-            key={item.id}
-            content={item.content}
-            pinned={item.pinned}
-            isPreset={item.isPreset}
-            modelType={item.modelType}
-            scene={item.scene}
-            onClick={() => onSelect?.(item)}
-            onTogglePin={onTogglePin && !item.isPreset ? () => onTogglePin(item.id) : undefined}
-            onDelete={onDelete && !item.isPreset ? () => onDelete(item.id) : undefined}
-            language={language}
-            disabled={disabled}
-          />
-        ))}
+        {/* 列表 */}
+        <div className="prompt-list-panel__list">
+          {items.map((item) => (
+            <PromptListItem
+              key={item.id}
+              content={item.content}
+              pinned={item.pinned}
+              isPreset={item.isPreset}
+              modelType={item.modelType}
+              scene={item.scene}
+              previewExamples={item.previewExamples}
+              onClick={() => onSelect?.(item)}
+              onTogglePin={
+                onTogglePin && !item.isPreset
+                  ? () => onTogglePin(item.id)
+                  : undefined
+              }
+              onDelete={
+                onDelete && !item.isPreset
+                  ? () => onDelete(item.id)
+                  : undefined
+              }
+              onPreviewExample={(request) =>
+                handlePreviewExample(item.id, request)
+              }
+              language={language}
+              disabled={disabled}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+      <UnifiedMediaViewer
+        visible={previewVisible}
+        items={previewItems}
+        initialIndex={previewInitialIndex}
+        onClose={() => setPreviewVisible(false)}
+        showThumbnails={previewItems.length > 1}
+        videoAutoPlay={true}
+      />
+    </>
   );
 };
 

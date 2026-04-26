@@ -240,11 +240,21 @@ export interface AgentExecutionContext {
   /** 系统配置的默认模型（用于 AI 分析时参考） */
   defaultModels?: {
     /** 默认图片模型 */
-    image: string;
+    image?: string;
     /** 默认视频模型 */
-    video: string;
+    video?: string;
     /** 默认音频模型 */
     audio?: string;
+  };
+
+  /** 系统配置的默认模型来源引用（用于多供应商路由） */
+  defaultModelRefs?: {
+    /** 默认图片模型来源 */
+    image?: ModelRef | null;
+    /** 默认视频模型来源 */
+    video?: ModelRef | null;
+    /** 默认音频模型来源 */
+    audio?: ModelRef | null;
   };
 
   /** 参数配置 */

@@ -64,6 +64,10 @@ export function getImageGenerationTaskInsertGroupKey(
     return `${taskGroupType}:${fallbackGroupKey}`;
   }
 
+  if (task.params.pptSlideImage && typeof task.params.targetFrameId === 'string') {
+    return `ppt-slide:${task.params.targetFrameId}:${batchId || task.id}`;
+  }
+
   const hasIndependentAnchor = anchor
     ? isIndependentBatchImageGenerationAnchor(anchor)
     : false;
