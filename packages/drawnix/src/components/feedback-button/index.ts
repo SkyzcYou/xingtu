@@ -1,1 +1,1 @@
-export { FeedbackButton } from './feedback-button';
+export { MessageButton } from './feedback-button';

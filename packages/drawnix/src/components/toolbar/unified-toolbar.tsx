@@ -149,6 +149,8 @@ function syncToolbarPositionVars(left: number, toolbarEl: HTMLElement | null) {
 export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
   ({
     className,
+    messageDrawerOpen = false,
+    onMessageDrawerToggle,
     projectDrawerOpen = false,
     onProjectDrawerToggle,
     toolboxDrawerOpen = false,
@@ -562,8 +564,10 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
           {/* 底部操作区域 - 打开项目 + 工具箱 + 任务队列 - 固定在底部 */}
           <div className="unified-toolbar__section unified-toolbar__section--fixed-bottom">
             <BottomActionsSection
+              messageDrawerOpen={messageDrawerOpen}
+              onMessageDrawerToggle={onMessageDrawerToggle}
               projectDrawerOpen={projectDrawerOpen}
-              onProjectDrawerToggle={onProjectDrawerToggle || (() => {})}
+              onProjectDrawerToggle={onProjectDrawerToggle}
               toolboxDrawerOpen={toolboxDrawerOpen}
               onToolboxDrawerToggle={onToolboxDrawerToggle}
               taskPanelExpanded={taskPanelExpanded}

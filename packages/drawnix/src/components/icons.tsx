@@ -929,7 +929,7 @@ export const ThemeIcon: React.FC<React.SVGProps<SVGSVGElement> & { size?: number
   </svg>
 );
 
-export const WeComIcon: React.FC<React.SVGProps<SVGSVGElement> & { size?: number }> = ({ size = 24, ...props }) => (
+export const MessageHornIcon: React.FC<React.SVGProps<SVGSVGElement> & { size?: number }> = ({ size = 24, ...props }) => (
   <svg
     viewBox="0 0 24 24"
     fill="none"
@@ -941,10 +941,10 @@ export const WeComIcon: React.FC<React.SVGProps<SVGSVGElement> & { size?: number
     height={size}
     {...props}
   >
-    <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-    <path d="M8 12h.01" />
-    <path d="M12 12h.01" />
-    <path d="M16 12h.01" />
+    <path d="M4 13.5h3.2l8.3 4.2V6.3l-8.3 4.2H4z" />
+    <path d="M7.2 13.5 8.5 20h2.8l-1.4-5.6" />
+    <path d="M18 9.5a4 4 0 0 1 0 5" />
+    <path d="M20.5 7a7.5 7.5 0 0 1 0 10" />
   </svg>
 );
 

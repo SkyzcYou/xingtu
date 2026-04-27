@@ -16,6 +16,11 @@ const ToolboxDrawer = lazy(() =>
     default: module.ToolboxDrawer,
   }))
 );
+const MessageDrawer = lazy(() =>
+  import('../message-drawer/MessageDrawer').then((module) => ({
+    default: module.MessageDrawer,
+  }))
+);
 const MediaLibraryModal = lazy(() =>
   import('./DeferredMediaLibraryModal').then((module) => ({
     default: module.DeferredMediaLibraryModal,
@@ -64,6 +69,7 @@ interface DrawnixDeferredFeaturesProps {
   versionUpdateEnabled: boolean;
   performancePanelEnabled: boolean;
   toolWindowManagerEnabled: boolean;
+  messageDrawerOpen: boolean;
   projectDrawerOpen: boolean;
   toolboxDrawerOpen: boolean;
   mediaLibraryOpen: boolean;
@@ -73,6 +79,7 @@ interface DrawnixDeferredFeaturesProps {
   backupRestoreOpen: boolean;
   cloudSyncOpen: boolean;
   onBoardSwitch?: (board: WorkspaceBoard) => void;
+  setMessageDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setProjectDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setToolboxDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setMediaLibraryOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -94,6 +101,7 @@ export function DrawnixDeferredFeatures({
   versionUpdateEnabled,
   performancePanelEnabled,
   toolWindowManagerEnabled,
+  messageDrawerOpen,
   projectDrawerOpen,
   toolboxDrawerOpen,
   mediaLibraryOpen,
@@ -101,6 +109,7 @@ export function DrawnixDeferredFeatures({
   backupRestoreOpen,
   cloudSyncOpen,
   onBoardSwitch,
+  setMessageDrawerOpen,
   setProjectDrawerOpen,
   setToolboxDrawerOpen,
   setMediaLibraryOpen,
@@ -205,6 +214,14 @@ export function DrawnixDeferredFeatures({
             container={containerRef.current}
             onCreateProject={onCreateProjectForMemory}
             elements={board?.children || value}
+          />
+        </Suspense>
+      )}
+      {messageDrawerOpen && (
+        <Suspense fallback={null}>
+          <MessageDrawer
+            isOpen={messageDrawerOpen}
+            onOpenChange={setMessageDrawerOpen}
           />
         </Suspense>
       )}

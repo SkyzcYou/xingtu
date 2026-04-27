@@ -10,7 +10,7 @@ import { Badge } from 'tdesign-react';
 import { ToolButton } from '../tool-button';
 import { useTaskQueue } from '../../hooks/useTaskQueue';
 import type { Task } from '../../types/task.types';
-import { FeedbackButton } from '../feedback-button/feedback-button';
+import { MessageButton } from '../feedback-button';
 import { FolderIcon, ToolboxIcon, TaskIcon } from '../icons';
 import './bottom-actions-section.scss';
 
@@ -44,10 +44,14 @@ function getTaskSignalAt(task: Task): number {
 }
 
 export interface BottomActionsSectionProps {
+  /** 消息抽屉是否打开 */
+  messageDrawerOpen: boolean;
+  /** 消息抽屉切换回调 */
+  onMessageDrawerToggle?: () => void;
   /** 项目抽屉是否打开 */
   projectDrawerOpen: boolean;
   /** 项目抽屉切换回调 */
-  onProjectDrawerToggle: () => void;
+  onProjectDrawerToggle?: () => void;
   /** 工具箱抽屉是否打开 */
   toolboxDrawerOpen?: boolean;
   /** 工具箱抽屉切换回调 */
@@ -59,6 +63,8 @@ export interface BottomActionsSectionProps {
 }
 
 export const BottomActionsSection: React.FC<BottomActionsSectionProps> = ({
+  messageDrawerOpen,
+  onMessageDrawerToggle,
   projectDrawerOpen,
   onProjectDrawerToggle,
   toolboxDrawerOpen = false,
@@ -102,8 +108,10 @@ export const BottomActionsSection: React.FC<BottomActionsSectionProps> = ({
 
   return (
     <div className="bottom-actions-section">
-      {/* 反馈按钮 */}
-      <FeedbackButton />
+      <MessageButton
+        open={messageDrawerOpen}
+        onToggle={onMessageDrawerToggle}
+      />
 
       {/* 打开项目按钮 - 使用 ToolButton */}
       <ToolButton

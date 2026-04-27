@@ -1,40 +1,35 @@
-/**
- * FeedbackButton Styles
- */
-
-.feedback-qrcode-content {
-  display: flex;
-  flex-direction: column;
+.message-button__icon {
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  padding: 16px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  border: 1px solid var(--color-border);
+  justify-content: center;
 }
 
-.feedback-qrcode-grid {
-  display: flex;
-  gap: 16px;
+.message-button__dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e34d59;
+  border: 1.5px solid #fff;
+  box-shadow: 0 0 0 0 rgba(227, 77, 89, 0.45);
+  pointer-events: none;
+  animation: message-button-dot-breathe 1.6s ease-in-out infinite;
 }
 
-.feedback-qrcode-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
+@keyframes message-button-dot-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(227, 77, 89, 0.45);
+  }
 
-.feedback-qrcode-image {
-  width: 160px;
-  height: 160px;
-  border-radius: 8px;
-  object-fit: contain;
+  50% {
+    transform: scale(1.35);
+    opacity: 0.65;
+    box-shadow: 0 0 0 5px rgba(227, 77, 89, 0);
+  }
 }
-
-.feedback-qrcode-text {
-  margin-top: 8px;
-  font-size: 13px;
-  color: #666;
-  font-weight: 500;
-}
-

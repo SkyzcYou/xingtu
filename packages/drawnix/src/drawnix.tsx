@@ -129,6 +129,8 @@ import {
 } from './utils/startup-prefetch';
 import { DRAWER_PIN_KEYS, getDrawerPinned } from './utils/drawer-pin';
 import { PPT_EDITOR_OPEN_EVENT } from './services/ppt/ppt-ui-events';
+import type { MediaLibraryModalProps } from './types/asset.types';
+import { SelectionMode } from './types/asset.types';
 const DeferredAIInputBar = lazy(() =>
   import('./components/startup/DeferredAIInputBar').then((module) => ({
     default: module.DeferredAIInputBar,
@@ -139,9 +141,6 @@ const ChatDrawer = lazy(() =>
     default: module.ChatDrawer,
   }))
 );
-import type { MediaLibraryModalProps } from './types/asset.types';
-import { SelectionMode } from './types/asset.types';
-
 type MediaLibraryOpenConfig = Pick<
   MediaLibraryModalProps,
   'mode' | 'filterType' | 'onSelect' | 'selectButtonText'
@@ -292,6 +291,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   });
 
   const [board, setBoard] = useState<DrawnixBoard | null>(null);
+  const [messageDrawerOpen, setMessageDrawerOpen] = useState(false);
   const [projectDrawerOpen, setProjectDrawerOpen] = useState(false);
   const [toolboxDrawerOpen, setToolboxDrawerOpen] = useState(false);
   const [taskPanelExpanded, setTaskPanelExpanded] = useState(false);
@@ -315,6 +315,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
 
   // 关闭所有抄屉
   const closeAllDrawers = useCallback(() => {
+    setMessageDrawerOpen(false);
     if (shouldAutoCloseProjectDrawer()) {
       setProjectDrawerOpen(false);
     }
@@ -401,6 +402,26 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     return () => window.removeEventListener('kb:open', handleKBOpen);
   }, [enableToolWindows]);
 
+  const handleMessageDrawerToggle = useCallback(() => {
+    enableToolWindows(TOOL_WINDOW_GROUPS);
+    if (messageDrawerOpen) {
+      setMessageDrawerOpen(false);
+      return;
+    }
+
+    if (shouldAutoCloseProjectDrawer()) {
+      setProjectDrawerOpen(false);
+    }
+    if (shouldAutoCloseToolboxDrawer()) {
+      setToolboxDrawerOpen(false);
+    }
+    if (shouldAutoCloseTaskDrawer()) {
+      setTaskPanelExpanded(false);
+    }
+    setMediaLibraryOpen(false);
+    setMessageDrawerOpen(true);
+  }, [enableToolWindows, messageDrawerOpen]);
+
   // 处理项目抽屉切换（互斥逻辑）
   const handleProjectDrawerToggle = useCallback(() => {
     enableToolWindows(TOOL_WINDOW_GROUPS);
@@ -409,6 +430,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       return;
     }
 
+    setMessageDrawerOpen(false);
     if (shouldAutoCloseToolboxDrawer()) {
       setToolboxDrawerOpen(false);
     }
@@ -422,6 +444,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   useEffect(() => {
     const handleOpenPPTEditor = () => {
       enableToolWindows(TOOL_WINDOW_GROUPS);
+      setMessageDrawerOpen(false);
       if (shouldAutoCloseToolboxDrawer()) {
         setToolboxDrawerOpen(false);
       }
@@ -445,6 +468,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       return;
     }
 
+    setMessageDrawerOpen(false);
     if (shouldAutoCloseProjectDrawer()) {
       setProjectDrawerOpen(false);
     }
@@ -463,6 +487,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       return;
     }
 
+    setMessageDrawerOpen(false);
     if (shouldAutoCloseProjectDrawer()) {
       setProjectDrawerOpen(false);
     }
@@ -479,6 +504,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       enableToolWindows(TOOL_WINDOW_GROUPS);
       const { keepProjectDrawerOpen, ...mediaLibraryConfig } = config || {};
       if (keepProjectDrawerOpen) {
+        setMessageDrawerOpen(false);
         if (shouldAutoCloseToolboxDrawer()) {
           setToolboxDrawerOpen(false);
         }
@@ -801,6 +827,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     toolWindowManagerEnabled ||
     appState.openCommandPalette ||
     appState.openCanvasSearch ||
+    messageDrawerOpen ||
     projectDrawerOpen ||
     toolboxDrawerOpen ||
     mediaLibraryOpen ||
@@ -826,6 +853,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                       appState={appState}
                       board={board}
                       setBoard={setBoard}
+                      messageDrawerOpen={messageDrawerOpen}
                       projectDrawerOpen={projectDrawerOpen}
                       toolboxDrawerOpen={toolboxDrawerOpen}
                       taskPanelExpanded={taskPanelExpanded}
@@ -840,6 +868,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                       afterInit={afterInit}
                       onBoardSwitch={onBoardSwitch}
                       onTabSyncNeeded={onTabSyncNeeded}
+                      handleMessageDrawerToggle={handleMessageDrawerToggle}
                       handleProjectDrawerToggle={handleProjectDrawerToggle}
                       handleToolboxDrawerToggle={handleToolboxDrawerToggle}
                       handleKnowledgeBaseToggle={handleKnowledgeBaseToggle}
@@ -847,6 +876,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                       handleOpenMediaLibrary={handleOpenMediaLibrary}
                       handleOpenBackupRestore={handleOpenBackupRestore}
                       handleOpenCloudSync={handleOpenCloudSync}
+                      setMessageDrawerOpen={setMessageDrawerOpen}
                       setProjectDrawerOpen={setProjectDrawerOpen}
                       setToolboxDrawerOpen={setToolboxDrawerOpen}
                       setTaskPanelExpanded={setTaskPanelExpanded}
@@ -890,6 +920,7 @@ interface DrawnixContentProps {
   appState: DrawnixState;
   board: DrawnixBoard | null;
   setBoard: React.Dispatch<React.SetStateAction<DrawnixBoard | null>>;
+  messageDrawerOpen: boolean;
   projectDrawerOpen: boolean;
   toolboxDrawerOpen: boolean;
   taskPanelExpanded: boolean;
@@ -911,6 +942,7 @@ interface DrawnixContentProps {
   afterInit?: (board: PlaitBoard) => void;
   onBoardSwitch?: (board: WorkspaceBoard) => void;
   onTabSyncNeeded?: () => void;
+  handleMessageDrawerToggle: () => void;
   handleProjectDrawerToggle: () => void;
   handleToolboxDrawerToggle: () => void;
   handleKnowledgeBaseToggle: () => void;
@@ -918,6 +950,7 @@ interface DrawnixContentProps {
   handleOpenMediaLibrary: (config?: MediaLibraryOpenConfig) => void;
   handleOpenBackupRestore: () => void;
   handleOpenCloudSync: () => void;
+  setMessageDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setProjectDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setToolboxDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setTaskPanelExpanded: React.Dispatch<React.SetStateAction<boolean>>;
@@ -941,6 +974,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   appState,
   board,
   setBoard,
+  messageDrawerOpen,
   projectDrawerOpen,
   toolboxDrawerOpen,
   taskPanelExpanded,
@@ -963,6 +997,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   afterInit,
   onBoardSwitch,
   onTabSyncNeeded,
+  handleMessageDrawerToggle,
   handleProjectDrawerToggle,
   handleToolboxDrawerToggle,
   handleKnowledgeBaseToggle,
@@ -970,6 +1005,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   handleOpenMediaLibrary,
   handleOpenBackupRestore,
   handleOpenCloudSync,
+  setMessageDrawerOpen,
   setProjectDrawerOpen,
   setToolboxDrawerOpen,
   setTaskPanelExpanded,
@@ -1462,6 +1498,9 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
       }
 
       // 关闭未固定的自动收起抽屉
+      if (messageDrawerOpen) {
+        setMessageDrawerOpen(false);
+      }
       if (projectDrawerOpen && shouldAutoCloseProjectDrawerOnCanvasClick()) {
         setProjectDrawerOpen(false);
       }
@@ -1486,9 +1525,11 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   }, [
     board,
     containerRef,
+    messageDrawerOpen,
     projectDrawerOpen,
     toolboxDrawerOpen,
     taskPanelExpanded,
+    setMessageDrawerOpen,
     setProjectDrawerOpen,
     setToolboxDrawerOpen,
     setTaskPanelExpanded,
@@ -1540,6 +1581,8 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
           <MultiSelectionHandles />
           {/* 统一左侧工具栏 (桌面端和移动端一致) */}
           <UnifiedToolbar
+            messageDrawerOpen={messageDrawerOpen}
+            onMessageDrawerToggle={handleMessageDrawerToggle}
             projectDrawerOpen={projectDrawerOpen}
             onProjectDrawerToggle={handleProjectDrawerToggle}
             toolboxDrawerOpen={toolboxDrawerOpen}
@@ -1668,6 +1711,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
               versionUpdateEnabled={versionUpdateEnabled}
               performancePanelEnabled={performancePanelEnabled}
               toolWindowManagerEnabled={toolWindowManagerEnabled}
+              messageDrawerOpen={messageDrawerOpen}
               projectDrawerOpen={projectDrawerOpen}
               toolboxDrawerOpen={toolboxDrawerOpen}
               mediaLibraryOpen={mediaLibraryOpen}
@@ -1675,6 +1719,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
               backupRestoreOpen={backupRestoreOpen}
               cloudSyncOpen={cloudSyncOpen}
               onBoardSwitch={onBoardSwitch}
+              setMessageDrawerOpen={setMessageDrawerOpen}
               setProjectDrawerOpen={setProjectDrawerOpen}
               setToolboxDrawerOpen={setToolboxDrawerOpen}
               setMediaLibraryOpen={setMediaLibraryOpen}

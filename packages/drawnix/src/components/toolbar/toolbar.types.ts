@@ -14,6 +14,14 @@ export interface UnifiedToolbarProps {
    */
   className?: string;
   /**
+   * (可选) 消息抽屉是否打开
+   */
+  messageDrawerOpen?: boolean;
+  /**
+   * (可选) 消息抽屉打开/关闭切换回调
+   */
+  onMessageDrawerToggle?: () => void;
+  /**
    * (可选) 项目抽屉是否打开
    */
   projectDrawerOpen?: boolean;
