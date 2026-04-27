@@ -16,6 +16,13 @@
     />
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <link rel="canonical" href="https://opentu.ai/home.html" />
+    <link rel="alternate" hreflang="zh-CN" href="https://opentu.ai/home.html" />
+    <link rel="alternate" hreflang="en" href="https://opentu.ai/en/home.html" />
+    <link
+      rel="alternate"
+      hreflang="x-default"
+      href="https://opentu.ai/home.html"
+    />
     <meta property="og:type" content="website" />
     <meta
       property="og:title"
@@ -26,6 +33,8 @@
       content="用 OpenTu 在浏览器里完成 AI 图片生成、文本推理、素材整理、流程图和作品展示。"
     />
     <meta property="og:url" content="https://opentu.ai/home.html" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
     <meta
       property="og:image"
       content="https://opentu.ai/product_showcase/九宫格拆图.gif"
@@ -762,6 +771,14 @@
             >教程</a
           >
           <a
+            href="/en/home.html"
+            hreflang="en"
+            lang="en"
+            data-seo-track="home_nav_click"
+            data-seo-target="english_home"
+            >English</a
+          >
+          <a
             href="https://github.com/ljquan/aitu"
             data-seo-track="home_nav_click"
             data-seo-target="github"
@@ -1106,10 +1123,7 @@
           window.location.hostname === '127.0.0.1';
         var forceReport =
           new URLSearchParams(window.location.search).get('report') === '1';
-
-        if (isLocalDev && !forceReport) {
-          return;
-        }
+        var shouldReportAnalytics = !isLocalDev || forceReport;
 
         function getSearchEngine() {
           var referrer = document.referrer || '';
@@ -1159,6 +1173,7 @@
         }
 
         function track(eventName, properties) {
+          if (!shouldReportAnalytics) return;
           if (!window.posthog || !window.posthog.capture) return;
           try {
             window.posthog.capture(
@@ -1171,6 +1186,10 @@
         }
 
         function initAnalytics() {
+          if (!shouldReportAnalytics) {
+            return;
+          }
+
           !(function (t, e) {
             var o, n, p, r;
             e.__SV ||
@@ -1252,8 +1271,104 @@
           window.setTimeout(callback, Math.min(timeout || 4000, 1200));
         }
 
+        var homeWorkspacePrefetchRequested = false;
+        var homeWorkspacePrefetchGroups = [
+          'tool-windows',
+          'runtime-static-assets',
+        ];
+        var homeWorkspacePrefetchMaxAttempts = 4;
+        var homeWorkspacePrefetchRetryDelayMs = 1000;
+
+        function canPrefetchWorkspaceStaticAssets() {
+          var connection =
+            navigator.connection ||
+            navigator.mozConnection ||
+            navigator.webkitConnection;
+
+          if (!connection) {
+            return true;
+          }
+
+          if (connection.saveData) return false;
+
+          return (
+            connection.effectiveType !== 'slow-2g' &&
+            connection.effectiveType !== '2g'
+          );
+        }
+
+        function postWorkspaceStaticPrefetch(registration, attempt, startedAt) {
+          if (homeWorkspacePrefetchRequested) {
+            return;
+          }
+
+          var controller = navigator.serviceWorker.controller;
+          var worker = controller || (registration && registration.active);
+
+          if (worker) {
+            try {
+              worker.postMessage({
+                type: 'SW_PREFETCH_GROUPS',
+                groups: homeWorkspacePrefetchGroups,
+              });
+              homeWorkspacePrefetchRequested = true;
+              track('home_sw_workspace_prefetch_requested', {
+                groups: homeWorkspacePrefetchGroups.join(','),
+                attempt: attempt,
+                via: controller ? 'controller' : 'registration_active',
+                duration_ms: Date.now() - startedAt,
+              });
+            } catch (error) {
+              track('home_sw_workspace_prefetch_failed', {
+                groups: homeWorkspacePrefetchGroups.join(','),
+                attempt: attempt,
+                error: sanitizeValue(error && error.message),
+                duration_ms: Date.now() - startedAt,
+              });
+            }
+            return;
+          }
+
+          if (attempt >= homeWorkspacePrefetchMaxAttempts) {
+            homeWorkspacePrefetchRequested = true;
+            track('home_sw_workspace_prefetch_failed', {
+              groups: homeWorkspacePrefetchGroups.join(','),
+              reason: 'no_active_worker',
+              attempt: attempt,
+              duration_ms: Date.now() - startedAt,
+            });
+            return;
+          }
+
+          window.setTimeout(function () {
+            postWorkspaceStaticPrefetch(registration, attempt + 1, startedAt);
+          }, homeWorkspacePrefetchRetryDelayMs);
+        }
+
+        function scheduleWorkspaceStaticPrefetch(registration, startedAt) {
+          if (homeWorkspacePrefetchRequested) {
+            return;
+          }
+
+          if (!canPrefetchWorkspaceStaticAssets()) {
+            homeWorkspacePrefetchRequested = true;
+            track('home_sw_workspace_prefetch_skipped', {
+              reason: 'constrained_connection',
+              duration_ms: Date.now() - startedAt,
+            });
+            return;
+          }
+
+          scheduleWhenIdle(function () {
+            postWorkspaceStaticPrefetch(registration, 1, startedAt);
+          }, 1800);
+        }
+
         function registerHomeServiceWorker() {
-          if (!('serviceWorker' in navigator)) return;
+          if (!('serviceWorker' in navigator)) {
+            return;
+          }
+
           scheduleWhenIdle(function () {
             var startedAt = Date.now();
             navigator.serviceWorker
@@ -1266,11 +1381,12 @@
                 });
                 return navigator.serviceWorker.ready;
               })
-              .then(function () {
+              .then(function (registration) {
                 track('home_sw_ready', {
                   has_controller: !!navigator.serviceWorker.controller,
                   duration_ms: Date.now() - startedAt,
                 });
+                scheduleWorkspaceStaticPrefetch(registration, startedAt);
               })
               .catch(function (error) {
                 track('home_sw_register_failed', {

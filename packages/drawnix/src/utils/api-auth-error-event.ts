@@ -44,6 +44,9 @@ const MISSING_CREDENTIAL_PATTERNS: RegExp[] = [
   /api[- ]?key is required/i,
   /api[- ]?key required/i,
   /no api[- ]?key/i,
+  /no (?:access |auth(?:entication)? |bearer )?token provided/i,
+  /missing (?:access |auth(?:entication)? |bearer )?token/i,
+  /(?:access |auth(?:entication)? |bearer )?token is required/i,
   /authorization header is missing/i,
   /missing authorization/i,
   /missing authentication/i,
@@ -144,10 +147,10 @@ export function classifyApiCredentialError(
 
 /**
  * 检查错误是否属于“应自动打开设置”的凭证错误
- * 只在凭证明确无效/过期/撤销时返回 true，避免把泛化 401 误判成 key 错误
+ * 只在凭证明确无效/过期/撤销/缺失时返回 true，避免把泛化 401 误判成 key 错误
  */
 export function isAuthError(error: unknown): boolean {
-  return classifyApiCredentialError(error) === 'invalid';
+  return classifyApiCredentialError(error) !== null;
 }
 
 /**

@@ -43,7 +43,7 @@ import {
 } from '../../utils/gemini-api/apiCalls';
 import type { GeminiMessage as UnifiedGeminiMessage } from '../../utils/gemini-api/types';
 import {
-  isAuthError,
+  classifyApiCredentialError,
   dispatchApiAuthError,
 } from '../../utils/api-auth-error-event';
 import { extractTextContent, parseToolCalls } from '../agent/tool-parser';
@@ -369,11 +369,12 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       );
 
       // 检测认证错误，触发设置弹窗
-      if (isAuthError(error)) {
+      const credentialErrorKind = classifyApiCredentialError(error);
+      if (credentialErrorKind) {
         dispatchApiAuthError({
           message: errorMessage,
           source: 'image',
-          reason: 'invalid',
+          reason: credentialErrorKind,
         });
       }
 
@@ -492,11 +493,12 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       const errorMessage = error.message || 'Async image generation failed';
 
       // 检测认证错误，触发设置弹窗
-      if (isAuthError(error)) {
+      const credentialErrorKind = classifyApiCredentialError(error);
+      if (credentialErrorKind) {
         dispatchApiAuthError({
           message: errorMessage,
           source: 'async-image',
-          reason: 'invalid',
+          reason: credentialErrorKind,
         });
       }
 
@@ -700,11 +702,12 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       const errorMessage = error.message || 'Video generation failed';
 
       // 检测认证错误，触发设置弹窗
-      if (isAuthError(error)) {
+      const credentialErrorKind = classifyApiCredentialError(error);
+      if (credentialErrorKind) {
         dispatchApiAuthError({
           message: errorMessage,
           source: 'video',
-          reason: 'invalid',
+          reason: credentialErrorKind,
         });
       }
 
@@ -866,11 +869,12 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       const errorMessage = error.message || 'AI analyze failed';
 
       // 检测认证错误，触发设置弹窗
-      if (isAuthError(error)) {
+      const credentialErrorKind = classifyApiCredentialError(error);
+      if (credentialErrorKind) {
         dispatchApiAuthError({
           message: errorMessage,
           source: 'ai-analyze',
-          reason: 'invalid',
+          reason: credentialErrorKind,
         });
       }
 

@@ -16,6 +16,8 @@
 - **[POSTHOG_SEO_LESSONS.md](./POSTHOG_SEO_LESSONS.md)** - 埋点观测与 SEO 优化方法论总结
 - **[POSTHOG_ERROR_TRACKING_LESSONS.md](./POSTHOG_ERROR_TRACKING_LESSONS.md)** - Error tracking 修复、降噪与关单标准复盘
 - **[PPT_STYLE_CONSISTENCY_LESSONS.md](./PPT_STYLE_CONSISTENCY_LESSONS.md)** - PPT 整页生图风格一致性与重生成经验总结
+- **[PPT_MEDIA_EXPORT_LESSONS.md](./PPT_MEDIA_EXPORT_LESSONS.md)** - PPT 视频/音频嵌入、封面与降级策略复盘
+- **[PPT_DECK_TITLE_FILENAME_LESSONS.md](./PPT_DECK_TITLE_FILENAME_LESSONS.md)** - PPT 总标题、导出文件名与元数据同步复盘
 
 ### 🚀 部署相关文档  
 - **[CFPAGE-DEPLOY.md](./CFPAGE-DEPLOY.md)** - Cloudflare Pages 部署指南
@@ -130,7 +132,11 @@ opentu/ (项目根目录)
 ### 2026-04-26
 - 🧩 新增 PPT 风格一致性经验总结，沉淀 deck 级 styleSpec、单页重生成和参考图策略
 
+### 2026-04-27
+- 🎬 新增 PPT 媒体导出经验总结，沉淀视频/音频嵌入、封面生成和超限降级策略
+- 🏷️ 新增 PPT 标题与导出文件名经验总结，沉淀 deckTitle 元数据同步策略
+
 ---
 
 *📖 文档持续更新中... 如有问题请提交 Issue*  
-*最后更新: 2026-04-26*
+*最后更新: 2026-04-27*

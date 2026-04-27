@@ -37,13 +37,24 @@ $brand-orange-dark: #E67E22;
     font-weight: 600;
     color: #333333;
     padding: 0 8px 0 12px;
+    display: block !important;
+    min-width: 48px;
+    visibility: visible !important;
   }
 
   // 标题栏图标区域
-  .wb-header-custom {
+  .wb-icon-container {
     display: flex;
     align-items: center;
+    justify-content: center;
     margin-left: 4px;
+
+    .wb-icon-content {
+      color: #666666;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
   }
 
   // 控制按钮 - 灰黑色风格

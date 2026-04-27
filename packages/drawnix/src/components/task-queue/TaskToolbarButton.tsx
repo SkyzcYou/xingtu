@@ -83,14 +83,6 @@ export const TaskToolbarButton: React.FC<TaskToolbarButtonProps> = ({
               </div>
             </div>
           </Badge>
-
-          {/* Status indicator dot */}
-          {activeTasks.length > 0 && (
-            <div className="task-toolbar-button__status task-toolbar-button__status--active" />
-          )}
-          {failedTasks.length > 0 && activeTasks.length === 0 && (
-            <div className="task-toolbar-button__status task-toolbar-button__status--failed" />
-          )}
         </div>
       </HoverTip>
     </>

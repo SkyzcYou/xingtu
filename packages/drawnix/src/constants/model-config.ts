@@ -174,7 +174,7 @@ export interface ModelConfig {
 }
 
 const BUILT_IN_MODEL_RECOMMENDATION_SCORES: Readonly<Record<string, number>> = {
-  // 'gpt-5.5': 99,
+  'gpt-5.5': 99,
   'claude-opus-4-6': 98,
   'gpt-5.4': 97,
   'gpt-5-pro': 96,
@@ -1138,17 +1138,17 @@ export const TEXT_MODELS: ModelConfig[] = applyBuiltInRecommendedScores([
     supportsTools: true,
     tags: ['new'],
   },
-  // {
-  //   id: 'gpt-5.5',
-  //   label: 'GPT-5.5',
-  //   shortCode: 'g55',
-  //   description: 'OpenAI 最新旗舰文本模型',
-  //   type: 'text',
-  //   vendor: ModelVendor.GPT,
-  //   isVip: true,
-  //   supportsTools: true,
-  //   tags: ['new'],
-  // },
+  {
+    id: 'gpt-5.5',
+    label: 'GPT-5.5',
+    shortCode: 'g55',
+    description: 'OpenAI 最新旗舰文本模型',
+    type: 'text',
+    vendor: ModelVendor.GPT,
+    isVip: true,
+    supportsTools: true,
+    tags: ['new'],
+  },
   {
     id: 'gpt-5.4',
     label: 'GPT-5.4',

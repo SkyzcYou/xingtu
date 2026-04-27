@@ -115,6 +115,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
   const drawerRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
+  const resizeEdgeRef = useRef<'left' | 'right'>('right');
 
   // ESC 键关闭
   useEffect(() => {
@@ -152,7 +153,12 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     startXRef.current = clientX;
     startWidthRef.current = drawerRef.current.offsetWidth;
-  }, []);
+    resizeEdgeRef.current =
+      position === 'toolbar-right' &&
+      document.documentElement.classList.contains('aitu-toolbar-dock-right')
+        ? 'left'
+        : 'right';
+  }, [position]);
 
   // 拖拽中 - 支持鼠标和触摸
   useEffect(() => {
@@ -161,7 +167,10 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     const handleMove = (e: MouseEvent | TouchEvent) => {
       // 获取当前 X 坐标（支持鼠标和触摸）
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-      const deltaX = clientX - startXRef.current;
+      const deltaX =
+        resizeEdgeRef.current === 'left'
+          ? startXRef.current - clientX
+          : clientX - startXRef.current;
       const newWidth = Math.min(maxWidth, Math.max(minWidth, startWidthRef.current + deltaX));
       setDraggingWidth(newWidth);
     };

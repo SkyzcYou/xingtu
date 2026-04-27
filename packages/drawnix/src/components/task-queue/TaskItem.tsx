@@ -325,8 +325,8 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
       isCharacterTask || isAudioTask ? undefined : mediaUrl
     );
     const cacheWarning =
-      isPreviewableTask && !isAudioTask
-        ? task.result?.cacheWarning || (!isCached ? detectedCacheWarning : undefined)
+      isPreviewableTask && !isAudioTask && !isCached
+        ? detectedCacheWarning || task.result?.cacheWarning
         : undefined;
     const cacheWarningTip = cacheWarning
       ? `${cacheWarning.message}${cacheWarning.expiresHint ? `\n${cacheWarning.expiresHint}` : ''}`

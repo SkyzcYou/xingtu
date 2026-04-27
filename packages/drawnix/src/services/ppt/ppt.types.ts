@@ -84,7 +84,23 @@ export interface PPTSlideImageHistoryItem {
   source?: 'agent' | 'manual' | 'regenerate';
 }
 
+export type PPTSlideTransitionType =
+  | 'none'
+  | 'fade'
+  | 'push'
+  | 'wipe'
+  | 'split'
+  | 'cover'
+  | 'uncover';
+
+export interface PPTSlideTransition {
+  type: PPTSlideTransitionType;
+  durationMs?: number;
+}
+
 export interface PPTFrameMeta {
+  /** PPT 总标题，用于大纲标题输入和导出文件名 */
+  deckTitle?: string;
   /** 旧视觉提示词（兼容旧数据，整页提示词优先使用 slidePrompt） */
   imagePrompt?: string;
   /** 旧图片状态（兼容旧数据，整页状态优先使用 slideImageStatus） */
@@ -103,6 +119,8 @@ export interface PPTFrameMeta {
   slideImageStatus?: 'placeholder' | 'loading' | 'generated' | 'failed';
   /** 整页幻灯片生图历史（仅保存轻量 URL/提示词/元素 ID） */
   slideImageHistory?: PPTSlideImageHistoryItem[];
+  /** 页面切换转场动画 */
+  transition?: PPTSlideTransition;
   /** 页面版式类型 */
   layout?: PPTLayoutType;
   /** 演讲者备注 */

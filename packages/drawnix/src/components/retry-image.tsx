@@ -144,6 +144,7 @@ export const RetryImage: React.FC<RetryImageProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [hasError, setHasError] = useState<boolean>(false);
   const [bypassSW, setBypassSW] = useState<boolean>(false);
+  const shouldHideWhileLoading = showSkeleton && isLoading;
   // 存储降级创建的 blob URL，用于清理
   const blobUrlRef = useRef<string | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -335,7 +336,7 @@ export const RetryImage: React.FC<RetryImageProps> = ({
         onError={handleError}
         style={{
           ...imgProps.style,
-          opacity: isLoading ? 0 : 1,
+          opacity: shouldHideWhileLoading ? 0 : 1,
           transition: 'opacity 0.3s ease-out',
           width: '100%',
           height: '100%'

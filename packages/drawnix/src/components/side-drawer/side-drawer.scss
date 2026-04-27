@@ -39,13 +39,21 @@ $drawer-width-wide: min(1024px, 50vw);
   // ========================================
 
   &--toolbar-right {
-    left: $toolbar-width;
+    left: 0;
     z-index: $z-side-drawer;
-    transform: translateX(calc(-100% - #{$toolbar-width}));
+    max-width: var(
+      --aitu-toolbar-side-panel-max-width,
+      calc(100vw - #{$toolbar-width})
+    );
+    transform: translateX(-100%);
     box-shadow: 16px 0 48px rgba(0, 0, 0, 0.08);
 
     &.side-drawer--open {
-      transform: translateX(0);
+      transform: translateX(var(--aitu-toolbar-right-edge, #{$toolbar-width}));
+      box-shadow:
+        calc(-1 * var(--aitu-toolbar-right-edge, #{$toolbar-width})) 0 0 0
+          var(--td-bg-color-container),
+        16px 0 48px rgba(0, 0, 0, 0.08);
     }
 
     // 移动端适配：抽屉从屏幕左边缘开始
@@ -324,6 +332,46 @@ $drawer-width-wide: min(1024px, 50vw);
     opacity: 1;
     background: #F39C12;
   }
+}
+
+.aitu-toolbar-dock-right .side-drawer--toolbar-right {
+  --aitu-toolbar-drawer-left: max(
+    0px,
+    calc(var(--aitu-toolbar-left, 0px) - 100%)
+  );
+
+  border-radius: 16px 0 0 16px;
+  transform: translateX(calc(100vw + 12px));
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  box-shadow: -16px 0 48px rgba(0, 0, 0, 0.08);
+  transition:
+    transform $animation-duration cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 140ms ease-out,
+    visibility 0s linear $animation-duration;
+
+  &.side-drawer--open {
+    transform: translateX(var(--aitu-toolbar-drawer-left));
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    box-shadow:
+      100vw 0 0 100vw var(--td-bg-color-container),
+      -16px 0 48px rgba(0, 0, 0, 0.08);
+    transition:
+      transform $animation-duration cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 140ms ease-out;
+  }
+
+  .side-drawer__resize-handle {
+    left: -4px;
+    right: auto;
+  }
+}
+
+.aitu-toolbar-dragging .side-drawer--toolbar-right {
+  transition: none;
 }
 
 // ============================================================================

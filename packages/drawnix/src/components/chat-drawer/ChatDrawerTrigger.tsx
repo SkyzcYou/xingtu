@@ -17,9 +17,13 @@ interface ChatDrawerTriggerProps {
 
 export const ChatDrawerTrigger: React.FC<ChatDrawerTriggerProps> = React.memo(
   ({ isOpen, onClick, drawerWidth }) => {
-    // 当抽屉打开时，根据抽屉宽度计算触发器位置
-    const style =
-      isOpen && drawerWidth ? { right: drawerWidth - 18 } : undefined;
+    // 抽屉打开时跟随抽屉左缘；工具栏贴右时，抽屉和关闭态把手都避开工具栏
+    const style: React.CSSProperties = {
+      right:
+        isOpen && drawerWidth
+          ? `calc(var(--aitu-toolbar-right-dock-width, 0px) + ${drawerWidth - 18}px)`
+          : 'var(--aitu-toolbar-right-dock-width, 0px)',
+    };
 
     return (
       <HoverTip content={isOpen ? '收起对话' : '展开对话'}>

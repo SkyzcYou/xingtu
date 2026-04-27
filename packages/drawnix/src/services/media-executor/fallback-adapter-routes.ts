@@ -15,7 +15,7 @@ import {
   LLMReferenceImage,
 } from './llm-api-logger';
 import {
-  isAuthError,
+  classifyApiCredentialError,
   dispatchApiAuthError,
 } from '../../utils/api-auth-error-event';
 import { unifiedCacheService } from '../unified-cache-service';
@@ -192,11 +192,12 @@ export async function executeImageViaAdapter(
     const duration = Date.now() - logStartTime;
     const errorMessage = error.message || 'Image generation failed (adapter)';
 
-    if (isAuthError(error)) {
+    const credentialErrorKind = classifyApiCredentialError(error);
+    if (credentialErrorKind) {
       dispatchApiAuthError({
         message: errorMessage,
         source: 'image',
-        reason: 'invalid',
+        reason: credentialErrorKind,
       });
     }
 
@@ -317,11 +318,12 @@ export async function executeVideoViaAdapter(
     const duration = Date.now() - logStartTime;
     const errorMessage = error.message || 'Video generation failed (adapter)';
 
-    if (isAuthError(error)) {
+    const credentialErrorKind = classifyApiCredentialError(error);
+    if (credentialErrorKind) {
       dispatchApiAuthError({
         message: errorMessage,
         source: 'video',
-        reason: 'invalid',
+        reason: credentialErrorKind,
       });
     }
 

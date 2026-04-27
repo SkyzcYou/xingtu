@@ -31,3 +31,16 @@
 - 更新安装阶段：先完成 precache，再尝试 idle prefetch。
 - idle manifest 不可用：记录原因并立即返回，不阻塞 `markNewVersionReady`。
 - 激活后：继续依赖已有 idle prefetch 调度，在网络恢复后补齐可选资源。
+
+## Home 页预热接入经验
+
+当静态落地页复用 `sw.js` 预热能力时，SW 注册逻辑不能放在 analytics 或上报开关的早退分支之后。本地调试常会跳过 PostHog 等外部上报，如果 `return` 包住了整段脚本，`navigator.serviceWorker.register('/sw.js')` 和后续 `SW_PREFETCH_GROUPS` 都不会执行。
+
+推荐将功能初始化和上报拆开：
+
+- 本地环境可以跳过 analytics 上报，但仍应执行 SW 注册、ready 等待和预热消息发送。
+- `track()` 内部根据 `shouldReportAnalytics` 降级为空操作，避免调用侧散落本地判断。
+- 预热触发继续走现有 `SW_PREFETCH_GROUPS`，并保留 `Save-Data`、`2g`、`slow-2g` 保护，避免落地页后台抢占弱网带宽。
+- 排查“没有加载 sw.js”时，先检查脚本是否有早退，再看 SW scope、secure context、`registration.active` 和 controller 状态。
+
+复现路径：访问 `http://127.0.0.1:7200/home.html`，如果本地 analytics 分支直接 `return`，控制台不会出现注册日志，Network 也不会请求 `/sw.js`。修复后，本地只跳过上报，SW 注册与工作区静态资源预热照常运行。

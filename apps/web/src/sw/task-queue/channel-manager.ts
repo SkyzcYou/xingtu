@@ -1212,6 +1212,16 @@ export class SWChannelManager {
   }
 
   /**
+   * 发送图片缓存失败事件
+   */
+  sendCacheImageCacheFailed(url: string, error?: string): void {
+    this.broadcastToAll(SW_EVENTS.CACHE_IMAGE_CACHE_FAILED, {
+      url,
+      error,
+    });
+  }
+
+  /**
    * 发送缓存删除事件
    */
   sendCacheDeleted(url: string): void {

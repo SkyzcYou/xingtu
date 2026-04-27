@@ -6,15 +6,32 @@
 @import './theme.scss';
 @import './z-index.scss'; // Z-Index层级管理变量
 @import './responsive'; // 响应式设计变量和混合宏
+@import './common-variables';
 @import './toolbox-theme.scss'; // 工具箱主题变量
 @import '../components/tool-element/tool.component.scss';
 @import '../components/minimap/minimap.scss';
 @import '../components/toolbar/pencil-settings-toolbar/pencil-settings-toolbar.scss'; // 画笔设置工具栏
 @import '../components/toolbar/pen-settings-toolbar/pen-settings-toolbar.scss'; // 钢笔设置工具栏
 
+:root {
+  --aitu-toolbar-safe-area-left: #{$toolbar-safe-area-left};
+  --aitu-toolbar-left: #{$toolbar-left};
+  --aitu-toolbar-content-width: #{$toolbar-content-width};
+  --aitu-toolbar-right-edge: #{$toolbar-width};
+  --aitu-toolbar-right-dock-width: 0px;
+  --aitu-toolbar-right-avoidance: 0px;
+  --aitu-toolbar-side-panel-max-width: calc(100vw - #{$toolbar-width});
+}
+
 .t-dialog__ctx.t-dialog__ctx--fixed {
   z-index: $z-dialog !important;
 }
+
+.t-tooltip,
+.t-tooltip .t-popup__content {
+  pointer-events: none;
+}
+
 .drawnix {
   height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
@@ -163,10 +180,10 @@
 
   // Unified Toolbar Container (统一左侧工具栏 - 桌面端和移动端通用)
   .unified-toolbar {
-    position: absolute; // 使用 absolute 定位,通过 JS 动态调整位置跟随视口
-    left: 12px; // 稍微偏移边缘，不贴死
+    position: fixed;
+    left: var(--aitu-toolbar-left, #{$toolbar-left});
     top: 12px;
-    z-index: $z-unified-toolbar; // Layer 2: Toolbars (2000)
+    z-index: $z-side-drawer + 1; // 覆盖抽屉左侧同色延展背景
     bottom: 12px; // 保持底部间距
     height: calc(100vh - 24px); // 减去上下间距
     display: flex;
@@ -175,7 +192,7 @@
     width: fit-content;
     max-width: 80px;
     overflow: visible; // 允许 Badge 角标溢出显示，滚动由 __scrollable 处理
-    border-radius: var(--border-radius-lg); // 更加圆润
+    border-radius: 20px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08); // 更加柔和的阴影
     background: rgba(
       var(--island-bg-color-rgb, 255, 255, 255),
@@ -207,6 +224,59 @@
       }
     }
 
+    &__drag-handle {
+      position: relative;
+      flex-shrink: 0;
+      width: 100%;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 0;
+      border-radius: 20px 20px 8px 8px;
+      background: transparent;
+      color: var(--color-on-surface-variant, rgba(0, 0, 0, 0.28));
+      cursor: grab;
+      opacity: 0.72;
+      transition:
+        background-color 0.18s ease,
+        color 0.18s ease,
+        opacity 0.18s ease;
+      touch-action: none;
+      z-index: 1;
+
+      &::before {
+        content: '';
+        width: 20px;
+        height: 3px;
+        border-radius: 999px;
+        background: currentColor;
+        opacity: 0.34;
+      }
+
+      &:hover,
+      &:focus-visible {
+        background: rgba(0, 0, 0, 0.035);
+        color: var(--color-on-surface, rgba(0, 0, 0, 0.72));
+        opacity: 1;
+      }
+
+      &:active {
+        cursor: grabbing;
+      }
+    }
+
+    &--dragging .unified-toolbar__drag-handle {
+      background: rgba(243, 156, 18, 0.08);
+      color: var(--brand-primary, #f39c12);
+      opacity: 1;
+    }
+
+    &--dragging {
+      user-select: none;
+    }
+
     &__section {
       padding: 0 8px;
 
@@ -232,6 +302,7 @@
         flex-shrink: 0;
         padding: 12px 8px;
         border-top: 1px solid var(--color-border-light, rgba(0, 0, 0, 0.05));
+        border-radius: 0 0 20px 20px;
         display: flex;
         justify-content: center;
         align-items: center;
@@ -242,7 +313,7 @@
       // 固定在顶部的section (菜单)
       &--fixed-top {
         flex-shrink: 0;
-        padding: 12px 8px;
+        padding: 4px 8px 10px;
         border-bottom: 1px solid var(--color-border-light, rgba(0, 0, 0, 0.05));
         display: flex;
         flex-direction: column;
@@ -272,7 +343,11 @@
       max-height: calc(100vh - 160px); // 限制最大高度
       width: 38px; // 固定宽度，确保收起和展开状态一致（以收起状态为准）
       max-width: 38px;
-      border-radius: $mobile-border-radius;
+      border-radius: 16px;
+
+      .unified-toolbar__drag-handle {
+        display: none;
+      }
 
       // 移动端强制使用图标模式
       .tool-icon__label {
@@ -329,11 +404,10 @@
     // 移动端收起状态修饰符
     &--mobile-collapsed {
       @include tablet-and-below {
-        // 保持位置不变，只调整高度为自适应
+        // 保持底部悬浮位置，只调整高度为自适应
         height: auto !important;
         min-height: 0 !important;
         max-height: none !important;
-        bottom: auto !important;
         overflow: visible !important;
 
         // 隐藏所有常规内容

@@ -1,3 +1,27 @@
+## 0.6.80 (2026-04-27)
+
+### 🚀 Features
+
+- 启用 GPT-5.5 模型配置 ([cb97b283](https://github.com/ljquan/aitu/commit/cb97b283))
+
+### 🩹 Fixes
+
+- tighten media cache warnings ([e71cb815](https://github.com/ljquan/aitu/commit/e71cb815))
+- refine left floating toolbar drawer alignment ([8255bde4](https://github.com/ljquan/aitu/commit/8255bde4))
+- clear task failure badge after viewing ([b574bfbb](https://github.com/ljquan/aitu/commit/b574bfbb))
+- 优化素材库渲染性能 ([bf713cd5](https://github.com/ljquan/aitu/commit/bf713cd5))
+- 完善 PPT 标题文件名和媒体导出 ([0f8a2fcd](https://github.com/ljquan/aitu/commit/0f8a2fcd))
+
+### 🔧 Chores
+
+- 更新应用版本号至0.6.79并同步构建时间 ([5af73dc1](https://github.com/ljquan/aitu/commit/5af73dc1))
+- docs: record home sw prefetch lesson ([b5e06667](https://github.com/ljquan/aitu/commit/b5e06667))
+- Add home SEO alternates and SW prefetch ([aaeab363](https://github.com/ljquan/aitu/commit/aaeab363))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
 ## 0.6.79 (2026-04-26)
 
 ### 🚀 Features

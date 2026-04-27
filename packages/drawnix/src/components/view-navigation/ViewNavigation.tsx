@@ -64,8 +64,16 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
   // 计算右侧偏移量
   const rightOffset = useMemo(() => {
     if (isDrawerOpen) {
-      return drawerWidth + EDGE_MARGIN;
+      return `calc(var(--aitu-toolbar-right-dock-width, 0px) + ${
+        drawerWidth + EDGE_MARGIN
+      }px)`;
     }
+
+    const toolbarAvoidance = 'var(--aitu-toolbar-right-avoidance, 0px)';
+    if (typeof CSS !== 'undefined' && CSS.supports('right', 'max(1px, 2px)')) {
+      return `max(${EDGE_MARGIN}px, ${toolbarAvoidance})`;
+    }
+
     return EDGE_MARGIN;
   }, [isDrawerOpen, drawerWidth]);
 

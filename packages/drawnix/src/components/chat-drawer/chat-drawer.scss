@@ -26,16 +26,31 @@ $drawer-input-height: 160px;
   display: flex;
   flex-direction: column;
   width: max($drawer-min-width, 50vw);
-  max-width: calc(100vw - $toolbar-width);
+  max-width: var(
+    --aitu-toolbar-side-panel-max-width,
+    calc(100vw - #{$toolbar-width})
+  );
   background: #ffffff;
   border-left: 1px solid var(--td-component-border);
   box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
   transform: translateX(100%);
-  transition: transform $animation-duration ease-out;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    transform $animation-duration ease-out,
+    opacity 160ms ease-out,
+    visibility 0s linear $animation-duration;
   color-scheme: light; // 强制光照模式配色，防止紫色干扰
 
   &--open {
     transform: translateX(0);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      transform $animation-duration ease-out,
+      opacity 160ms ease-out;
   }
 
   &--dragging {
@@ -203,6 +218,16 @@ $drawer-input-height: 160px;
       color: var(--td-brand-color);
       border: 1px solid rgba(243, 156, 18, 0.2);
     }
+  }
+}
+
+.aitu-toolbar-dock-right .chat-drawer {
+  right: var(--aitu-toolbar-right-dock-width, 0px);
+
+  &.chat-drawer--open {
+    box-shadow:
+      100vw 0 0 100vw #ffffff,
+      -4px 0 16px rgba(0, 0, 0, 0.08);
   }
 }
 

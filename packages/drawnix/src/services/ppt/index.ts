@@ -11,6 +11,8 @@ export type {
   PPTPageCountOption,
   PPTGenerateOptions,
   PPTFrameMeta,
+  PPTSlideTransition,
+  PPTSlideTransitionType,
   PPTSlideImageHistoryItem,
   LayoutElement,
   FrameRect,
@@ -36,13 +38,29 @@ export {
 } from './ppt-prompts';
 
 export {
+  PPT_DEFAULT_TRANSITION_DURATION_MS,
+  PPT_TRANSITION_OPTIONS,
+  buildPPTSlideTransitionXml,
+  getPPTSlideTransition,
+  getPPTTransitionOption,
+  hasPPTSlideTransition,
+  injectPPTSlideTransitionXml,
+  injectPPTSlideTransitions,
+  normalizePPTSlideTransition,
+} from './ppt-transitions';
+export type { PPTTransitionOption } from './ppt-transitions';
+
+export {
   PPT_EDITOR_OPEN_EVENT,
   PPT_EDITOR_VIEW_MODE_STORAGE_KEY,
   loadPPTEditorViewMode,
   savePPTEditorViewMode,
   requestOpenPPTEditor,
 } from './ppt-ui-events';
-export type { PPTEditorOpenEventDetail, PPTEditorViewMode } from './ppt-ui-events';
+export type {
+  PPTEditorOpenEventDetail,
+  PPTEditorViewMode,
+} from './ppt-ui-events';
 
 // 布局引擎
 export {

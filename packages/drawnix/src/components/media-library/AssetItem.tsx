@@ -22,7 +22,6 @@ import { useUnifiedCache } from '../../hooks/useUnifiedCache';
 import { VideoPosterPreview } from '../shared/VideoPosterPreview';
 import type { Asset, ViewMode } from '../../types/asset.types';
 import './AssetItem.scss';
-import { HoverTip } from '../shared';
 
 export interface AssetItemProps {
   asset: Asset;
@@ -67,8 +66,8 @@ export const AssetItem = memo<AssetItemProps>(
       asset.type === 'IMAGE' || asset.type === 'VIDEO' ? asset.url : undefined
     );
     const cacheWarning =
-      asset.type === 'IMAGE' || asset.type === 'VIDEO'
-        ? asset.cacheWarning || (!isCached ? detectedCacheWarning : undefined)
+      (asset.type === 'IMAGE' || asset.type === 'VIDEO') && !isCached
+        ? detectedCacheWarning || asset.cacheWarning
         : undefined;
     const cacheWarningTip = cacheWarning
       ? `${cacheWarning.message}${cacheWarning.expiresHint ? `\n${cacheWarning.expiresHint}` : ''}`
@@ -213,16 +212,17 @@ export const AssetItem = memo<AssetItemProps>(
                 <div className="asset-item__ai-badge">AI</div>
               )}
               {isSynced && (
-                <HoverTip content="已同步到云端" showArrow={false}>
-                  <div className="asset-item__synced-badge">
-                    <Cloud size={10} />
-                  </div>
-                </HoverTip>
+                <div className="asset-item__synced-badge" title="已同步到云端">
+                  <Cloud size={10} />
+                </div>
               )}
               {cacheWarning && (
-                <HoverTip content={cacheWarningTip} showArrow={false}>
-                  <div className="asset-item__cache-warning-badge">需下载</div>
-                </HoverTip>
+                <div
+                  className="asset-item__cache-warning-badge"
+                  title={cacheWarningTip}
+                >
+                  需下载
+                </div>
               )}
             </div>
           )}
@@ -256,25 +256,25 @@ export const AssetItem = memo<AssetItemProps>(
 
           {/* 插入按钮 - 统一渲染，显示由 CSS 控制 */}
           {!isListMode && !isInSelectionMode && onDoubleClick && (
-            <HoverTip content="插入到画布" showArrow={false}>
-              <button
-                type="button"
-                className="asset-item__preview-btn"
-                onClick={handleInsertClick}
-                data-track="asset_item_insert"
-              >
-                <Plus size={16} />
-              </button>
-            </HoverTip>
+            <button
+              type="button"
+              className="asset-item__preview-btn"
+              onClick={handleInsertClick}
+              aria-label="插入到画布"
+              title="插入到画布"
+              data-track="asset_item_insert"
+            >
+              <Plus size={16} />
+            </button>
           )}
 
           {/* 网格模式：渐变遮罩和名称 */}
           {!isListMode && !isCompactMode && (
             <>
               <div className="asset-item__overlay" />
-              <HoverTip content={asset.name} showArrow={false}>
-                <div className="asset-item__name-overlay">{asset.name}</div>
-              </HoverTip>
+              <div className="asset-item__name-overlay" title={asset.name}>
+                {asset.name}
+              </div>
             </>
           )}
         </div>
@@ -282,9 +282,9 @@ export const AssetItem = memo<AssetItemProps>(
         {/* 列表模式：信息区域 */}
         {isListMode && (
           <div className="asset-item__info">
-            <HoverTip content={asset.name} showArrow={false}>
-              <div className="asset-item__name">{asset.name}</div>
-            </HoverTip>
+            <div className="asset-item__name" title={asset.name}>
+              {asset.name}
+            </div>
             <div className="asset-item__meta">
               <span className="asset-item__type">
                 {asset.type === 'IMAGE' ? (
@@ -328,33 +328,35 @@ export const AssetItem = memo<AssetItemProps>(
 
         {/* 列表模式：已同步标识 */}
         {isListMode && isSynced && (
-          <HoverTip content="已同步到云端" showArrow={false}>
-            <div className="asset-item__synced-badge asset-item__synced-badge--list">
-              <Cloud size={12} />
-            </div>
-          </HoverTip>
+          <div
+            className="asset-item__synced-badge asset-item__synced-badge--list"
+            title="已同步到云端"
+          >
+            <Cloud size={12} />
+          </div>
         )}
 
         {isListMode && cacheWarning && (
-          <HoverTip content={cacheWarningTip} showArrow={false}>
-            <div className="asset-item__cache-warning-badge asset-item__cache-warning-badge--list">
-              需下载
-            </div>
-          </HoverTip>
+          <div
+            className="asset-item__cache-warning-badge asset-item__cache-warning-badge--list"
+            title={cacheWarningTip}
+          >
+            需下载
+          </div>
         )}
 
         {/* 列表模式：插入按钮 */}
         {isListMode && !isInSelectionMode && onDoubleClick && (
-          <HoverTip content="插入到画布" showArrow={false}>
-            <button
-              type="button"
-              className="asset-item__preview-btn"
-              onClick={handleInsertClick}
-              data-track="asset_item_insert"
-            >
-              <Plus size={16} />
-            </button>
-          </HoverTip>
+          <button
+            type="button"
+            className="asset-item__preview-btn"
+            onClick={handleInsertClick}
+            aria-label="插入到画布"
+            title="插入到画布"
+            data-track="asset_item_insert"
+          >
+            <Plus size={16} />
+          </button>
         )}
       </div>
     );

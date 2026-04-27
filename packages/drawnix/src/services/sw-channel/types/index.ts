@@ -80,6 +80,7 @@ export type {
   InitParams,
   InitResult,
   CacheImageCachedEvent,
+  CacheImageCacheFailedEvent,
   CacheDeletedEvent,
   CacheQuotaWarningEvent,
   SWNewVersionReadyEvent,

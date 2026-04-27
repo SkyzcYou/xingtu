@@ -26,12 +26,28 @@ describe('api-auth-error-event', () => {
     expect(isAuthError(error)).toBe(true);
   });
 
-  it('应识别缺少凭证但不自动打开设置', () => {
+  it('应识别缺少凭证并自动打开设置', () => {
     const error = new Error('HTTP 401: API key is required');
     (error as any).httpStatus = 401;
 
     expect(classifyApiCredentialError(error)).toBe('missing');
-    expect(isAuthError(error)).toBe(false);
+    expect(isAuthError(error)).toBe(true);
+  });
+
+  it('应识别 PAI 返回的 No token provided', () => {
+    const error = new Error('HTTP 401');
+    (error as any).httpStatus = 401;
+    (error as any).apiErrorBody = JSON.stringify({
+      error: {
+        code: '',
+        message:
+          'No token provided (request id: 20260427153350105490223i5mx7ZLL)',
+        type: 'rix_api_error',
+      },
+    });
+
+    expect(classifyApiCredentialError(error)).toBe('missing');
+    expect(isAuthError(error)).toBe(true);
   });
 
   it('不应把泛化 unauthorized 误判为 key 错误', () => {

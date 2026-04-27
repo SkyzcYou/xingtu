@@ -20,6 +20,9 @@ import { callWithDefault, callOperation } from './rpc-helpers';
 export interface SWChannelEventHandlers {
   // Cache events
   onCacheImageCached?: (event: import('./types').CacheImageCachedEvent) => void;
+  onCacheImageCacheFailed?: (
+    event: import('./types').CacheImageCacheFailedEvent
+  ) => void;
   onCacheDeleted?: (event: import('./types').CacheDeletedEvent) => void;
   onCacheQuotaWarning?: (
     event: import('./types').CacheQuotaWarningEvent
@@ -1047,6 +1050,10 @@ export class SWChannelClient {
     this.subscribeEvent<import('./types').CacheImageCachedEvent>(
       'cache:imageCached',
       () => this.eventHandlers.onCacheImageCached
+    );
+    this.subscribeEvent<import('./types').CacheImageCacheFailedEvent>(
+      'cache:imageCacheFailed',
+      () => this.eventHandlers.onCacheImageCacheFailed
     );
     this.subscribeEvent<import('./types').CacheDeletedEvent>(
       'cache:deleted',

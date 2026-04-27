@@ -13,6 +13,9 @@ $brand-orange-dark: #E67E22;
 
 .asset-item {
   position: relative;
+  box-sizing: border-box;
+  contain: layout paint;
+  isolation: isolate;
   cursor: pointer;
   background: #ffffff;
   border: 2px solid transparent;
@@ -24,7 +27,6 @@ $brand-orange-dark: #E67E22;
 
   &:hover {
     border-color: rgba(0, 0, 0, 0.15);
-    box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.14);
   }
 
   &--selected {
@@ -82,8 +84,6 @@ $brand-orange-dark: #E67E22;
     padding: 5px 10px;
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -182,7 +182,6 @@ $brand-orange-dark: #E67E22;
           border-radius: 4px;
           border-color: rgba(255, 255, 255, 0.4);
           background: rgba(0, 0, 0, 0.2);
-          backdrop-filter: blur(4px);
           width: 18px; // 统一尺寸
           height: 18px;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -220,8 +219,6 @@ $brand-orange-dark: #E67E22;
     border: none;
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -275,7 +272,6 @@ $brand-orange-dark: #E67E22;
     justify-content: center;
     background: rgba(255, 255, 255, 0.94);
     color: #64748b;
-    backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
     transition: all 0.2s ease;
 
@@ -329,6 +325,7 @@ $brand-orange-dark: #E67E22;
     transition: opacity 0.25s ease, transform 0.25s ease;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
     z-index: 1;
+    pointer-events: none;
   }
 
   // ========== 列表模式信息区 ==========

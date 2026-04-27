@@ -97,6 +97,14 @@ export interface CacheImageCachedEvent {
 }
 
 /**
+ * 图片缓存失败事件
+ */
+export interface CacheImageCacheFailedEvent {
+  url: string;
+  error?: string;
+}
+
+/**
  * 缓存删除事件
  */
 export interface CacheDeletedEvent {
@@ -244,6 +252,7 @@ export interface SWEvents {
   'workflow:recovered': WorkflowRecoveredEvent;
   // Cache events
   'cache:imageCached': CacheImageCachedEvent;
+  'cache:imageCacheFailed': CacheImageCacheFailedEvent;
   'cache:deleted': CacheDeletedEvent;
   'cache:quotaWarning': CacheQuotaWarningEvent;
   // SW status events

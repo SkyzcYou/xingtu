@@ -31,10 +31,8 @@ export function MediaLibraryModal({
 }: MediaLibraryModalProps) {
   const {
     assets,
-    loading,
     loadAssets,
     addAsset,
-    filters,
     setFilters,
     selectedAssetId,
     setSelectedAssetId,
@@ -297,7 +295,6 @@ export function MediaLibraryModal({
   return (
     <>
       <WinBoxWindow
-        id="media-library"
         visible={isOpen}
         title="素材库"
         onClose={onClose}
@@ -312,13 +309,9 @@ export function MediaLibraryModal({
         resizable={true}
         movable={true}
         modal={false}
-        className="winbox-media-library"
+        className="winbox-media-library media-library-modal"
         data-testid="media-library-modal"
-        headerContent={
-          <div className="media-library-header-content">
-            <MediaLibraryIcon size={18} />
-          </div>
-        }
+        icon={<MediaLibraryIcon size={18} />}
       >
         {/* 隐藏的文件输入 */}
         <input

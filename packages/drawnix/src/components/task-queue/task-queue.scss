@@ -7,8 +7,60 @@
  */
 
 @import '../../styles/z-index.scss';
+@import '../../styles/_common-variables.scss';
 
 // Task Queue Panel Content Styles
+.task-queue-panel.side-drawer--toolbar-right {
+  transform: translateX(
+    calc(var(--aitu-toolbar-right-edge, #{$toolbar-width}) - 10px)
+  );
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    transform 160ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 120ms ease-out,
+    visibility 0s linear 160ms;
+
+  &.side-drawer--open {
+    transform: translateX(var(--aitu-toolbar-right-edge, #{$toolbar-width}));
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      transform 160ms cubic-bezier(0.2, 0, 0, 1),
+      opacity 120ms ease-out;
+  }
+
+  @media (max-width: 768px) {
+    transform: translateX(-100%);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+
+    &.side-drawer--open {
+      transform: translateX(0);
+    }
+  }
+}
+
+.aitu-toolbar-dock-right .task-queue-panel.side-drawer--toolbar-right {
+  --aitu-toolbar-drawer-left: max(
+    0px,
+    calc(var(--aitu-toolbar-left, 0px) - 100%)
+  );
+
+  transform: translateX(calc(var(--aitu-toolbar-drawer-left) + 10px));
+
+  &.side-drawer--open {
+    transform: translateX(var(--aitu-toolbar-drawer-left));
+  }
+}
+
+.aitu-toolbar-dragging .task-queue-panel.side-drawer--toolbar-right {
+  transition: none;
+}
+
 .task-queue-panel {
   &__filters-container {
     display: flex;
@@ -709,10 +761,6 @@
 // Responsive Design for Panel
 @media (max-width: 1200px) {
   .task-queue-panel {
-    width: 100%; // 移动端占满宽度
-    left: 0;
-    right: 0;
-
     &__filters-container {
       gap: 8px;
     }
@@ -1080,24 +1128,6 @@
     transition: color 0.3s ease;
   }
 
-  &__status {
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    bottom: 4px;
-    right: 4px;
-    border: 2px solid #ffffff;
-    animation: pulse 2s infinite;
-
-    &--active {
-      background: var(--td-success-color, #00a870);
-    }
-
-    &--failed {
-      background: var(--td-error-color, #e34d59);
-    }
-  }
 }
 
 // Badge positioning and styling adjustment for embedded button

@@ -85,11 +85,15 @@ import {
   loadPPTEditorViewMode,
   normalizePPTStyleSpec,
   PPT_EDITOR_OPEN_EVENT,
+  PPT_TRANSITION_OPTIONS,
+  getPPTSlideTransition,
+  getPPTTransitionOption,
   savePPTEditorViewMode,
   sanitizePPTFrameLayoutColumns,
   savePPTFrameLayoutColumns,
   type PPTEditorOpenEventDetail,
   type PPTEditorViewMode,
+  type PPTSlideTransitionType,
 } from '../../services/ppt';
 import { createImageTask } from '../../mcp/tools/image-generation';
 import { waitForTaskCompletion } from '../../services/media-executor';
@@ -155,6 +159,7 @@ interface FrameInfo {
 }
 
 interface FramePanelProps {
+  currentBoardName?: string;
   onOpenMediaLibrary?: (config?: {
     mode?: SelectionMode;
     onSelect?: (asset: Asset) => void | Promise<void>;
@@ -364,9 +369,10 @@ function getPPTImageElementDimensions(
   return undefined;
 }
 
-function resolveClosestPPTImageTaskSize(
-  dimensions?: { width: number; height: number }
-): string | undefined {
+function resolveClosestPPTImageTaskSize(dimensions?: {
+  width: number;
+  height: number;
+}): string | undefined {
   if (!dimensions?.width || !dimensions.height) {
     return undefined;
   }
@@ -486,6 +492,29 @@ function isDefaultFrameName(name?: string): boolean {
 function getFramePromptTitle(frame: PlaitFrame, fallback: string): string {
   const displayName = getFrameDisplayName(frame).trim();
   return displayName || fallback;
+}
+
+function getPPTDeckTitleFromFrameInfos(frameInfos: FrameInfo[]): string {
+  for (const info of frameInfos) {
+    const title = info.pptMeta?.deckTitle?.trim();
+    if (title) {
+      return title;
+    }
+  }
+  return '';
+}
+
+function resolvePPTExportFileName(
+  deckTitle: string,
+  canvasTitle?: string
+): string {
+  const rawName = deckTitle.trim() || canvasTitle?.trim() || 'aitu-ppt';
+  return (
+    rawName
+      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim() || 'aitu-ppt'
+  );
 }
 
 function frameInfoToPPTPageSpec(
@@ -714,6 +743,50 @@ const PPTSlideHistoryMenuLabel: React.FC<{
   );
 };
 
+const PPTTransitionMenuLabel: React.FC<{
+  label: string;
+  description: string;
+  active: boolean;
+}> = ({ label, description, active }) => (
+  <span
+    className={classNames('frame-panel__transition-menu-item', {
+      'frame-panel__transition-menu-item--active': active,
+    })}
+  >
+    <span className="frame-panel__transition-menu-check">
+      {active ? <Check size={14} /> : null}
+    </span>
+    <span className="frame-panel__transition-menu-text">
+      <span className="frame-panel__transition-menu-title">{label}</span>
+      <span className="frame-panel__transition-menu-desc">{description}</span>
+    </span>
+  </span>
+);
+
+const PPTTransitionBadge: React.FC<{
+  transitionType: PPTSlideTransitionType;
+  onContextMenu: (event: React.MouseEvent) => void;
+}> = ({ transitionType, onContextMenu }) => {
+  const option = getPPTTransitionOption(transitionType);
+  return (
+    <HoverTip content={`转场：${option.label}`} placement="bottom">
+      <button
+        type="button"
+        className="frame-panel__transition-badge"
+        aria-label={`转场：${option.label}`}
+        onClick={(event) => {
+          event.preventDefault();
+          onContextMenu(event);
+        }}
+        onContextMenu={onContextMenu}
+      >
+        <Sparkles size={12} strokeWidth={2} />
+        <span>{option.label}</span>
+      </button>
+    </HoverTip>
+  );
+};
+
 const PPTSlidePreview: React.FC<{
   imageUrl?: string;
   title: string;
@@ -822,6 +895,7 @@ const PPTOutlineSlideImageAction: React.FC<{
 };
 
 export const FramePanel: React.FC<FramePanelProps> = ({
+  currentBoardName,
   onOpenMediaLibrary,
 }) => {
   const { board, openDialog } = useDrawnix();
@@ -873,6 +947,7 @@ export const FramePanel: React.FC<FramePanelProps> = ({
   >(() => new Set());
   const [outlineSerialMode, setOutlineSerialMode] = useState(true);
   const [outlineRuntimeVersion, setOutlineRuntimeVersion] = useState(0);
+  const [pptTitleDraft, setPPTTitleDraft] = useState('');
   const [commonPromptDraft, setCommonPromptDraft] = useState('');
   const [slidePromptDrafts, setSlidePromptDrafts] = useState<
     Record<string, string>
@@ -890,8 +965,7 @@ export const FramePanel: React.FC<FramePanelProps> = ({
       )
     );
   const outlineSelectionInitializedRef = useRef(false);
-  const [commonPromptHistoryOpen, setCommonPromptHistoryOpen] =
-    useState(false);
+  const [commonPromptHistoryOpen, setCommonPromptHistoryOpen] = useState(false);
   const commonPromptHistoryPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1169,6 +1243,7 @@ export const FramePanel: React.FC<FramePanelProps> = ({
         .map((info) =>
           [
             info.frame.id,
+            info.pptMeta?.deckTitle || '',
             info.pptMeta?.commonPrompt || '',
             info.slidePrompt || '',
             info.pptMeta?.styleSpec
@@ -1206,6 +1281,7 @@ export const FramePanel: React.FC<FramePanelProps> = ({
   }, [orderedPPTFrameIdsKey, orderedPPTFrames]);
 
   useEffect(() => {
+    setPPTTitleDraft(getPPTDeckTitleFromFrameInfos(orderedPPTFrames));
     setCommonPromptDraft(getPPTCommonPromptFromFrameInfos(orderedPPTFrames));
 
     const nextDrafts: Record<string, string> = {};
@@ -2014,6 +2090,38 @@ export const FramePanel: React.FC<FramePanelProps> = ({
     ]
   );
 
+  const handleSelectPPTTransition = useCallback(
+    (frameInfo: FrameInfo, type: PPTSlideTransitionType) => {
+      if (!board) return;
+
+      const option =
+        PPT_TRANSITION_OPTIONS.find((item) => item.type === type) ||
+        PPT_TRANSITION_OPTIONS[0];
+      const transition = getPPTSlideTransition({
+        type,
+        durationMs: option.durationMs,
+      });
+
+      setFramePPTMeta(board, frameInfo.frame.id, { transition });
+      analytics.trackPPTAction({
+        action: 'set_transition',
+        source: 'project_drawer_context_menu',
+        pageCount: orderedPPTFrames.length,
+        selectedCount: selectedFrameIds.size,
+        metadata: {
+          transition_type: transition.type,
+          transition_duration_ms: transition.durationMs,
+        },
+      });
+      MessagePlugin.success(
+        transition.type === 'none'
+          ? '已清除 PPT 页面转场'
+          : `已设置「${option.label}」转场`
+      );
+    },
+    [board, orderedPPTFrames.length, selectedFrameIds.size]
+  );
+
   const handleUseHistoryImage = useCallback(
     async (frameInfo: FrameInfo, historyItem: PPTSlideImageHistoryItem) => {
       if (!board) return;
@@ -2352,6 +2460,28 @@ export const FramePanel: React.FC<FramePanelProps> = ({
             },
           })),
       },
+      {
+        key: 'transition',
+        type: 'submenu',
+        label: '动画/转场',
+        icon: <Sparkles size={14} />,
+        children: (frameInfo) => {
+          const current = getPPTSlideTransition(frameInfo.pptMeta?.transition);
+          return PPT_TRANSITION_OPTIONS.map((option) => ({
+            key: `transition-${option.type}`,
+            label: (
+              <PPTTransitionMenuLabel
+                label={option.label}
+                description={option.description}
+                active={current.type === option.type}
+              />
+            ),
+            onSelect: () => {
+              handleSelectPPTTransition(frameInfo, option.type);
+            },
+          }));
+        },
+      },
       { key: 'divider-1', type: 'divider' },
       {
         key: 'delete',
@@ -2364,7 +2494,12 @@ export const FramePanel: React.FC<FramePanelProps> = ({
         onSelect: (frameInfo) => handleContextMenuAction('delete', frameInfo),
       },
     ],
-    [handleContextMenuAction, handleUseHistoryImage, selectedFrameIds]
+    [
+      handleContextMenuAction,
+      handleSelectPPTTransition,
+      handleUseHistoryImage,
+      selectedFrameIds,
+    ]
   );
 
   const handleRegenerateSlide = useCallback(
@@ -2428,7 +2563,9 @@ export const FramePanel: React.FC<FramePanelProps> = ({
   const handleToggleOutlineSelection = useCallback(
     (checked: boolean) => {
       analytics.trackPPTAction({
-        action: checked ? 'select_all_outline_slides' : 'clear_outline_selection',
+        action: checked
+          ? 'select_all_outline_slides'
+          : 'clear_outline_selection',
         source: 'project_drawer_outline',
         pageCount: orderedPPTFrames.length,
         selectedCount: checked ? orderedPPTFrames.length : 0,
@@ -2470,6 +2607,25 @@ export const FramePanel: React.FC<FramePanelProps> = ({
       }));
     },
     []
+  );
+
+  const persistPPTTitleDraft = useCallback(
+    (title = pptTitleDraft) => {
+      if (!board) return;
+      const normalizedTitle = title.trim();
+      orderedPPTFrames.forEach((info) => {
+        setFramePPTMeta(board, info.frame.id, {
+          deckTitle: normalizedTitle || undefined,
+        });
+      });
+      analytics.trackPPTAction({
+        action: 'save_deck_title',
+        source: 'project_drawer_outline',
+        pageCount: orderedPPTFrames.length,
+        prompt: normalizedTitle,
+      });
+    },
+    [board, orderedPPTFrames, pptTitleDraft]
   );
 
   const rememberCommonPromptHistory = useCallback(
@@ -2580,8 +2736,10 @@ export const FramePanel: React.FC<FramePanelProps> = ({
 
   const persistOutlineDrafts = useCallback(() => {
     if (!board) return;
+    const normalizedTitle = pptTitleDraft.trim();
     orderedPPTFrames.forEach((info) => {
       setFramePPTMeta(board, info.frame.id, {
+        deckTitle: normalizedTitle || undefined,
         commonPrompt: commonPromptDraft,
         slidePrompt: slidePromptDrafts[info.frame.id] ?? info.slidePrompt ?? '',
       });
@@ -2597,6 +2755,7 @@ export const FramePanel: React.FC<FramePanelProps> = ({
     board,
     commonPromptDraft,
     orderedPPTFrames,
+    pptTitleDraft,
     rememberCommonPromptHistory,
     slidePromptDrafts,
   ]);
@@ -2830,7 +2989,11 @@ export const FramePanel: React.FC<FramePanelProps> = ({
         ? `已停止 ${cancelledCount} 个 PPT 生图任务`
         : '已停止 PPT 生图流程'
     );
-  }, [activeOutlineGeneration, orderedPPTFrames.length, resetStoppedOutlineFrames]);
+  }, [
+    activeOutlineGeneration,
+    orderedPPTFrames.length,
+    resetStoppedOutlineFrames,
+  ]);
 
   const handleGenerateOutlineSlides = useCallback(async () => {
     if (!board || isOutlineGenerating) return;
@@ -2917,7 +3080,10 @@ export const FramePanel: React.FC<FramePanelProps> = ({
           runtime.controller.abort();
           throw error;
         }
-        console.error('[FramePanel] PPT outline slide generation failed:', error);
+        console.error(
+          '[FramePanel] PPT outline slide generation failed:',
+          error
+        );
         runtime.failedCount++;
       } finally {
         updatePPTOutlineRuntimeStatus(runtime);
@@ -3037,7 +3203,9 @@ export const FramePanel: React.FC<FramePanelProps> = ({
           model: outlineImageModel || undefined,
           prompt: commonPromptDraft,
         });
-        MessagePlugin.success(`已提交并完成 ${runtime.successCount} 页 PPT 生图`);
+        MessagePlugin.success(
+          `已提交并完成 ${runtime.successCount} 页 PPT 生图`
+        );
       }
     } catch (error) {
       if (isPPTOutlineCancelledError(error)) {
@@ -3107,7 +3275,12 @@ export const FramePanel: React.FC<FramePanelProps> = ({
       pageCount: frames.length,
     });
     try {
-      await exportAllPPTFrames(board, { fileName: 'aitu-ppt' });
+      const fileName = resolvePPTExportFileName(
+        pptTitleDraft,
+        currentBoardName
+      );
+      persistPPTTitleDraft(pptTitleDraft);
+      await exportAllPPTFrames(board, { fileName });
       analytics.trackPPTAction({
         action: 'export_all',
         source: 'project_drawer',
@@ -3130,7 +3303,14 @@ export const FramePanel: React.FC<FramePanelProps> = ({
     } finally {
       setIsExportingAllPPT(false);
     }
-  }, [board, isExportingAllPPT, frames]);
+  }, [
+    board,
+    currentBoardName,
+    frames,
+    isExportingAllPPT,
+    persistPPTTitleDraft,
+    pptTitleDraft,
+  ]);
 
   const allOutlineSlidesSelected =
     orderedPPTFrames.length > 0 &&
@@ -3307,6 +3487,18 @@ export const FramePanel: React.FC<FramePanelProps> = ({
           </div>
         ) : (
           <div className="frame-panel__outline">
+            <div className="frame-panel__outline-title">
+              <span className="frame-panel__outline-label">PPT 标题</span>
+              <Input
+                value={pptTitleDraft}
+                onChange={setPPTTitleDraft}
+                onBlur={() => persistPPTTitleDraft()}
+                placeholder={currentBoardName?.trim() || 'PPT 标题'}
+                size="small"
+                disabled={isOutlineGenerating}
+              />
+            </div>
+
             <div className="frame-panel__outline-common">
               <div className="frame-panel__outline-common-header">
                 <span className="frame-panel__outline-label">公共提示词</span>
@@ -3381,10 +3573,7 @@ export const FramePanel: React.FC<FramePanelProps> = ({
                 const slidePrompt =
                   slidePromptDrafts[info.frame.id] ?? info.slidePrompt ?? '';
                 return (
-                  <div
-                    key={info.listKey}
-                    className="frame-panel__outline-item"
-                  >
+                  <div key={info.listKey} className="frame-panel__outline-item">
                     <Checkbox
                       checked={outlineSelectedFrameIds.has(info.frame.id)}
                       disabled={isOutlineGenerating}
@@ -3571,6 +3760,10 @@ export const FramePanel: React.FC<FramePanelProps> = ({
         <div className="frame-panel__list">
           {filteredFrames.map((info) => {
             const dragProps = getFrameDragProps(info);
+            const pptTransition = getPPTSlideTransition(
+              info.pptMeta?.transition
+            );
+            const hasPPTTransition = pptTransition.type !== 'none';
             return (
               <div
                 key={info.listKey}
@@ -3584,6 +3777,7 @@ export const FramePanel: React.FC<FramePanelProps> = ({
                     dragProps['data-drag-position'] === 'before',
                   'frame-panel__item--drag-after':
                     dragProps['data-drag-position'] === 'after',
+                  'frame-panel__item--with-transition': hasPPTTransition,
                 })}
                 onClick={(e) => handleFrameClick(info, e)}
                 onContextMenu={(e) => handleContextMenu(e, info)}
@@ -3641,62 +3835,75 @@ export const FramePanel: React.FC<FramePanelProps> = ({
                   )}
                 </div>
 
-                <div className="frame-panel__item-actions">
-                  {info.pptMeta && (
-                    <HoverTip
-                      content={info.slidePrompt ? '重新生成' : 'AI 图片生成'}
-                    >
+                <div
+                  className={classNames('frame-panel__item-actions', {
+                    'frame-panel__item-actions--with-transition':
+                      hasPPTTransition,
+                  })}
+                >
+                  <div className="frame-panel__item-action-buttons">
+                    {info.pptMeta && (
+                      <HoverTip
+                        content={info.slidePrompt ? '重新生成' : 'AI 图片生成'}
+                      >
+                        <Button
+                          variant="text"
+                          size="small"
+                          shape="square"
+                          icon={<AIImageIcon size={16} />}
+                          onClick={(e) =>
+                            handleRegenerateSlide(
+                              info,
+                              e as unknown as React.MouseEvent
+                            )
+                          }
+                        />
+                      </HoverTip>
+                    )}
+                    <HoverTip content="素材库" showArrow={false}>
                       <Button
                         variant="text"
                         size="small"
                         shape="square"
-                        icon={<AIImageIcon size={16} />}
+                        icon={<MediaLibraryIcon size={16} />}
                         onClick={(e) =>
-                          handleRegenerateSlide(
+                          handleOpenFrameMediaLibrary(
                             info,
                             e as unknown as React.MouseEvent
                           )
                         }
                       />
                     </HoverTip>
-                  )}
-                  <HoverTip content="素材库" showArrow={false}>
-                    <Button
-                      variant="text"
-                      size="small"
-                      shape="square"
-                      icon={<MediaLibraryIcon size={16} />}
-                      onClick={(e) =>
-                        handleOpenFrameMediaLibrary(
-                          info,
-                          e as unknown as React.MouseEvent
-                        )
+                    <HoverTip
+                      content={
+                        selectedFrameIds.size > 1 &&
+                        selectedFrameIds.has(info.frame.id)
+                          ? `删除选中 ${selectedFrameIds.size} 项`
+                          : '删除'
                       }
+                      showArrow={false}
+                    >
+                      <Button
+                        variant="text"
+                        size="small"
+                        shape="square"
+                        theme="danger"
+                        icon={<DeleteIcon />}
+                        onClick={(e) =>
+                          void handleDelete(
+                            info,
+                            e as unknown as React.MouseEvent
+                          )
+                        }
+                      />
+                    </HoverTip>
+                  </div>
+                  {hasPPTTransition ? (
+                    <PPTTransitionBadge
+                      transitionType={pptTransition.type}
+                      onContextMenu={(event) => handleContextMenu(event, info)}
                     />
-                  </HoverTip>
-                  <HoverTip
-                    content={
-                      selectedFrameIds.size > 1 &&
-                      selectedFrameIds.has(info.frame.id)
-                        ? `删除选中 ${selectedFrameIds.size} 项`
-                        : '删除'
-                    }
-                    showArrow={false}
-                  >
-                    <Button
-                      variant="text"
-                      size="small"
-                      shape="square"
-                      theme="danger"
-                      icon={<DeleteIcon />}
-                      onClick={(e) =>
-                        void handleDelete(
-                          info,
-                          e as unknown as React.MouseEvent
-                        )
-                      }
-                    />
-                  </HoverTip>
+                  ) : null}
                 </div>
               </div>
             );

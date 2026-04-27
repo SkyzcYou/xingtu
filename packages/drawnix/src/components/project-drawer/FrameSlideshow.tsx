@@ -24,7 +24,16 @@ import {
 import { Z_INDEX } from '../../constants/z-index';
 import { FreehandShape } from '../../plugins/freehand/type';
 import { useSetPointer } from '../../hooks/use-drawnix';
-import { HandIcon, FeltTipPenIcon, EraseIcon, LaserPointerIcon, StrokeStyleNormalIcon, StrokeStyleDashedIcon, StrokeStyleDotedIcon, StrokeStyleDoubleIcon } from '../icons';
+import {
+  HandIcon,
+  FeltTipPenIcon,
+  EraseIcon,
+  LaserPointerIcon,
+  StrokeStyleNormalIcon,
+  StrokeStyleDashedIcon,
+  StrokeStyleDotedIcon,
+  StrokeStyleDoubleIcon,
+} from '../icons';
 import { HoverTip } from '../shared';
 import {
   getFreehandSettings,
@@ -33,6 +42,10 @@ import {
   setFreehandStrokeStyle,
   FreehandStrokeStyle,
 } from '../../plugins/freehand/freehand-settings';
+import {
+  getPPTSlideTransition,
+  type PPTSlideTransition,
+} from '../../services/ppt';
 
 interface FrameSlideshowProps {
   visible: boolean;
@@ -48,6 +61,13 @@ interface FrameScreenRect {
   top: number;
   width: number;
   height: number;
+}
+
+interface SlideshowTransitionState {
+  key: number;
+  rect: FrameScreenRect;
+  type: Exclude<PPTSlideTransition['type'], 'none'>;
+  durationMs: number;
 }
 
 const PADDING = 60;
@@ -72,9 +92,22 @@ function getFrames(board: PlaitBoard): PlaitFrame[] {
   return frames;
 }
 
+function prefersReducedMotion(): boolean {
+  return Boolean(
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+function getFrameTransition(frame?: PlaitFrame): PPTSlideTransition {
+  return getPPTSlideTransition(
+    (frame as PlaitFrame & { pptMeta?: { transition?: PPTSlideTransition } })
+      ?.pptMeta?.transition
+  );
+}
+
 /**
  * 将 viewport 对准 Frame，返回 Frame 在屏幕上的矩形位置。
- * 
+ *
  * 关键：不依赖 toHostPointFromViewBoxPoint（可能有时序问题），
  * 而是根据 viewport 居中算法直接计算 Frame 在屏幕上的位置。
  */
@@ -106,10 +139,8 @@ function focusFrameAndGetScreenRect(
   // 相对于视口左上角的偏移: (rect.x - origination[0], rect.y - origination[1])
   // 乘以 zoom 得到屏幕像素偏移
   const containerBounds = container.getBoundingClientRect();
-  const screenLeft =
-    containerBounds.left + (rect.x - origination[0]) * zoom;
-  const screenTop =
-    containerBounds.top + (rect.y - origination[1]) * zoom;
+  const screenLeft = containerBounds.left + (rect.x - origination[0]) * zoom;
+  const screenTop = containerBounds.top + (rect.y - origination[1]) * zoom;
   const screenWidth = rect.width * zoom;
   const screenHeight = rect.height * zoom;
 
@@ -163,8 +194,13 @@ function getMaskBlockStyles(r: FrameScreenRect): React.CSSProperties[] {
 type ToolType = 'select' | 'pen' | 'eraser' | 'laser';
 
 const PEN_COLORS = [
-  '#000000', '#e91e63', '#f39c12', '#4caf50',
-  '#2196f3', '#9c27b0', '#ffffff',
+  '#000000',
+  '#e91e63',
+  '#f39c12',
+  '#4caf50',
+  '#2196f3',
+  '#9c27b0',
+  '#ffffff',
 ];
 
 const STROKE_STYLES: { style: FreehandStrokeStyle; icon: React.ReactNode }[] = [
@@ -196,27 +232,47 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
   } | null>(null);
   const savedPointerRef = useRef<string | null>(null);
   const framesRef = useRef<PlaitFrame[]>([]);
+  const currentIndexRef = useRef(0);
+  const transitionKeyRef = useRef(0);
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const [activeTransition, setActiveTransition] =
+    useState<SlideshowTransitionState | null>(null);
 
   // 画笔设置状态（从 board 初始化）
   const initSettings = visible ? getFreehandSettings(board) : null;
-  const [penColor, setPenColor] = useState(initSettings?.strokeColor ?? '#000000');
-  const [penStrokeStyle, setPenStrokeStyle] = useState<FreehandStrokeStyle>(initSettings?.strokeStyle ?? FreehandStrokeStyle.solid);
-  const [penStrokeWidth, setPenStrokeWidth] = useState(initSettings?.strokeWidth ?? 2);
+  const [penColor, setPenColor] = useState(
+    initSettings?.strokeColor ?? '#000000'
+  );
+  const [penStrokeStyle, setPenStrokeStyle] = useState<FreehandStrokeStyle>(
+    initSettings?.strokeStyle ?? FreehandStrokeStyle.solid
+  );
+  const [penStrokeWidth, setPenStrokeWidth] = useState(
+    initSettings?.strokeWidth ?? 2
+  );
 
-  const handlePenColorChange = useCallback((color: string) => {
-    setPenColor(color);
-    setFreehandStrokeColor(board, color);
-  }, [board]);
+  const handlePenColorChange = useCallback(
+    (color: string) => {
+      setPenColor(color);
+      setFreehandStrokeColor(board, color);
+    },
+    [board]
+  );
 
-  const handlePenStrokeStyleChange = useCallback((style: FreehandStrokeStyle) => {
-    setPenStrokeStyle(style);
-    setFreehandStrokeStyle(board, style);
-  }, [board]);
+  const handlePenStrokeStyleChange = useCallback(
+    (style: FreehandStrokeStyle) => {
+      setPenStrokeStyle(style);
+      setFreehandStrokeStyle(board, style);
+    },
+    [board]
+  );
 
-  const handlePenStrokeWidthChange = useCallback((width: number) => {
-    setPenStrokeWidth(width);
-    setFreehandStrokeWidth(board, width);
-  }, [board]);
+  const handlePenStrokeWidthChange = useCallback(
+    (width: number) => {
+      setPenStrokeWidth(width);
+      setFreehandStrokeWidth(board, width);
+    },
+    [board]
+  );
 
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
@@ -229,35 +285,74 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
   }, []);
 
   /** 切换工具 */
-  const switchTool = useCallback((tool: ToolType) => {
-    setActiveTool(tool);
-    resetControlsTimer();
+  const switchTool = useCallback(
+    (tool: ToolType) => {
+      setActiveTool(tool);
+      resetControlsTimer();
 
-    if (tool === 'select') {
-      BoardTransforms.updatePointerType(board, PlaitPointerType.selection);
-      setPointer(PlaitPointerType.selection);
-    } else {
-      const pointerMap: Record<string, FreehandShape> = {
-        pen: FreehandShape.feltTipPen,
-        eraser: FreehandShape.eraser,
-        laser: FreehandShape.laserPointer,
-      };
-      const pointer = pointerMap[tool];
-      setCreationMode(board, BoardCreationMode.drawing);
-      BoardTransforms.updatePointerType(board, pointer);
-      setPointer(pointer);
-    }
-  }, [board, resetControlsTimer, setPointer]);
+      if (tool === 'select') {
+        BoardTransforms.updatePointerType(board, PlaitPointerType.selection);
+        setPointer(PlaitPointerType.selection);
+      } else {
+        const pointerMap: Record<string, FreehandShape> = {
+          pen: FreehandShape.feltTipPen,
+          eraser: FreehandShape.eraser,
+          laser: FreehandShape.laserPointer,
+        };
+        const pointer = pointerMap[tool];
+        setCreationMode(board, BoardCreationMode.drawing);
+        BoardTransforms.updatePointerType(board, pointer);
+        setPointer(pointer);
+      }
+    },
+    [board, resetControlsTimer, setPointer]
+  );
 
   /** 切换到指定 Frame */
   const goToFrame = useCallback(
-    (index: number) => {
+    (index: number, options: { animate?: boolean } = {}) => {
       const frames = framesRef.current;
       if (!board || index < 0 || index >= frames.length) return;
 
-      const rect = focusFrameAndGetScreenRect(board, frames[index]);
+      const frame = frames[index];
+      const rect = focusFrameAndGetScreenRect(board, frame);
+      const transition = getFrameTransition(frame);
+      const shouldAnimate =
+        options.animate !== false &&
+        currentIndexRef.current !== index &&
+        transition.type !== 'none' &&
+        !prefersReducedMotion();
+
+      if (transitionTimerRef.current) {
+        clearTimeout(transitionTimerRef.current);
+      }
+
+      if (shouldAnimate && transition.type !== 'none') {
+        const key = transitionKeyRef.current + 1;
+        transitionKeyRef.current = key;
+        const durationMs = transition.durationMs || 700;
+        const transitionType = transition.type as Exclude<
+          PPTSlideTransition['type'],
+          'none'
+        >;
+        setActiveTransition({
+          key,
+          rect,
+          type: transitionType,
+          durationMs,
+        });
+        transitionTimerRef.current = setTimeout(() => {
+          setActiveTransition((current) =>
+            current?.key === key ? null : current
+          );
+        }, durationMs + 120);
+      } else {
+        setActiveTransition(null);
+      }
+
       setFrameRect(rect);
       setCurrentIndex(index);
+      currentIndexRef.current = index;
       resetControlsTimer();
     },
     [board, resetControlsTimer]
@@ -297,13 +392,13 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
     }
 
     // 先定位到起始帧
-    goToFrame(startIndex);
+    goToFrame(startIndex, { animate: false });
 
     // 尝试请求全屏，成功后重新定位
     document.documentElement
       .requestFullscreen?.()
       .then(() => {
-        setTimeout(() => goToFrame(startIndex), 300);
+        setTimeout(() => goToFrame(startIndex, { animate: false }), 300);
       })
       .catch(() => undefined);
 
@@ -311,6 +406,9 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
       setSlideshowMode(false);
       if (controlsTimerRef.current) {
         clearTimeout(controlsTimerRef.current);
+      }
+      if (transitionTimerRef.current) {
+        clearTimeout(transitionTimerRef.current);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -337,6 +435,7 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
       document.exitFullscreen?.().catch(() => undefined);
     }
     setFrameRect(null);
+    setActiveTransition(null);
     setActiveTool('select');
     onClose();
   }, [board, onClose, setPointer]);
@@ -369,9 +468,12 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
         // 恢复 pointer（同时更新 board 和 React context）
         if (savedPointerRef.current !== null) {
           BoardTransforms.updatePointerType(board, savedPointerRef.current);
-          setPointer(savedPointerRef.current as Parameters<typeof setPointer>[0]);
+          setPointer(
+            savedPointerRef.current as Parameters<typeof setPointer>[0]
+          );
         }
         setFrameRect(null);
+        setActiveTransition(null);
         setActiveTool('select');
         onClose();
       }
@@ -601,12 +703,7 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
       document.removeEventListener('pointerup', handlePointerUpCapture, true);
       document.removeEventListener('click', handleClickCapture, true);
     };
-  }, [
-    activeTool,
-    frameRect,
-    goToNextFrameOrClose,
-    visible,
-  ]);
+  }, [activeTool, frameRect, goToNextFrameOrClose, visible]);
 
   // 鼠标移动显示控件
   useEffect(() => {
@@ -621,6 +718,15 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
   const frames = framesRef.current;
   const currentFrame = frames[currentIndex];
   const maskStyles = getMaskBlockStyles(frameRect);
+  const transitionStyle = activeTransition
+    ? ({
+        left: activeTransition.rect.left,
+        top: activeTransition.rect.top,
+        width: activeTransition.rect.width,
+        height: activeTransition.rect.height,
+        animationDuration: `${activeTransition.durationMs}ms`,
+      } as React.CSSProperties)
+    : undefined;
 
   return createPortal(
     <div
@@ -635,6 +741,14 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
           <div key={i} className="frame-slideshow__mask-block" style={style} />
         ))}
       </div>
+
+      {activeTransition ? (
+        <div
+          key={activeTransition.key}
+          className={`frame-slideshow__transition frame-slideshow__transition--${activeTransition.type}`}
+          style={transitionStyle}
+        />
+      ) : null}
 
       {/* 底部控制栏 */}
       <div
@@ -676,7 +790,11 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
                 {PEN_COLORS.map((color) => (
                   <button
                     key={color}
-                    className={`frame-slideshow__pen-color ${penColor === color ? 'frame-slideshow__pen-color--active' : ''}`}
+                    className={`frame-slideshow__pen-color ${
+                      penColor === color
+                        ? 'frame-slideshow__pen-color--active'
+                        : ''
+                    }`}
                     style={{ backgroundColor: color }}
                     onClick={() => handlePenColorChange(color)}
                   />
@@ -688,7 +806,11 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
                 {STROKE_STYLES.map(({ style, icon }) => (
                   <button
                     key={style}
-                    className={`frame-slideshow__pen-style ${penStrokeStyle === style ? 'frame-slideshow__pen-style--active' : ''}`}
+                    className={`frame-slideshow__pen-style ${
+                      penStrokeStyle === style
+                        ? 'frame-slideshow__pen-style--active'
+                        : ''
+                    }`}
                     onClick={() => handlePenStrokeStyleChange(style)}
                   >
                     {icon}
@@ -701,11 +823,23 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
                 {STROKE_WIDTHS.map((w) => (
                   <button
                     key={w}
-                    className={`frame-slideshow__pen-width ${penStrokeWidth === w ? 'frame-slideshow__pen-width--active' : ''}`}
+                    className={`frame-slideshow__pen-width ${
+                      penStrokeWidth === w
+                        ? 'frame-slideshow__pen-width--active'
+                        : ''
+                    }`}
                     onClick={() => handlePenStrokeWidthChange(w)}
                   >
                     <svg width="20" height="20" viewBox="0 0 20 20">
-                      <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth={w} strokeLinecap="round" />
+                      <line
+                        x1="3"
+                        y1="10"
+                        x2="17"
+                        y2="10"
+                        stroke="currentColor"
+                        strokeWidth={w}
+                        strokeLinecap="round"
+                      />
                     </svg>
                   </button>
                 ))}
@@ -714,7 +848,11 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
           )}
           <HoverTip content="选择工具" showArrow={false}>
             <button
-              className={`frame-slideshow__tool-btn ${activeTool === 'select' ? 'frame-slideshow__tool-btn--active' : ''}`}
+              className={`frame-slideshow__tool-btn ${
+                activeTool === 'select'
+                  ? 'frame-slideshow__tool-btn--active'
+                  : ''
+              }`}
               onClick={() => switchTool('select')}
             >
               <HandIcon size={20} />
@@ -722,7 +860,9 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
           </HoverTip>
           <HoverTip content="画笔" showArrow={false}>
             <button
-              className={`frame-slideshow__tool-btn ${activeTool === 'pen' ? 'frame-slideshow__tool-btn--active' : ''}`}
+              className={`frame-slideshow__tool-btn ${
+                activeTool === 'pen' ? 'frame-slideshow__tool-btn--active' : ''
+              }`}
               onClick={() => switchTool('pen')}
             >
               <FeltTipPenIcon size={20} />
@@ -730,7 +870,11 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
           </HoverTip>
           <HoverTip content="橡皮擦" showArrow={false}>
             <button
-              className={`frame-slideshow__tool-btn ${activeTool === 'eraser' ? 'frame-slideshow__tool-btn--active' : ''}`}
+              className={`frame-slideshow__tool-btn ${
+                activeTool === 'eraser'
+                  ? 'frame-slideshow__tool-btn--active'
+                  : ''
+              }`}
               onClick={() => switchTool('eraser')}
             >
               <EraseIcon size={20} />
@@ -738,7 +882,11 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
           </HoverTip>
           <HoverTip content="激光笔" showArrow={false}>
             <button
-              className={`frame-slideshow__tool-btn ${activeTool === 'laser' ? 'frame-slideshow__tool-btn--active' : ''}`}
+              className={`frame-slideshow__tool-btn ${
+                activeTool === 'laser'
+                  ? 'frame-slideshow__tool-btn--active'
+                  : ''
+              }`}
               onClick={() => switchTool('laser')}
             >
               <LaserPointerIcon size={20} />
@@ -786,7 +934,6 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
           </button>
         </HoverTip>
       )}
-
     </div>,
     document.body
   );

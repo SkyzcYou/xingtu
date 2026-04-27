@@ -225,6 +225,9 @@ function classifyCacheWarningReason(error: unknown): CacheWarningReasonCode {
   ) {
     return 'http_error';
   }
+  if (normalized.includes('missing') || normalized.includes('not found')) {
+    return 'cache_missing';
+  }
   if (normalized.includes('body') || normalized.includes('blob')) {
     return 'response_unreadable';
   }
@@ -470,6 +473,14 @@ class UnifiedCacheService {
             );
           }
         },
+        onCacheImageCacheFailed: async (event) => {
+          if (event.url) {
+            await this.handleImageCacheFailedNotification(
+              event.url,
+              event.error
+            );
+          }
+        },
         onCacheDeleted: (event) => {
           if (event.url) {
             this.cachedUrls.delete(event.url);
@@ -502,6 +513,8 @@ class UnifiedCacheService {
       const normalizedUrl = this.normalizeRemoteCacheUrl(url);
       const existing = await this.getItem(normalizedUrl);
       const now = Date.now();
+      const metadata = { ...(existing?.metadata || {}) };
+      delete metadata.cacheWarning;
 
       const item: CachedMedia = {
         url: normalizedUrl,
@@ -510,7 +523,7 @@ class UnifiedCacheService {
         size,
         cachedAt: existing?.cachedAt || now,
         lastUsed: now,
-        metadata: existing?.metadata || {},
+        metadata,
       };
 
       await this.putItem(item);
@@ -520,6 +533,46 @@ class UnifiedCacheService {
       // console.log('[UnifiedCache] Image metadata updated:', url);
     } catch (error) {
       console.error('[UnifiedCache] Failed to handle IMAGE_CACHED:', error);
+    }
+  }
+
+  /**
+   * 处理图片缓存失败通知
+   */
+  private async handleImageCacheFailedNotification(
+    url: string,
+    error?: string
+  ): Promise<void> {
+    try {
+      const normalizedUrl = this.normalizeRemoteCacheUrl(url);
+      const existing = await this.getItem(normalizedUrl);
+      const now = Date.now();
+      const cacheWarning = createCacheWarning(
+        classifyCacheWarningReason(error || 'cache failed')
+      );
+
+      const item: CachedMedia = {
+        url: normalizedUrl,
+        type: existing?.type || 'image',
+        mimeType: existing?.mimeType || 'image/png',
+        size: existing?.size || 0,
+        contentHash: existing?.contentHash,
+        cachedAt: existing?.cachedAt || now,
+        lastUsed: now,
+        metadata: {
+          ...existing?.metadata,
+          cacheWarning,
+        },
+      };
+
+      await this.putItem(item);
+      this.cachedUrls.delete(normalizedUrl);
+      this.notifyListeners();
+    } catch (recordError) {
+      console.error(
+        '[UnifiedCache] Failed to handle image cache failure:',
+        recordError
+      );
     }
   }
 
@@ -738,6 +791,18 @@ class UnifiedCacheService {
 
           // 尝试精确匹配
           let response = await cache.match(normalizedUrl);
+          if (
+            !response &&
+            normalizedUrl.startsWith('/') &&
+            typeof window !== 'undefined'
+          ) {
+            response = await cache.match(
+              new URL(normalizedUrl, window.location.origin).toString()
+            );
+          }
+          if (!response && url !== normalizedUrl) {
+            response = await cache.match(url);
+          }
 
           // 如果精确匹配失败，尝试忽略查询参数匹配
           if (!response) {
@@ -1265,6 +1330,15 @@ class UnifiedCacheService {
           let response = await cache.match(cacheUrl);
           if (!response && cacheUrl !== url) {
             response = await cache.match(url);
+          }
+          if (
+            !response &&
+            cacheUrl.startsWith('/') &&
+            typeof window !== 'undefined'
+          ) {
+            response = await cache.match(
+              new URL(cacheUrl, window.location.origin).toString()
+            );
           }
           if (response) {
             return await response.blob();

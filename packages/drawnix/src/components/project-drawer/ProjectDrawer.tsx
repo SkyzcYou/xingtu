@@ -1679,7 +1679,10 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
         {activeTab === 'layers' ? (
           <LayerPanel />
         ) : activeTab === 'frames' ? (
-          <FramePanel onOpenMediaLibrary={onOpenMediaLibrary} />
+          <FramePanel
+            currentBoardName={currentBoard?.name}
+            onOpenMediaLibrary={onOpenMediaLibrary}
+          />
         ) : isLoading ? (
           <div className="project-drawer__loading">加载中...</div>
         ) : filteredTree.length === 0 ? (

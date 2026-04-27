@@ -198,6 +198,7 @@ function createPPTPage(
     generateOptions
   );
   const pptMeta: PPTFrameMeta = {
+    deckTitle: outline.title,
     layout: pageSpec.layout,
     pageIndex,
     slidePrompt,

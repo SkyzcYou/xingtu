@@ -32,6 +32,110 @@ const TOOLBAR_MIN_HEIGHT = 460;
 // AI 按钮 ID，用于初始化时滚动到可见位置
 const AI_BUTTON_IDS = ['ai-image', 'ai-video'];
 
+const TOOLBAR_LEFT_STORAGE_KEY = 'aitu-toolbar-left';
+const TOOLBAR_DEFAULT_LEFT = 0;
+const TOOLBAR_MOBILE_LEFT = 8;
+const TOOLBAR_VIEWPORT_GAP = 0;
+const TOOLBAR_CONTENT_WIDTH = 58;
+type ToolbarDockSide = 'left' | 'right';
+
+function clampToolbarLeft(left: number, toolbarWidth = TOOLBAR_CONTENT_WIDTH) {
+  const viewportWidth =
+    typeof window === 'undefined' ? toolbarWidth : window.innerWidth;
+  const maxLeft = Math.max(
+    TOOLBAR_DEFAULT_LEFT,
+    viewportWidth - toolbarWidth - TOOLBAR_VIEWPORT_GAP
+  );
+
+  return Math.round(
+    Math.max(TOOLBAR_DEFAULT_LEFT, Math.min(left, maxLeft))
+  );
+}
+
+function getToolbarDockSide(
+  left: number,
+  toolbarWidth = TOOLBAR_CONTENT_WIDTH
+): ToolbarDockSide {
+  if (typeof window === 'undefined') {
+    return 'left';
+  }
+
+  return left + toolbarWidth / 2 > window.innerWidth / 2 ? 'right' : 'left';
+}
+
+function readStoredToolbarLeft() {
+  if (typeof window === 'undefined') {
+    return TOOLBAR_DEFAULT_LEFT;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(TOOLBAR_LEFT_STORAGE_KEY);
+    if (!raw) {
+      return TOOLBAR_DEFAULT_LEFT;
+    }
+
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      return TOOLBAR_DEFAULT_LEFT;
+    }
+
+    return clampToolbarLeft(parsed);
+  } catch {
+    return TOOLBAR_DEFAULT_LEFT;
+  }
+}
+
+function writeStoredToolbarLeft(left: number) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(TOOLBAR_LEFT_STORAGE_KEY, String(left));
+  } catch {
+    // localStorage 可能被禁用，拖动仍可在当前页面生效
+  }
+}
+
+function syncToolbarPositionVars(left: number, toolbarEl: HTMLElement | null) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const rect = toolbarEl?.getBoundingClientRect();
+  const width =
+    rect && rect.width > 0 ? rect.width : TOOLBAR_CONTENT_WIDTH;
+  const viewportWidth =
+    typeof window === 'undefined' ? left + width : window.innerWidth;
+  const rightEdge = Math.round(left + width);
+  const dockSide = getToolbarDockSide(left, width);
+  const rightDockWidth =
+    dockSide === 'right' ? Math.max(0, viewportWidth - left) : 0;
+  const sidePanelMaxWidth =
+    dockSide === 'right' ? left : Math.max(0, viewportWidth - rightEdge);
+  const rootStyle = document.documentElement.style;
+  rootStyle.setProperty('--aitu-toolbar-left', `${left}px`);
+  rootStyle.setProperty('--aitu-toolbar-right-edge', `${rightEdge}px`);
+  rootStyle.setProperty(
+    '--aitu-toolbar-right-dock-width',
+    `${Math.round(rightDockWidth)}px`
+  );
+  rootStyle.setProperty(
+    '--aitu-toolbar-right-avoidance',
+    `${Math.round(rightDockWidth ? rightDockWidth + 12 : 0)}px`
+  );
+  rootStyle.setProperty(
+    '--aitu-toolbar-side-panel-max-width',
+    `${Math.max(0, Math.round(sidePanelMaxWidth))}px`
+  );
+
+  const root = document.documentElement;
+  root.classList.toggle('aitu-toolbar-dock-right', dockSide === 'right');
+  root.classList.toggle('aitu-toolbar-dock-left', dockSide === 'left');
+
+  toolbarEl?.style.setProperty('--aitu-toolbar-left', `${left}px`);
+}
+
 /**
  * UnifiedToolbar - 统一左侧工具栏容器
  *
@@ -60,20 +164,174 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
   }) => {
     const [isIconMode, setIsIconMode] = useState(false);
     const [isMobileCollapsed, setIsMobileCollapsed] = useState(true); // 移动端默认收起
+    const [toolbarLeft, setToolbarLeft] = useState(readStoredToolbarLeft);
+    const [isToolbarDragging, setIsToolbarDragging] = useState(false);
+    const [isTaskPanelAnimationReady, setIsTaskPanelAnimationReady] =
+      useState(false);
     const hasEverExpanded = useRef(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollableRef = useRef<HTMLDivElement>(null);
     const hasScrolledToAI = useRef(false);
+    const toolbarLeftRef = useRef(toolbarLeft);
+    const toolbarDragRef = useRef<{
+      pointerId: number;
+      startX: number;
+      startLeft: number;
+    } | null>(null);
 
     // 检测设备类型
     const { isMobile: isSmallScreen, isTablet } = useDeviceType();
     const isMobileOrTablet = isSmallScreen || isTablet;
+    const effectiveToolbarLeft = isMobileOrTablet
+      ? TOOLBAR_MOBILE_LEFT
+      : toolbarLeft;
 
-    // 使用 viewport scale hook 确保缩放时工具栏保持在视口左上角且大小不变
+    // fixed 定位保留 CSS 安全区偏移，hook 只补偿页面缩放
     useViewportScale(containerRef, {
-      enablePositionTracking: true, // 启用位置跟随（适用于 absolute 定位）
-      enableScaleCompensation: true, // 启用反向缩放保持大小不变
+      enablePositionTracking: false,
+      enableScaleCompensation: true,
     });
+
+    useEffect(() => {
+      toolbarLeftRef.current = effectiveToolbarLeft;
+      syncToolbarPositionVars(effectiveToolbarLeft, containerRef.current);
+    }, [effectiveToolbarLeft]);
+
+    useEffect(() => {
+      return () => {
+        document.documentElement.classList.remove(
+          'aitu-toolbar-dock-left',
+          'aitu-toolbar-dock-right'
+        );
+      };
+    }, []);
+
+    useEffect(() => {
+      if (typeof document === 'undefined') {
+        return;
+      }
+
+      const root = document.documentElement;
+      root.classList.toggle('aitu-toolbar-dragging', isToolbarDragging);
+      return () => {
+        root.classList.remove('aitu-toolbar-dragging');
+      };
+    }, [isToolbarDragging]);
+
+    useEffect(() => {
+      if (isMobileOrTablet) {
+        return;
+      }
+
+      const handleResize = () => {
+        const toolbarWidth =
+          containerRef.current?.getBoundingClientRect().width ||
+          TOOLBAR_CONTENT_WIDTH;
+        setToolbarLeft((currentLeft) =>
+          clampToolbarLeft(currentLeft, toolbarWidth)
+        );
+      };
+
+      window.addEventListener('resize', handleResize);
+      return () => {
+        window.removeEventListener('resize', handleResize);
+      };
+    }, [isMobileOrTablet]);
+
+    useEffect(() => {
+      if (!taskPanelExpanded) {
+        setIsTaskPanelAnimationReady(false);
+        return;
+      }
+
+      if (!hasEverExpanded.current) {
+        return;
+      }
+
+      const frameId = requestAnimationFrame(() => {
+        setIsTaskPanelAnimationReady(true);
+      });
+
+      return () => {
+        cancelAnimationFrame(frameId);
+      };
+    }, [taskPanelExpanded]);
+
+    const handleToolbarDragStart = useCallback(
+      (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (isMobileOrTablet || event.button !== 0) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        toolbarDragRef.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startLeft: toolbarLeftRef.current,
+        };
+        document.documentElement.classList.add('aitu-toolbar-dragging');
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setIsToolbarDragging(true);
+      },
+      [isMobileOrTablet]
+    );
+
+    const handleToolbarDragMove = useCallback(
+      (event: React.PointerEvent<HTMLButtonElement>) => {
+        const dragState = toolbarDragRef.current;
+        if (!dragState || dragState.pointerId !== event.pointerId) {
+          return;
+        }
+
+        event.preventDefault();
+        const toolbarWidth =
+          containerRef.current?.getBoundingClientRect().width ||
+          TOOLBAR_CONTENT_WIDTH;
+        const nextLeft = clampToolbarLeft(
+          dragState.startLeft + event.clientX - dragState.startX,
+          toolbarWidth
+        );
+        toolbarLeftRef.current = nextLeft;
+        syncToolbarPositionVars(nextLeft, containerRef.current);
+      },
+      []
+    );
+
+    const finishToolbarDrag = useCallback(
+      (event: React.PointerEvent<HTMLButtonElement>) => {
+        const dragState = toolbarDragRef.current;
+        if (!dragState || dragState.pointerId !== event.pointerId) {
+          return;
+        }
+
+        toolbarDragRef.current = null;
+        document.documentElement.classList.remove('aitu-toolbar-dragging');
+        setIsToolbarDragging(false);
+        setToolbarLeft(toolbarLeftRef.current);
+        writeStoredToolbarLeft(toolbarLeftRef.current);
+
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      },
+      []
+    );
+
+    const handleToolbarPositionReset = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        if (isMobileOrTablet) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        toolbarLeftRef.current = TOOLBAR_DEFAULT_LEFT;
+        setToolbarLeft(TOOLBAR_DEFAULT_LEFT);
+        writeStoredToolbarLeft(TOOLBAR_DEFAULT_LEFT);
+      },
+      [isMobileOrTablet]
+    );
 
     // 使用 useCallback 稳定回调函数引用,配合 React.memo 优化性能
     const handleResize = useCallback((entries: ResizeObserverEntry[]) => {
@@ -156,12 +414,16 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
       if (!taskPanelExpanded && !hasEverExpanded.current) {
         hasEverExpanded.current = true;
       }
+      if (!taskPanelExpanded) {
+        setIsTaskPanelAnimationReady(false);
+      }
       onTaskPanelToggle?.();
     }, [taskPanelExpanded, onTaskPanelToggle]);
 
     // 关闭任务面板（仅在打开时才关闭）
     const handleTaskPanelClose = useCallback(() => {
       if (taskPanelExpanded) {
+        setIsTaskPanelAnimationReady(false);
         onTaskPanelToggle?.();
       }
     }, [taskPanelExpanded, onTaskPanelToggle]);
@@ -189,7 +451,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
         {hasEverExpanded.current && (
           <Suspense fallback={null}>
             <TaskQueuePanel
-              expanded={taskPanelExpanded}
+              expanded={taskPanelExpanded && isTaskPanelAnimationReady}
               onClose={handleTaskPanelClose}
             />
           </Suspense>
@@ -204,12 +466,33 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
               'unified-toolbar--icon-only': isIconMode || isMobileOrTablet,
               'unified-toolbar--mobile-collapsed':
                 isMobileOrTablet && isMobileCollapsed,
+              'unified-toolbar--dragging': isToolbarDragging,
             },
             className
           )}
+          style={
+            {
+              '--aitu-toolbar-left': `${effectiveToolbarLeft}px`,
+            } as React.CSSProperties
+          }
           padding={0}
           data-testid="unified-toolbar"
         >
+          {!isMobileOrTablet && (
+            <button
+              type="button"
+              className="unified-toolbar__drag-handle"
+              aria-label="拖动工具栏位置"
+              title="拖动工具栏位置，双击复位"
+              data-testid="toolbar-drag-handle"
+              onPointerDown={handleToolbarDragStart}
+              onPointerMove={handleToolbarDragMove}
+              onPointerUp={finishToolbarDrag}
+              onPointerCancel={finishToolbarDrag}
+              onDoubleClick={handleToolbarPositionReset}
+            />
+          )}
+
           {/* 移动端收起状态的快捷按钮区域 */}
           {isMobileOrTablet && isMobileCollapsed && (
             <div className="unified-toolbar__collapsed-shortcuts">

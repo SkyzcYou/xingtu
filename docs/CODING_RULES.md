@@ -4041,6 +4041,43 @@ export function useTaskQueue() {
 - `apps/web/src/sw/task-queue/channel-manager.ts` - SW 端的通道管理器
 - `apps/web/public/sw-debug/duplex-client.js` - 调试页面的 duplex 客户端
 
+### 任务队列入口红点需区分状态与未读
+
+**场景**: 工具栏任务队列图标需要提示失败任务或生成中任务时
+
+❌ **错误示例**:
+```typescript
+// 错误：把历史失败任务当成红点条件，失败任务不清理就会永久亮
+const showFailedDot =
+  failedTasks.length > 0 && activeTasks.length === 0;
+```
+
+✅ **正确示例**:
+```typescript
+// 正确：生成中是实时状态；失败红点是未查看通知
+const latestFailedAt = failedTasks.reduce(
+  (latest, task) =>
+    Math.max(latest, task.completedAt || task.updatedAt || task.createdAt || 0),
+  0
+);
+const showFailedDot =
+  latestFailedAt > acknowledgedFailedAt && activeTasks.length === 0;
+
+useEffect(() => {
+  if (taskPanelExpanded && latestFailedAt > acknowledgedFailedAt) {
+    setAcknowledgedFailedAt(latestFailedAt);
+  }
+}, [acknowledgedFailedAt, latestFailedAt, taskPanelExpanded]);
+```
+
+**原因**:
+- `failed` 是任务终态，可能长期保留在 IndexedDB/队列历史中，不能直接等价于“未读”
+- 用户打开任务队列已经完成查看动作，应清除红点；之后只有新失败或失败任务更新时间晚于确认点才重新提示
+- 数字 Badge/绿色点可表达“正在生成”这种持续状态；红点更适合表达“有新情况待查看”
+
+**相关文件**:
+- `packages/drawnix/src/components/toolbar/bottom-actions-section.tsx` - 任务队列入口图标和红点逻辑
+
 ### 降级模式（?sw=0）下任务必须自动执行
 
 **场景**: 用户通过 `?sw=0` URL 参数禁用 Service Worker，使用降级模式

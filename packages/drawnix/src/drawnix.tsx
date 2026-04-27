@@ -111,6 +111,7 @@ import { withLockedElement } from './plugins/with-locked-element';
 import {
   API_AUTH_ERROR_EVENT,
   ApiAuthErrorDetail,
+  classifyApiCredentialError,
 } from './utils/api-auth-error-event';
 import { MessagePlugin } from 'tdesign-react';
 import { calculateEditedImagePoints } from './utils/image';
@@ -663,11 +664,15 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   useEffect(() => {
     const handleApiAuthError = (event: Event) => {
       const customEvent = event as CustomEvent<ApiAuthErrorDetail>;
-      const { message } = customEvent.detail;
+      const { message, reason } = customEvent.detail;
+      const credentialReason = reason || classifyApiCredentialError(message);
 
       // 显示错误提示
       MessagePlugin.error({
-        content: 'API Key 无效或已过期，请重新配置',
+        content:
+          credentialReason === 'missing'
+            ? '缺少 API Key，请先在设置中配置'
+            : 'API Key 无效或已过期，请重新配置',
         duration: 5000,
       });
 

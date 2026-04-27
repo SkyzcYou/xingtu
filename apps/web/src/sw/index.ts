@@ -405,6 +405,10 @@ const completedImageRequests = new Map<string, CompletedRequestEntry>();
 // 已完成请求的缓存保留时间（30秒）
 const COMPLETED_REQUEST_CACHE_TTL = 30 * 1000;
 
+const cacheFailureNotificationCache = new Map<string, number>();
+const CACHE_FAILURE_NOTIFICATION_TTL = 5 * 60 * 1000;
+const MAX_CACHE_FAILURE_NOTIFICATION_CACHE_SIZE = 500;
+
 interface VideoRequestEntry {
   promise: Promise<Blob | null | symbol>; // symbol = VIDEO_LOAD_ERROR 表示下载失败
   timestamp: number;
@@ -1163,67 +1167,6 @@ async function markNewVersionReady(isUpdate: boolean): Promise<void> {
     cm.sendSWNewVersionReady(APP_VERSION);
   }
   await postVersionState();
-}
-
-// 清理旧的缓存条目以释放空间（基于LRU策略）
-async function cleanOldCacheEntries(cache: Cache) {
-  try {
-    // console.log('Service Worker: Starting cache cleanup to free space');
-    const requests = await cache.keys();
-
-    if (requests.length <= 10) {
-      // console.log('Service Worker: Cache has few entries, skipping cleanup');
-      return;
-    }
-
-    interface CacheEntry {
-      request: Request;
-      cacheDate: number;
-      imageSize: number;
-    }
-
-    // 获取所有缓存条目及其时间戳
-    const entries: CacheEntry[] = [];
-    for (const request of requests) {
-      try {
-        const response = await cache.match(request);
-        if (response) {
-          const cacheDate = response.headers.get(SW_CACHE_DATE_HEADER);
-          const imageSize = response.headers.get('sw-image-size');
-          entries.push({
-            request,
-            cacheDate: cacheDate ? parseInt(cacheDate) : 0,
-            imageSize: imageSize ? parseInt(imageSize) : 0,
-          });
-        }
-      } catch (error) {
-        console.warn('Service Worker: Error reading cache entry:', error);
-      }
-    }
-
-    // 按时间排序，最老的在前面
-    entries.sort((a, b) => a.cacheDate - b.cacheDate);
-
-    // 删除最老的25%缓存条目
-    const deleteCount = Math.max(1, Math.floor(entries.length * 0.25));
-    let deletedCount = 0;
-    let freedSpace = 0;
-
-    for (let i = 0; i < deleteCount && i < entries.length; i++) {
-      try {
-        await cache.delete(entries[i].request);
-        deletedCount++;
-        freedSpace += entries[i].imageSize;
-        // console.log(`Service Worker: Deleted old cache entry (${(entries[i].imageSize / 1024 / 1024).toFixed(2)}MB)`);
-      } catch (error) {
-        console.warn('Service Worker: Error deleting cache entry:', error);
-      }
-    }
-
-    // console.log(`Service Worker: Cache cleanup completed, deleted ${deletedCount} entries, freed ${(freedSpace / 1024 / 1024).toFixed(2)}MB`);
-  } catch (error) {
-    console.warn('Service Worker: Cache cleanup failed:', error);
-  }
 }
 
 // Precache manifest 类型定义
@@ -4007,6 +3950,67 @@ async function notifyImageCached(
   }
 }
 
+function shouldNotifyCacheFailure(url: string): boolean {
+  const now = Date.now();
+  const lastNotifiedAt = cacheFailureNotificationCache.get(url);
+  if (
+    lastNotifiedAt &&
+    now - lastNotifiedAt < CACHE_FAILURE_NOTIFICATION_TTL
+  ) {
+    return false;
+  }
+
+  if (
+    cacheFailureNotificationCache.size >=
+    MAX_CACHE_FAILURE_NOTIFICATION_CACHE_SIZE
+  ) {
+    for (const [key, timestamp] of cacheFailureNotificationCache) {
+      if (now - timestamp > CACHE_FAILURE_NOTIFICATION_TTL) {
+        cacheFailureNotificationCache.delete(key);
+      }
+    }
+
+    if (
+      cacheFailureNotificationCache.size >=
+      MAX_CACHE_FAILURE_NOTIFICATION_CACHE_SIZE
+    ) {
+      const entries = Array.from(cacheFailureNotificationCache.entries());
+      entries.sort((a, b) => a[1] - b[1]);
+      for (const [key] of entries.slice(0, Math.floor(entries.length / 2))) {
+        cacheFailureNotificationCache.delete(key);
+      }
+    }
+  }
+
+  cacheFailureNotificationCache.set(url, now);
+  return true;
+}
+
+async function notifyImageCacheFailed(
+  url: string,
+  error?: string
+): Promise<void> {
+  try {
+    const normalizedUrl = buildNormalizedCacheUrl(
+      new URL(url, self.location.origin)
+    ).toString();
+    if (!shouldNotifyCacheFailure(normalizedUrl)) {
+      return;
+    }
+
+    const cm = getChannelManager();
+    if (cm) {
+      cm.sendCacheImageCacheFailed(normalizedUrl, error);
+    }
+  } catch (notifyError) {
+    console.warn('Service Worker: Failed to notify image cache failure:', {
+      url,
+      error,
+      notifyError,
+    });
+  }
+}
+
 // 检测并警告存储配额
 async function checkStorageQuota(): Promise<void> {
   try {
@@ -4770,6 +4774,27 @@ function getVirtualMediaCacheKeys(request: Request, url: URL): string[] {
   );
 }
 
+async function hasCachedMediaResponse(
+  cache: Cache,
+  cacheKeys: string[]
+): Promise<boolean> {
+  for (const cacheKey of cacheKeys) {
+    const response = await cache.match(cacheKey);
+    if (!response) continue;
+
+    try {
+      const blob = await response.clone().blob();
+      if (blob.size > 0) {
+        return true;
+      }
+    } catch {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // 处理缓存 URL 请求 (/__aitu_cache__/{type}/{taskId}.{ext})
 // 从 Cache API 获取合并媒体并返回，视频支持 Range 请求
 async function handleCacheUrlRequest(request: Request): Promise<Response> {
@@ -4815,6 +4840,17 @@ async function handleCacheUrlRequest(request: Request): Promise<Response> {
     );
 
     if (result) {
+      const cache = await caches.open(IMAGE_CACHE_NAME);
+      const originalCacheKeys = getVirtualMediaCacheKeys(
+        new Request(originalUrlForCache.toString()),
+        originalUrlForCache
+      );
+      if (!(await hasCachedMediaResponse(cache, originalCacheKeys))) {
+        await notifyImageCacheFailed(
+          originalUrlForCache.toString(),
+          'thumbnail_exists_original_missing'
+        );
+      }
       const blob = await result.response.blob();
       return createThumbnailResponse(blob);
     }
@@ -4922,6 +4958,17 @@ async function handleAssetLibraryRequest(request: Request): Promise<Response> {
     );
 
     if (result) {
+      const cache = await caches.open(IMAGE_CACHE_NAME);
+      const originalCacheKeys = getVirtualMediaCacheKeys(
+        new Request(url.toString(), { method: request.method }),
+        url
+      );
+      if (!(await hasCachedMediaResponse(cache, originalCacheKeys))) {
+        await notifyImageCacheFailed(
+          url.pathname,
+          'thumbnail_exists_original_missing'
+        );
+      }
       const blob = await result.response.blob();
       return createThumbnailResponse(blob);
     }
@@ -6380,6 +6427,7 @@ async function handleImageRequestInternal(
 
               if (opaqueResponse.type === 'opaque') {
                 // console.log(`Service Worker [${requestId}]: no-cors 模式成功获取 opaque 响应`);
+                await notifyImageCacheFailed(requestUrl, 'cors_opaque');
                 return opaqueResponse;
               }
             } catch (noCorsError) {
@@ -6390,6 +6438,7 @@ async function handleImageRequestInternal(
             }
 
             // 如果 no-cors 也失败，返回空响应让浏览器重试
+            await notifyImageCacheFailed(requestUrl, 'cors_fetch_failed');
             return new Response(null, {
               status: 200,
               headers: {
@@ -6459,6 +6508,7 @@ async function handleImageRequestInternal(
 
       // 不要抛出错误，而是返回一个表示图片加载失败的响应
       // 这样前端img标签会触发onerror事件，但不会导致浏览器回退到默认CORS处理
+      await notifyImageCacheFailed(dedupeKey, errorMessage);
       return new Response('Image load failed after all attempts', {
         status: 404,
         statusText: 'Image Not Found',
@@ -6482,6 +6532,7 @@ async function handleImageRequestInternal(
       const problemHostname = new URL(requestUrl).hostname;
       markCorsFailedDomain(problemHostname);
 
+      await notifyImageCacheFailed(dedupeKey, 'cors_opaque');
       return response;
 
       /* 注释掉无效的缓存逻辑 - opaque 响应的 body 是 null
@@ -6564,30 +6615,8 @@ async function handleImageRequestInternal(
           )}MB, 可能超出存储限制):`,
           cacheError
         );
-        // 尝试清理一些旧缓存后重试
-        await cleanOldCacheEntries(cache);
-        try {
-          if (originalRequest.url.startsWith('http')) {
-            await cache.put(dedupeKey, corsResponse.clone());
-            if (requestUrl !== dedupeKey) {
-              await cache.delete(requestUrl);
-            }
-            // console.log(`Service Worker: Normal response cached after cleanup (${imageSizeMB.toFixed(2)}MB)`);
-            // 通知主线程图片已缓存
-            await notifyImageCached(dedupeKey, blob.size, blob.type);
-
-            // 异步生成预览图（不阻塞主流程）
-            const { generateThumbnailAsync } = await import(
-              './task-queue/utils/thumbnail-utils'
-            );
-            generateThumbnailAsync(blob, dedupeKey, 'image');
-          }
-        } catch (retryError) {
-          console.error(
-            'Service Worker: Still failed to cache after cleanup:',
-            retryError
-          );
-        }
+        // Cache Storage 里可能包含用户资产。缓存失败只标记状态，不自动清理缓存。
+        await notifyImageCacheFailed(dedupeKey, String(cacheError));
       }
 
       return corsResponse;
@@ -6640,6 +6669,7 @@ async function handleImageRequestInternal(
       // console.log('Service Worker: 图片加载失败，返回错误状态码以触发前端重试');
 
       // 返回404错误，让前端img标签触发onerror事件
+      await notifyImageCacheFailed(requestUrl, String(error?.message || error));
       return new Response('Image not found', {
         status: 404,
         statusText: 'Not Found',

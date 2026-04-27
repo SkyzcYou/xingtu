@@ -27,13 +27,26 @@ import {
   isImageElement,
 } from '../../utils/selection-utils';
 import { getCurrentFill, getCurrentStrokeColor } from '../../utils/property';
+import type { PPTSlideTransition } from './ppt.types';
+import {
+  hasPPTSlideTransition,
+  injectPPTSlideTransitions,
+  normalizePPTSlideTransition,
+} from './ppt-transitions';
 
-interface ExportPPTOptions {
+export interface ExportPPTOptions {
   fileName?: string;
+  embedMedia?: boolean;
+  mediaSizeLimitBytes?: number;
 }
 
 const SLIDE_WIDTH = 10;
 const SLIDE_HEIGHT = 5.625;
+const DEFAULT_EXPORT_MEDIA_SIZE_LIMIT_BYTES = 50 * 1024 * 1024;
+const PPTX_MIME_TYPE =
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+const EXPORT_MEDIA_COVER_MAX_WIDTH_PX = 1280;
+const EXPORT_MEDIA_COVER_TIMEOUT_MS = 5000;
 /** 幻灯片宽度（磅），与 fontScale 计算一致：SLIDE_WIDTH 英寸 × 72pt/英寸 */
 const SLIDE_WIDTH_PT = SLIDE_WIDTH * 72;
 // 画布默认使用的中文系统字体（与前端一致）
@@ -108,6 +121,82 @@ interface SlateLeaf {
 interface TextFallbackStyle {
   fontSizePt?: number;
   align?: 'left' | 'center' | 'right';
+}
+
+interface ResolvedExportPPTOptions {
+  embedMedia: boolean;
+  mediaSizeLimitBytes: number;
+}
+
+type ExportMediaKind = 'audio' | 'video';
+
+interface ExportMediaDescriptor {
+  kind: ExportMediaKind;
+  url: string;
+  title?: string;
+  coverCandidates: string[];
+}
+
+interface ResolvedExportMediaSource {
+  data: string;
+  extn: string;
+  mimeType: string;
+  size: number;
+}
+
+interface ExportMediaCoverSize {
+  width: number;
+  height: number;
+}
+
+function normalizePPTFileName(fileName: string): string {
+  return fileName.toLowerCase().endsWith('.pptx')
+    ? fileName
+    : `${fileName}.pptx`;
+}
+
+function getFramePPTTransition(frame: PlaitFrame): PPTSlideTransition {
+  return normalizePPTSlideTransition(
+    (frame as PlaitFrame & { pptMeta?: { transition?: PPTSlideTransition } })
+      .pptMeta?.transition
+  );
+}
+
+function toPPTXBlob(data: string | ArrayBuffer | Blob | Uint8Array): Blob {
+  if (data instanceof Blob) {
+    return data;
+  }
+  return new Blob([data as BlobPart], { type: PPTX_MIME_TYPE });
+}
+
+function downloadPPTXBlob(blob: Blob, fileName: string): void {
+  const link = document.createElement('a');
+  link.setAttribute('style', 'display:none;');
+  link.dataset.interception = 'off';
+  document.body.appendChild(link);
+
+  const url = window.URL.createObjectURL(
+    blob.type === PPTX_MIME_TYPE
+      ? blob
+      : new Blob([blob], { type: PPTX_MIME_TYPE })
+  );
+  link.href = url;
+  link.download = fileName;
+  link.click();
+
+  setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(link);
+  }, 100);
+}
+
+class ExportMediaTooLargeError extends Error {
+  constructor(readonly size: number, readonly limit: number) {
+    super(
+      `媒体文件超过导出上限 (${formatBytes(size)} / ${formatBytes(limit)})`
+    );
+    this.name = 'ExportMediaTooLargeError';
+  }
 }
 
 function isSlateLeaf(node: any): node is SlateLeaf {
@@ -454,24 +543,761 @@ type CustGeomPoint =
 
 // ─── Image helper ───
 
+function resolveExportPPTOptions(
+  options: ExportPPTOptions = {}
+): ResolvedExportPPTOptions {
+  return {
+    embedMedia: options.embedMedia !== false,
+    mediaSizeLimitBytes:
+      typeof options.mediaSizeLimitBytes === 'number' &&
+      Number.isFinite(options.mediaSizeLimitBytes) &&
+      options.mediaSizeLimitBytes > 0
+        ? options.mediaSizeLimitBytes
+        : DEFAULT_EXPORT_MEDIA_SIZE_LIMIT_BYTES,
+  };
+}
+
 async function ensureBase64Image(url: string): Promise<string> {
   if (!url) throw new Error('图片 URL 为空');
   if (url.startsWith('data:')) return url;
 
-  const response = await fetch(url, { referrerPolicy: 'no-referrer' });
+  const response = await fetch(url, {
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+  });
   if (!response.ok) throw new Error(`获取图片失败: ${response.status}`);
   const blob = await response.blob();
 
+  return blobToDataUrl(blob, '图片转换失败', '图片读取失败');
+}
+
+function blobToDataUrl(
+  blob: Blob,
+  convertErrorMessage = '媒体转换失败',
+  readErrorMessage = '媒体读取失败'
+): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
       typeof reader.result === 'string'
         ? resolve(reader.result)
-        : reject(new Error('图片转换失败'));
+        : reject(new Error(convertErrorMessage));
     };
-    reader.onerror = () => reject(new Error('图片读取失败'));
+    reader.onerror = () => reject(new Error(readErrorMessage));
     reader.readAsDataURL(blob);
   });
+}
+
+function getMediaCoverSize(pos: { w: number; h: number }): ExportMediaCoverSize {
+  const ratio = Math.min(4, Math.max(0.4, pos.w / Math.max(pos.h, 0.1)));
+  const width =
+    ratio >= 1
+      ? EXPORT_MEDIA_COVER_MAX_WIDTH_PX
+      : Math.round(EXPORT_MEDIA_COVER_MAX_WIDTH_PX * ratio);
+  const height = Math.round(width / ratio);
+  return {
+    width: Math.max(320, width),
+    height: Math.max(180, height),
+  };
+}
+
+function createPngCanvas(
+  size: ExportMediaCoverSize
+): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
+  if (typeof document === 'undefined') return null;
+  if (
+    typeof navigator !== 'undefined' &&
+    /jsdom/i.test(navigator.userAgent)
+  ) {
+    return null;
+  }
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext?.('2d');
+  if (!ctx) return null;
+  canvas.width = size.width;
+  canvas.height = size.height;
+  return { canvas, ctx };
+}
+
+function fillCanvasBackground(
+  ctx: CanvasRenderingContext2D,
+  size: ExportMediaCoverSize
+) {
+  const gradient = ctx.createLinearGradient(0, 0, size.width, size.height);
+  gradient.addColorStop(0, '#0f172a');
+  gradient.addColorStop(0.55, '#1d4ed8');
+  gradient.addColorStop(1, '#f97316');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size.width, size.height);
+}
+
+function drawMediaPlayBadge(
+  ctx: CanvasRenderingContext2D,
+  size: ExportMediaCoverSize,
+  kind: ExportMediaKind
+) {
+  const radius = Math.min(size.width, size.height) * 0.14;
+  const cx = size.width / 2;
+  const cy = size.height / 2;
+  ctx.save();
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.62)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.88)';
+  ctx.lineWidth = Math.max(4, radius * 0.08);
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffffff';
+  if (kind === 'video') {
+    ctx.beginPath();
+    ctx.moveTo(cx - radius * 0.22, cy - radius * 0.38);
+    ctx.lineTo(cx - radius * 0.22, cy + radius * 0.38);
+    ctx.lineTo(cx + radius * 0.46, cy);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    const barWidth = Math.max(4, radius * 0.12);
+    const bars = [0.52, 0.82, 0.62, 0.92, 0.7];
+    bars.forEach((heightRatio, index) => {
+      const x = cx - radius * 0.45 + index * barWidth * 1.7;
+      const h = radius * heightRatio;
+      ctx.fillRect(x, cy - h / 2, barWidth, h);
+    });
+  }
+  ctx.restore();
+}
+
+function drawImageCoverToCanvas(
+  ctx: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  size: ExportMediaCoverSize
+) {
+  const sourceRatio = sourceWidth / Math.max(sourceHeight, 1);
+  const targetRatio = size.width / Math.max(size.height, 1);
+  let sx = 0;
+  let sy = 0;
+  let sw = sourceWidth;
+  let sh = sourceHeight;
+
+  if (sourceRatio > targetRatio) {
+    sw = sourceHeight * targetRatio;
+    sx = (sourceWidth - sw) / 2;
+  } else {
+    sh = sourceWidth / targetRatio;
+    sy = (sourceHeight - sh) / 2;
+  }
+
+  ctx.drawImage(image, sx, sy, sw, sh, 0, 0, size.width, size.height);
+}
+
+function loadCoverImage(data: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('封面图片加载失败'));
+    image.src = data;
+  });
+}
+
+async function imageToPngCover(
+  data: string,
+  size: ExportMediaCoverSize,
+  kind?: ExportMediaKind
+): Promise<string> {
+  const pngCanvas = createPngCanvas(size);
+  if (!pngCanvas) return data;
+  const image = await loadCoverImage(data);
+  fillCanvasBackground(pngCanvas.ctx, size);
+  drawImageCoverToCanvas(
+    pngCanvas.ctx,
+    image,
+    image.naturalWidth || size.width,
+    image.naturalHeight || size.height,
+    size
+  );
+  if (kind) {
+    drawMediaPlayBadge(pngCanvas.ctx, size, kind);
+  }
+  return pngCanvas.canvas.toDataURL('image/png');
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+function waitForMediaEvent(
+  media: HTMLMediaElement,
+  eventName: string,
+  errorMessage: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      media.removeEventListener(eventName, onEvent);
+      media.removeEventListener('error', onError);
+    };
+    const onEvent = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error(errorMessage));
+    };
+    media.addEventListener(eventName, onEvent, { once: true });
+    media.addEventListener('error', onError, { once: true });
+  });
+}
+
+async function captureVideoFrameCover(
+  videoUrl: string,
+  size: ExportMediaCoverSize
+): Promise<string | undefined> {
+  const pngCanvas = createPngCanvas(size);
+  if (!pngCanvas || typeof document === 'undefined') return undefined;
+
+  const video = document.createElement('video');
+  video.crossOrigin = 'anonymous';
+  video.muted = true;
+  video.preload = 'metadata';
+  video.playsInline = true;
+
+  try {
+    video.src = videoUrl;
+    await withTimeout(
+      waitForMediaEvent(video, 'loadedmetadata', '视频封面加载失败'),
+      EXPORT_MEDIA_COVER_TIMEOUT_MS,
+      '视频封面加载超时'
+    );
+
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    const timestamp =
+      duration > 0 ? Math.min(0.1, Math.max(0, duration - 0.01)) : 0;
+    if (timestamp > 0) {
+      video.currentTime = timestamp;
+      await withTimeout(
+        waitForMediaEvent(video, 'seeked', '视频首帧定位失败'),
+        EXPORT_MEDIA_COVER_TIMEOUT_MS,
+        '视频首帧定位超时'
+      );
+    } else if (video.readyState < video.HAVE_CURRENT_DATA) {
+      await withTimeout(
+        waitForMediaEvent(video, 'loadeddata', '视频首帧加载失败'),
+        EXPORT_MEDIA_COVER_TIMEOUT_MS,
+        '视频首帧加载超时'
+      );
+    }
+
+    fillCanvasBackground(pngCanvas.ctx, size);
+    drawImageCoverToCanvas(
+      pngCanvas.ctx,
+      video,
+      video.videoWidth || size.width,
+      video.videoHeight || size.height,
+      size
+    );
+    drawMediaPlayBadge(pngCanvas.ctx, size, 'video');
+    return pngCanvas.canvas.toDataURL('image/png');
+  } catch {
+    return undefined;
+  } finally {
+    video.removeAttribute('src');
+    video.load();
+  }
+}
+
+function truncateCoverText(text: string, maxLength: number): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength - 1)}…`
+    : normalized;
+}
+
+function createAudioGeneratedCover(
+  descriptor: ExportMediaDescriptor,
+  size: ExportMediaCoverSize
+): string | undefined {
+  const pngCanvas = createPngCanvas(size);
+  if (!pngCanvas) return undefined;
+  const { canvas, ctx } = pngCanvas;
+  fillCanvasBackground(ctx, size);
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+  for (let i = 0; i < 18; i++) {
+    const x = (size.width / 18) * i;
+    const h = size.height * (0.18 + ((i * 37) % 9) / 18);
+    ctx.fillRect(x, size.height - h, Math.max(8, size.width / 60), h);
+  }
+  ctx.restore();
+
+  const artworkSize = Math.min(size.height * 0.58, size.width * 0.28);
+  const artworkX = size.width * 0.08;
+  const artworkY = (size.height - artworkSize) / 2;
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+  ctx.fillRect(artworkX, artworkY, artworkSize, artworkSize);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.82)';
+  const barWidth = artworkSize * 0.08;
+  [0.7, 0.46, 0.82, 0.58].forEach((heightRatio, index) => {
+    const h = artworkSize * heightRatio;
+    const x = artworkX + artworkSize * 0.25 + index * barWidth * 1.8;
+    ctx.fillRect(x, artworkY + (artworkSize - h) / 2, barWidth, h);
+  });
+
+  const title = truncateCoverText(descriptor.title || 'Canvas Audio', 34);
+  const textX = artworkX + artworkSize + size.width * 0.06;
+  const textW = size.width - textX - size.width * 0.08;
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `700 ${Math.max(
+    24,
+    Math.round(size.height * 0.13)
+  )}px ${DEFAULT_FONT_FACE}, sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(title, textX, size.height * 0.43, textW);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+  ctx.font = `500 ${Math.max(
+    14,
+    Math.round(size.height * 0.055)
+  )}px ${DEFAULT_FONT_FACE}, sans-serif`;
+  ctx.fillText('AUDIO', textX, size.height * 0.58, textW);
+  drawMediaPlayBadge(ctx, size, 'audio');
+  return canvas.toDataURL('image/png');
+}
+
+function isLikelyVideoUrl(url: string): boolean {
+  const normalized = url.toLowerCase();
+  return (
+    normalized.includes('#video') ||
+    normalized.includes('#merged-video') ||
+    /\.(mp4|webm|mov|mkv|avi|m4v|flv|wmv)(\?|#|$)/i.test(url)
+  );
+}
+
+function isLikelyAudioUrl(url: string): boolean {
+  return /\.(mp3|wav|m4a|aac|ogg|flac|webm)(\?|#|$)/i.test(url);
+}
+
+function stripMediaUrlMarker(url: string): string {
+  return url.replace(/#(?:video|merged-video[^?#]*)$/i, '');
+}
+
+function getAudioUrl(element: PlaitElement): string | undefined {
+  const audioUrl = (element as PlaitElement & { audioUrl?: unknown }).audioUrl;
+  return typeof audioUrl === 'string' && audioUrl.trim()
+    ? audioUrl.trim()
+    : undefined;
+}
+
+function getImageUrl(element: PlaitElement): string | undefined {
+  const anyEl = element as any;
+  const url = anyEl.url || anyEl.image?.url;
+  return typeof url === 'string' && url.trim() ? url.trim() : undefined;
+}
+
+function getMediaCoverCandidates(element: PlaitElement): string[] {
+  const anyEl = element as any;
+  const seen = new Set<string>();
+  return [
+    anyEl.poster,
+    anyEl.previewImageUrl,
+    anyEl.coverUrl,
+    anyEl.thumbnail,
+    anyEl.imageLargeUrl,
+    anyEl.image?.url,
+    anyEl.url,
+  ].filter((value): value is string => {
+    if (typeof value !== 'string') return false;
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) return false;
+    seen.add(trimmed);
+    return true;
+  });
+}
+
+function getExportMediaDescriptor(
+  element: PlaitElement
+): ExportMediaDescriptor | null {
+  const anyEl = element as any;
+  const imageUrl = getImageUrl(element);
+  const audioUrl = getAudioUrl(element);
+  const isLegacyAudio =
+    anyEl.isAudio === true ||
+    anyEl.audioType === 'music-card' ||
+    Boolean(audioUrl && anyEl.type !== 'audio');
+
+  if (audioUrl && (anyEl.type === 'audio' || isLegacyAudio)) {
+    return {
+      kind: 'audio',
+      url: audioUrl,
+      title:
+        typeof anyEl.title === 'string'
+          ? anyEl.title
+          : typeof anyEl.audioTitle === 'string'
+          ? anyEl.audioTitle
+          : undefined,
+      coverCandidates: getMediaCoverCandidates(element),
+    };
+  }
+
+  if (
+    imageUrl &&
+    (anyEl.type === 'video' ||
+      anyEl.isVideo === true ||
+      Boolean(anyEl.videoType) ||
+      isLikelyVideoUrl(imageUrl))
+  ) {
+    return {
+      kind: 'video',
+      url: stripMediaUrlMarker(imageUrl),
+      title: typeof anyEl.title === 'string' ? anyEl.title : undefined,
+      coverCandidates: getMediaCoverCandidates(element),
+    };
+  }
+
+  return null;
+}
+
+function shouldSkipMediaAsRasterImage(element: PlaitElement): boolean {
+  return getExportMediaDescriptor(element)?.kind === 'video';
+}
+
+function parsePositiveInteger(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function estimateDataUrlBytes(url: string): number | null {
+  const commaIndex = url.indexOf(',');
+  if (commaIndex < 0) return null;
+  const metadata = url.slice(0, commaIndex).toLowerCase();
+  const payload = url.slice(commaIndex + 1);
+  if (!metadata.includes(';base64')) {
+    return Math.ceil(decodeURIComponent(payload).length);
+  }
+  const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
+  return Math.floor((payload.length * 3) / 4) - padding;
+}
+
+async function responseToLimitedBlob(
+  response: Response,
+  limitBytes: number
+): Promise<Blob> {
+  const headerSize = parsePositiveInteger(
+    response.headers.get('content-length')
+  );
+  if (headerSize && headerSize > limitBytes) {
+    throw new ExportMediaTooLargeError(headerSize, limitBytes);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!response.body) {
+    const blob = await response.blob();
+    if (blob.size > limitBytes) {
+      throw new ExportMediaTooLargeError(blob.size, limitBytes);
+    }
+    return blob;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > limitBytes) {
+        await reader.cancel();
+        throw new ExportMediaTooLargeError(total, limitBytes);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return new Blob(chunks, { type: contentType || undefined });
+}
+
+function getMimeTypeFromDataUrl(url: string): string | undefined {
+  const match = /^data:([^;,]+)/i.exec(url);
+  return match?.[1]?.toLowerCase();
+}
+
+function normalizeMediaExtension(ext: string | undefined): string | undefined {
+  const normalized = ext?.toLowerCase().replace(/^\./, '').trim();
+  if (!normalized || !/^[a-z0-9]+$/.test(normalized)) return undefined;
+  if (normalized === 'mpeg' || normalized === 'mpga') return 'mp3';
+  if (normalized === 'quicktime') return 'mov';
+  if (normalized === 'x-m4v') return 'm4v';
+  return normalized;
+}
+
+function inferExtensionFromMime(
+  mimeType: string | undefined,
+  kind: ExportMediaKind
+): string | undefined {
+  const mime = mimeType?.toLowerCase().split(';')[0].trim();
+  if (!mime) return undefined;
+  const mapped: Record<string, string> = {
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/ogg': 'ogg',
+    'audio/webm': 'webm',
+    'audio/mp4': 'm4a',
+    'audio/aac': 'aac',
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/quicktime': 'mov',
+    'video/x-m4v': 'm4v',
+    'video/x-msvideo': 'avi',
+    'video/x-matroska': 'mkv',
+  };
+  if (mapped[mime]) return mapped[mime];
+  if (mime.startsWith(`${kind}/`)) {
+    return normalizeMediaExtension(mime.slice(kind.length + 1));
+  }
+  return undefined;
+}
+
+function inferExtensionFromUrl(url: string): string | undefined {
+  const cleanUrl = stripMediaUrlMarker(url).split('?')[0].split('#')[0];
+  const match = /\.([a-z0-9]+)$/i.exec(cleanUrl);
+  return normalizeMediaExtension(match?.[1]);
+}
+
+function inferMediaExtension(
+  url: string,
+  mimeType: string | undefined,
+  kind: ExportMediaKind
+): string {
+  return (
+    inferExtensionFromMime(mimeType, kind) ||
+    inferExtensionFromUrl(url) ||
+    (kind === 'video' ? 'mp4' : 'mp3')
+  );
+}
+
+function inferMediaMimeType(
+  blob: Blob,
+  url: string,
+  kind: ExportMediaKind
+): string {
+  return (
+    blob.type ||
+    getMimeTypeFromDataUrl(url) ||
+    (kind === 'video' ? 'video/mp4' : 'audio/mpeg')
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const precision = unitIndex === 0 ? 0 : 1;
+  return `${value.toFixed(precision)}${units[unitIndex]}`;
+}
+
+async function resolveExportMediaSource(
+  descriptor: ExportMediaDescriptor,
+  limitBytes: number
+): Promise<ResolvedExportMediaSource> {
+  const mediaUrl =
+    descriptor.kind === 'video'
+      ? stripMediaUrlMarker(descriptor.url)
+      : descriptor.url;
+  if (!mediaUrl) throw new Error('媒体 URL 为空');
+
+  const estimatedDataSize = mediaUrl.startsWith('data:')
+    ? estimateDataUrlBytes(mediaUrl)
+    : null;
+  if (estimatedDataSize && estimatedDataSize > limitBytes) {
+    throw new ExportMediaTooLargeError(estimatedDataSize, limitBytes);
+  }
+
+  const response = await fetch(mediaUrl, {
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+  });
+  if (!response.ok) {
+    throw new Error(`获取媒体失败: ${response.status}`);
+  }
+
+  const blob = await responseToLimitedBlob(response, limitBytes);
+  if (blob.size <= 0) throw new Error('媒体内容为空');
+
+  const mimeType = inferMediaMimeType(blob, mediaUrl, descriptor.kind);
+  const data = await blobToDataUrl(blob);
+  const extn = inferMediaExtension(mediaUrl, mimeType, descriptor.kind);
+  return { data, extn, mimeType, size: blob.size };
+}
+
+function shouldSkipMediaCoverCandidate(
+  candidate: string,
+  descriptor: ExportMediaDescriptor
+): boolean {
+  const normalizedCandidate = stripMediaUrlMarker(candidate);
+  const normalizedMediaUrl = stripMediaUrlMarker(descriptor.url);
+  return (
+    normalizedCandidate === normalizedMediaUrl ||
+    isLikelyVideoUrl(candidate) ||
+    isLikelyAudioUrl(candidate)
+  );
+}
+
+async function resolveMediaCover(
+  descriptor: ExportMediaDescriptor,
+  size: ExportMediaCoverSize,
+  allowGeneratedCover = true
+): Promise<string | undefined> {
+  for (const candidate of descriptor.coverCandidates) {
+    if (shouldSkipMediaCoverCandidate(candidate, descriptor)) {
+      continue;
+    }
+    if (candidate.startsWith('data:') && !candidate.toLowerCase().startsWith('data:image/')) {
+      continue;
+    }
+    try {
+      const data = await ensureBase64Image(candidate);
+      const normalizedData = data.toLowerCase();
+      if (normalizedData.startsWith('data:image/')) {
+        return await imageToPngCover(data, size, descriptor.kind);
+      }
+    } catch {}
+  }
+
+  if (!allowGeneratedCover) {
+    return undefined;
+  }
+
+  if (descriptor.kind === 'video') {
+    return captureVideoFrameCover(descriptor.url, size);
+  }
+
+  return createAudioGeneratedCover(descriptor, size);
+}
+
+function getFallbackReason(error: unknown): string {
+  if (error instanceof ExportMediaTooLargeError) {
+    return `文件超过 ${formatBytes(error.limit)} 上限`;
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return '媒体获取失败';
+}
+
+function getSafeHyperlink(url: string): { url: string } | undefined {
+  return /^https?:\/\//i.test(url) ? { url } : undefined;
+}
+
+async function addMediaFallback(
+  slide: PptxGenJS.Slide,
+  descriptor: ExportMediaDescriptor,
+  pos: { x: number; y: number; w: number; h: number },
+  error?: unknown
+) {
+  const label = descriptor.kind === 'video' ? '视频' : '音频';
+  const title = descriptor.title?.trim();
+  const reason = getFallbackReason(error);
+  const text = [
+    `${label}未嵌入`,
+    reason,
+    title ? `《${title}》` : '',
+    getSafeHyperlink(descriptor.url) ? '点击打开原始链接' : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const cover = await resolveMediaCover(descriptor, getMediaCoverSize(pos));
+  if (cover) {
+    slide.addImage({ data: cover, x: pos.x, y: pos.y, w: pos.w, h: pos.h });
+  }
+
+  slide.addText(buildPlainTextRows(text, 10), {
+    x: pos.x,
+    y: pos.y,
+    w: pos.w,
+    h: pos.h,
+    valign: 'middle',
+    align: 'center',
+    margin: 0.08,
+    fit: 'shrink',
+    fontFace: DEFAULT_FONT_FACE,
+    color: cover ? 'FFFFFF' : '334155',
+    fill: cover ? { color: '0F172A', transparency: 18 } : { color: 'F8FAFC' },
+    line: { color: 'CBD5E1', width: 0.5 },
+    hyperlink: getSafeHyperlink(descriptor.url),
+  });
+}
+
+async function addMediaElementToSlide(
+  slide: PptxGenJS.Slide,
+  element: PlaitElement,
+  pos: { x: number; y: number; w: number; h: number },
+  options: ResolvedExportPPTOptions
+): Promise<boolean> {
+  const descriptor = getExportMediaDescriptor(element);
+  if (!descriptor) return false;
+
+  if (!options.embedMedia) {
+    await addMediaFallback(slide, descriptor, pos);
+    return true;
+  }
+
+  try {
+    const coverSize = getMediaCoverSize(pos);
+    const [source, cover] = await Promise.all([
+      resolveExportMediaSource(descriptor, options.mediaSizeLimitBytes),
+      resolveMediaCover(descriptor, coverSize),
+    ]);
+    slide.addMedia({
+      type: descriptor.kind,
+      data: source.data,
+      extn: source.extn,
+      ...(cover ? { cover } : {}),
+      objectName:
+        descriptor.title ||
+        (descriptor.kind === 'video' ? 'Canvas Video' : 'Canvas Audio'),
+      x: pos.x,
+      y: pos.y,
+      w: pos.w,
+      h: pos.h,
+    });
+  } catch (error) {
+    await addMediaFallback(slide, descriptor, pos, error);
+  }
+
+  return true;
 }
 
 // ─── Frame sorting ───
@@ -630,22 +1456,14 @@ function isPointInRect(
   );
 }
 
-function shouldSkipMediaAsRasterImage(element: PlaitElement): boolean {
-  const anyEl = element as any;
-  if (anyEl.isVideo) return true;
-  const url = anyEl.url || anyEl.image?.url;
-  if (typeof url !== 'string') return false;
-  if (url.includes('#video') || url.includes('#merged-video')) return true;
-  return /\.(mp4|webm|mov|mkv|avi)(\?|#|$)/i.test(url);
-}
-
 // ─── Core: convert one Frame into a PPT slide ───
 
 async function addFrameSlide(
   pptx: PptxGenJS,
   board: PlaitBoard,
   frame: PlaitFrame,
-  children: PlaitElement[]
+  children: PlaitElement[],
+  options: ResolvedExportPPTOptions
 ): Promise<boolean> {
   const frameRect = RectangleClient.getRectangleByPoints(frame.points);
   const slide = pptx.addSlide();
@@ -683,6 +1501,10 @@ async function addFrameSlide(
 
       const rect = getRectangleByElements(board, [element], false);
       const pos = computeSlidePosition(rect, frameRect);
+
+      if (await addMediaElementToSlide(slide, element, pos, options)) {
+        continue;
+      }
 
       // --- Image element ---
       if (isImageElement(board, element)) {
@@ -1038,11 +1860,18 @@ export async function exportFramesToPPT(
   const sortedFrames = sortFramesForPPT(frames);
   const partition = partitionElementsByExportFrames(board, sortedFrames);
   const pptx = new PptxGenJS();
+  const resolvedOptions = resolveExportPPTOptions(options);
 
   let addedCount = 0;
   for (const frame of sortedFrames) {
     const slideChildren = partition.get(frame.id) ?? [];
-    const ok = await addFrameSlide(pptx, board, frame, slideChildren);
+    const ok = await addFrameSlide(
+      pptx,
+      board,
+      frame,
+      slideChildren,
+      resolvedOptions
+    );
     if (ok) addedCount += 1;
   }
 
@@ -1053,10 +1882,18 @@ export async function exportFramesToPPT(
     (sortedFrames.length === 1 && sortedFrames[0].name
       ? sortedFrames[0].name
       : 'aitu-ppt');
+  const fileName = normalizePPTFileName(baseName);
+  const transitions = sortedFrames.map(getFramePPTTransition);
 
-  await pptx.writeFile({
-    fileName: baseName.endsWith('.pptx') ? baseName : `${baseName}.pptx`,
-  });
+  if (!transitions.some(hasPPTSlideTransition)) {
+    await pptx.writeFile({ fileName });
+    return;
+  }
+
+  const pptxData = await pptx.write({ outputType: 'blob' });
+  const pptxBlob = toPPTXBlob(pptxData);
+  const outputBlob = await injectPPTSlideTransitions(pptxBlob, transitions);
+  downloadPPTXBlob(outputBlob, fileName);
 }
 
 export async function exportAllPPTFrames(

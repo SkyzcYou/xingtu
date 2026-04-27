@@ -58,6 +58,7 @@ export const RPC_METHODS = {
 export const SW_EVENTS = {
   // Cache events
   CACHE_IMAGE_CACHED: 'cache:imageCached',
+  CACHE_IMAGE_CACHE_FAILED: 'cache:imageCacheFailed',
   CACHE_DELETED: 'cache:deleted',
   CACHE_QUOTA_WARNING: 'cache:quotaWarning',
 

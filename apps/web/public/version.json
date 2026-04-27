@@ -1,13 +1,12 @@
 {
-  "version": "0.6.79",
-  "buildTime": "2026-04-26T17:09:17.700Z",
+  "version": "0.6.80",
+  "buildTime": "2026-04-27T05:32:44.069Z",
   "gitCommit": "unknown",
   "changelog": [
-    "本地开发默认启用 Service Worker",
-    "确保虚拟图片链接在当前页由 SW 接管",
-    "恢复画布图片稳定虚拟 URL 缓存链路",
-    "添加提示词历史工具并集成到AI输入栏",
-    "为歌曲创作页面添加提示词优化功能",
-    "修复粘贴图片画布展示兜底"
+    "refine left floating toolbar drawer alignment",
+    "Add home SEO alternates and SW prefetch",
+    "完善 PPT 标题文件名和媒体导出",
+    "启用 GPT-5.5 模型配置",
+    "优化素材库渲染性能"
   ]
 }

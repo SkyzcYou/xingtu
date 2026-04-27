@@ -6,7 +6,11 @@
 
 // Layout
 $drawer-width: 300px;
-$toolbar-width: 52px; // 考虑 12px 间距 + 约 64px 的工具栏宽度
+$toolbar-safe-area-left: 48px; // 侧边标签冲突时，拖入画布内侧的建议避让距离
+$toolbar-edge-gap: 0px; // 默认贴屏幕左边缘
+$toolbar-left: $toolbar-edge-gap;
+$toolbar-content-width: 58px;
+$toolbar-width: $toolbar-left + $toolbar-content-width; // 工具栏右边界，用于抽屉/提示避让
 
 // Animation
 $animation-duration: 300ms;

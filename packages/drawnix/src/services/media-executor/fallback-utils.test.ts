@@ -106,7 +106,7 @@ describe('cacheRemoteUrl', () => {
     vi.unstubAllGlobals();
   });
 
-  it('caches remote https audio urls into stable local paths', async () => {
+  it('caches remote https audio urls while keeping original URLs', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValue(
@@ -121,14 +121,14 @@ describe('cacheRemoteUrl', () => {
 
     const result = await cacheRemoteUrl(remoteUrl, 'task-audio', 'audio', 'mp3');
 
-    expect(result).toBe('/__aitu_generated__/audio/task-audio.mp3');
+    expect(result).toBe(remoteUrl);
     expect(fetchMock).toHaveBeenCalledWith(remoteUrl, {
       credentials: 'omit',
       cache: 'no-store',
       referrerPolicy: 'no-referrer',
     });
     expect(cacheMediaFromBlob).toHaveBeenCalledWith(
-      '/__aitu_generated__/audio/task-audio.mp3',
+      remoteUrl,
       expect.any(Blob),
       'audio',
       {
@@ -140,7 +140,7 @@ describe('cacheRemoteUrl', () => {
     vi.unstubAllGlobals();
   });
 
-  it('caches playback-only remote audio urls into hidden local cache paths', async () => {
+  it('caches playback-only remote audio urls while keeping original URLs', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValue(
@@ -162,9 +162,9 @@ describe('cacheRemoteUrl', () => {
       { source: 'PLAYBACK_CACHE' }
     );
 
-    expect(result).toBe('/__aitu_cache__/audio/asset-d88312b4-5b86-4f11-b9a6-c4162ba07486.mp3');
+    expect(result).toBe(remoteUrl);
     expect(cacheMediaFromBlob).toHaveBeenCalledWith(
-      '/__aitu_cache__/audio/asset-d88312b4-5b86-4f11-b9a6-c4162ba07486.mp3',
+      remoteUrl,
       expect.any(Blob),
       'audio',
       {
@@ -176,7 +176,7 @@ describe('cacheRemoteUrl', () => {
     vi.unstubAllGlobals();
   });
 
-  it('caches force-remote cover images into image cache paths instead of audio paths', async () => {
+  it('caches force-remote cover images while keeping original URLs', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValue(
@@ -198,13 +198,51 @@ describe('cacheRemoteUrl', () => {
       { forceRemoteCache: true }
     );
 
-    expect(result).toBe('/__aitu_cache__/image/task-audio-cover_1.jpg');
+    expect(result).toBe(remoteUrl);
     expect(cacheMediaFromBlob).toHaveBeenCalledWith(
-      '/__aitu_cache__/image/task-audio-cover_1.jpg',
+      remoteUrl,
       expect.any(Blob),
       'image',
       {
         taskId: 'task-audio-cover',
+        source: 'AI_GENERATED',
+      }
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the original remote URL when cache write cannot be verified', async () => {
+    cacheMediaFromBlob.mockResolvedValueOnce('https://cdn.example.com/audio/cover.jpg');
+
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(new Blob(['cover-binary'], { type: 'image/jpeg' }), {
+          status: 200,
+        })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { cacheRemoteUrl } = await import('./fallback-utils');
+    const remoteUrl = 'https://cdn.example.com/audio/cover.jpg';
+
+    const result = await cacheRemoteUrl(
+      remoteUrl,
+      'task-cover',
+      'image',
+      'jpg',
+      undefined,
+      { forceRemoteCache: true }
+    );
+
+    expect(result).toBe(remoteUrl);
+    expect(cacheMediaFromBlob).toHaveBeenCalledWith(
+      remoteUrl,
+      expect.any(Blob),
+      'image',
+      {
+        taskId: 'task-cover',
         source: 'AI_GENERATED',
       }
     );

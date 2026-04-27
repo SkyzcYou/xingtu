@@ -298,22 +298,8 @@ export async function cacheRemoteUrl(
 
     try {
       const cacheSource = options?.source || 'AI_GENERATED';
-      const hintedFormat = getFileExtension(normalizedUrl);
-      const guessedFormat = hintedFormat !== 'bin' ? hintedFormat : format;
-      const guessedSuffix = index !== undefined ? `_${index}` : '';
-      const safeTaskId =
-        cacheSource === 'PLAYBACK_CACHE'
-          ? taskId.replace(/[^a-zA-Z0-9._-]+/g, '-')
-          : taskId;
-      const guessedLocalUrl =
-        cacheSource === 'PLAYBACK_CACHE'
-          ? `/__aitu_cache__/audio/${safeTaskId}${guessedSuffix}.${guessedFormat}`
-          : mediaType === 'audio'
-          ? `${AI_GENERATED_AUDIO_URL_PREFIX}${taskId}${guessedSuffix}.${guessedFormat}`
-          : `/__aitu_cache__/${mediaType}/${taskId}${guessedSuffix}.${guessedFormat}`;
-
-      if (await unifiedCacheService.isCached(guessedLocalUrl)) {
-        return guessedLocalUrl;
+      if (await unifiedCacheService.isCached(normalizedUrl)) {
+        return normalizedUrl;
       }
 
       const response = await fetch(normalizedUrl, {
@@ -330,33 +316,20 @@ export async function cacheRemoteUrl(
         return normalizedUrl;
       }
 
-      const mimeFormat = getFileExtension('', blob.type);
-      const finalFormat =
-        mimeFormat !== 'bin'
-          ? mimeFormat
-          : hintedFormat !== 'bin'
-          ? hintedFormat
-          : guessedFormat;
-      const localUrl =
-        cacheSource === 'PLAYBACK_CACHE'
-          ? `/__aitu_cache__/audio/${safeTaskId}${guessedSuffix}.${finalFormat}`
-          : mediaType === 'audio'
-          ? `${AI_GENERATED_AUDIO_URL_PREFIX}${taskId}${guessedSuffix}.${finalFormat}`
-          : `/__aitu_cache__/${mediaType}/${taskId}${guessedSuffix}.${finalFormat}`;
-
-      if (await unifiedCacheService.isCached(localUrl)) {
-        return localUrl;
-      }
-
-      await unifiedCacheService.cacheMediaFromBlob(localUrl, blob, mediaType, {
-        taskId,
-        source: cacheSource,
-        ...options?.extraMetadata,
-      });
-      return localUrl;
+      await unifiedCacheService.cacheMediaFromBlob(
+        normalizedUrl,
+        blob,
+        mediaType,
+        {
+          taskId,
+          source: cacheSource,
+          ...options?.extraMetadata,
+        }
+      );
+      return normalizedUrl;
     } catch (error) {
       console.warn(
-        '[cacheRemoteUrl] Remote audio cache failed, using original URL:',
+        '[cacheRemoteUrl] Remote media cache failed, using original URL:',
         error
       );
       return normalizedUrl;
@@ -407,7 +380,9 @@ export async function cacheRemoteUrl(
           ...options?.extraMetadata,
         }
       );
-      return contentAddressedUrl;
+      return (await unifiedCacheService.isCached(contentAddressedUrl))
+        ? contentAddressedUrl
+        : normalizedUrl;
     }
 
     return normalizedUrl;
