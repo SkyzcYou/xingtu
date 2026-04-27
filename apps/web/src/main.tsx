@@ -139,6 +139,78 @@ interface RuntimeSWVersionState {
   swVersion: string;
 }
 
+type ManualUpdateCheckFailedReason =
+  | 'unsupported'
+  | 'disabled'
+  | 'no-registration'
+  | 'timeout'
+  | 'update-error';
+
+interface ManualUpdateCheckRequestDetail {
+  requestId?: string;
+  source?: 'app-menu';
+}
+
+type ManualUpdateCheckResultDetail =
+  | {
+      requestId: string;
+      status: 'checking';
+    }
+  | {
+      requestId: string;
+      status: 'latest';
+      currentVersion: string;
+    }
+  | {
+      requestId: string;
+      status: 'available';
+      version: string;
+    }
+  | {
+      requestId: string;
+      status: 'failed';
+      reason: ManualUpdateCheckFailedReason;
+      message?: string;
+    };
+
+function dispatchManualUpdateCheckResult(
+  detail: ManualUpdateCheckResultDetail
+): void {
+  window.dispatchEvent(
+    new CustomEvent('sw-update-check-result', {
+      detail,
+    })
+  );
+}
+
+function getManualUpdateCheckRequestId(event: Event): string | null {
+  const detail = (event as CustomEvent<ManualUpdateCheckRequestDetail>).detail;
+  return typeof detail?.requestId === 'string' && detail.requestId
+    ? detail.requestId
+    : null;
+}
+
+function hasPendingRuntimeVersionState(
+  state: RuntimeSWVersionState | null
+): state is RuntimeSWVersionState & { pendingVersion: string } {
+  return Boolean(
+    state?.pendingVersion && state.pendingVersion !== state.committedVersion
+  );
+}
+
+function isReadyRuntimeVersionState(
+  state: RuntimeSWVersionState | null
+): state is RuntimeSWVersionState & { pendingVersion: string } {
+  return Boolean(
+    hasPendingRuntimeVersionState(state) &&
+      (state.upgradeState === 'ready' || state.upgradeState === 'committing')
+  );
+}
+
+function getUpdateErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function getRuntimeCDNPreference(): RuntimeCDNPreference | null {
   const preference = window.__OPENTU_CDN__ || window.__AITU_CDN__;
   if (!preference || !isValidCDNName(preference.cdn)) {
@@ -344,6 +416,21 @@ if (hasServiceWorkerSupport && isServiceWorkerExplicitlyDisabled) {
   cleanupDisabledServiceWorker();
 }
 
+if (!shouldUseServiceWorker) {
+  window.addEventListener('sw-update-check-request', (event) => {
+    const requestId = getManualUpdateCheckRequestId(event);
+    if (!requestId) {
+      return;
+    }
+
+    dispatchManualUpdateCheckResult({
+      requestId,
+      status: 'failed',
+      reason: hasServiceWorkerSupport ? 'disabled' : 'unsupported',
+    });
+  });
+}
+
 // 注册Service Worker来处理CORS问题和PWA功能
 if (shouldUseServiceWorker) {
   const isDevelopment = isLocalDev;
@@ -354,6 +441,7 @@ if (shouldUseServiceWorker) {
   let userConfirmedUpgrade = false;
   let upgradeReloadScheduled = false;
   let lastPendingVersionNotified: string | null = null;
+  let latestVersionState: RuntimeSWVersionState | null = null;
 
   // Global reference to service worker registration
   let swRegistration: ServiceWorkerRegistration | null = null;
@@ -371,11 +459,9 @@ if (shouldUseServiceWorker) {
   };
 
   const handleRuntimeVersionState = (state: RuntimeSWVersionState) => {
-    if (
-      state.pendingVersion &&
-      state.pendingVersion !== state.committedVersion &&
-      (state.upgradeState === 'ready' || state.upgradeState === 'committing')
-    ) {
+    latestVersionState = state;
+
+    if (isReadyRuntimeVersionState(state)) {
       notifyUpdateReady(state.pendingVersion);
       return;
     }
@@ -399,6 +485,35 @@ if (shouldUseServiceWorker) {
     }
 
     worker.postMessage({ type: 'GET_VERSION_STATE' });
+  };
+
+  const requestSWVersionStateOnce = (
+    target?: ServiceWorker | null,
+    timeout = 2500
+  ): Promise<RuntimeSWVersionState | null> => {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (state: RuntimeSWVersionState | null) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        navigator.serviceWorker.removeEventListener('message', handleMessage);
+        window.clearTimeout(timeoutId);
+        resolve(state);
+      };
+      const handleMessage = (event: MessageEvent) => {
+        if (event.data?.type === 'SW_VERSION_STATE') {
+          finish(event.data as RuntimeSWVersionState);
+        }
+      };
+      const timeoutId = window.setTimeout(() => {
+        finish(null);
+      }, timeout);
+
+      navigator.serviceWorker.addEventListener('message', handleMessage);
+      requestSWVersionState(target);
+    });
   };
 
   const claimCurrentClientIfNeeded = (
@@ -470,6 +585,163 @@ if (shouldUseServiceWorker) {
 
       return null;
     };
+
+  const getLiveServiceWorkerRegistration =
+    async (): Promise<ServiceWorkerRegistration | null> => {
+      if (swRegistration) {
+        return swRegistration;
+      }
+
+      const liveRegistration =
+        (await navigator.serviceWorker.getRegistration()) ||
+        (await navigator.serviceWorker.ready.catch(() => null));
+
+      swRegistration = liveRegistration;
+      return liveRegistration;
+    };
+
+  const waitForInstallingWorker = (
+    registration: ServiceWorkerRegistration,
+    timeout = 15000
+  ): Promise<ServiceWorker | null> => {
+    const worker = registration.installing || registration.waiting;
+    if (!worker) {
+      return Promise.resolve(null);
+    }
+
+    if (worker.state === 'installed' || worker.state === 'activated') {
+      return Promise.resolve(worker);
+    }
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result: ServiceWorker | null) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        worker.removeEventListener('statechange', handleStateChange);
+        window.clearTimeout(timeoutId);
+        resolve(result);
+      };
+      const handleStateChange = () => {
+        if (worker.state === 'installed' || worker.state === 'activated') {
+          finish(worker);
+          return;
+        }
+        if (worker.state === 'redundant') {
+          finish(null);
+        }
+      };
+      const timeoutId = window.setTimeout(() => finish(null), timeout);
+
+      worker.addEventListener('statechange', handleStateChange);
+    });
+  };
+
+  const dispatchManualUpdateAvailable = (requestId: string, version: string) => {
+    notifyUpdateReady(version);
+    dispatchManualUpdateCheckResult({
+      requestId,
+      status: 'available',
+      version,
+    });
+  };
+
+  const reportManualUpdateState = (
+    requestId: string,
+    state: RuntimeSWVersionState | null
+  ): boolean => {
+    if (isReadyRuntimeVersionState(state)) {
+      dispatchManualUpdateAvailable(requestId, state.pendingVersion);
+      return true;
+    }
+
+    return false;
+  };
+
+  const handleManualUpdateCheck = (event: Event) => {
+    const requestId = getManualUpdateCheckRequestId(event);
+    if (!requestId) {
+      return;
+    }
+
+    void (async () => {
+      dispatchManualUpdateCheckResult({ requestId, status: 'checking' });
+
+      if (reportManualUpdateState(requestId, latestVersionState)) {
+        return;
+      }
+
+      try {
+        const registration = await getLiveServiceWorkerRegistration();
+        if (!registration) {
+          dispatchManualUpdateCheckResult({
+            requestId,
+            status: 'failed',
+            reason: 'no-registration',
+          });
+          return;
+        }
+
+        const stagedWorker = await resolvePendingUpgradeWorker();
+        if (stagedWorker) {
+          const stagedState = await requestSWVersionStateOnce(stagedWorker);
+          if (reportManualUpdateState(requestId, stagedState)) {
+            return;
+          }
+        }
+
+        await registration.update();
+        const updatedRegistration =
+          (await navigator.serviceWorker.getRegistration()) || registration;
+        swRegistration = updatedRegistration;
+
+        const installedWorker = await waitForInstallingWorker(updatedRegistration);
+        const state = await requestSWVersionStateOnce(
+          installedWorker || updatedRegistration.waiting || updatedRegistration.active
+        );
+
+        if (reportManualUpdateState(requestId, state || latestVersionState)) {
+          return;
+        }
+
+        if (!state) {
+          dispatchManualUpdateCheckResult({
+            requestId,
+            status: 'failed',
+            reason: 'timeout',
+          });
+          return;
+        }
+
+        if (hasPendingRuntimeVersionState(state)) {
+          dispatchManualUpdateCheckResult({
+            requestId,
+            status: 'failed',
+            reason: 'timeout',
+          });
+          return;
+        }
+
+        dispatchManualUpdateCheckResult({
+          requestId,
+          status: 'latest',
+          currentVersion: state.committedVersion || APP_VERSION,
+        });
+      } catch (error) {
+        console.warn('[Main] Manual update check failed:', error);
+        dispatchManualUpdateCheckResult({
+          requestId,
+          status: 'failed',
+          reason: 'update-error',
+          message: getUpdateErrorMessage(error),
+        });
+      }
+    })();
+  };
+
+  window.addEventListener('sw-update-check-request', handleManualUpdateCheck);
 
   const swRegistrationPromise =
     window.__OPENTU_SW_REGISTRATION_PROMISE__ ||

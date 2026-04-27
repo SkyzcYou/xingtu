@@ -12,6 +12,7 @@ import {
   CleanBrokenLinksIcon,
   CommandPaletteIcon,
 } from '../../icons';
+import { RefreshIcon } from 'tdesign-icons-react';
 import { useBoard, useListRender } from '@plait-board/react-board';
 import {
   BoardTransforms,
@@ -299,7 +300,7 @@ export const VersionInfo = () => {
   const { t } = useI18n();
   // 从 HTML meta 标签获取版本号
   const version = document.querySelector('meta[name="app-version"]')?.getAttribute('content') || '0.0.0';
-  
+
   return (
     <MenuItem
       data-track="toolbar_click_menu_version"
@@ -311,6 +312,116 @@ export const VersionInfo = () => {
   );
 };
 VersionInfo.displayName = 'VersionInfo';
+
+interface UpdateCheckResultDetail {
+  requestId?: string;
+  status?: 'checking' | 'latest' | 'available' | 'failed';
+  version?: string;
+}
+
+function formatUpdateMessage(template: string, version?: string): string {
+  return template.replace('{version}', version || '');
+}
+
+let updateCheckInFlight = false;
+
+export const CheckUpdate = () => {
+  const { t } = useI18n();
+
+  const handleCheckUpdate = useCallback(() => {
+    if (updateCheckInFlight) {
+      return;
+    }
+
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const loadingInstance = MessagePlugin.loading(
+      t('menu.checkUpdate.checking'),
+      0
+    );
+    let settled = false;
+
+    updateCheckInFlight = true;
+
+    const closeLoading = () => {
+      loadingInstance.then((instance) => instance?.close?.());
+    };
+
+    const cleanup = () => {
+      window.removeEventListener('sw-update-check-result', handleResult);
+      window.clearTimeout(timeoutId);
+      updateCheckInFlight = false;
+    };
+
+    const finish = (callback: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      closeLoading();
+      cleanup();
+      callback();
+    };
+
+    const handleResult = (event: Event) => {
+      const detail = (event as CustomEvent<UpdateCheckResultDetail>).detail;
+      if (!detail || detail.requestId !== requestId) {
+        return;
+      }
+
+      if (detail.status === 'checking') {
+        return;
+      }
+
+      if (detail.status === 'available') {
+        finish(() => {
+          MessagePlugin.success(
+            formatUpdateMessage(
+              t('menu.checkUpdate.available'),
+              detail.version
+            )
+          );
+        });
+        return;
+      }
+
+      if (detail.status === 'latest') {
+        finish(() => {
+          MessagePlugin.success(t('menu.checkUpdate.latest'));
+        });
+        return;
+      }
+
+      finish(() => {
+        MessagePlugin.error(t('menu.checkUpdate.failed'));
+      });
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      finish(() => {
+        MessagePlugin.error(t('menu.checkUpdate.failed'));
+      });
+    }, 20000);
+
+    window.addEventListener('sw-update-check-result', handleResult);
+    window.dispatchEvent(
+      new CustomEvent('sw-update-check-request', {
+        detail: { requestId, source: 'app-menu' },
+      })
+    );
+  }, [t]);
+
+  return (
+    <MenuItem
+      icon={<RefreshIcon />}
+      data-track="toolbar_click_menu_check_update"
+      onSelect={handleCheckUpdate}
+      aria-label={t('menu.checkUpdate')}
+    >
+      {t('menu.checkUpdate')}
+    </MenuItem>
+  );
+};
+CheckUpdate.displayName = 'CheckUpdate';
 
 /**
  * 检查 URL 是否有效

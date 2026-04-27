@@ -91,7 +91,12 @@ export interface Translations {
   'menu.cleanInvalidLinks.success': string;
   'menu.cleanInvalidLinks.noInvalid': string;
   'menu.cleanInvalidLinks.error': string;
-  
+  'menu.checkUpdate': string;
+  'menu.checkUpdate.checking': string;
+  'menu.checkUpdate.latest': string;
+  'menu.checkUpdate.available': string;
+  'menu.checkUpdate.failed': string;
+
   // Dialog translations
   'dialog.mermaid.title': string;
   'dialog.mermaid.description': string;
@@ -282,7 +287,12 @@ const translations: Record<Language, Translations> = {
     'menu.cleanInvalidLinks.success': '已清除 {count} 个失效媒体',
     'menu.cleanInvalidLinks.noInvalid': '未发现失效媒体',
     'menu.cleanInvalidLinks.error': '清除失败',
-    
+    'menu.checkUpdate': '检查更新',
+    'menu.checkUpdate.checking': '正在检查更新...',
+    'menu.checkUpdate.latest': '当前已是最新版本',
+    'menu.checkUpdate.available': '发现新版本 v{version}，请在提示中确认更新',
+    'menu.checkUpdate.failed': '检查更新失败，请稍后重试',
+
     // Dialog translations
     'dialog.mermaid.title': 'Mermaid 转 Drawnix',
     'dialog.mermaid.description': '目前仅支持',
@@ -470,7 +480,12 @@ const translations: Record<Language, Translations> = {
     'menu.cleanInvalidLinks.success': 'Cleaned {count} invalid media',
     'menu.cleanInvalidLinks.noInvalid': 'No invalid media found',
     'menu.cleanInvalidLinks.error': 'Clean failed',
-    
+    'menu.checkUpdate': 'Check for Updates',
+    'menu.checkUpdate.checking': 'Checking for updates...',
+    'menu.checkUpdate.latest': 'You are on the latest version',
+    'menu.checkUpdate.available': 'New version v{version} is ready. Confirm from the update prompt.',
+    'menu.checkUpdate.failed': 'Update check failed. Please try again later.',
+
     // Dialog translations
     'dialog.mermaid.title': 'Mermaid to Drawnix',
     'dialog.mermaid.description': 'Currently supports',
