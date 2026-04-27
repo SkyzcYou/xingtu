@@ -5830,7 +5830,7 @@ function createOfflinePage(): Response {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>离线 - Opentu</title>
+  <title>离线 - Xingtu 星图</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -5840,7 +5840,7 @@ function createOfflinePage(): Response {
       justify-content: center;
       min-height: 100vh;
       margin: 0;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #F39C12 0%, #E67E22 30%, #5A4FCF 70%, #E91E63 100%);
       color: white;
       text-align: center;
       padding: 20px;
@@ -5863,7 +5863,7 @@ function createOfflinePage(): Response {
 </head>
 <body>
   <h1>📡 无法连接到服务器</h1>
-  <p>Opentu 是一个以画布工作区为底座的 AI 应用平台，当前无法访问时请检查网络或稍后再试。</p>
+  <p>Xingtu 星图是一个以画布工作区为底座的 AI 应用平台，当前无法访问时请检查网络或稍后再试。</p>
   <button onclick="location.reload()">重试</button>
 </body>
 </html>`,
