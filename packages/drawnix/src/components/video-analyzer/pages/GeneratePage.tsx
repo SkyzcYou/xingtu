@@ -4,7 +4,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { MessagePlugin } from 'tdesign-react';
+import { MessagePlugin } from '../../../utils/message-plugin';
 import type { AnalysisRecord, VideoShot, VideoCharacter } from '../types';
 import { formatShotsMarkdown, migrateProductInfo } from '../types';
 import { getValidVideoSize, getVideoModelConfig } from '../../../constants/video-model-config';

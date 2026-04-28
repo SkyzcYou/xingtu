@@ -20,7 +20,7 @@ import {
   getFrameDisplayName,
   isFrameElement,
 } from '../types/frame.types';
-import { MessagePlugin } from 'tdesign-react';
+import { MessagePlugin } from './message-plugin';
 
 /**
  * 深度克隆元素并生成新 ID

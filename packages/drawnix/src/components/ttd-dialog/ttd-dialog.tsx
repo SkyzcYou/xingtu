@@ -1,7 +1,5 @@
 import { Dialog, DialogContent } from '../dialog/dialog';
-import MermaidToDrawnix from './mermaid-to-drawnix';
 import { DialogType, useDrawnix } from '../../hooks/use-drawnix';
-import MarkdownToDrawnix from './markdown-to-drawnix';
 import AIImageGeneration from './ai-image-generation';
 import AIVideoGeneration from './ai-video-generation';
 import type { ReferenceImage } from './shared/ReferenceImageUpload';
@@ -44,6 +42,8 @@ import type { VideoModel } from '../../types/video.types';
 
 // 懒加载批量出图组件
 const BatchImageGeneration = lazy(() => import('./batch-image-generation'));
+const MermaidToDrawnix = lazy(() => import('./mermaid-to-drawnix'));
+const MarkdownToDrawnix = lazy(() => import('./markdown-to-drawnix'));
 
 // 图像生成模式类型
 type ImageGenerationMode = 'single' | 'batch';
@@ -651,7 +651,9 @@ const TTDDialogComponent = ({
         }}
       >
         <DialogContent className="Dialog ttd-dialog" container={container}>
-          <MermaidToDrawnix></MermaidToDrawnix>
+          <Suspense fallback={null}>
+            <MermaidToDrawnix />
+          </Suspense>
         </DialogContent>
       </Dialog>
       <Dialog
@@ -665,7 +667,9 @@ const TTDDialogComponent = ({
         }}
       >
         <DialogContent className="Dialog ttd-dialog" container={container}>
-          <MarkdownToDrawnix></MarkdownToDrawnix>
+          <Suspense fallback={null}>
+            <MarkdownToDrawnix />
+          </Suspense>
         </DialogContent>
       </Dialog>
       {/* AI 图片生成窗口 - 使用 WinBox */}

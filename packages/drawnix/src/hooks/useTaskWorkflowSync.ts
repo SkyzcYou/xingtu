@@ -15,7 +15,7 @@ import { TaskStatus, TaskType } from '../types/shared/core.types';
 import type { WorkflowMessageData } from '../types/chat.types';
 import { WorkZoneTransforms, isWorkZoneElement } from '../plugins/with-workzone';
 import { PlaitBoard } from '@plait/core';
-import { toWorkflowMessageData } from './useWorkflowSubmission';
+import { toWorkflowMessageData } from './workflow-message-data';
 import type { TaskEvent, Task } from '../types/task.types';
 
 import type { WorkflowStep, WorkflowDefinition } from '../components/ai-input-bar/workflow-converter';

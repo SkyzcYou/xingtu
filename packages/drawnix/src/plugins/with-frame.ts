@@ -41,6 +41,12 @@ import {
   isPointInRect,
   createFrameTitleEditor,
 } from '../utils/frame-title-utils';
+import {
+  getPPTFrameGridPosition,
+  loadPPTFrameLayoutColumns,
+  sanitizePPTFrameLayoutColumns,
+} from '../services/ppt/ppt-frame-layout';
+import type { PPTFrameMeta } from '../services/ppt/ppt.types';
 /** Frame 指针类型 */
 export const FramePointerType = 'frame' as const;
 
@@ -50,6 +56,12 @@ const generateFrameId = () => {
 };
 
 type RectLike = { x: number; y: number; width: number; height: number };
+type PPTFrameDeletionReflowSnapshot = {
+  remainingFrameIds: string[];
+  startPosition: Point;
+  columns: number;
+};
+const DEFAULT_FRAME_NAME_REGEXP = /^(?:Frame|Slide|PPT\s*页面)\s*\d+$/i;
 
 function getElementRect(element: PlaitElement): RectLike | null {
   const points = (element as PlaitElement & { points?: Point[] }).points;
@@ -133,6 +145,344 @@ function isRectIntersect(
     rect1.x + rect1.width > rect2.x &&
     rect1.y < rect2.y + rect2.height &&
     rect1.y + rect1.height > rect2.y
+  );
+}
+
+function isDefaultFrameName(name?: string): boolean {
+  return DEFAULT_FRAME_NAME_REGEXP.test((name || '').trim());
+}
+
+function getPPTPageFrameName(pageIndex: number): string {
+  return `PPT 页面 ${pageIndex}`;
+}
+
+function getOrderedPPTFrames(frames: PlaitFrame[]): PlaitFrame[] {
+  const sourceOrder = new Map(frames.map((frame, index) => [frame.id, index]));
+
+  return [...frames].sort((left, right) => {
+    const leftIndex = (left as PlaitFrame & { pptMeta?: PPTFrameMeta }).pptMeta
+      ?.pageIndex;
+    const rightIndex = (right as PlaitFrame & { pptMeta?: PPTFrameMeta })
+      .pptMeta?.pageIndex;
+    const hasLeftIndex =
+      typeof leftIndex === 'number' && !Number.isNaN(leftIndex);
+    const hasRightIndex =
+      typeof rightIndex === 'number' && !Number.isNaN(rightIndex);
+
+    if (hasLeftIndex && hasRightIndex && leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+    if (hasLeftIndex !== hasRightIndex) {
+      return hasLeftIndex ? -1 : 1;
+    }
+    return (sourceOrder.get(left.id) ?? 0) - (sourceOrder.get(right.id) ?? 0);
+  });
+}
+
+function moveElementByDelta(
+  board: PlaitBoard,
+  element: PlaitElement,
+  deltaX: number,
+  deltaY: number
+): void {
+  if (deltaX === 0 && deltaY === 0) {
+    return;
+  }
+
+  const elementIndex = board.children.findIndex((child) => child.id === element.id);
+  if (elementIndex === -1) {
+    return;
+  }
+
+  const currentElement = board.children[elementIndex] as PlaitElement & {
+    points?: Point[];
+    x?: number;
+    y?: number;
+  };
+
+  if (currentElement.points && Array.isArray(currentElement.points)) {
+    const nextPoints = currentElement.points.map(
+      (point) => [point[0] + deltaX, point[1] + deltaY] as Point
+    );
+    Transforms.setNode(board, { points: nextPoints } as any, [elementIndex]);
+    return;
+  }
+
+  if (
+    typeof currentElement.x === 'number' &&
+    typeof currentElement.y === 'number'
+  ) {
+    Transforms.setNode(
+      board,
+      {
+        x: currentElement.x + deltaX,
+        y: currentElement.y + deltaY,
+      } as any,
+      [elementIndex]
+    );
+  }
+}
+
+function collectRelatedElementsByFrameId(
+  board: PlaitBoard,
+  frameIds: Set<string>
+): Map<string, PlaitElement[]> {
+  const relatedByFrameId = new Map<string, PlaitElement[]>();
+
+  for (const element of board.children) {
+    if (isFrameElement(element)) {
+      continue;
+    }
+
+    const associatedFrameId = getAssociatedFrameIdByMaxIntersection(
+      board,
+      element
+    );
+    if (!associatedFrameId || !frameIds.has(associatedFrameId)) {
+      continue;
+    }
+
+    const relatedElements = relatedByFrameId.get(associatedFrameId) ?? [];
+    relatedElements.push(element);
+    relatedByFrameId.set(associatedFrameId, relatedElements);
+  }
+
+  return relatedByFrameId;
+}
+
+function moveElementWithFrameRelations(
+  board: PlaitBoard,
+  element: PlaitElement,
+  deltaX: number,
+  deltaY: number,
+  relatedByFrameId: Map<string, PlaitElement[]>,
+  movedElementIds: Set<string>
+): void {
+  if (movedElementIds.has(element.id)) {
+    return;
+  }
+
+  moveElementByDelta(board, element, deltaX, deltaY);
+  movedElementIds.add(element.id);
+
+  if (!isFrameElement(element)) {
+    return;
+  }
+
+  const relatedElements = relatedByFrameId.get(element.id) ?? [];
+  for (const relatedElement of relatedElements) {
+    if (movedElementIds.has(relatedElement.id)) {
+      continue;
+    }
+    moveElementByDelta(board, relatedElement, deltaX, deltaY);
+    movedElementIds.add(relatedElement.id);
+  }
+}
+
+function collectPPTFrameDeletionReflowSnapshot(
+  board: PlaitBoard,
+  deletedElements: PlaitElement[]
+): PPTFrameDeletionReflowSnapshot | null {
+  const rootFrames = board.children.filter(isFrameElement) as PlaitFrame[];
+  if (rootFrames.length === 0) {
+    return null;
+  }
+
+  const rootFrameIds = new Set(rootFrames.map((frame) => frame.id));
+  const deletedRootFrameIds = new Set(
+    deletedElements
+      .filter((element) => rootFrameIds.has(element.id))
+      .map((element) => element.id)
+  );
+  if (deletedRootFrameIds.size === 0) {
+    return null;
+  }
+
+  const remainingFrameIds = getOrderedPPTFrames(rootFrames)
+    .map((frame) => frame.id)
+    .filter((frameId) => !deletedRootFrameIds.has(frameId));
+  if (remainingFrameIds.length === 0) {
+    return null;
+  }
+
+  const frameRects = rootFrames.map((frame) =>
+    RectangleClient.getRectangleByPoints(frame.points)
+  );
+
+  return {
+    remainingFrameIds,
+    startPosition: [
+      Math.min(...frameRects.map((rect) => rect.x)),
+      Math.min(...frameRects.map((rect) => rect.y)),
+    ],
+    columns: loadPPTFrameLayoutColumns(),
+  };
+}
+
+function reorderRootFramesByIds(
+  board: PlaitBoard,
+  orderedFrameIds: string[]
+): void {
+  const framePositions: number[] = [];
+  const frameById = new Map<string, PlaitFrame>();
+  const existingFrameIds: string[] = [];
+
+  board.children.forEach((element, index) => {
+    if (!isFrameElement(element)) {
+      return;
+    }
+    framePositions.push(index);
+    frameById.set(element.id, element as PlaitFrame);
+    existingFrameIds.push(element.id);
+  });
+
+  if (framePositions.length <= 1) {
+    return;
+  }
+
+  const orderedIdSet = new Set(orderedFrameIds);
+  const nextFrames: PlaitFrame[] = [];
+  for (const id of orderedFrameIds) {
+    const frame = frameById.get(id);
+    if (frame) {
+      nextFrames.push(frame);
+    }
+  }
+  for (const id of existingFrameIds) {
+    if (orderedIdSet.has(id)) {
+      continue;
+    }
+    const frame = frameById.get(id);
+    if (frame) {
+      nextFrames.push(frame);
+    }
+  }
+
+  if (nextFrames.length !== framePositions.length) {
+    return;
+  }
+
+  for (let i = framePositions.length - 1; i >= 0; i -= 1) {
+    Transforms.removeNode(board, [framePositions[i]]);
+  }
+  for (let i = 0; i < framePositions.length; i += 1) {
+    Transforms.insertNode(board, nextFrames[i], [framePositions[i]]);
+  }
+}
+
+function renumberPPTFrames(
+  board: PlaitBoard,
+  orderedFrameIds: string[]
+): void {
+  orderedFrameIds.forEach((frameId, index) => {
+    const frameIndex = board.children.findIndex(
+      (element) => element.id === frameId && isFrameElement(element)
+    );
+    if (frameIndex === -1) {
+      return;
+    }
+
+    const pageIndex = index + 1;
+    const frame = board.children[frameIndex] as PlaitFrame & {
+      pptMeta?: PPTFrameMeta;
+    };
+
+    Transforms.setNode(
+      board,
+      {
+        pptMeta: {
+          ...(frame.pptMeta || {}),
+          pageIndex,
+          ...(!frame.pptMeta ? { slideImageStatus: 'placeholder' as const } : {}),
+        },
+      } as any,
+      [frameIndex]
+    );
+
+    if (isDefaultFrameName(frame.name)) {
+      Transforms.setNode(
+        board,
+        { name: getPPTPageFrameName(pageIndex) } as any,
+        [frameIndex]
+      );
+    }
+  });
+}
+
+function arrangePPTFramesByIds(
+  board: PlaitBoard,
+  orderedFrameIds: string[],
+  startPosition: Point,
+  columns: number
+): void {
+  const orderedFrames: PlaitFrame[] = [];
+  for (const frameId of orderedFrameIds) {
+    const frame = board.children.find(
+      (element) => element.id === frameId && isFrameElement(element)
+    );
+    if (frame && isFrameElement(frame)) {
+      orderedFrames.push(frame);
+    }
+  }
+
+  if (orderedFrames.length === 0) {
+    return;
+  }
+
+  const safeColumns = sanitizePPTFrameLayoutColumns(columns);
+  const frameIds = new Set(orderedFrames.map((frame) => frame.id));
+  const relatedByFrameId = collectRelatedElementsByFrameId(board, frameIds);
+  const movedElementIds = new Set<string>();
+
+  orderedFrames.forEach((frame, index) => {
+    const currentFrame = board.children.find(
+      (element) => element.id === frame.id && isFrameElement(element)
+    );
+    if (!currentFrame || !isFrameElement(currentFrame)) {
+      return;
+    }
+
+    const rect = RectangleClient.getRectangleByPoints(currentFrame.points);
+    const targetPosition = getPPTFrameGridPosition(
+      startPosition,
+      index,
+      safeColumns
+    );
+    moveElementWithFrameRelations(
+      board,
+      currentFrame,
+      targetPosition[0] - rect.x,
+      targetPosition[1] - rect.y,
+      relatedByFrameId,
+      movedElementIds
+    );
+  });
+
+  orderedFrameIds.forEach((frameId) => {
+    const frame = board.children.find(
+      (element) => element.id === frameId && isFrameElement(element)
+    );
+    if (frame && isFrameElement(frame)) {
+      FrameTransforms.updateFrameMembers(board, frame);
+    }
+  });
+}
+
+function reflowPPTFramesAfterDeletion(
+  board: PlaitBoard,
+  snapshot: PPTFrameDeletionReflowSnapshot | null
+): void {
+  if (!snapshot) {
+    return;
+  }
+
+  reorderRootFramesByIds(board, snapshot.remainingFrameIds);
+  renumberPPTFrames(board, snapshot.remainingFrameIds);
+  arrangePPTFramesByIds(
+    board,
+    snapshot.remainingFrameIds,
+    snapshot.startPosition,
+    snapshot.columns
   );
 }
 
@@ -297,6 +647,7 @@ export const withFrame: PlaitPlugin = (board: PlaitBoard) => {
     pointerUp,
     dblClick,
     getDeletedFragment,
+    deleteFragment,
   } = board;
 
   // 跟踪 Frame 移动
@@ -325,6 +676,12 @@ export const withFrame: PlaitPlugin = (board: PlaitBoard) => {
       }
     }
     return getDeletedFragment(data);
+  };
+
+  board.deleteFragment = (data: PlaitElement[]) => {
+    const reflowSnapshot = collectPPTFrameDeletionReflowSnapshot(board, data);
+    deleteFragment(data);
+    reflowPPTFramesAfterDeletion(board, reflowSnapshot);
   };
 
   // 注册 Frame 元素渲染组件

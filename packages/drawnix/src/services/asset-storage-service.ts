@@ -84,6 +84,19 @@ class AssetStorageService {
   }
 
   private getFileExtension(mimeType: string): string {
+    const normalizedMimeType = mimeType.toLowerCase();
+    const extensionByMimeType: Record<string, string> = {
+      'audio/mpeg': 'mp3',
+      'image/jpeg': 'jpg',
+      'image/svg+xml': 'svg',
+      'video/quicktime': 'mov',
+      'video/x-m4v': 'm4v',
+    };
+    const mappedExtension = extensionByMimeType[normalizedMimeType];
+    if (mappedExtension) {
+      return mappedExtension;
+    }
+
     const slashIndex = mimeType.indexOf('/');
     return slashIndex >= 0 ? mimeType.slice(slashIndex + 1) : 'bin';
   }

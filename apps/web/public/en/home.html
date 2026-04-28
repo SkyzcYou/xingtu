@@ -6,11 +6,11 @@
     <title>Xingtu AI Canvas Workspace | Open Source Creation Tool</title>
     <meta
       name="description"
-      content="Xingtu is an open-source AI canvas workspace for image generation, prompt reasoning, flowcharts, mind maps, asset libraries, and reusable creative projects."
+      content="Xingtu is an open-source AI canvas workspace for image generation, prompt reasoning, flowcharts, mind maps, asset libraries, and reusable creative workflows in one browser canvas."
     />
     <meta
       name="keywords"
-      content="Xingtu,open source AI canvas,AI image generation workspace,AI whiteboard,GPT-Image-2,DeepSeek-v4,flowchart maker,mind map maker"
+      content="Xingtu,open source AI canvas,AI image workflow,AI image generation workspace,AI whiteboard,GPT-Image-2,DeepSeek-v4,flowchart maker,mind map maker"
     />
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <link rel="canonical" href="https://opentu.ai/en/home.html" />
@@ -49,7 +49,7 @@
     <meta name="twitter:title" content="Xingtu AI Canvas Workspace" />
     <meta
       name="twitter:description"
-      content="An open-source AI creation workspace for image generation, prompt reasoning, flowcharts, mind maps, and reusable creative assets."
+      content="An open-source AI canvas for image generation, prompt reasoning, flowcharts, mind maps, and reusable creative assets."
     />
     <script type="application/ld+json">
       {
@@ -64,7 +64,7 @@
             "applicationCategory": "DesignApplication",
             "operatingSystem": "Any",
             "inLanguage": "en",
-            "description": "Xingtu is an open-source AI canvas workspace for image generation, prompt reasoning, flowcharts, mind maps, asset libraries, and reusable creative projects.",
+            "description": "Xingtu is an open-source AI canvas workspace for image generation, prompt reasoning, flowcharts, mind maps, asset libraries, and reusable creative workflows in one browser canvas.",
             "keywords": [
               "Xingtu",
               "open source AI canvas",
@@ -517,6 +517,21 @@
         padding: 24px;
       }
 
+      .text-link {
+        display: inline-flex;
+        margin-top: 10px;
+        color: var(--accent);
+        font-size: 14px;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .text-link:hover {
+        color: #9a3412;
+        text-decoration: underline;
+        text-underline-offset: 4px;
+      }
+
       .steps {
         display: grid;
         gap: 18px;
@@ -712,29 +727,30 @@
 
       <section class="hero">
         <div class="hero-copy">
-          <h1>Open-source AI canvas workspace</h1>
+          <h1>Xingtu: open-source AI canvas workspace</h1>
           <p class="lead">
             Xingtu brings AI image generation, prompt reasoning, flowcharts,
             mind maps, and reusable assets into one browser canvas, so every
-            idea can become a structured creative project.
+            idea can become a structured workflow you can use online or
+            self-host.
           </p>
           <ul class="proof" aria-label="Xingtu core strengths">
             <li class="proof-item">
-              <span class="proof-value">One canvas</span>
-              <span class="proof-label"
-                >Keep prompts, outputs, notes, and deliverables together</span
-              >
-            </li>
-            <li class="proof-item">
-              <span class="proof-value">Multi-model</span>
-              <span class="proof-label"
-                >Connect image, text, video, and multimodal tasks</span
-              >
-            </li>
-            <li class="proof-item">
-              <span class="proof-value">Open source</span>
+              <span class="proof-value">Open canvas</span>
               <span class="proof-label"
                 >Use it online or self-host your own creative workspace</span
+              >
+            </li>
+            <li class="proof-item">
+              <span class="proof-value">AI workflow</span>
+              <span class="proof-label"
+                >Connect image generation, prompts, and multimodal tasks</span
+              >
+            </li>
+            <li class="proof-item">
+              <span class="proof-value">Structured work</span>
+              <span class="proof-label"
+                >Keep diagrams, mind maps, assets, and notes in one place</span
               >
             </li>
           </ul>
@@ -890,6 +906,13 @@
                 Generate multiple visual candidates, sort them by theme or
                 style, and quickly decide which version is ready to deliver.
               </p>
+              <a
+                class="text-link"
+                href="/user-manual/ai-generation-image-generation.html"
+                data-seo-track="home_work_card_click"
+                data-seo-target="image_generation_manual"
+                >Read the AI image guide</a
+              >
             </div>
           </article>
           <article
@@ -908,6 +931,13 @@
                 Convert steps, requirements, and decision paths into clear
                 diagrams that make complex projects easier to understand.
               </p>
+              <a
+                class="text-link"
+                href="/user-manual/drawing-flowchart.html"
+                data-seo-track="home_work_card_click"
+                data-seo-target="flowchart_manual"
+                >Read the flowchart guide</a
+              >
             </div>
           </article>
           <article
@@ -926,6 +956,13 @@
                 Collect prompts, references, model outputs, and final assets in
                 one place to build your own creative knowledge base.
               </p>
+              <a
+                class="text-link"
+                href="/user-manual/drawing-mindmap.html"
+                data-seo-track="home_work_card_click"
+                data-seo-target="mindmap_manual"
+                >Read the mind map guide</a
+              >
             </div>
           </article>
         </div>
@@ -1117,7 +1154,7 @@
             utm_campaign: sanitizeValue(params.get('utm_campaign')),
             primary_image_model: 'gpt-image-2',
             primary_reasoning_model: 'deepseek-v4',
-            content_variant: 'home-en-2026-04-27',
+            content_variant: 'home-en-2026-04-28',
           };
         }
 
@@ -1202,9 +1239,33 @@
             request_queue: { flush_interval_ms: 2000 },
           });
 
-          if (window.posthog.register) {
-            window.posthog.register(getCommonProperties());
-          }
+          clearHomeSuperProperties();
+        }
+
+        function clearHomeSuperProperties() {
+          if (!window.posthog || !window.posthog.unregister) return;
+
+          [
+            'page_name',
+            'page_path',
+            'page_title',
+            'page_language',
+            'landing_page',
+            'referrer_host',
+            'search_engine',
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+            'primary_image_model',
+            'primary_reasoning_model',
+            'content_variant',
+          ].forEach(function (key) {
+            try {
+              window.posthog.unregister(key);
+            } catch (error) {
+              void error;
+            }
+          });
         }
 
         function scheduleWhenIdle(callback, timeout) {

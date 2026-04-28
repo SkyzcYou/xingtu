@@ -29,7 +29,7 @@ import { insertImageFromUrl } from '../../data/image';
 import { insertVideoFromUrl } from '../../data/video';
 import { insertAudioFromUrl } from '../../data/audio';
 import { scrollToPointIfNeeded } from '../../utils/selection-utils';
-import { WorkZoneTransforms } from '../../plugins/with-workzone';
+import { WorkZoneTransforms } from '../../plugins/workzone-transforms';
 import type { PlaitWorkZone } from '../../types/workzone.types';
 
 /**

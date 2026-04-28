@@ -109,6 +109,52 @@ function applyAuthQuery(
   };
 }
 
+function createTimeoutSignal(
+  upstreamSignal: AbortSignal | undefined,
+  timeoutMs: number | undefined
+): {
+  signal: AbortSignal | undefined;
+  didTimeout: () => boolean;
+  cleanup: () => void;
+} {
+  if (!timeoutMs || timeoutMs <= 0) {
+    return {
+      signal: upstreamSignal,
+      didTimeout: () => false,
+      cleanup: () => undefined,
+    };
+  }
+
+  const controller = new AbortController();
+  let didTimeout = false;
+
+  const abortFromUpstream = () => {
+    controller.abort(upstreamSignal?.reason);
+  };
+
+  if (upstreamSignal?.aborted) {
+    controller.abort(upstreamSignal.reason);
+  } else if (upstreamSignal) {
+    upstreamSignal.addEventListener('abort', abortFromUpstream, { once: true });
+  }
+
+  const timeoutId = setTimeout(() => {
+    didTimeout = true;
+    const error = new Error(`Request timeout after ${timeoutMs}ms`);
+    error.name = 'TimeoutError';
+    controller.abort(error);
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => didTimeout,
+    cleanup: () => {
+      clearTimeout(timeoutId);
+      upstreamSignal?.removeEventListener('abort', abortFromUpstream);
+    },
+  };
+}
+
 export class ProviderTransport {
   prepareRequest(
     context: ResolvedProviderContext,
@@ -142,9 +188,31 @@ export class ProviderTransport {
     context: ResolvedProviderContext,
     request: ProviderTransportRequest
   ): Promise<Response> {
-    const prepared = this.prepareRequest(context, request);
+    const timeoutControl = createTimeoutSignal(
+      request.signal,
+      request.timeoutMs
+    );
+    const prepared = this.prepareRequest(context, {
+      ...request,
+      signal: timeoutControl.signal,
+    });
     const fetcher = request.fetcher || fetch;
-    return fetcher(prepared.url, prepared.init);
+
+    try {
+      return await fetcher(prepared.url, prepared.init);
+    } catch (error) {
+      if (timeoutControl.didTimeout()) {
+        const timeoutMinutes = Math.floor((request.timeoutMs || 0) / 60000);
+        const timeoutError = new Error(
+          `请求超时（>${timeoutMinutes} 分钟）`
+        );
+        timeoutError.name = 'TimeoutError';
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      timeoutControl.cleanup();
+    }
   }
 }
 

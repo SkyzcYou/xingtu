@@ -326,9 +326,10 @@ function sizeTokenToRatio(sizeToken: string): number | null {
  *
  * 处理逻辑：
  * 1. 如果 size 已在可用列表中（精确匹配），直接返回
- * 2. 将 ':' 转为 'x' 后再次精确匹配
- * 3. 解析为宽高比数值，找到数值最接近的可用 size
- * 4. 都无法处理时返回默认值 'auto'
+ * 2. 如果 size 是具体像素尺寸，保留原值
+ * 3. 将 ':' 转为 'x' 后再次精确匹配
+ * 4. 解析为宽高比数值，找到数值最接近的可用 size
+ * 5. 都无法处理时返回默认值 'auto'
  *
  * @param size 原始 size 字符串，如 '2.35:1', '16:9', '1920x1080'
  * @param defaultSize 默认尺寸，当无法匹配时返回
@@ -347,11 +348,21 @@ export function normalizeToClosestImageSize(
   const lower = trimmed.toLowerCase();
   if (VALID_IMAGE_SIZES.includes(lower)) return lower;
 
-  // 2. ':' → 'x' 后再精确匹配
+  const pixelSize = parseSize(lower);
+  if (
+    pixelSize &&
+    pixelSize.width > 0 &&
+    pixelSize.height > 0 &&
+    (pixelSize.width > 32 || pixelSize.height > 32)
+  ) {
+    return lower;
+  }
+
+  // 3. ':' → 'x' 后再精确匹配
   const colonToX = lower.replace(':', 'x');
   if (VALID_IMAGE_SIZES.includes(colonToX)) return colonToX;
 
-  // 3. 解析为宽高比数值，找最接近的
+  // 4. 解析为宽高比数值，找最接近的
   const targetRatio = parseAspectRatioValue(trimmed);
   if (targetRatio === null) return defaultSize;
 

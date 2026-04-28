@@ -347,6 +347,7 @@ const AI_INPUT_COLLAPSED_ROWS = 1;
 const AI_INPUT_EXPANDED_ROWS = 4;
 const AI_INPUT_MAX_ROWS = 6;
 const AI_INPUT_LINE_HEIGHT = 1.5;
+type AIInputSubmitTrigger = 'button' | 'keyboard';
 
 function getTextareaHeightForRows(textarea: HTMLTextAreaElement, rows: number) {
   const styles = window.getComputedStyle(textarea);
@@ -2476,14 +2477,49 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     );
 
     // Handle generation
-    const handleGenerate = useCallback(async () => {
-      if (!prompt.trim() && allContent.length === 0) {
+    const handleGenerate = useCallback(async (trigger: AIInputSubmitTrigger) => {
+      const trimmedPrompt = prompt.trim();
+      if (!trimmedPrompt && allContent.length === 0) {
         return;
       }
       if (isSubmitting) {
         return; // 仅防止快速重复点击
       }
 
+      const submitStartTime = Date.now();
+      const promptLength = trimmedPrompt.length;
+      const submitAnalyticsBase = {
+        trigger,
+        source: 'ai_input_bar',
+        generationType,
+        generation_type: generationType,
+        model: selectedModel,
+        profileId: selectedModelRef?.profileId || null,
+        profile_id: selectedModelRef?.profileId || null,
+        hasAttachedContent: allContent.length > 0,
+        has_attached_content: allContent.length > 0,
+        attachedCount: allContent.length,
+        attached_count: allContent.length,
+        promptLength,
+        prompt_length: promptLength,
+        promptLengthBucket: getPromptLengthBucket(promptLength),
+        prompt_length_bucket: getPromptLengthBucket(promptLength),
+      };
+      const trackSubmitStatus = (
+        status: 'start' | 'success' | 'failed' | 'cancelled',
+        extras: Record<string, unknown> = {}
+      ) => {
+        const durationMs = Date.now() - submitStartTime;
+        analytics.track('ai_input_submit', {
+          ...submitAnalyticsBase,
+          status,
+          durationMs,
+          duration_ms: durationMs,
+          ...extras,
+        });
+      };
+
+      trackSubmitStatus('start');
       setIsSubmitting(true);
 
       try {
@@ -2503,6 +2539,11 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         if (!hasRouteCredentials) {
           const newApiKey = await promptForApiKey();
           if (!newApiKey) {
+            trackSubmitStatus('cancelled', {
+              reason: 'missing_api_key',
+              submitMode: 'preflight',
+              submit_mode: 'preflight',
+            });
             setIsSubmitting(false);
             return;
           }
@@ -2990,6 +3031,14 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             workflow
           );
           if (usedSW) {
+            trackSubmitStatus('success', {
+              submitMode: 'service_worker',
+              submit_mode: 'service_worker',
+              workflowId: workflow.id,
+              workflow_id: workflow.id,
+              stepCount: workflow.steps.length,
+              step_count: workflow.steps.length,
+            });
             if (generationType === 'image') {
               applyCurrentImageAnchorPresentationState(board, 'accepted');
             }
@@ -3428,8 +3477,25 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             }
           }
         }
+        trackSubmitStatus(workflowFailed ? 'failed' : 'success', {
+          submitMode: 'main_thread',
+          submit_mode: 'main_thread',
+          workflowId: workflow.id,
+          workflow_id: workflow.id,
+          stepCount: finalWorkflow?.steps.length || workflow.steps.length,
+          step_count: finalWorkflow?.steps.length || workflow.steps.length,
+          createdTaskCount: createdTaskIds.length,
+          created_task_count: createdTaskIds.length,
+          failureReason: workflowFailed ? 'workflow_step_failed' : undefined,
+          failure_reason: workflowFailed ? 'workflow_step_failed' : undefined,
+        });
       } catch (error) {
         console.error('Failed to create generation task:', error);
+        trackSubmitStatus('failed', {
+          submitMode: 'setup',
+          submit_mode: 'setup',
+          error: error instanceof Error ? error.message : String(error),
+        });
         if (generationType === 'image') {
           applyCurrentImageAnchorPresentationState(
             SelectionWatcherBoardRef.current,
@@ -3910,7 +3976,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         if (event.key === 'Enter') {
           event.preventDefault();
           analytics.track('ai_input_submit_keyboard');
-          handleGenerate();
+          handleGenerate('keyboard');
           return;
         }
 
@@ -4211,7 +4277,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                 e.preventDefault();
                 e.stopPropagation();
               }}
-              onClick={() => handleGenerate()}
+              onClick={() => handleGenerate('button')}
               disabled={!canGenerate || isSubmitting}
               data-track="ai_input_click_send"
               data-track-params={sendButtonTrackParams}

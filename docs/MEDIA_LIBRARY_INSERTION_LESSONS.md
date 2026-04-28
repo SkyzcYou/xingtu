@@ -211,3 +211,93 @@
 
 素材库“能打开”不等于“能插入”。  
 对画布入口来说，真正重要的是：入口语义要带到弹窗里，异步插入要被用户看见。🎯
+
+## 八、画布多文件拖拽插入经验
+
+更新日期：2026-04-27
+
+### 1. 问题现象
+
+用户希望一次拖多个图片/视频进入画布。第一轮修复后，多文件可以插入，但当原画布内容很多、画布很大时，拖入完成后视口会偏移，新增内容不在当前可见区域。
+
+这类问题表面是“插入位置不对”，本质是两个坐标系统同时变化：
+
+- Drop 事件发生时，鼠标位置来自屏幕/DOM 坐标。
+- Plait 插入元素后，画布 `viewBox` 可能因为内容边界扩大而重算。
+- 如果只在插入前计算一次 `toViewBoxPoint`，插入后 DOM scroll 和 viewport origination 可能不再对应，用户就会被带到别的位置。
+
+### 2. 设计原则
+
+1. 批量拖拽不是把 `files[0]` 改成循环这么简单。
+   - 图片、视频、音频要走各自已有插入链路。
+   - 单张图片拖到 mind node 时，应保留“替换节点图片”的旧语义。
+   - 多文件拖拽时，不应让多个文件抢同一个节点，应统一按坐标插入画布。
+
+2. 大文件批量处理要顺序执行。
+   - 不要对多个视频同时 `Promise.all` 存储、解码或读元数据。
+   - 图片加载、视频缓存、音频封面读取都可能触发大内存占用。
+   - 高并发文件处理场景下，宁可略慢，也要避免内存峰值和交换分区压力。
+
+3. 本地视频类型要同时看 MIME 和扩展名。
+   - macOS/浏览器可能把 `.mov` 标成 `video/quicktime`。
+   - 有些拖入来源可能不给 `file.type`。
+   - 类型兜底应集中在 `data/blob.ts`，不要让各入口各写一份扩展名判断。
+
+4. 批量插入后要锚定拖放点。
+   - 记录 drop 时鼠标下的画布坐标 `point`。
+   - 同时记录鼠标在 board 容器内的屏幕偏移 `activePoint`。
+   - 插入完成并等待 Plait 完成一轮/两轮渲染后，用 `BoardTransforms.updateViewport` 恢复：
+
+```typescript
+const origination: [number, number] = [
+  point[0] - activePoint[0] / zoom,
+  point[1] - activePoint[1] / zoom,
+];
+BoardTransforms.updateViewport(board, origination, zoom);
+```
+
+这样无论 `viewBox` 怎么重算，用户鼠标落下的画布点都会回到原来的屏幕位置，新增内容仍在可见区域。
+
+### 3. 实现要点
+
+- `with-image.tsx` 的 drop 入口应先把 `FileList` 过滤成结构化的 `DroppedMediaFile[]`，而不是在循环里散落判断。
+- 批量坐标使用固定网格偏移，避免所有文件堆在同一点。
+- 视频文件先进入 `assetStorageService`，再复用 `insertVideoFromUrl`，不要新增一套视频元素结构。
+- 当浏览器没有提供正确 MIME 时，可通过 `file.slice(0, file.size, resolvedMimeType)` 生成带类型的 Blob，保证 Cache Storage 元数据和 Response header 正确。
+- 图片插入函数可增加 `skipScroll` 参数，批量拖拽由上层统一控制视口，避免每张图自己滚动。
+- 视口恢复应使用 `updateViewport` 一步设置 `origination + zoom`，不要拆成滚动 DOM 或 `updateZoom + moveToCenter`。
+
+### 4. 验证建议
+
+1. 精确单测：
+
+```bash
+pnpm --dir packages/drawnix exec vitest run src/data/blob.test.ts
+```
+
+2. 类型检查：
+
+```bash
+pnpm nx run drawnix:typecheck
+```
+
+3. 手动回归：
+
+- 大画布、已有大量元素、滚动到远离原点的位置。
+- 一次拖入 2 张以上图片，新增内容应出现在 drop 点附近且可见。
+- 一次拖入图片 + `.mov` / `.mp4` 视频，视频应进入画布并保留可播放语义。
+- 单张图片拖到 mind node 上，仍应替换该节点图片。
+
+### 5. 涉及文件
+
+- `packages/drawnix/src/plugins/with-image.tsx`
+- `packages/drawnix/src/data/blob.ts`
+- `packages/drawnix/src/data/image.ts`
+- `packages/drawnix/src/data/video.ts`
+- `packages/drawnix/src/services/asset-storage-service.ts`
+- `packages/drawnix/src/constants/ASSET_CONSTANTS.ts`
+
+### 6. 一句话结论
+
+画布文件拖拽要同时处理“文件批量语义”和“视口锚定语义”。
+能插入多个文件只是第一步，真正稳定的体验是：插入完成后，用户仍然停在自己放手的位置。📍

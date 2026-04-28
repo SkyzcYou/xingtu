@@ -7,6 +7,7 @@ import {
   clearModelAdapters,
   registerModelAdapter,
   resolveAdapterForBinding,
+  resolveAdapterForInvocation,
 } from '../model-adapters/registry';
 import { seedreamImageAdapter } from '../model-adapters/seedream-adapter';
 import { tuziGPTImageAdapter } from '../model-adapters/tuzi-gpt-image-adapter';
@@ -152,6 +153,12 @@ describe('image routing to default registered adapters', () => {
     expect(resolveAdapterForBinding(binding, 'image')?.id).toBe(
       'tuzi-gpt-image-adapter'
     );
+  });
+
+  it('keeps legacy model-only GPT Image requests on the Tuzi GPT adapter', () => {
+    const adapter = resolveAdapterForInvocation('image', 'gpt-image-2', null);
+
+    expect(adapter?.id).toBe('tuzi-gpt-image-adapter');
   });
 
   it('keeps generic non-GPT OpenAI-compatible image models on the default adapter', () => {

@@ -1,7 +1,10 @@
 import type { ModelAdapter, ModelKind } from './types';
-import { getModelConfig } from '../../constants/model-config';
+import { getModelConfig, ModelVendor } from '../../constants/model-config';
 import type { ModelType } from '../../constants/model-config';
-import type { ModelRef } from '../../utils/settings-manager';
+import {
+  resolveInvocationRoute,
+  type ModelRef,
+} from '../../utils/settings-manager';
 import {
   resolveInvocationPlanFromRoute,
   type ProviderModelBinding,
@@ -121,6 +124,43 @@ function toRouteType(kind: ModelKind): ModelType {
   }
 }
 
+function isGPTImageModel(modelId?: string | null): boolean {
+  if (!modelId) {
+    return false;
+  }
+
+  const modelConfig = getModelConfig(modelId);
+  const lowerId = modelId.toLowerCase();
+  return (
+    lowerId.startsWith('gpt-image') ||
+    lowerId === 'chatgpt-image-latest' ||
+    (modelConfig?.vendor === ModelVendor.GPT && lowerId.includes('gpt-image'))
+  );
+}
+
+function findImageAdapterBySchema(schema: string): ModelAdapter | undefined {
+  return listModelAdapters('image').find((adapter) =>
+    adapter.matchRequestSchemas?.includes(schema)
+  );
+}
+
+function resolveGPTImageAdapterForLegacyRoute(
+  modelId?: string | null,
+  modelRef?: ModelRef | null
+): ModelAdapter | undefined {
+  if (!isGPTImageModel(modelId)) {
+    return undefined;
+  }
+
+  const route = resolveInvocationRoute('image', modelRef || modelId);
+  const baseUrl = route.baseUrl.toLowerCase();
+  if (baseUrl.includes('api.tu-zi.com')) {
+    return findImageAdapterBySchema('tuzi.image.gpt-generation-json');
+  }
+
+  return findImageAdapterBySchema('openai.image.gpt-generation-json');
+}
+
 export function resolveAdapterForInvocation(
   kind: ModelKind,
   modelId?: string | null,
@@ -146,6 +186,16 @@ export function resolveAdapterForInvocation(
 
   if (!modelId) {
     return undefined;
+  }
+
+  if (kind === 'image') {
+    const routeAdapter = resolveGPTImageAdapterForLegacyRoute(
+      modelId,
+      modelRef
+    );
+    if (routeAdapter) {
+      return routeAdapter;
+    }
   }
 
   return resolveAdapterForModel(modelId, kind);

@@ -1,11 +1,7 @@
 import React from 'react';
 import type { ToolDefinition } from '../types/toolbox.types';
 import { BUILT_IN_TOOL_MANIFESTS } from './built-in-manifests';
-
-export interface ToolPluginModule {
-  manifest: ToolDefinition;
-  Component?: React.ComponentType<any>;
-}
+export type { ToolPluginModule } from './types';
 
 type InternalComponentLoader = () => Promise<{
   default: React.ComponentType<any>;

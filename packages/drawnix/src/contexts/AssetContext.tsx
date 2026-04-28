@@ -17,7 +17,7 @@ import {
   ReactNode,
   useEffect,
 } from 'react';
-import { MessagePlugin } from 'tdesign-react';
+import { MessagePlugin } from '../utils/message-plugin';
 import { assetStorageService } from '../services/asset-storage-service';
 import { taskQueueService } from '../services/task-queue';
 import {

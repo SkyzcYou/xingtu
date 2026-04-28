@@ -3,7 +3,7 @@ import type {
   ImageApiCompatibility,
   ModelRef,
   ProviderProfile,
-} from '../../utils/settings-manager';
+} from '../../utils/settings-types';
 
 export type ProviderOperation = ModelType;
 
@@ -176,6 +176,7 @@ export interface ProviderTransportRequest {
   query?: Record<string, string | number | boolean | null | undefined>;
   body?: BodyInit | null;
   signal?: AbortSignal;
+  timeoutMs?: number;
   credentials?: RequestCredentials;
   fetcher?: typeof fetch;
 }

@@ -9,7 +9,7 @@
  * - Claude MCP：工具调用的自然语言描述与结构化参数结合
  */
 
-import type { WorkflowStep } from './workflow-converter';
+import type { WorkflowStep } from './workflow-types';
 import type { SkillDSLVariables, SkillParseResult } from './skill-dsl.types';
 import { defaultGeminiClient } from '../../utils/gemini-api';
 import { geminiSettings } from '../../utils/settings-manager';

@@ -43,8 +43,8 @@ export function isTaskActive(task: Task): boolean {
  * @returns True if the task has timed out, false otherwise
  * 
  * @example
- * const task = { type: 'image', startedAt: Date.now() - 11 * 60 * 1000 };
- * isTaskTimeout(task) // Returns true (started > 10 minutes ago)
+ * const task = { type: 'image', startedAt: Date.now() - 16 * 60 * 1000 };
+ * isTaskTimeout(task) // Returns true (started > 15 minutes ago)
  */
 export function isTaskTimeout(task: Task): boolean {
   if (!task.startedAt || task.status !== TaskStatus.PROCESSING) {
@@ -64,7 +64,7 @@ export function isTaskTimeout(task: Task): boolean {
  * @returns Timeout duration in milliseconds
  * 
  * @example
- * getTaskTimeout('image') // Returns 600000 (10 minutes)
+ * getTaskTimeout('image') // Returns 900000 (15 minutes)
  * getTaskTimeout('video') // Returns 1800000 (30 minutes)
  */
 export function getTaskTimeout(taskType: TaskType): number {

@@ -11,7 +11,7 @@ import { ToolLoadState, ToolErrorType, ToolErrorEventDetail } from '../../types/
 import { createRoot, Root } from 'react-dom/client';
 import React, { Suspense } from 'react';
 import { ToolProviderWrapper } from '../startup/ToolProviderWrapper';
-import { ToolTransforms } from '../../plugins/with-tool';
+import { ToolTransforms } from './tool.transforms';
 import { toolWindowService } from '../../services/tool-window-service';
 import { BUILT_IN_TOOLS } from '../../constants/built-in-tools';
 import { processToolUrl, hasTemplateVariables } from '../../utils/url-template';

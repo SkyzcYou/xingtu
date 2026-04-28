@@ -15,7 +15,7 @@ import React, {
 import classNames from 'classnames';
 import { throttle } from '@aitu/utils';
 import { useI18n } from '../../i18n';
-import { MessagePlugin } from 'tdesign-react';
+import { MessagePlugin } from '../../utils/message-plugin';
 import { Image, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   ImageUploadIcon,

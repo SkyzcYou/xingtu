@@ -11,7 +11,6 @@ import {
   isDataURL,
   normalizeImageDataUrl,
 } from '@aitu/utils';
-import { getDataURL } from '../data/blob';
 import { swChannelClient } from './sw-channel/client';
 import {
   AI_GENERATED_AUDIO_URL_PREFIX,
@@ -249,6 +248,15 @@ function createCacheWarning(
     detectedAt: Date.now(),
     expiresHint: '原始链接可能带有效期',
   };
+}
+
+function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 // ==================== 统一缓存服务类 ====================
@@ -723,7 +731,7 @@ class UnifiedCacheService {
       }
 
       // 8. 转换为 base64
-      const base64 = await getDataURL(blob);
+      const base64 = await blobToDataURL(blob);
 
       return { type: 'base64', value: base64 };
     } catch (error) {

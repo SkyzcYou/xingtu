@@ -16,12 +16,22 @@ import { collectAndDownloadErrorLog } from '../utils/error-log-exporter';
 const LAZY_CHUNK_RETRY_KEY_PREFIX = 'aitu:lazy-chunk-retry';
 const LAZY_CHUNK_RETRY_PARAM = '_lazy_chunk_retry';
 const LAZY_CHUNK_RETRY_TS_PARAM = '_t';
+const STATIC_CACHE_NAME_PREFIX = 'drawnix-static-v';
 const DYNAMIC_IMPORT_ERROR_PATTERNS = [
   /Failed to fetch dynamically imported module/i,
   /Importing a module script failed/i,
+  /Unable to preload CSS/i,
   /Loading chunk [\w-]+ failed/i,
   /ChunkLoadError/i,
 ];
+let lazyAssetRecoveryScheduled = false;
+
+type ErrorLikeEvent = Event & {
+  error?: unknown;
+  reason?: unknown;
+  payload?: unknown;
+  message?: string;
+};
 
 function getAppVersion(): string {
   if (typeof document === 'undefined') {
@@ -29,17 +39,56 @@ function getAppVersion(): string {
   }
 
   return (
-    document.querySelector('meta[name="app-version"]')?.getAttribute('content') ||
-    'unknown'
+    document
+      .querySelector('meta[name="app-version"]')
+      ?.getAttribute('content') || 'unknown'
   );
 }
 
-function serializeError(error: unknown): string {
+function getEventTargetAssetUrl(target: EventTarget | null): string | null {
+  if (!(target instanceof HTMLElement)) {
+    return null;
+  }
+
+  const assetTarget = target as HTMLElement & {
+    src?: string;
+    currentSrc?: string;
+    href?: string;
+  };
+
+  return assetTarget.currentSrc || assetTarget.src || assetTarget.href || null;
+}
+
+function serializeError(error: unknown, depth = 0): string {
   if (error instanceof Error) {
     const parts = [error.name, error.message, error.stack];
-    if ((error as any).cause) {
-      parts.push(String((error as any).cause));
+    const errorWithCause = error as Error & { cause?: unknown };
+    if (errorWithCause.cause && depth < 2) {
+      parts.push(serializeError(errorWithCause.cause, depth + 1));
     }
+    return parts.filter(Boolean).join('\n');
+  }
+
+  if (typeof Event !== 'undefined' && error instanceof Event) {
+    const event = error as ErrorLikeEvent;
+    const parts = [`event:${event.type}`];
+    const targetAssetUrl = getEventTargetAssetUrl(event.target);
+
+    if (event.message) {
+      parts.push(event.message);
+    }
+    if (targetAssetUrl) {
+      parts.push(targetAssetUrl);
+    }
+
+    if (depth < 2) {
+      [event.error, event.reason, event.payload].forEach((value) => {
+        if (value && value !== error) {
+          parts.push(serializeError(value, depth + 1));
+        }
+      });
+    }
+
     return parts.filter(Boolean).join('\n');
   }
 
@@ -47,7 +96,9 @@ function serializeError(error: unknown): string {
 }
 
 function extractModuleKey(errorText: string): string {
-  const matchedUrl = errorText.match(/https?:\/\/[^\s)'"]+\.js(?:\?[^\s)'"]*)?/i);
+  const matchedUrl = errorText.match(
+    /https?:\/\/[^\s)'"]+\.(?:js|css)(?:\?[^\s)'"]*)?/i
+  );
   if (!matchedUrl) {
     return 'unknown-module';
   }
@@ -66,19 +117,64 @@ function isRecoverableDynamicImportError(error: unknown): boolean {
   );
 }
 
-function tryRecoverDynamicImportError(error: unknown): boolean {
-  if (
-    typeof window === 'undefined' ||
-    typeof sessionStorage === 'undefined' ||
-    !isRecoverableDynamicImportError(error)
-  ) {
+async function prepareDynamicImportRecoveryReload(
+  moduleKey: string,
+  errorText: string
+): Promise<void> {
+  const cleanupTasks: Promise<unknown>[] = [];
+
+  try {
+    navigator.serviceWorker?.controller?.postMessage({
+      type: 'RECOVER_DYNAMIC_IMPORT_FAILURE',
+      appVersion: getAppVersion(),
+      moduleKey,
+      error: errorText.slice(0, 500),
+    });
+  } catch {
+    // Best-effort only. The reload path below still works without SW support.
+  }
+
+  if (typeof caches !== 'undefined') {
+    cleanupTasks.push(
+      caches
+        .keys()
+        .then((cacheNames) =>
+          Promise.all(
+            cacheNames
+              .filter((name) => name.startsWith(STATIC_CACHE_NAME_PREFIX))
+              .map((name) => caches.delete(name))
+          )
+        )
+    );
+  }
+
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    cleanupTasks.push(
+      navigator.serviceWorker
+        .getRegistration()
+        .then((registration) => registration?.update())
+    );
+  }
+
+  await Promise.allSettled(cleanupTasks);
+}
+
+export function tryRecoverDynamicImportError(error: unknown): boolean {
+  if (!isRecoverableDynamicImportError(error)) {
+    return false;
+  }
+
+  if (lazyAssetRecoveryScheduled) {
+    return true;
+  }
+
+  if (typeof window === 'undefined') {
     return false;
   }
 
   const errorText = serializeError(error);
-  const retryKey = `${LAZY_CHUNK_RETRY_KEY_PREFIX}:${getAppVersion()}:${extractModuleKey(
-    errorText
-  )}`;
+  const moduleKey = extractModuleKey(errorText);
+  const retryKey = `${LAZY_CHUNK_RETRY_KEY_PREFIX}:${getAppVersion()}:${moduleKey}`;
 
   try {
     if (sessionStorage.getItem(retryKey) === '1') {
@@ -87,24 +183,34 @@ function tryRecoverDynamicImportError(error: unknown): boolean {
 
     sessionStorage.setItem(retryKey, '1');
   } catch {
-    return false;
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.has(LAZY_CHUNK_RETRY_PARAM)) {
+      return false;
+    }
   }
+
+  lazyAssetRecoveryScheduled = true;
 
   const reloadUrl = new URL(window.location.href);
   reloadUrl.searchParams.set(LAZY_CHUNK_RETRY_PARAM, '1');
-  reloadUrl.searchParams.set(
-    LAZY_CHUNK_RETRY_TS_PARAM,
-    String(Date.now())
-  );
+  reloadUrl.searchParams.set(LAZY_CHUNK_RETRY_TS_PARAM, String(Date.now()));
 
   console.warn(
-    '[ErrorBoundary] Detected stale lazy chunk. Reloading once to recover.',
+    '[ErrorBoundary] Detected stale lazy asset. Reloading once to recover.',
     error
   );
 
-  window.setTimeout(() => {
+  let didReload = false;
+  const reload = () => {
+    if (didReload) {
+      return;
+    }
+    didReload = true;
     window.location.replace(reloadUrl.toString());
-  }, 0);
+  };
+
+  window.setTimeout(reload, 700);
+  void prepareDynamicImportRecoveryReload(moduleKey, errorText).finally(reload);
 
   return true;
 }
@@ -187,7 +293,9 @@ export class ErrorBoundary extends Component<Props, State> {
 export function safeModeReload(): void {
   try {
     localStorage.setItem('aitu_safe_mode', 'true');
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   window.location.reload();
 }
 
@@ -220,13 +328,16 @@ export interface ErrorFallbackProps {
   onGoToDebug: () => void;
 }
 
-const VARIANT_CONFIG: Record<Variant, {
-  iconBg: string;
-  iconStroke: string;
-  iconPath: React.ReactNode;
-  defaultTitle: string;
-  defaultDesc: string;
-}> = {
+const VARIANT_CONFIG: Record<
+  Variant,
+  {
+    iconBg: string;
+    iconStroke: string;
+    iconPath: React.ReactNode;
+    defaultTitle: string;
+    defaultDesc: string;
+  }
+> = {
   crash: {
     iconBg: '#FFF3E0',
     iconStroke: '#F57C00',
@@ -259,9 +370,18 @@ const VARIANT_CONFIG: Record<Variant, {
 
 export const ErrorFallbackUI: React.FC<ErrorFallbackProps> = (props) => {
   const {
-    variant, crashCount, memoryInfo, onIgnore,
-    title, description, errorMessage, errorStack, componentStack,
-    onExportLog, onSafeModeReload, onGoToDebug,
+    variant,
+    crashCount,
+    memoryInfo,
+    onIgnore,
+    title,
+    description,
+    errorMessage,
+    errorStack,
+    componentStack,
+    onExportLog,
+    onSafeModeReload,
+    onGoToDebug,
   } = props;
   const [showDetail, setShowDetail] = React.useState(false);
   const cfg = VARIANT_CONFIG[variant];
@@ -274,9 +394,16 @@ export const ErrorFallbackUI: React.FC<ErrorFallbackProps> = (props) => {
       <div style={styles.card}>
         {/* 图标 */}
         <div style={{ ...styles.iconWrap, backgroundColor: cfg.iconBg }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
-            stroke={cfg.iconStroke} strokeWidth="2"
-            strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="32"
+            height="32"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={cfg.iconStroke}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             {cfg.iconPath}
           </svg>
         </div>
@@ -289,7 +416,8 @@ export const ErrorFallbackUI: React.FC<ErrorFallbackProps> = (props) => {
             页面已连续 {crashCount} 次未能正常加载，可能是因为：
             <br />• 画布元素过多导致内存不足
             <br />• 浏览器内存限制
-            <br /><br />
+            <br />
+            <br />
             建议使用「安全模式」创建空白画布，稍后可从侧边栏切换到其他画布。
           </p>
         )}
@@ -307,8 +435,10 @@ export const ErrorFallbackUI: React.FC<ErrorFallbackProps> = (props) => {
           <div style={styles.errorBox}>
             <div style={styles.errorMsg}>{errorMessage}</div>
             {(errorStack || componentStack) && (
-              <button onClick={() => setShowDetail(v => !v)}
-                style={styles.detailToggle}>
+              <button
+                onClick={() => setShowDetail((v) => !v)}
+                style={styles.detailToggle}
+              >
                 {showDetail ? '收起详情' : '展开详情'}
               </button>
             )}
@@ -324,15 +454,30 @@ export const ErrorFallbackUI: React.FC<ErrorFallbackProps> = (props) => {
         {/* 操作按钮 */}
         <div style={styles.btnRow}>
           {variant === 'crash' && onIgnore && (
-            <HoverButton label="继续加载" onClick={onIgnore}
-              bg="#f5f5f5" bgHover="#e8e8e8" color="#666" />
+            <HoverButton
+              label="继续加载"
+              onClick={onIgnore}
+              bg="#f5f5f5"
+              bgHover="#e8e8e8"
+              color="#666"
+            />
           )}
           {variant === 'error' && onExportLog && (
-            <HoverButton label="导出错误日志" onClick={onExportLog}
-              bg="#f5f5f5" bgHover="#e8e8e8" color="#333" />
+            <HoverButton
+              label="导出错误日志"
+              onClick={onExportLog}
+              bg="#f5f5f5"
+              bgHover="#e8e8e8"
+              color="#333"
+            />
           )}
-          <HoverButton label="安全模式" onClick={onSafeModeReload}
-            bg="#F39C12" bgHover="#E67E22" color="#fff" />
+          <HoverButton
+            label="安全模式"
+            onClick={onSafeModeReload}
+            bg="#F39C12"
+            bgHover="#E67E22"
+            color="#fff"
+          />
         </div>
 
         {/* 分隔线 */}
@@ -342,14 +487,25 @@ export const ErrorFallbackUI: React.FC<ErrorFallbackProps> = (props) => {
         <div style={styles.helpSection}>
           <div style={styles.helpRow}>
             {/* 二维码 */}
-            <img src="./logo/wechat-qr.jpg"
-              alt="企业微信二维码" style={styles.qrcode} />
+            <img
+              src="./logo/wechat-qr.jpg"
+              alt="企业微信二维码"
+              style={styles.qrcode}
+            />
             {/* 右侧文字 + 按钮 */}
             <div style={styles.helpText}>
               <p style={styles.helpTitle}>需要帮助？</p>
-              <p style={styles.helpDesc}>扫码联系客服，或前往调试页面导出完整日志与备份数据</p>
-              <HoverButton label="打开调试页面" onClick={onGoToDebug}
-                bg="#f0eefa" bgHover="#e2ddf7" color="#5A4FCF" small />
+              <p style={styles.helpDesc}>
+                扫码联系客服，或前往调试页面导出完整日志与备份数据
+              </p>
+              <HoverButton
+                label="打开调试页面"
+                onClick={onGoToDebug}
+                bg="#f0eefa"
+                bgHover="#e2ddf7"
+                color="#5A4FCF"
+                small
+              />
             </div>
           </div>
         </div>
@@ -362,25 +518,58 @@ export const ErrorFallbackUI: React.FC<ErrorFallbackProps> = (props) => {
 
 // ==================== Sub-components ====================
 
-const MemoryBar: React.FC<{ info: { used: string; limit: string; percent: number } }> = ({ info }) => {
-  const barColor = info.percent > 75 ? '#E53935' : info.percent > 50 ? '#FB8C00' : '#43A047';
+const MemoryBar: React.FC<{
+  info: { used: string; limit: string; percent: number };
+}> = ({ info }) => {
+  const barColor =
+    info.percent > 75 ? '#E53935' : info.percent > 50 ? '#FB8C00' : '#43A047';
   return (
     <div style={styles.memoryBox}>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>当前内存使用情况</div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 14, color: '#333' }}>{info.used} / {info.limit}</span>
-        <span style={{ fontSize: 14, fontWeight: 500, color: barColor }}>{info.percent.toFixed(0)}%</span>
+      <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+        当前内存使用情况
       </div>
-      <div style={{ height: 4, backgroundColor: '#e0e0e0', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${Math.min(info.percent, 100)}%`, backgroundColor: barColor, transition: 'width 0.3s ease' }} />
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <span style={{ fontSize: 14, color: '#333' }}>
+          {info.used} / {info.limit}
+        </span>
+        <span style={{ fontSize: 14, fontWeight: 500, color: barColor }}>
+          {info.percent.toFixed(0)}%
+        </span>
+      </div>
+      <div
+        style={{
+          height: 4,
+          backgroundColor: '#e0e0e0',
+          borderRadius: 2,
+          marginTop: 8,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: `${Math.min(info.percent, 100)}%`,
+            backgroundColor: barColor,
+            transition: 'width 0.3s ease',
+          }}
+        />
       </div>
     </div>
   );
 };
 
 const HoverButton: React.FC<{
-  label: string; onClick: () => void;
-  bg: string; bgHover: string; color: string;
+  label: string;
+  onClick: () => void;
+  bg: string;
+  bgHover: string;
+  color: string;
   small?: boolean;
 }> = ({ label, onClick, bg, bgHover, color, small }) => {
   const [hovered, setHovered] = React.useState(false);
@@ -388,9 +577,12 @@ const HoverButton: React.FC<{
     ? { ...styles.btnSmall, backgroundColor: hovered ? bgHover : bg, color }
     : { ...styles.btn, backgroundColor: hovered ? bgHover : bg, color };
   return (
-    <button onClick={onClick}
-      onMouseOver={() => setHovered(true)} onMouseOut={() => setHovered(false)}
-      style={btnStyle}>
+    <button
+      onClick={onClick}
+      onMouseOver={() => setHovered(true)}
+      onMouseOut={() => setHovered(false)}
+      style={btnStyle}
+    >
       {label}
     </button>
   );
@@ -400,78 +592,138 @@ const HoverButton: React.FC<{
 
 const styles: Record<string, React.CSSProperties> = {
   overlay: {
-    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     zIndex: 99999,
   },
   card: {
-    backgroundColor: '#fff', borderRadius: 12, padding: 32,
-    maxWidth: 520, width: '90%',
-    maxHeight: '90vh', overflowY: 'auto',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 32,
+    maxWidth: 520,
+    width: '90%',
+    maxHeight: '90vh',
+    overflowY: 'auto',
     boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
   },
   iconWrap: {
-    width: 64, height: 64, borderRadius: '50%',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: 64,
+    height: 64,
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     margin: '0 auto 24px',
   },
   title: {
-    margin: '0 0 12px', fontSize: 20, fontWeight: 600,
-    textAlign: 'center', color: '#1a1a1a',
+    margin: '0 0 12px',
+    fontSize: 20,
+    fontWeight: 600,
+    textAlign: 'center',
+    color: '#1a1a1a',
   },
   desc: {
-    margin: '0 0 20px', fontSize: 14, color: '#666',
-    textAlign: 'center', lineHeight: 1.6,
+    margin: '0 0 20px',
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 1.6,
   },
   memoryBox: {
-    backgroundColor: '#f5f5f5', borderRadius: 8,
-    padding: '12px 16px', marginBottom: 24,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: '12px 16px',
+    marginBottom: 24,
   },
   errorBox: {
-    backgroundColor: '#f5f5f5', borderRadius: 8,
-    padding: '12px 16px', marginBottom: 24,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: '12px 16px',
+    marginBottom: 24,
   },
   errorMsg: { fontSize: 13, color: '#E53935', wordBreak: 'break-word' },
   detailToggle: {
-    marginTop: 8, padding: 0, border: 'none', background: 'none',
-    color: '#888', fontSize: 12, cursor: 'pointer', textDecoration: 'underline',
+    marginTop: 8,
+    padding: 0,
+    border: 'none',
+    background: 'none',
+    color: '#888',
+    fontSize: 12,
+    cursor: 'pointer',
+    textDecoration: 'underline',
   },
   errorDetail: {
-    marginTop: 8, padding: 8, backgroundColor: '#eee', borderRadius: 4,
-    fontSize: 11, color: '#555', maxHeight: 150, overflow: 'auto',
-    whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#eee',
+    borderRadius: 4,
+    fontSize: 11,
+    color: '#555',
+    maxHeight: 150,
+    overflow: 'auto',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-all',
   },
   btnRow: { display: 'flex', gap: 12 },
   btn: {
-    flex: 1, padding: '12px 24px', fontSize: 14, fontWeight: 500,
-    border: 'none', borderRadius: 8, cursor: 'pointer',
+    flex: 1,
+    padding: '12px 24px',
+    fontSize: 14,
+    fontWeight: 500,
+    border: 'none',
+    borderRadius: 8,
+    cursor: 'pointer',
     transition: 'background-color 0.2s ease',
   },
   btnSmall: {
-    padding: '8px 16px', fontSize: 13, fontWeight: 500,
-    border: 'none', borderRadius: 6, cursor: 'pointer',
+    padding: '8px 16px',
+    fontSize: 13,
+    fontWeight: 500,
+    border: 'none',
+    borderRadius: 6,
+    cursor: 'pointer',
     transition: 'background-color 0.2s ease',
   },
   divider: {
-    height: 1, backgroundColor: '#eee', margin: '24px 0',
+    height: 1,
+    backgroundColor: '#eee',
+    margin: '24px 0',
   },
   helpSection: {
     padding: 0,
   },
   helpRow: {
-    display: 'flex', gap: 16, alignItems: 'center',
+    display: 'flex',
+    gap: 16,
+    alignItems: 'center',
   },
   qrcode: {
-    width: 96, height: 96, borderRadius: 8, flexShrink: 0,
+    width: 96,
+    height: 96,
+    borderRadius: 8,
+    flexShrink: 0,
   },
   helpText: {
-    flex: 1, minWidth: 0,
+    flex: 1,
+    minWidth: 0,
   },
   helpTitle: {
-    margin: '0 0 4px', fontSize: 14, fontWeight: 500, color: '#333',
+    margin: '0 0 4px',
+    fontSize: 14,
+    fontWeight: 500,
+    color: '#333',
   },
   helpDesc: {
-    margin: '0 0 12px', fontSize: 12, color: '#999', lineHeight: 1.5,
+    margin: '0 0 12px',
+    fontSize: 12,
+    color: '#999',
+    lineHeight: 1.5,
   },
 };

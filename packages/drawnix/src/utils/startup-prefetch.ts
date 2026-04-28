@@ -3,6 +3,8 @@ export type IdlePrefetchGroup =
   | 'tool-windows'
   | 'diagram-engines'
   | 'office-data'
+  | 'editor-engines'
+  | 'media-viewer'
   | 'external-skills'
   | 'runtime-static-assets'
   | 'offline-static-assets';

@@ -6,7 +6,6 @@
  * Import infers structure from ZIP directory and .drawnix file metadata.
  */
 
-import JSZip from 'jszip';
 import { workspaceStorageService } from './workspace-storage-service';
 import { assetStorageService } from './asset-storage-service';
 import type { Folder, Board } from '../types/workspace.types';
@@ -65,6 +64,7 @@ class WorkspaceExportService {
    */
   async exportToZip(options?: { onProgress?: (progress: number, message: string) => void }): Promise<Blob> {
     const { onProgress } = options || {};
+    const { default: JSZip } = await import('jszip');
     const zip = new JSZip();
 
     onProgress?.(5, '正在加载数据...');
@@ -244,6 +244,7 @@ class WorkspaceExportService {
 
     try {
       onProgress?.(5, '正在读取文件...');
+      const { default: JSZip } = await import('jszip');
       const zip = await JSZip.loadAsync(file);
 
       onProgress?.(10, '正在验证文件格式...');

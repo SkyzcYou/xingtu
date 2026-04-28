@@ -36,10 +36,7 @@ const MAX_PERSISTED_TEXT_LENGTH = 4000;
 const MAX_PERSISTED_URL_LENGTH = 120000;
 const DEFAULT_CONCURRENCY = 2;
 
-export type BenchmarkCompareMode =
-  | 'cross-provider'
-  | 'cross-model'
-  | 'custom';
+export type BenchmarkCompareMode = 'cross-provider' | 'cross-model' | 'custom';
 export type BenchmarkEntryStatus =
   | 'pending'
   | 'running'
@@ -160,13 +157,15 @@ function sanitizeUrl(url?: string): string | undefined {
     : url;
 }
 
-function sanitizePreview(preview: ModelBenchmarkPreview): ModelBenchmarkPreview {
+function sanitizePreview(
+  preview: ModelBenchmarkPreview
+): ModelBenchmarkPreview {
   return {
     text: sanitizeText(preview.text),
     url: sanitizeUrl(preview.url),
-    urls: preview.urls
-      ?.map((item) => sanitizeUrl(item))
-      .filter(Boolean) as string[] | undefined,
+    urls: preview.urls?.map((item) => sanitizeUrl(item)).filter(Boolean) as
+      | string[]
+      | undefined,
     format: preview.format,
     duration: preview.duration,
     title: sanitizeText(preview.title),
@@ -174,9 +173,7 @@ function sanitizePreview(preview: ModelBenchmarkPreview): ModelBenchmarkPreview 
   };
 }
 
-function sanitizeEntry(
-  entry: ModelBenchmarkEntry
-): ModelBenchmarkEntry {
+function sanitizeEntry(entry: ModelBenchmarkEntry): ModelBenchmarkEntry {
   return {
     ...entry,
     errorSummary: sanitizeText(entry.errorSummary || undefined) || null,
@@ -262,7 +259,7 @@ function summarizeError(error: unknown): string {
   return '请求失败';
 }
 
-function trackBenchmarkEvent(
+export function trackBenchmarkEvent(
   eventName: string,
   payload: Record<string, unknown>
 ): void {
@@ -270,6 +267,17 @@ function trackBenchmarkEvent(
     area: 'model_benchmark',
     ...payload,
   });
+}
+
+function getEntryStatusCounts(entries: ModelBenchmarkEntry[]) {
+  return {
+    targetCount: entries.length,
+    completedCount: entries.filter((entry) => entry.status === 'completed')
+      .length,
+    failedCount: entries.filter((entry) => entry.status === 'failed').length,
+    runningCount: entries.filter((entry) => entry.status === 'running').length,
+    pendingCount: entries.filter((entry) => entry.status === 'pending').length,
+  };
 }
 
 async function executeTextBenchmark(
@@ -487,8 +495,9 @@ class ModelBenchmarkService {
       return;
     }
     try {
-      const persisted =
-        await kvStorageService.get<ModelBenchmarkStoreState>(STORAGE_KEY);
+      const persisted = await kvStorageService.get<ModelBenchmarkStoreState>(
+        STORAGE_KEY
+      );
       const sessions = trimSessions(persisted?.sessions || []);
       const activeSessionId = sessions.some(
         (session) => session.id === persisted?.activeSessionId
@@ -618,6 +627,13 @@ class ModelBenchmarkService {
   }
 
   removeSession(sessionId: string) {
+    const removedSession = this.state$.value.sessions.find(
+      (session) => session.id === sessionId
+    );
+    if (!removedSession) {
+      return;
+    }
+
     this.mutate((state) => {
       const sessions = state.sessions.filter((item) => item.id !== sessionId);
       return {
@@ -629,9 +645,28 @@ class ModelBenchmarkService {
             : state.activeSessionId,
       };
     });
+
+    trackBenchmarkEvent('model_benchmark_session_removed', {
+      sessionId,
+      modality: removedSession.modality,
+      compareMode: removedSession.compareMode,
+      source: removedSession.source,
+      status: removedSession.status,
+      rankingMode: removedSession.rankingMode,
+      ...getEntryStatusCounts(removedSession.entries),
+      hasFavorite: removedSession.entries.some((entry) => entry.favorite),
+      hasRejected: removedSession.entries.some((entry) => entry.rejected),
+    });
   }
 
   setRankingMode(sessionId: string, rankingMode: BenchmarkRankingMode) {
+    const currentSession = this.state$.value.sessions.find(
+      (session) => session.id === sessionId
+    );
+    if (!currentSession || currentSession.rankingMode === rankingMode) {
+      return;
+    }
+
     this.mutate((state) => ({
       ...state,
       sessions: state.sessions.map((session) =>
@@ -644,6 +679,15 @@ class ModelBenchmarkService {
           : session
       ),
     }));
+
+    trackBenchmarkEvent('model_benchmark_ranking_mode_changed', {
+      sessionId,
+      modality: currentSession.modality,
+      compareMode: currentSession.compareMode,
+      previousRankingMode: currentSession.rankingMode,
+      rankingMode,
+      targetCount: currentSession.entries.length,
+    });
   }
 
   setEntryFeedback(
@@ -653,6 +697,25 @@ class ModelBenchmarkService {
       Pick<ModelBenchmarkEntry, 'userScore' | 'favorite' | 'rejected'>
     >
   ) {
+    const currentSession = this.state$.value.sessions.find(
+      (session) => session.id === sessionId
+    );
+    const currentEntry = currentSession?.entries.find(
+      (entry) => entry.id === entryId
+    );
+    if (!currentSession || !currentEntry) {
+      return;
+    }
+
+    const nextUserScore =
+      'userScore' in updates
+        ? updates.userScore ?? null
+        : currentEntry.userScore;
+    const nextFavorite =
+      'favorite' in updates ? Boolean(updates.favorite) : currentEntry.favorite;
+    const nextRejected =
+      'rejected' in updates ? Boolean(updates.rejected) : currentEntry.rejected;
+
     this.mutate((state) => ({
       ...state,
       sessions: state.sessions.map((session) =>
@@ -672,6 +735,26 @@ class ModelBenchmarkService {
           : session
       ),
     }));
+
+    trackBenchmarkEvent('model_benchmark_entry_feedback_changed', {
+      sessionId,
+      entryId,
+      modality: currentEntry.modality,
+      compareMode: currentSession.compareMode,
+      profileId: currentEntry.profileId,
+      profileName: currentEntry.profileName,
+      modelId: currentEntry.modelId,
+      modelLabel: currentEntry.modelLabel,
+      vendor: currentEntry.vendor,
+      entryStatus: currentEntry.status,
+      changedFields: Object.keys(updates).join(','),
+      previousUserScore: currentEntry.userScore,
+      userScore: nextUserScore,
+      previousFavorite: currentEntry.favorite,
+      favorite: nextFavorite,
+      previousRejected: currentEntry.rejected,
+      rejected: nextRejected,
+    });
   }
 
   async runSession(
@@ -748,7 +831,9 @@ class ModelBenchmarkService {
         if (session.id !== sessionId) {
           return session;
         }
-        const failedCount = session.entries.filter((entry) => entry.status === 'failed').length;
+        const failedCount = session.entries.filter(
+          (entry) => entry.status === 'failed'
+        ).length;
         const allFailed = failedCount === session.entries.length;
         const hasFailed = failedCount > 0;
         return {
@@ -815,7 +900,9 @@ class ModelBenchmarkService {
       const latestSession = this.state$.value.sessions.find(
         (session) => session.id === sessionId
       );
-      const latestEntry = latestSession?.entries.find((entry) => entry.id === entryId);
+      const latestEntry = latestSession?.entries.find(
+        (entry) => entry.id === entryId
+      );
       if (!latestSession || !latestEntry) {
         return;
       }
@@ -927,12 +1014,16 @@ export function buildBenchmarkTarget(
     modelLabel: model.shortLabel || model.label || model.id,
     modality: model.type,
     vendor: model.vendor,
-    selectionKey:
-      model.selectionKey || buildSelectionKey(profileId, model.id),
+    selectionKey: model.selectionKey || buildSelectionKey(profileId, model.id),
   };
 }
 
-export { BENCHMARK_PROMPT_PRESETS, getDefaultPromptPreset, rankBenchmarkEntries, computeValueScore };
+export {
+  BENCHMARK_PROMPT_PRESETS,
+  getDefaultPromptPreset,
+  rankBenchmarkEntries,
+  computeValueScore,
+};
 export { resolvePromptPreset as resolveBenchmarkPromptPreset };
 
 export const modelBenchmarkService = new ModelBenchmarkService();

@@ -1,7 +1,17 @@
 import { ToolCategory, ToolDefinition } from '../types/toolbox.types';
-import { toolRegistry } from '../tools/registry';
+import { BUILT_IN_TOOL_MANIFESTS } from '../tools/built-in-manifests';
 
-export const BUILT_IN_TOOLS: ToolDefinition[] = toolRegistry.getBuiltInTools();
+export const BUILT_IN_TOOLS: ToolDefinition[] = BUILT_IN_TOOL_MANIFESTS.map(
+  (tool) => ({ ...tool })
+);
+
+export const BUILT_IN_TOOL_IDS = new Set(
+  BUILT_IN_TOOL_MANIFESTS.map((tool) => tool.id)
+);
+
+export function isBuiltInToolId(toolId: string): boolean {
+  return BUILT_IN_TOOL_IDS.has(toolId);
+}
 
 /**
  * 默认工具配置

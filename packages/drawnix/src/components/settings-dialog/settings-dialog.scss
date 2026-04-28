@@ -816,6 +816,46 @@
     }
   }
 
+  &__secret-input-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+  }
+
+  &__secret-input {
+    padding-right: 42px;
+  }
+
+  &__secret-toggle {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    transition: background-color 0.18s ease, color 0.18s ease;
+    transform: translateY(-50%);
+
+    &:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
+    }
+  }
+
   &__model-toolbar {
     display: flex;
     align-items: center;

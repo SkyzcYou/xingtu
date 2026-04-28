@@ -9,7 +9,6 @@ import {
   PlaitPlugin,
   PlaitPluginElementContext,
   Point,
-  Transforms,
   RectangleClient,
   PlaitElement,
   Selection,
@@ -22,8 +21,11 @@ import {
 } from '@plait/core';
 import { buildClipboardData, insertClipboardData } from '@plait/common';
 import { ToolComponent } from '../components/tool-element/tool.component';
+import {
+  isToolElement,
+  ToolTransforms,
+} from '../components/tool-element/tool.transforms';
 import { PlaitTool } from '../types/toolbox.types';
-import { DEFAULT_TOOL_CONFIG } from '../constants/built-in-tools';
 import { ToolCommunicationService, ToolCommunicationHelper } from '../services/tool-communication-service';
 import { ToolMessageType, GenerateImagePayload, GenerateImageResponse, InsertImagePayload } from '../types/tool-communication.types';
 import { taskQueueService } from '../services/task-queue';
@@ -419,12 +421,7 @@ export const withTool: PlaitPlugin = (board: PlaitBoard) => {
   return board;
 };
 
-/**
- * 判断是否为工具元素
- */
-export function isToolElement(element: any): element is PlaitTool {
-  return element && element.type === 'tool';
-}
+export { isToolElement, ToolTransforms };
 
 /**
  * 获取当前选中的工具元素
@@ -433,222 +430,3 @@ function getSelectedToolElements(board: PlaitBoard): PlaitTool[] {
   const selectedElements = getSelectedElements(board);
   return selectedElements.filter(isToolElement) as PlaitTool[];
 }
-
-/**
- * 生成唯一 ID
- */
-function generateId(): string {
-  return `tool_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-}
-
-/**
- * 工具元素操作 API
- *
- * 提供便捷的工具元素 CRUD 操作
- */
-export const ToolTransforms = {
-  /**
-   * 插入工具到画布
-   *
-   * @param board - Plait 画板实例
-   * @param toolId - 工具定义 ID
-   * @param url - iframe URL (可选)
-   * @param position - 插入位置（画布坐标）
-   * @param size - 工具尺寸
-   * @param metadata - 可选元数据
-   * @returns 创建的工具元素
-   */
-  insertTool(
-    board: PlaitBoard,
-    toolId: string,
-    url: string | undefined,
-    position: Point,
-    size: { width: number; height: number },
-    metadata?: PlaitTool['metadata']
-  ): PlaitTool {
-    // console.log('insertTool called with:', { position, size, toolId });
-
-    // 验证输入参数
-    if (!position || position.length !== 2) {
-      console.error('Invalid position:', position);
-      position = [0, 0];
-    }
-    if (!size || typeof size.width !== 'number' || typeof size.height !== 'number') {
-      console.error('Invalid size:', size);
-      size = { width: 400, height: 300 };
-    }
-
-    const toolElement: PlaitTool = {
-      id: generateId(),
-      type: 'tool',
-      toolId,
-      url: url as any,
-      component: metadata?.component as any,
-      points: [
-        position,
-        [position[0] + size.width, position[1] + size.height],
-      ],
-      angle: 0,
-      metadata,
-    } as any;
-
-    // console.log('Tool element created:', toolElement);
-
-    // 插入到画板
-    Transforms.insertNode(board, toolElement, [board.children.length]);
-
-    // console.log('Tool element inserted:', toolElement);
-    return toolElement;
-  },
-
-  /**
-   * 更新工具尺寸
-   *
-   * @param board - Plait 画板实例
-   * @param element - 工具元素
-   * @param newSize - 新尺寸
-   */
-  resizeTool(
-    board: PlaitBoard,
-    element: PlaitTool,
-    newSize: { width: number; height: number }
-  ): void {
-    const [start] = element.points;
-    const newElement: Partial<PlaitTool> = {
-      points: [start, [start[0] + newSize.width, start[1] + newSize.height]],
-    };
-
-    const path = board.children.findIndex((el: any) => el.id === element.id);
-    if (path >= 0) {
-      Transforms.setNode(board, newElement, [path]);
-      // console.log('Tool element resized:', element.id);
-    }
-  },
-
-  /**
-   * 移动工具位置
-   *
-   * @param board - Plait 画板实例
-   * @param element - 工具元素
-   * @param newPosition - 新位置
-   */
-  moveTool(board: PlaitBoard, element: PlaitTool, newPosition: Point): void {
-    const [start, end] = element.points;
-    const width = Math.abs(end[0] - start[0]);
-    const height = Math.abs(end[1] - start[1]);
-
-    const newElement: Partial<PlaitTool> = {
-      points: [
-        newPosition,
-        [newPosition[0] + width, newPosition[1] + height],
-      ],
-    };
-
-    const path = board.children.findIndex((el: any) => el.id === element.id);
-    if (path >= 0) {
-      Transforms.setNode(board, newElement, [path]);
-      // console.log('Tool element moved:', element.id);
-    }
-  },
-
-  /**
-   * 旋转工具
-   *
-   * @param board - Plait 画板实例
-   * @param element - 工具元素
-   * @param angle - 旋转角度（度数）
-   */
-  rotateTool(board: PlaitBoard, element: PlaitTool, angle: number): void {
-    const newElement: Partial<PlaitTool> = {
-      angle,
-    };
-
-    const path = board.children.findIndex((el: any) => el.id === element.id);
-    if (path >= 0) {
-      Transforms.setNode(board, newElement, [path]);
-      // console.log('Tool element rotated:', element.id, angle);
-    }
-  },
-
-  /**
-   * 删除工具
-   *
-   * @param board - Plait 画板实例
-   * @param elementId - 工具元素 ID
-   */
-  removeTool(board: PlaitBoard, elementId: string): void {
-    const path = board.children.findIndex((el: any) => el.id === elementId);
-    if (path >= 0) {
-      Transforms.removeNode(board, [path]);
-      // console.log('Tool element removed:', elementId);
-    }
-  },
-
-  /**
-   * 更新工具 URL
-   *
-   * @param board - Plait 画板实例
-   * @param elementId - 工具元素 ID
-   * @param newUrl - 新的 URL
-   */
-  updateToolUrl(board: PlaitBoard, elementId: string, newUrl: string): void {
-    const path = board.children.findIndex((el: any) => el.id === elementId);
-    if (path >= 0) {
-      Transforms.setNode(board, { url: newUrl } as Partial<PlaitTool>, [path]);
-      // console.log('Tool element URL updated:', elementId, newUrl);
-    }
-  },
-
-  /**
-   * 更新工具元数据
-   *
-   * @param board - Plait 画板实例
-   * @param elementId - 工具元素 ID
-   * @param metadata - 新的元数据
-   */
-  updateToolMetadata(
-    board: PlaitBoard,
-    elementId: string,
-    metadata: Partial<PlaitTool['metadata']>
-  ): void {
-    const element = board.children.find((el: any) => el.id === elementId) as PlaitTool;
-    if (element && element.type === 'tool') {
-      const newMetadata = {
-        ...element.metadata,
-        ...metadata,
-      };
-
-      const path = board.children.findIndex((el: any) => el.id === elementId);
-      if (path >= 0) {
-        Transforms.setNode(
-          board,
-          { metadata: newMetadata } as Partial<PlaitTool>,
-          [path]
-        );
-        // console.log('Tool element metadata updated:', elementId);
-      }
-    }
-  },
-
-  /**
-   * 获取所有工具元素
-   *
-   * @param board - Plait 画板实例
-   * @returns 工具元素数组
-   */
-  getAllTools(board: PlaitBoard): PlaitTool[] {
-    return board.children.filter((el: any) => el.type === 'tool') as PlaitTool[];
-  },
-
-  /**
-   * 根据 ID 查找工具元素
-   *
-   * @param board - Plait 画板实例
-   * @param elementId - 工具元素 ID
-   * @returns 工具元素或 null
-   */
-  getToolById(board: PlaitBoard, elementId: string): PlaitTool | null {
-    const element = board.children.find((el: any) => el.id === elementId);
-    return element && isToolElement(element) ? element : null;
-  },
-};

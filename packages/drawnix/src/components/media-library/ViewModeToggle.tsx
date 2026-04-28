@@ -7,7 +7,7 @@ import { memo, useCallback } from 'react';
 import { Grid3X3, LayoutGrid, List } from 'lucide-react';
 import type { ViewMode } from '../../types/asset.types';
 import './ViewModeToggle.scss';
-import { HoverTip } from '../shared';
+import { HoverTip } from '../shared/hover';
 
 interface ViewModeToggleProps {
   viewMode: ViewMode;

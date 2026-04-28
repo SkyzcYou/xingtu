@@ -20,6 +20,10 @@ import { parseMarkdownToCards } from '../../utils/markdown-to-cards';
 import { insertCardsToCanvas } from '../../utils/insert-cards';
 import type { MCPResult } from '../../mcp/types';
 import { parseSizeToPixels } from '../../utils/size-ratio';
+import { insertMediaIntoSelectedFrame } from '../../utils/frame-insertion-utils';
+import { getCanvasBoard as readCanvasBoard } from './canvas-board-ref';
+
+export { setCanvasBoard, getCanvasBoard } from './canvas-board-ref';
 
 export { parseSizeToPixels };
 
@@ -92,25 +96,6 @@ const LAYOUT_CONSTANTS = {
   MEDIA_DEFAULT_SIZE: 400,
   MEDIA_MAX_SIZE: 600,
 };
-
-/**
- * Board 引用持有器
- */
-let boardRef: PlaitBoard | null = null;
-
-/**
- * 设置 Board 引用
- */
-export function setCanvasBoard(board: PlaitBoard | null): void {
-  boardRef = board;
-}
-
-/**
- * 获取 Board 引用
- */
-export function getCanvasBoard(): PlaitBoard | null {
-  return boardRef;
-}
 
 /**
  * 从保存的选中元素IDs获取起始插入位置（左对齐）
@@ -389,7 +374,7 @@ async function insertSvgToCanvas(
  * 执行画布插入
  */
 export async function executeCanvasInsertion(params: CanvasInsertionParams): Promise<MCPResult> {
-  const board = boardRef;
+  const board = readCanvasBoard();
 
   if (!board) {
     return {
@@ -410,6 +395,38 @@ export async function executeCanvasInsertion(params: CanvasInsertionParams): Pro
   }
 
   try {
+    if (!params.startPoint && items.length === 1) {
+      const item = items[0];
+      if (item.type === 'image' || item.type === 'video') {
+        const inserted = await insertMediaIntoSelectedFrame(
+          board,
+          item.content,
+          item.type,
+          item.dimensions
+        );
+        if (inserted) {
+          return {
+            success: true,
+            data: {
+              insertedCount: 1,
+              items: [
+                {
+                  type: item.type,
+                  point: inserted.point,
+                  elementId: inserted.elementId,
+                  size: inserted.size,
+                },
+              ],
+              firstElementId: inserted.elementId,
+              firstElementPosition: inserted.point,
+              firstElementSize: inserted.size,
+            },
+            type: 'text',
+          };
+        }
+      }
+    }
+
     let startPoint = params.startPoint;
     if (!startPoint) {
       startPoint = getStartPointFromSelection(board);

@@ -5,7 +5,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { ArrowUpToLine, ArrowDownToLine } from 'lucide-react';
-import { MessagePlugin } from 'tdesign-react';
+import { MessagePlugin } from '../../../utils/message-plugin';
 import type { MVRecord, VideoShot, VideoCharacter } from '../types';
 import { updateRecord } from '../storage';
 import { formatMVShotsMarkdown, updateActiveShotsInRecord } from '../utils';

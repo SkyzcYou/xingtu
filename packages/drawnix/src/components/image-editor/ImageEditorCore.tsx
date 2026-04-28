@@ -27,7 +27,7 @@ import {
   Redo2,
   Eye,
 } from 'lucide-react';
-import { MessagePlugin } from 'tdesign-react';
+import { MessagePlugin } from '../../utils/message-plugin';
 import {
   EditMode,
   CropArea,

@@ -1,17 +1,21 @@
 import {
   BoardTransforms,
   PlaitBoard,
+  PlaitElement,
   Point,
   clampZoomLevel,
   getViewBox,
+  getSelectedElements,
   getViewportOrigination,
 } from '@plait/core';
+import type { PlaitCommonElementRef } from '@plait/common';
 
 const IGNORED_VIEWPORT_SCROLL_COUNT = new WeakMap<PlaitBoard, number>();
 const IGNORED_VIEWPORT_SCROLL_TIMEOUT = new WeakMap<
   PlaitBoard,
   ReturnType<typeof setTimeout>
 >();
+const ACTIVE_SECTION_REFRESH_PENDING = new WeakMap<PlaitBoard, boolean>();
 
 export const getCurrentViewportOrigination = (board: PlaitBoard): Point => {
   const originFromScroll = getViewportOriginationFromScroll(board);
@@ -86,6 +90,45 @@ export const consumeIgnoredViewportScroll = (board: PlaitBoard) => {
   return true;
 };
 
+export const refreshSelectedElementActiveSections = (board: PlaitBoard) => {
+  const selectedElements = getSelectedElements(board);
+  selectedElements.forEach((element) => {
+    const elementRef =
+      PlaitElement.getElementRef<PlaitCommonElementRef>(element);
+    elementRef?.updateActiveSection();
+  });
+  return selectedElements.length;
+};
+
+export const scheduleSelectedElementActiveSectionRefresh = (
+  board: PlaitBoard
+) => {
+  if (ACTIVE_SECTION_REFRESH_PENDING.get(board)) {
+    return false;
+  }
+
+  if (getSelectedElements(board).length === 0) {
+    return false;
+  }
+
+  ACTIVE_SECTION_REFRESH_PENDING.set(board, true);
+  scheduleFrame(() => {
+    ACTIVE_SECTION_REFRESH_PENDING.delete(board);
+    refreshSelectedElementActiveSections(board);
+  });
+  return true;
+};
+
+export const refreshSelectedElementActiveSectionsForViewportChange = (
+  board: PlaitBoard
+) => {
+  const count = refreshSelectedElementActiveSections(board);
+  if (count > 0) {
+    scheduleSelectedElementActiveSectionRefresh(board);
+  }
+  return count;
+};
+
 const getViewportOriginationFromScroll = (board: PlaitBoard): Point | null => {
   const zoom = board.viewport.zoom;
   if (!Number.isFinite(zoom) || zoom <= 0) {
@@ -131,4 +174,15 @@ const isPointInRect = (point: Point, rect: DOMRect) => {
     point[1] >= rect.top &&
     point[1] <= rect.bottom
   );
+};
+
+const scheduleFrame = (callback: () => void) => {
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.requestAnimationFrame === 'function'
+  ) {
+    window.requestAnimationFrame(callback);
+    return;
+  }
+  setTimeout(callback, 0);
 };

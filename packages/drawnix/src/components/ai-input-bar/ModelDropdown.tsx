@@ -40,7 +40,7 @@ import {
   ContextMenu,
   useContextMenuState,
   type ContextMenuEntry,
-} from '../shared';
+} from '../shared/ContextMenu';
 import './model-dropdown.scss';
 import { ModelHealthBadge } from '../shared/ModelHealthBadge';
 import { ModelBenchmarkBadge } from '../shared/ModelBenchmarkBadge';

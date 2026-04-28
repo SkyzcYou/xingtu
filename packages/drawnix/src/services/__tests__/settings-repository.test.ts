@@ -8,6 +8,7 @@ describe('settings-repository', () => {
   it('uses the saved legacy provider type and auth type in snapshots', async () => {
     vi.doMock('../../utils/settings-manager', () => ({
       DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: 'openai-gpt-image',
+      LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: 'tuzi-gpt-image',
       LEGACY_DEFAULT_PROVIDER_PROFILE_ID: 'legacy-default',
       TUZI_DEFAULT_PROVIDER_NAME: '兔子 AI',
       TUZI_PROVIDER_DEFAULT_BASE_URL: 'https://api.tu-zi.com/v1',
@@ -66,13 +67,14 @@ describe('settings-repository', () => {
       name: '兔子 AI',
       providerType: 'custom',
       authType: 'query',
-      imageApiCompatibility: 'openai-gpt-image',
+      imageApiCompatibility: 'tuzi-gpt-image',
     });
   });
 
   it('preserves saved legacy image compatibility overrides in snapshots', async () => {
     vi.doMock('../../utils/settings-manager', () => ({
       DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: 'openai-gpt-image',
+      LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: 'tuzi-gpt-image',
       LEGACY_DEFAULT_PROVIDER_PROFILE_ID: 'legacy-default',
       TUZI_DEFAULT_PROVIDER_NAME: '兔子 AI',
       TUZI_PROVIDER_DEFAULT_BASE_URL: 'https://api.tu-zi.com/v1',

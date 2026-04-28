@@ -14,8 +14,8 @@ import {
   toViewBoxPoint,
 } from '@plait/core';
 import { PlaitTool } from '../types/toolbox.types';
-import { isToolElement } from './with-tool';
-import { ToolGenerator } from '../components/tool-element/tool.generator';
+import { isToolElement } from '../components/tool-element/tool.transforms';
+import type { ToolGenerator } from '../components/tool-element/tool.generator';
 
 /**
  * 全局存储当前聚焦的工具元素 ID

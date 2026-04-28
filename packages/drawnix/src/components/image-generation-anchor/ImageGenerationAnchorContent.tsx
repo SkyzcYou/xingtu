@@ -2,18 +2,25 @@ import React, { useCallback, useMemo, useState } from 'react';
 import classNames from 'classnames';
 import type { PlaitBoard } from '@plait/core';
 import { useImageGenerationAnchorController } from '../../hooks/useImageGenerationAnchorController';
-import { ImageGenerationAnchorTransforms } from '../../plugins/with-image-generation-anchor';
+import { taskQueueService } from '../../services/task-queue';
+import { workflowCompletionService } from '../../services/workflow-completion-service';
+import { ImageGenerationAnchorTransforms } from './image-generation-anchor.transforms';
 import {
   IMAGE_GENERATION_ANCHOR_RETRY_EVENT,
   type ImageGenerationAnchorActionType,
   type PlaitImageGenerationAnchor,
 } from '../../types/image-generation-anchor.types';
+import { TaskStatus } from '../../types/task.types';
 import {
   ImageGenerationProgressDisplay,
   type ImageGenerationProgressTone,
 } from '../shared/ImageGenerationProgressDisplay';
 import { getImageTaskProgressStatusText } from '../../utils/image-task-progress';
 import { buildImageGenerationAnchorPresentationPatch } from '../../utils/image-generation-anchor-state';
+import {
+  getTasksForImageGenerationAnchor,
+  selectPrimaryImageGenerationAnchorTask,
+} from '../../utils/image-generation-anchor-task';
 import './image-generation-anchor.scss';
 
 interface ImageGenerationAnchorContentProps {
@@ -99,6 +106,12 @@ export const ImageGenerationAnchorContent: React.FC<
     ]
   );
 
+  const stopEventPropagation = useCallback(
+    (event: React.PointerEvent | React.MouseEvent) => {
+      event.stopPropagation();
+    },
+    []
+  );
   const stopPointer = useCallback(
     (event: React.PointerEvent | React.MouseEvent) => {
       event.stopPropagation();
@@ -119,20 +132,46 @@ export const ImageGenerationAnchorContent: React.FC<
       }
 
       if (actionType === 'retry') {
-        const taskId = element.primaryTaskId || element.taskIds[0];
+        const relatedTasks = getTasksForImageGenerationAnchor(
+          element,
+          taskQueueService.getAllTasks()
+        );
+        const retryableTask =
+          relatedTasks.find(
+            (task) =>
+              task.status === TaskStatus.FAILED ||
+              task.status === TaskStatus.CANCELLED
+          ) ||
+          relatedTasks.find(
+            (task) =>
+              workflowCompletionService.getPostProcessingStatus(task.id)
+                ?.status === 'failed'
+          ) ||
+          selectPrimaryImageGenerationAnchorTask(element, relatedTasks);
+        const taskId =
+          retryableTask?.id || element.primaryTaskId || element.taskIds[0];
         if (!taskId) {
+          ImageGenerationAnchorTransforms.updateAnchor(
+            board,
+            element.id,
+            buildImageGenerationAnchorPresentationPatch('failed', {
+              error: '任务未绑定，无法重试',
+            })
+          );
           return;
         }
 
-        ImageGenerationAnchorTransforms.updateAnchor(
-          board,
-          element.id,
-          buildImageGenerationAnchorPresentationPatch('retrying')
-        );
+        if (retryableTask) {
+          ImageGenerationAnchorTransforms.updateAnchor(
+            board,
+            element.id,
+            buildImageGenerationAnchorPresentationPatch('retrying')
+          );
+        }
 
         window.dispatchEvent(
           new CustomEvent(IMAGE_GENERATION_ANCHOR_RETRY_EVENT, {
-            detail: { taskId },
+            detail: { taskId, anchorId: element.id },
           })
         );
         return;
@@ -167,8 +206,8 @@ export const ImageGenerationAnchorContent: React.FC<
             <button
               type="button"
               className="image-generation-anchor__error-link"
-              onPointerDown={stopPointer}
-              onMouseDown={stopPointer}
+              onPointerDown={stopEventPropagation}
+              onMouseDown={stopEventPropagation}
               onClick={(event) => {
                 stopPointer(event);
                 handleAction('details');
@@ -355,8 +394,8 @@ export const ImageGenerationAnchorContent: React.FC<
           <button
             type="button"
             className="image-generation-anchor__action"
-            onPointerDown={stopPointer}
-            onMouseDown={stopPointer}
+            onPointerDown={stopEventPropagation}
+            onMouseDown={stopEventPropagation}
             onClick={(event) => {
               stopPointer(event);
               handleAction(viewModel.primaryAction.type);
@@ -368,8 +407,8 @@ export const ImageGenerationAnchorContent: React.FC<
             <button
               type="button"
               className="image-generation-anchor__action image-generation-anchor__action--secondary"
-              onPointerDown={stopPointer}
-              onMouseDown={stopPointer}
+              onPointerDown={stopEventPropagation}
+              onMouseDown={stopEventPropagation}
               onClick={(event) => {
                 stopPointer(event);
                 if (secondaryActionType) {

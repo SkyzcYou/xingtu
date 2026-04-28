@@ -22,6 +22,7 @@ import {
 import { scrollToPointIfNeeded } from '../../utils/selection-utils';
 import { parseMarkdownToCards } from '../../utils/markdown-to-cards';
 import { insertCardsToCanvas } from '../../utils/insert-cards';
+import { insertMediaIntoSelectedFrame } from '../../utils/frame-insertion-utils';
 
 /**
  * 内容类型
@@ -415,6 +416,30 @@ async function executeCanvasInsertion(params: CanvasInsertionParams): Promise<MC
   }
 
   try {
+    if (!params.startPoint && items.length === 1) {
+      const item = items[0];
+      if (item.type === 'image' || item.type === 'video') {
+        const inserted = await insertMediaIntoSelectedFrame(
+          board,
+          item.content,
+          item.type,
+          item.dimensions
+        );
+        if (inserted) {
+          return {
+            success: true,
+            data: {
+              insertedCount: 1,
+              items: [{ type: item.type, point: inserted.point }],
+              firstElementPosition: inserted.point,
+              firstElementSize: inserted.size,
+            },
+            type: 'text',
+          };
+        }
+      }
+    }
+
     // 确定起始位置
     let startPoint = params.startPoint;
     if (!startPoint) {

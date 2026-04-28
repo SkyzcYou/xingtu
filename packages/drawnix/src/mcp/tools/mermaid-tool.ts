@@ -32,30 +32,27 @@ export interface MermaidToolParams {
   mermaid: string;
 }
 
-/**
- * mermaid-to-drawnix 库的动态加载器
- */
-interface MermaidToDrawnixLib {
-  loaded: boolean;
-  api: Promise<{
-    parseMermaidToDrawnix: (
-      definition: string,
-      config?: any
-    ) => Promise<{ elements: any[] }>;
-  }>;
-}
-
-const mermaidToDrawnixLib: MermaidToDrawnixLib = {
-  loaded: false,
-  api: new Promise((resolve, reject) => {
-    import('@plait-board/mermaid-to-drawnix')
-      .then((module) => {
-        mermaidToDrawnixLib.loaded = true;
-        resolve(module);
-      })
-      .catch(reject);
-  }),
+type MermaidToDrawnixModule = {
+  parseMermaidToDrawnix: (
+    definition: string,
+    config?: any
+  ) => Promise<{ elements: any[] }>;
 };
+
+let mermaidToDrawnixPromise: Promise<MermaidToDrawnixModule> | null = null;
+
+function loadMermaidToDrawnix(): Promise<MermaidToDrawnixModule> {
+  if (!mermaidToDrawnixPromise) {
+    mermaidToDrawnixPromise = import('@plait-board/mermaid-to-drawnix').catch(
+      (error) => {
+        mermaidToDrawnixPromise = null;
+        throw error;
+      }
+    );
+  }
+
+  return mermaidToDrawnixPromise;
+}
 
 /**
  * 从代码块中提取Mermaid代码
@@ -132,7 +129,7 @@ async function executeMermaidTool(params: MermaidToolParams): Promise<MCPResult>
     // console.log('[MermaidTool] Detected diagram type:', diagramType);
 
     // 3. 加载并调用mermaid-to-drawnix库
-    const api = await mermaidToDrawnixLib.api;
+    const api = await loadMermaidToDrawnix();
 
     let result;
     try {

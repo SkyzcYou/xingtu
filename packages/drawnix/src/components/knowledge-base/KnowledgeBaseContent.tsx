@@ -32,6 +32,12 @@ import { KBSortDropdown } from './KBSortDropdown';
 import { useConfirmDialog } from '../dialog/ConfirmDialog';
 import { HoverTip } from '../shared';
 import { knowledgeBaseService } from '../../services/knowledge-base-service';
+import {
+  exportAsZip as exportKnowledgeBaseAsZip,
+  importAllData as importKnowledgeBaseData,
+  importFromZip as importKnowledgeBaseFromZip,
+  importNoteFromMarkdown as importKnowledgeBaseNoteFromMarkdown,
+} from '../../services/kb-import-export-service';
 import { ensurePromptOptimizationTemplates } from '../../services/prompt-optimization-service';
 import { getKBSearchEngine, type KBSearchResult } from '../../services/kb-search-engine';
 import type {
@@ -849,7 +855,7 @@ const KnowledgeBaseContent: React.FC<KnowledgeBaseContentProps> = ({ initialNote
       for (const file of Array.from(files)) {
         if (!file.name.endsWith('.md') && !file.name.endsWith('.markdown')) continue;
         const content = await file.text();
-        await knowledgeBaseService.importNoteFromMarkdown(content, selectedDirId, file.name);
+        await importKnowledgeBaseNoteFromMarkdown(content, selectedDirId, file.name);
       }
       await refreshData();
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -859,7 +865,7 @@ const KnowledgeBaseContent: React.FC<KnowledgeBaseContentProps> = ({ initialNote
 
   const handleExportAll = useCallback(async () => {
     try {
-      const blob = await knowledgeBaseService.exportAsZip();
+      const blob = await exportKnowledgeBaseAsZip();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -886,7 +892,7 @@ const KnowledgeBaseContent: React.FC<KnowledgeBaseContentProps> = ({ initialNote
       if (!file) return;
       try {
         if (file.name.toLowerCase().endsWith('.zip')) {
-          const result = await knowledgeBaseService.importFromZip(file);
+          const result = await importKnowledgeBaseFromZip(file);
           if (result.noteCount === 0 && result.dirCount === 0) {
             MessagePlugin.warning('导入完成：没有新增内容（可能已存在重复内容）');
           } else {
@@ -899,7 +905,7 @@ const KnowledgeBaseContent: React.FC<KnowledgeBaseContentProps> = ({ initialNote
             MessagePlugin.error('不支持的导入格式');
             return;
           }
-          const result = await knowledgeBaseService.importAllData(data);
+          const result = await importKnowledgeBaseData(data);
           MessagePlugin.success(`导入完成：${result.dirCount} 个目录、${result.noteCount} 篇笔记、${result.tagCount} 个标签`);
         }
         await refreshData();

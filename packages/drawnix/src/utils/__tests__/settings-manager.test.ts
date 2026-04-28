@@ -163,6 +163,7 @@ describe('settings-manager', () => {
     const {
       providerProfilesSettings,
       DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+      LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
       LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
       TUZI_CODEX_PROVIDER_PROFILE_ID,
       TUZI_ORIGINAL_PROVIDER_PROFILE_ID,
@@ -182,7 +183,7 @@ describe('settings-manager', () => {
     expect(legacyProfile).toMatchObject({
       providerType: 'custom',
       authType: 'query',
-      imageApiCompatibility: DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+      imageApiCompatibility: LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
     });
     expect(tuziOriginProfile).toMatchObject({
       providerType: 'gemini-compatible',
@@ -243,6 +244,122 @@ describe('settings-manager', () => {
 
     expect(updatedCustomProfile).toMatchObject({
       imageApiCompatibility: 'tuzi-gpt-image',
+    });
+  });
+
+  it('migrates legacy default Tuzi GPT Image compatibility only once', async () => {
+    mockSettingsManagerDeps();
+
+    localStorage.setItem(
+      DRAWNIX_SETTINGS_KEY,
+      JSON.stringify({
+        gemini: {
+          apiKey: 'legacy-key',
+          baseUrl: 'https://api.tu-zi.com/v1',
+        },
+        providerProfiles: [
+          {
+            id: 'legacy-default',
+            name: 'default 分组',
+            providerType: 'openai-compatible',
+            baseUrl: 'https://api.tu-zi.com/v1',
+            apiKey: 'legacy-key',
+            authType: 'bearer',
+            imageApiCompatibility: 'openai-gpt-image',
+            enabled: true,
+            capabilities: {},
+          },
+        ],
+      })
+    );
+
+    const {
+      providerProfilesSettings,
+      settingsManager,
+      LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+    } = await import('../settings-manager');
+
+    const migratedProfile = providerProfilesSettings
+      .get()
+      .find((profile) => profile.id === LEGACY_DEFAULT_PROVIDER_PROFILE_ID);
+
+    expect(migratedProfile).toMatchObject({
+      imageApiCompatibility: 'tuzi-gpt-image',
+    });
+    expect(settingsManager.getSettings().migrations).toMatchObject({
+      legacyDefaultImageApiCompatibilityV1: true,
+    });
+
+    await providerProfilesSettings.update(
+      providerProfilesSettings.get().map((profile) =>
+        profile.id === LEGACY_DEFAULT_PROVIDER_PROFILE_ID
+          ? {
+              ...profile,
+              imageApiCompatibility: 'openai-gpt-image' as const,
+            }
+          : profile
+      )
+    );
+
+    vi.resetModules();
+    mockSettingsManagerDeps();
+
+    const reloaded = await import('../settings-manager');
+    const reloadedLegacyProfile = reloaded.providerProfilesSettings
+      .get()
+      .find(
+        (profile) => profile.id === reloaded.LEGACY_DEFAULT_PROVIDER_PROFILE_ID
+      );
+
+    expect(reloadedLegacyProfile).toMatchObject({
+      imageApiCompatibility: 'openai-gpt-image',
+    });
+    expect(reloaded.settingsManager.getSettings().migrations).toMatchObject({
+      legacyDefaultImageApiCompatibilityV1: true,
+    });
+  });
+
+  it('does not migrate legacy default compatibility when the default baseUrl is not Tuzi', async () => {
+    mockSettingsManagerDeps();
+
+    localStorage.setItem(
+      DRAWNIX_SETTINGS_KEY,
+      JSON.stringify({
+        gemini: {
+          apiKey: 'openai-key',
+          baseUrl: 'https://api.openai.com/v1',
+        },
+        providerProfiles: [
+          {
+            id: 'legacy-default',
+            name: 'default 分组',
+            providerType: 'openai-compatible',
+            baseUrl: 'https://api.openai.com/v1',
+            apiKey: 'openai-key',
+            authType: 'bearer',
+            imageApiCompatibility: 'openai-gpt-image',
+            enabled: true,
+            capabilities: {},
+          },
+        ],
+      })
+    );
+
+    const {
+      providerProfilesSettings,
+      settingsManager,
+      LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+    } = await import('../settings-manager');
+
+    const legacyProfile = providerProfilesSettings
+      .get()
+      .find((profile) => profile.id === LEGACY_DEFAULT_PROVIDER_PROFILE_ID);
+
+    expect(legacyProfile).toMatchObject({
+      imageApiCompatibility: 'openai-gpt-image',
+    });
+    expect(settingsManager.getSettings().migrations).toMatchObject({
+      legacyDefaultImageApiCompatibilityV1: true,
     });
   });
 

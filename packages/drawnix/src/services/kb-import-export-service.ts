@@ -11,7 +11,7 @@ import type {
   KBNoteTag,
   KBNoteImage,
 } from '../types/knowledge-base.types';
-import JSZip from 'jszip';
+import type JSZip from 'jszip';
 import {
   getAllDirectories,
   getDirectoryById,
@@ -90,6 +90,7 @@ export async function exportAllData(): Promise<KBExportData> {
  * 导出所有知识库数据为 ZIP 压缩包 (Markdown 格式)
  */
 export async function exportAsZip(): Promise<Blob> {
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   const directories = await getAllDirectories();
   const dirMap = new Map(directories.map((d) => [d.id, d.name]));
@@ -123,6 +124,7 @@ export async function importFromZip(file: File): Promise<{
   dirCount: number;
   noteCount: number;
 }> {
+  const { default: JSZip } = await import('jszip');
   const zip = await JSZip.loadAsync(file);
   let dirCount = 0;
   let noteCount = 0;

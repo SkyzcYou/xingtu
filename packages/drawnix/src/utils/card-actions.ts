@@ -1,7 +1,7 @@
 import { PlaitBoard, PlaitElement, Transforms, getRectangleByElements } from '@plait/core';
 import { PlaitDrawElement } from '@plait/draw';
 import { PlaitCard, isCardElement } from '../types/card.types';
-import { MessagePlugin } from 'tdesign-react';
+import { MessagePlugin } from './message-plugin';
 import { Node } from 'slate';
 
 const KB_NOTE_DIRECTORY_NAME = '笔记';

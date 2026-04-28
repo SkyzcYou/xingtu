@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => {
     clearTask: vi.fn(),
     getPostProcessingStatus: vi.fn(),
     retryTask: vi.fn(),
+    updateAnchor: vi.fn(),
   };
 });
 
@@ -100,7 +101,7 @@ vi.mock('../../plugins/with-image-generation-anchor', () => ({
     getAnchorByTaskId: vi.fn(() => null),
     getAnchorByBatchSlot: vi.fn(() => null),
     getAnchorsByWorkflowId: vi.fn(() => []),
-    updateAnchor: vi.fn(),
+    updateAnchor: mocks.updateAnchor,
     updateGeometry: vi.fn(),
   },
 }));
@@ -195,6 +196,7 @@ describe('useAutoInsertToCanvas', () => {
     mocks.getPostProcessingStatus.mockReset();
     mocks.getPostProcessingStatus.mockReturnValue(undefined);
     mocks.retryTask.mockReset();
+    mocks.updateAnchor.mockReset();
   });
 
   afterEach(() => {
@@ -323,5 +325,125 @@ describe('useAutoInsertToCanvas', () => {
     expect(mocks.quickInsert).not.toHaveBeenCalled();
     expect(mocks.clearTask).not.toHaveBeenCalled();
     expect(mocks.markAsInserted).not.toHaveBeenCalled();
+  });
+
+  it('does not clear post-processing when retry is requested for an active task', async () => {
+    const task: Task = {
+      ...createCompletedImageTask(),
+      id: 'task-active',
+      status: TaskStatus.PROCESSING,
+      completedAt: undefined,
+      result: undefined,
+      insertedToCanvas: false,
+    };
+    mocks.board = { children: [] };
+    mocks.taskState.tasks = [task];
+
+    renderHook(() =>
+      useAutoInsertToCanvas({
+        enabled: true,
+        groupSimilarTasks: true,
+        groupTimeWindow: 10,
+      })
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(IMAGE_GENERATION_ANCHOR_RETRY_EVENT, {
+          detail: { taskId: task.id, anchorId: 'anchor-active' },
+        })
+      );
+    });
+
+    expect(mocks.retryTask).not.toHaveBeenCalled();
+    expect(mocks.clearTask).not.toHaveBeenCalled();
+    expect(mocks.updateAnchor).toHaveBeenCalledWith(
+      mocks.board,
+      'anchor-active',
+      expect.objectContaining({
+        phase: 'queued',
+        subtitle: '任务仍在执行，请稍候',
+      })
+    );
+  });
+
+  it('regenerates a completed task when generation anchor retry follows failed post-processing', async () => {
+    const task = createCompletedImageTask({
+      id: 'task-post-processing-failed',
+      params: {
+        prompt: '重新生成一张图',
+        size: '1:1',
+      },
+    });
+    mocks.board = { children: [] };
+    mocks.taskState.tasks = [task];
+    mocks.getPostProcessingStatus.mockReturnValue({
+      taskId: task.id,
+      status: 'failed',
+      type: 'direct_insert',
+      error: 'Failed to fetch',
+    });
+
+    renderHook(() =>
+      useAutoInsertToCanvas({
+        enabled: true,
+        groupSimilarTasks: true,
+        groupTimeWindow: 10,
+      })
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(IMAGE_GENERATION_ANCHOR_RETRY_EVENT, {
+          detail: { taskId: task.id, anchorId: 'anchor-post-processing-failed' },
+        })
+      );
+    });
+
+    expect(mocks.updateAnchor).toHaveBeenCalledWith(
+      mocks.board,
+      'anchor-post-processing-failed',
+      expect.objectContaining({
+        phase: 'queued',
+        subtitle: '正在重新触发，请稍候',
+      })
+    );
+    expect(mocks.clearTask).toHaveBeenCalledWith(task.id);
+    expect(mocks.retryTask).toHaveBeenCalledWith(task.id, {
+      allowCompleted: true,
+    });
+    expect(mocks.quickInsert).not.toHaveBeenCalled();
+  });
+
+  it('keeps the failed state visible when retry task has been removed', async () => {
+    mocks.board = { children: [] };
+    mocks.taskState.tasks = [];
+
+    renderHook(() =>
+      useAutoInsertToCanvas({
+        enabled: true,
+        groupSimilarTasks: true,
+        groupTimeWindow: 10,
+      })
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(IMAGE_GENERATION_ANCHOR_RETRY_EVENT, {
+          detail: { taskId: 'missing-task', anchorId: 'anchor-missing' },
+        })
+      );
+    });
+
+    expect(mocks.retryTask).not.toHaveBeenCalled();
+    expect(mocks.clearTask).not.toHaveBeenCalled();
+    expect(mocks.updateAnchor).toHaveBeenCalledWith(
+      mocks.board,
+      'anchor-missing',
+      expect.objectContaining({
+        phase: 'failed',
+        error: '任务已丢失，无法重试',
+      })
+    );
   });
 });

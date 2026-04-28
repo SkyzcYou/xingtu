@@ -1,6 +1,125 @@
 {
   "versions": [
     {
+      "version": "0.6.88",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "改进动态导入错误恢复机制并优化错误处理",
+          "guard toImage fetch failures"
+        ],
+        "improvements": [
+          "更新应用版本号至0.6.87并同步构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "改进动态导入错误恢复机制并优化错误处理"
+    },
+    {
+      "version": "0.6.87",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [
+          "为 API Key 输入框添加显示/隐藏切换功能"
+        ],
+        "fixes": [
+          "stabilize GPT image generation requests",
+          "retry failed image generation anchors"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "为 API Key 输入框添加显示/隐藏切换功能"
+    },
+    {
+      "version": "0.6.86",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [],
+        "fixes": [],
+        "improvements": [
+          "更新版本号至 0.6.85 并同步构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.6.85",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [
+          "增强懒加载资源恢复与SEO优化"
+        ],
+        "fixes": [
+          "修复 default 分组迁移类型检查",
+          "调整 default 分组 GPT Image 默认路由"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "增强懒加载资源恢复与SEO优化"
+    },
+    {
+      "version": "0.6.84",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [],
+        "fixes": [],
+        "improvements": [
+          "perf: slim startup dependencies without visual regressions"
+        ]
+      },
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.6.83",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [
+          "优化懒加载和构建配置，添加分析埋点"
+        ],
+        "fixes": [],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "优化懒加载和构建配置，添加分析埋点"
+    },
+    {
+      "version": "0.6.82",
+      "date": "2026-04-27",
+      "changes": {
+        "features": [],
+        "fixes": [],
+        "improvements": [
+          "更新应用版本号至0.6.81并同步构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.6.81",
+      "date": "2026-04-27",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修复画布批量拖拽媒体定位",
+          "收敛静态循环依赖",
+          "选中PPT页面时素材插入页面内",
+          "自动重排删除后的 PPT 页面",
+          "改进API认证错误处理以区分缺失与无效凭证",
+          "修复图片骨架屏加载期间透明度计算逻辑",
+          "support right dock drawer avoidance"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修复画布批量拖拽媒体定位"
+    },
+    {
       "version": "0.6.80",
       "date": "2026-04-27",
       "changes": {

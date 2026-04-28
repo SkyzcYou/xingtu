@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { MessagePlugin } from 'tdesign-react';
 import { normalizeImageDataUrl } from '@aitu/utils';
-import { quickInsert } from '../../../services/canvas-operations';
+import { quickInsertCanvasMedia } from '../../../services/canvas-operations/media-quick-insert';
 import { AudioCover } from '../AudioCover';
 import type { MediaViewportProps, MediaViewportRef } from './types';
 import { HoverPopover } from './HoverPopover';
@@ -407,7 +407,7 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
         MessagePlugin.warning('音频暂不支持直接插入到画布');
         return;
       }
-      const result = await quickInsert(contentType, mediaUrl);
+      const result = await quickInsertCanvasMedia(contentType, mediaUrl);
       if (result.success) {
         MessagePlugin.success(item.type === 'video' ? '视频已插入到画布' : '图片已插入到画布');
       } else {

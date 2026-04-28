@@ -19,7 +19,7 @@ import {
   idCreator,
 } from '@plait/core';
 import { PlaitDrawElement } from '@plait/draw';
-import { MessagePlugin } from 'tdesign-react';
+import { MessagePlugin } from '../utils/message-plugin';
 import { PenPath, PenAnchor, PEN_TYPE, PenShape } from '../plugins/pen/type';
 import { Freehand } from '../plugins/freehand/type';
 import { getPathSamplePoints } from '../plugins/pen/bezier-utils';

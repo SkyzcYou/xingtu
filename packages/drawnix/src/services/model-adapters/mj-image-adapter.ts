@@ -5,6 +5,7 @@ import type {
 } from './types';
 import { registerModelAdapter } from './registry';
 import { sendAdapterRequest } from './context';
+import { IMAGE_GENERATION_TIMEOUT_MS } from '../../constants/TASK_CONSTANTS';
 
 type MJSubmitResponse = {
   code: number;
@@ -21,7 +22,9 @@ type MJQueryResponse = {
 };
 
 const DEFAULT_POLL_INTERVAL_MS = 5000;
-const DEFAULT_POLL_MAX_ATTEMPTS = 1080;
+const DEFAULT_POLL_MAX_ATTEMPTS = Math.ceil(
+  IMAGE_GENERATION_TIMEOUT_MS / DEFAULT_POLL_INTERVAL_MS
+);
 
 const normalizeBaseUrl = (context: AdapterContext): string => {
   if (!context.baseUrl) {

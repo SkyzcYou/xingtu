@@ -60,7 +60,7 @@ import {
   ContextMenu,
   useContextMenuState,
   type ContextMenuEntry,
-} from '../shared';
+} from '../shared/ContextMenu';
 import type {
   MediaLibraryGridProps,
   ViewMode,
@@ -93,7 +93,7 @@ import {
 } from '../../utils/download-utils';
 import './MediaLibraryGrid.scss';
 import './VirtualAssetGrid.scss';
-import { HoverTip } from '../shared';
+import { HoverTip } from '../shared/hover';
 
 // 视图切换防抖时间
 const VIEW_MODE_DEBOUNCE_MS = 150;

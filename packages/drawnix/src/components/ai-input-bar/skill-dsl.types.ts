@@ -4,7 +4,7 @@
  * 定义 DSL 解析所需的变量接口、解析结果接口等类型
  */
 
-import type { WorkflowStep } from './workflow-converter';
+import type { WorkflowStep } from './workflow-types';
 
 /**
  * DSL 变量接口

@@ -170,7 +170,39 @@
 - 权限拒绝是不是预期行为
 - 是否会被 crash logger / PostHog 误记为真实故障
 
-## 五、涉及文件
+## 五、2026-04-28：`toImage` 导出链路的 `Failed to fetch`
+
+这次线上 issue `019b26b0-f85d-7b90-a66d-d8573f0e8350` 又聚合到 `TypeError: Failed to fetch`。PostHog 没有 source map，但生产 chunk 列号能反查到 `@plait/core` 的 `toImage()` 内部：
+
+- `toImage()` 克隆 SVG 后会把 `<image>` 的 `href/src` 重新 `fetch(...).blob()`
+- 外链图片、缓存虚拟 URL 或失效资源一旦 fetch 失败，内部 Promise 没有把错误回传给外层导出 Promise
+- 结果是导出 PNG、合并为图片、PPT frame 缩略图、AI 选区转图这类能力会出现未捕获异常，甚至让操作挂起
+
+修复思路：
+
+- 不改业务入口，不在每个按钮里各自 try/catch
+- 在 drawnix 内收口出 `safeToImage()`，统一包住所有 `toImage()` 调用
+- 只在 `toImage()` 运行期间临时代理 `window.fetch`
+- 只对当前导出元素里收集到的图片 URL 做降级，失败时返回 1x1 透明 PNG
+- 操作结束后立即恢复原始 `fetch`，避免影响普通网络请求
+
+经验：
+
+- 没有 source map 时，先用生产 chunk + 行列号反查压缩代码，再回到源码找公共入口
+- `Failed to fetch` 不一定是接口请求；画布导出、SVG 序列化、图片转 base64 也会触发浏览器 fetch
+- 这类底层库 Promise 链异常要在最窄公共边界收口，不能靠 UI 按钮逐个兜
+- 临时 patch 全局 API 必须满足三点：短生命周期、白名单范围、finally 恢复
+- 兜底透明占位比整次导出失败更符合用户预期，但要保留 console warning 方便继续排查真实资源问题
+
+新增/更新的关键入口：
+
+- `packages/drawnix/src/utils/common.ts`：新增 `safeToImage()`
+- `packages/drawnix/src/utils/image.ts`：导出图片入口补兜底提示
+- `packages/drawnix/src/utils/selection-utils.ts`：AI 选区转图改走 `safeToImage()`
+- `packages/drawnix/src/utils/frame-preview-snapshot.ts`：PPT frame 缩略图改走 `safeToImage()`
+- `packages/drawnix/src/components/toolbar/popup-toolbar/popup-toolbar.tsx`：合并为图片改走 `safeToImage()`
+
+## 六、涉及文件
 
 - `packages/utils/src/id/index.ts`
 - `packages/utils/src/dom/index.ts`
@@ -188,7 +220,7 @@
 - `apps/web/vite.config.ts`
 - `packages/drawnix/vite.config.ts`
 
-## 六、一句话结论
+## 七、一句话结论
 
 这轮真正沉淀下来的不是“关了几个单”，而是一个更稳的处理顺序：
 

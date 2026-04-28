@@ -23,6 +23,7 @@ import {
 } from '../types/workspace.types';
 import { workspaceStorageService } from './workspace-storage-service';
 import { logDebug, logWarning, logError } from './github-sync/sync-log-service';
+import { registerWorkspaceRuntime } from './workspace-runtime-bridge';
 
 /**
  * Generate UUID v4
@@ -522,7 +523,7 @@ class WorkspaceService {
     if (!board) throw new Error(`Board ${id} not found`);
 
     // 异步同步删除到远程回收站（不阻塞本地删除）
-    import('./github-sync').then(({ syncEngine }) => {
+    import('./github-sync/sync-engine').then(({ syncEngine }) => {
       syncEngine.syncBoardDeletion(id).then((result) => {
         if (!result.success) {
           logWarning('Failed to sync deletion to remote', { error: result.error });
@@ -1321,3 +1322,9 @@ class WorkspaceService {
 
 export { WorkspaceService };
 export const workspaceService = WorkspaceService.getInstance();
+
+registerWorkspaceRuntime({
+  reload: () => workspaceService.reload(),
+  getState: () => workspaceService.getState(),
+  getAllBoardMetadata: () => workspaceService.getAllBoardMetadata(),
+});

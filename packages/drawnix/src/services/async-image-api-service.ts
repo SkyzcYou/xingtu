@@ -15,6 +15,7 @@ import {
   type ProviderAuthStrategy,
   type ResolvedProviderContext,
 } from './provider-routing';
+import { IMAGE_GENERATION_TIMEOUT_MS } from '../constants/TASK_CONSTANTS';
 
 function getFileExtension(url: string): string | null {
   const pathname = url.split('?')[0] || '';
@@ -55,9 +56,14 @@ export interface AsyncImageQueryResponse {
 interface PollingOptions {
   interval?: number;
   maxAttempts?: number;
+  signal?: AbortSignal;
   onProgress?: (progress: number, status: string) => void;
   onSubmitted?: (taskId: string) => void;
   routeModel?: string | ModelRef | null;
+}
+
+function getDefaultImagePollingMaxAttempts(interval: number): number {
+  return Math.ceil(IMAGE_GENERATION_TIMEOUT_MS / Math.max(interval, 1));
 }
 
 function inferAuthType(route: ReturnType<typeof resolveInvocationRoute>): ProviderAuthStrategy {
@@ -85,7 +91,8 @@ function resolveProviderContext(
 
 class AsyncImageAPIService {
   private async submit(
-    params: AsyncImageGenerationParams
+    params: AsyncImageGenerationParams,
+    signal?: AbortSignal
   ): Promise<AsyncImageSubmitResponse> {
     const providerContext = resolveProviderContext(params.modelRef || params.model);
 
@@ -104,6 +111,8 @@ class AsyncImageAPIService {
       path: '/videos',
       method: 'POST',
       body: formData,
+      signal,
+      timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
     });
 
     if (!response.ok) {
@@ -121,7 +130,8 @@ class AsyncImageAPIService {
 
   private async query(
     id: string,
-    routeModel?: string | ModelRef | null
+    routeModel?: string | ModelRef | null,
+    signal?: AbortSignal
   ): Promise<AsyncImageQueryResponse> {
     const providerContext = resolveProviderContext(routeModel);
 
@@ -132,6 +142,8 @@ class AsyncImageAPIService {
     const response = await providerTransport.send(providerContext, {
       path: `/videos/${id}`,
       method: 'GET',
+      signal,
+      timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
     });
 
     if (!response.ok) {
@@ -153,12 +165,15 @@ class AsyncImageAPIService {
   ): Promise<AsyncImageQueryResponse> {
     const {
       interval = 5000,
-      maxAttempts = 1080,
+      maxAttempts,
+      signal,
       onProgress,
       onSubmitted,
     } = options;
+    const maxPollingAttempts =
+      maxAttempts ?? getDefaultImagePollingMaxAttempts(interval);
 
-    const submitResp = await this.submit(params);
+    const submitResp = await this.submit(params, signal);
 
     if (onSubmitted) {
       onSubmitted(submitResp.id);
@@ -178,7 +193,8 @@ class AsyncImageAPIService {
 
     return this.pollUntilComplete(submitResp.id, {
       interval,
-      maxAttempts,
+      maxAttempts: maxPollingAttempts,
+      signal,
       onProgress,
       routeModel: params.modelRef || params.model,
     });
@@ -190,7 +206,7 @@ class AsyncImageAPIService {
   ): Promise<AsyncImageQueryResponse> {
     const { onProgress } = options;
 
-    const immediate = await this.query(id, options.routeModel);
+    const immediate = await this.query(id, options.routeModel, options.signal);
     const immediateProgress =
       immediate.progress ??
       (immediate.status === 'failed'
@@ -216,21 +232,28 @@ class AsyncImageAPIService {
   ): Promise<AsyncImageQueryResponse> {
     const {
       interval = 5000,
-      maxAttempts = 1080,
+      maxAttempts,
+      signal,
       onProgress,
       routeModel,
     } = options;
+    const maxPollingAttempts =
+      maxAttempts ?? getDefaultImagePollingMaxAttempts(interval);
 
     let attempts = 0;
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 10;
 
-    while (attempts < maxAttempts) {
-      await this.sleep(interval);
+    while (attempts < maxPollingAttempts) {
+      if (signal?.aborted) {
+        throw new Error('Async image generation cancelled');
+      }
+
+      await this.sleep(interval, signal);
       attempts += 1;
 
       try {
-        const status = await this.query(id, routeModel);
+        const status = await this.query(id, routeModel, signal);
         const progress =
           status.progress ??
           (status.status === 'failed'
@@ -267,8 +290,27 @@ class AsyncImageAPIService {
     throw new Error('图片生成超时');
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error('Async image generation cancelled'));
+        return;
+      }
+
+      let timeoutId: ReturnType<typeof setTimeout>;
+      const onAbort = () => {
+        clearTimeout(timeoutId);
+        signal?.removeEventListener('abort', onAbort);
+        reject(new Error('Async image generation cancelled'));
+      };
+
+      timeoutId = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
   }
 
   /**

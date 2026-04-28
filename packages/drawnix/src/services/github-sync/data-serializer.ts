@@ -4,7 +4,11 @@
  */
 
 import { workspaceStorageService } from '../workspace-storage-service';
-import { workspaceService } from '../workspace-service';
+import {
+  getAllWorkspaceBoardMetadata,
+  getWorkspaceState,
+  reloadWorkspace,
+} from '../workspace-runtime-bridge';
 import {
   getPromptHistory,
   getVideoPromptHistory,
@@ -1017,11 +1021,11 @@ class DataSerializer {
     if (boardsApplied > 0) {
       logDebug('DataSerializer: ========== RELOAD WORKSPACE START ==========');
       logDebug('DataSerializer: Calling workspaceService.reload()...');
-      await workspaceService.reload();
+      await reloadWorkspace();
       logDebug('DataSerializer: workspaceService.reload() completed');
       
       // 验证工作区加载状态
-      const allBoards = workspaceService.getAllBoardMetadata();
+      const allBoards = getAllWorkspaceBoardMetadata();
       logDebug('DataSerializer: Workspace reloaded, boards in memory:', {
         count: allBoards.length,
         ids: allBoards.map(b => b.id),
@@ -1043,7 +1047,7 @@ class DataSerializer {
       if (data.workspace?.currentBoardId) {
         logDebug('DataSerializer: Setting currentBoardId from remote:', { id: data.workspace.currentBoardId });
         // 保存工作区状态（包括 currentBoardId）
-        const currentState = workspaceService.getState();
+        const currentState = getWorkspaceState();
         logDebug('DataSerializer: Current state before update:', { state: currentState as unknown as Record<string, unknown> });
         await workspaceStorageService.saveState({
           ...currentState,

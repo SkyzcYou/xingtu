@@ -1,4 +1,4 @@
-import { getSelectedElements, PlaitBoard, PlaitElement, getRectangleByElements, RectangleClient, toImage, Point, BoardTransforms, getViewportOrigination } from '@plait/core';
+import { getSelectedElements, PlaitBoard, PlaitElement, getRectangleByElements, RectangleClient, Point, BoardTransforms, getViewportOrigination } from '@plait/core';
 import { MindElement } from '@plait/mind';
 import { PlaitDrawElement } from '@plait/draw';
 import { Node } from 'slate';
@@ -9,6 +9,7 @@ import { trimImageWhiteAndTransparentBorder } from '@aitu/utils';
 import { isFillConfig, ImageFillConfig } from '../types/fill.types';
 import { generateFillDefId } from './fill-renderer';
 import { isCardElement } from '../types/card.types';
+import { safeToImage } from './common';
 
 /**
  * 从图片 URL 获取原始尺寸
@@ -697,7 +698,7 @@ export const convertElementsToImage = async (board: PlaitBoard, elements: PlaitE
     try {
       // Use Plait's native toImage function with the same options as export
       // This ensures all colors, styles, and rendering are preserved exactly
-      imageDataUrl = await toImage(board, {
+      imageDataUrl = await safeToImage(board, {
         elements: sortedElements, // Use sorted elements to maintain layer order
         fillStyle: 'white', // White background for AI image generation
         inlineStyleClassNames: '.extend,.emojis,.text', // Include style classes for proper rendering

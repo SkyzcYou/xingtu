@@ -1,59 +1,12 @@
 import { PlaitBoard } from '@plait/core';
-import { isValidDrawnixData } from './json';
+import { isValidDrawnixData } from './drawnix-data-validation';
 import { IMAGE_MIME_TYPES, MIME_TYPES } from '../constants';
+import { ASSET_CONSTANTS } from '../constants/ASSET_CONSTANTS';
 import { ValueOf } from '@aitu/utils';
 import { DataURL } from '../types';
-import { DrawnixExportedData, EmbeddedMediaItem } from './types';
-import { unifiedCacheService } from '../services/unified-cache-service';
-
-/**
- * 将 Base64 字符串转换为 Blob
- */
-const base64ToBlob = (base64: string, mimeType: string): Blob => {
-  const byteCharacters = atob(base64);
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-  const byteArray = new Uint8Array(byteNumbers);
-  return new Blob([byteArray], { type: mimeType });
-};
-
-/**
- * 恢复嵌入的媒体数据到缓存中
- */
-export const restoreEmbeddedMedia = async (
-  embeddedMedia?: EmbeddedMediaItem[]
-): Promise<void> => {
-  if (!embeddedMedia || embeddedMedia.length === 0) return;
-
-  for (const item of embeddedMedia) {
-    try {
-      // 检查是否已经存在
-      const exists = await unifiedCacheService.isCached(item.url);
-      if (exists) {
-        // console.log(`[restoreEmbeddedMedia] 媒体已存在，跳过: ${item.url}`);
-        continue;
-      }
-
-      // 将 Base64 转换为 Blob
-      const blob = base64ToBlob(item.data, item.mimeType);
-
-      // 缓存到 unifiedCacheService
-      await unifiedCacheService.cacheMediaFromBlob(item.url, blob, item.type, {
-        metadata: {
-          taskId: item.taskId || `imported-${Date.now()}`,
-        },
-        cachedAt: item.cachedAt,
-        lastUsed: item.lastUsed || item.cachedAt,
-      });
-
-      // console.log(`[restoreEmbeddedMedia] 已恢复媒体: ${item.url}`);
-    } catch (error) {
-      console.error(`[restoreEmbeddedMedia] 恢复媒体失败: ${item.url}`, error);
-    }
-  }
-};
+import { DrawnixExportedData } from './types';
+import { restoreEmbeddedMedia } from './embedded-media';
+export { restoreEmbeddedMedia };
 
 export const loadFromBlob = async (board: PlaitBoard, blob: Blob | File) => {
   const contents = await parseFileContents(blob);
@@ -153,7 +106,38 @@ export const isSupportedImageFile = (
 };
 
 const AUDIO_MIME_TYPES = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/flac'];
+const VIDEO_EXTENSION_MIME_TYPES: Record<string, string> = {
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  ogg: 'video/ogg',
+  ogv: 'video/ogg',
+  mov: 'video/quicktime',
+  qt: 'video/quicktime',
+  m4v: 'video/x-m4v',
+};
 
 export const isSupportedAudioFileType = (type: string | null | undefined) => {
   return !!type && AUDIO_MIME_TYPES.includes(type);
+};
+
+export const isSupportedVideoFileType = (type: string | null | undefined) => {
+  return !!type && ASSET_CONSTANTS.ALLOWED_VIDEO_TYPES.includes(type as any);
+};
+
+export const getSupportedVideoFileMimeType = (
+  file: File | null | undefined
+): string | null => {
+  if (!file) {
+    return null;
+  }
+
+  if (isSupportedVideoFileType(file.type)) {
+    return file.type;
+  }
+
+  const extension = file.name?.split('.').pop()?.toLowerCase();
+  const fallbackMimeType = extension
+    ? VIDEO_EXTENSION_MIME_TYPES[extension]
+    : undefined;
+  return isSupportedVideoFileType(fallbackMimeType) ? fallbackMimeType! : null;
 };

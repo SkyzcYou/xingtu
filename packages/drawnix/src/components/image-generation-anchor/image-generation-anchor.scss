@@ -115,6 +115,7 @@
   );
   background-size: 28px 28px;
   mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.84), transparent 92%);
+  pointer-events: none;
 }
 
 .image-generation-anchor__stack-preview {
@@ -123,6 +124,7 @@
   z-index: 2;
   display: grid;
   gap: 10px;
+  pointer-events: none;
 }
 
 .image-generation-anchor__stack-header {
@@ -440,6 +442,7 @@
 .image-generation-anchor__surface-refresh {
   z-index: 3;
   opacity: 0;
+  pointer-events: none;
   background: linear-gradient(
       102deg,
       rgba(255, 243, 210, 0) 8%,
@@ -584,6 +587,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  z-index: 8;
+  pointer-events: auto;
 }
 
 .image-generation-anchor__action {

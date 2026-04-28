@@ -3,7 +3,6 @@
  * ZIP 文件处理工具函数
  */
 
-import JSZip from 'jszip';
 import { ASSET_CONSTANTS } from '../constants/ASSET_CONSTANTS';
 
 /** 解压后的媒体文件信息 */
@@ -83,6 +82,7 @@ export async function extractMediaFromZip(
   };
 
   try {
+    const { default: JSZip } = await import('jszip');
     const zip = await JSZip.loadAsync(zipFile);
     const entries = Object.entries(zip.files);
 

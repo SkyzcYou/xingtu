@@ -1,4 +1,4 @@
-import type { ToolPluginModule } from '../../registry';
+import type { ToolPluginModule } from '../../types';
 import { ToolCategory } from '../../../types/toolbox.types';
 
 export const poseLibraryTool: ToolPluginModule = {

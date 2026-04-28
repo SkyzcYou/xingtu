@@ -6,7 +6,11 @@ import type { OutputAsset, OutputBundle, OutputChunk } from 'rollup';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { createRequire } from 'module';
 import { visualizer } from 'rollup-plugin-visualizer';
+
+const require = createRequire(import.meta.url);
+const workspaceRoot = path.resolve(__dirname, '../..');
 
 // Read version from public/version.json
 const versionPath = path.resolve(__dirname, 'public/version.json');
@@ -30,6 +34,8 @@ const IDLE_PREFETCH_GROUPS = [
   'tool-windows',
   'diagram-engines',
   'office-data',
+  'editor-engines',
+  'media-viewer',
   'external-skills',
   'runtime-static-assets',
   'offline-static-assets',
@@ -326,6 +332,53 @@ function normalizePathForChunking(id: string): string {
   return id.replace(/\\/g, '/');
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function findPackageRoot(entryPath: string): string {
+  let current = fs.statSync(entryPath).isDirectory()
+    ? entryPath
+    : path.dirname(entryPath);
+
+  while (current !== path.dirname(current)) {
+    if (fs.existsSync(path.join(current, 'package.json'))) {
+      return current;
+    }
+
+    current = path.dirname(current);
+  }
+
+  throw new Error(`Unable to resolve package root for ${entryPath}`);
+}
+
+function resolvePackageRoot(packageName: string, fromPaths: string[]): string {
+  return findPackageRoot(require.resolve(packageName, { paths: fromPaths }));
+}
+
+function createPackageRootAlias(packageName: string, packageRoot: string) {
+  const escapedName = escapeRegExp(packageName);
+
+  return [
+    { find: new RegExp(`^${escapedName}$`), replacement: packageRoot },
+    {
+      find: new RegExp(`^${escapedName}/(.+)$`),
+      replacement: `${packageRoot}/$1`,
+    },
+  ];
+}
+
+const mermaidToDrawnixPackageRoot = resolvePackageRoot(
+  '@plait-board/mermaid-to-drawnix',
+  [workspaceRoot]
+);
+const diagramEngineAliases = [
+  ...createPackageRootAlias(
+    'mermaid',
+    resolvePackageRoot('mermaid', [mermaidToDrawnixPackageRoot])
+  ),
+];
+
 function normalizeBundleFileName(fileName: string): string {
   return normalizePathForChunking(fileName).replace(/^\.\//, '');
 }
@@ -339,14 +392,18 @@ function toManifestUrl(fileName: string): string {
 
 function shouldIncludeIdlePrefetchBundleFile(fileName: string): boolean {
   const normalizedFileName = normalizeBundleFileName(fileName).toLowerCase();
-  return normalizedFileName.endsWith('.js') || normalizedFileName.endsWith('.css');
+  return (
+    normalizedFileName.endsWith('.js') || normalizedFileName.endsWith('.css')
+  );
 }
 
 function isNamedIdlePrefetchGroupFile(
   fileName: string,
   group: IdlePrefetchGroup
 ): boolean {
-  const baseName = path.posix.basename(normalizeBundleFileName(fileName)).toLowerCase();
+  const baseName = path.posix
+    .basename(normalizeBundleFileName(fileName))
+    .toLowerCase();
   return baseName.startsWith(`${group.toLowerCase()}-`);
 }
 
@@ -400,7 +457,8 @@ function chunkBelongsToIdlePrefetchGroup(
   const moduleIds = [chunk.facadeModuleId, ...Object.keys(chunk.modules)];
   return moduleIds.some(
     (moduleId) =>
-      typeof moduleId === 'string' && resolveIdlePrefetchGroup(moduleId) === group
+      typeof moduleId === 'string' &&
+      resolveIdlePrefetchGroup(moduleId) === group
   );
 }
 
@@ -470,15 +528,22 @@ function collectIdlePrefetchGroupEntriesFromBundle(
     });
 
     chunk.referencedFiles.forEach((referencedFileName) => {
-      const normalizedReferencedFileName = normalizeBundleFileName(referencedFileName);
+      const normalizedReferencedFileName =
+        normalizeBundleFileName(referencedFileName);
       if (normalizedReferencedFileName.toLowerCase().endsWith('.css')) {
         pendingCssFileNames.add(normalizedReferencedFileName);
       }
     });
 
-    for (const importedFileName of [...chunk.imports, ...chunk.dynamicImports]) {
-      const normalizedImportedFileName = normalizeBundleFileName(importedFileName);
-      const importedGroup = getNamedIdlePrefetchGroupForFile(normalizedImportedFileName);
+    for (const importedFileName of [
+      ...chunk.imports,
+      ...chunk.dynamicImports,
+    ]) {
+      const normalizedImportedFileName =
+        normalizeBundleFileName(importedFileName);
+      const importedGroup = getNamedIdlePrefetchGroupForFile(
+        normalizedImportedFileName
+      );
 
       if (importedGroup && importedGroup !== group) {
         continue;
@@ -515,39 +580,201 @@ function resolveIdlePrefetchGroup(id: string): IdlePrefetchGroup | undefined {
   const normalizedId = normalizePathForChunking(id);
 
   if (
-    normalizedId.includes('/packages/drawnix/src/components/startup/DrawnixDeferredRuntime.tsx') ||
-    normalizedId.includes('/packages/drawnix/src/components/startup/DeferredMediaLibraryModal.tsx') ||
-    normalizedId.includes('/packages/drawnix/src/components/startup/DeferredSyncSettings.tsx') ||
-    normalizedId.includes('/packages/drawnix/src/services/asset-integration-service') ||
-    normalizedId.includes('/packages/drawnix/src/services/font-manager-service') ||
-    normalizedId.includes('/packages/drawnix/src/utils/model-pricing-service') ||
+    normalizedId.includes('/packages/drawnix/src/components/chat-drawer/') ||
+    normalizedId.includes('/packages/drawnix/src/hooks/useChatHandler') ||
+    normalizedId.includes('/packages/drawnix/src/services/chat-service') ||
+    normalizedId.includes(
+      '/packages/drawnix/src/services/chat-storage-service'
+    ) ||
+    normalizedId.includes('/packages/drawnix/src/types/chat.types') ||
+    normalizedId.includes('/packages/drawnix/src/types/chat-ui.types')
+  ) {
+    return 'ai-chat';
+  }
+
+  if (
+    normalizedId.includes('/node_modules/.pnpm/mermaid@') ||
+    normalizedId.includes('/node_modules/mermaid/') ||
+    normalizedId.includes('/node_modules/.pnpm/elkjs@') ||
+    normalizedId.includes('/node_modules/elkjs/') ||
+    normalizedId.includes('/node_modules/.pnpm/cytoscape@') ||
+    normalizedId.includes('/node_modules/cytoscape/') ||
+    normalizedId.includes('/node_modules/.pnpm/layout-base@') ||
+    normalizedId.includes('/node_modules/layout-base/') ||
+    normalizedId.includes('/node_modules/.pnpm/cose-base@') ||
+    normalizedId.includes('/node_modules/cose-base/') ||
+    normalizedId.includes('/node_modules/.pnpm/cytoscape-cose-bilkent@') ||
+    normalizedId.includes('/node_modules/cytoscape-cose-bilkent/') ||
+    normalizedId.includes('/node_modules/.pnpm/dagre-d3-es@') ||
+    normalizedId.includes('/node_modules/dagre-d3-es/') ||
+    normalizedId.includes('/node_modules/.pnpm/dompurify@') ||
+    normalizedId.includes('/node_modules/dompurify/')
+  ) {
+    return 'diagram-engines';
+  }
+
+  if (
+    normalizedId.includes('/node_modules/.pnpm/xlsx@') ||
+    normalizedId.includes('/node_modules/xlsx/') ||
+    normalizedId.includes('/node_modules/.pnpm/jszip@') ||
+    normalizedId.includes('/node_modules/jszip/') ||
+    normalizedId.includes('/node_modules/.pnpm/pptxgenjs@') ||
+    normalizedId.includes('/node_modules/pptxgenjs/')
+  ) {
+    return 'office-data';
+  }
+
+  if (
+    normalizedId.includes('/node_modules/.pnpm/@milkdown+') ||
+    normalizedId.includes('/node_modules/@milkdown/') ||
+    normalizedId.includes('/node_modules/.pnpm/@codemirror+') ||
+    normalizedId.includes('/node_modules/@codemirror/') ||
+    normalizedId.includes('/node_modules/.pnpm/@lezer+') ||
+    normalizedId.includes('/node_modules/@lezer/') ||
+    normalizedId.includes('/node_modules/.pnpm/prosemirror-') ||
+    normalizedId.includes('/node_modules/prosemirror-') ||
+    normalizedId.includes('/node_modules/.pnpm/katex@') ||
+    normalizedId.includes('/node_modules/katex/')
+  ) {
+    return 'editor-engines';
+  }
+
+  if (
+    normalizedId.includes('/node_modules/.pnpm/viewerjs@') ||
+    normalizedId.includes('/node_modules/viewerjs/')
+  ) {
+    return 'media-viewer';
+  }
+
+  if (
+    normalizedId.includes(
+      '/packages/drawnix/src/components/startup/DrawnixDeferredRuntime.tsx'
+    ) ||
+    normalizedId.includes(
+      '/packages/drawnix/src/components/startup/DeferredMediaLibraryModal.tsx'
+    ) ||
+    normalizedId.includes(
+      '/packages/drawnix/src/components/startup/DeferredSyncSettings.tsx'
+    ) ||
+    normalizedId.includes(
+      '/packages/drawnix/src/services/asset-integration-service'
+    ) ||
+    normalizedId.includes(
+      '/packages/drawnix/src/services/font-manager-service'
+    ) ||
+    normalizedId.includes(
+      '/packages/drawnix/src/utils/model-pricing-service'
+    ) ||
     normalizedId.includes('/packages/drawnix/src/hooks/useTaskStorage') ||
     normalizedId.includes('/packages/drawnix/src/hooks/useTaskExecutor') ||
-    normalizedId.includes('/packages/drawnix/src/hooks/useAutoInsertToCanvas') ||
-    normalizedId.includes('/packages/drawnix/src/hooks/useImageGenerationAnchorSync') ||
+    normalizedId.includes(
+      '/packages/drawnix/src/hooks/useAutoInsertToCanvas'
+    ) ||
+    normalizedId.includes(
+      '/packages/drawnix/src/hooks/useImageGenerationAnchorSync'
+    ) ||
     normalizedId.includes('/packages/drawnix/src/hooks/useBeforeUnload') ||
     normalizedId.includes('/packages/drawnix/src/hooks/useProviderProfiles') ||
     normalizedId.includes('/packages/drawnix/src/components/toolbox-drawer/') ||
     normalizedId.includes('/packages/drawnix/src/components/project-drawer/') ||
-    normalizedId.includes('/packages/drawnix/src/components/toolbar/minimized-tools-bar/') ||
-    normalizedId.includes('/packages/drawnix/src/services/tool-window-service') ||
+    normalizedId.includes(
+      '/packages/drawnix/src/components/toolbar/minimized-tools-bar/'
+    ) ||
+    normalizedId.includes(
+      '/packages/drawnix/src/services/tool-window-service'
+    ) ||
     normalizedId.includes('/packages/drawnix/src/tools/') ||
     normalizedId.includes('/packages/drawnix/src/components/backup-restore/') ||
-    normalizedId.includes('/packages/drawnix/src/components/performance-panel/') ||
+    normalizedId.includes(
+      '/packages/drawnix/src/components/performance-panel/'
+    ) ||
     normalizedId.includes('/packages/drawnix/src/components/version-update/') ||
-    normalizedId.includes('/packages/drawnix/src/components/command-palette/') ||
+    normalizedId.includes(
+      '/packages/drawnix/src/components/command-palette/'
+    ) ||
     normalizedId.includes('/packages/drawnix/src/components/canvas-search/')
   ) {
     return 'tool-windows';
   }
 
   if (
-    normalizedId.includes('/packages/drawnix/src/generated/external-skills-bundle.json')
+    normalizedId.includes(
+      '/packages/drawnix/src/generated/external-skills-bundle.json'
+    )
   ) {
     return 'external-skills';
   }
 
   return undefined;
+}
+
+function isStartupRuntimeModule(id: string): boolean {
+  const normalizedId = normalizePathForChunking(id);
+  return (
+    normalizedId.includes('vite/preload-helper') ||
+    normalizedId.includes('commonjs-dynamic-modules') ||
+    normalizedId.includes('commonjsHelpers')
+  );
+}
+
+interface ManualChunkModuleInfo {
+  importers: string[];
+}
+
+interface ManualChunkContext {
+  getModuleInfo: (id: string) => ManualChunkModuleInfo | null;
+}
+
+function isWebMainEntry(id: string): boolean {
+  const normalizedId = normalizePathForChunking(id);
+  return (
+    normalizedId.endsWith('/apps/web/src/main.tsx') ||
+    normalizedId.endsWith('/src/main.tsx')
+  );
+}
+
+function isStaticallyReachableFromWebMain(
+  id: string,
+  getModuleInfo: ManualChunkContext['getModuleInfo'],
+  visited = new Set<string>()
+): boolean {
+  if (visited.has(id)) {
+    return false;
+  }
+  visited.add(id);
+
+  if (isWebMainEntry(id)) {
+    return true;
+  }
+
+  const moduleInfo = getModuleInfo(id);
+  if (!moduleInfo) {
+    return false;
+  }
+
+  return moduleInfo.importers.some((importerId) =>
+    isStaticallyReachableFromWebMain(importerId, getModuleInfo, visited)
+  );
+}
+
+function resolveManualChunk(
+  id: string,
+  context?: ManualChunkContext
+): string | undefined {
+  if (isStartupRuntimeModule(id)) {
+    return 'startup-runtime';
+  }
+
+  const group = resolveIdlePrefetchGroup(id);
+  if (
+    (group === undefined || group === 'tool-windows') &&
+    context &&
+    isStaticallyReachableFromWebMain(id, context.getModuleInfo)
+  ) {
+    return 'startup-app';
+  }
+
+  return group;
 }
 
 /**
@@ -615,7 +842,10 @@ function idlePrefetchManifestPlugin(): Plugin {
       async handler() {
         const outDir = path.resolve(__dirname, '../../dist/apps/web');
         const assetsDir = path.join(outDir, 'assets');
-        const precacheManifestPath = path.join(outDir, 'precache-manifest.json');
+        const precacheManifestPath = path.join(
+          outDir,
+          'precache-manifest.json'
+        );
         const groups = Object.fromEntries(
           IDLE_PREFETCH_GROUPS.map((group) => [
             group,
@@ -630,7 +860,10 @@ function idlePrefetchManifestPlugin(): Plugin {
         if (fs.existsSync(precacheManifestPath)) {
           try {
             const precacheManifest = JSON.parse(
-              (await readFileWithFdRetry(precacheManifestPath, 'utf8')) as string
+              (await readFileWithFdRetry(
+                precacheManifestPath,
+                'utf8'
+              )) as string
             ) as { files?: Array<{ url?: string }> };
             for (const entry of precacheManifest.files || []) {
               if (typeof entry.url === 'string' && entry.url.length > 0) {
@@ -720,7 +953,10 @@ function deferEntryAssetsPlugin(): Plugin {
           return;
         }
 
-        const html = (await readFileWithFdRetry(indexHtmlPath, 'utf8')) as string;
+        const html = (await readFileWithFdRetry(
+          indexHtmlPath,
+          'utf8'
+        )) as string;
         const deferredTags: string[] = [];
         const assetTagPattern =
           /^[ \t]*(<script\b[^>]*type="module"[^>]*src="\.\/assets\/[^"]+"[^>]*><\/script>|<link\b[^>]*rel="stylesheet"[^>]*href="\.\/assets\/[^"]+"[^>]*>)\s*$/gm;
@@ -745,6 +981,84 @@ function deferEntryAssetsPlugin(): Plugin {
     },
   };
 }
+
+function rewriteEntryAssetsToCDNPlugin(): Plugin {
+  return {
+    name: 'rewrite-entry-assets-to-cdn',
+    apply: 'build',
+    closeBundle: {
+      sequential: true,
+      order: 'post',
+      async handler() {
+        const outDir = path.resolve(__dirname, '../../dist/apps/web');
+        const indexHtmlPath = path.join(outDir, 'index.html');
+
+        if (!fs.existsSync(indexHtmlPath)) {
+          return;
+        }
+
+        const html = (await readFileWithFdRetry(
+          indexHtmlPath,
+          'utf8'
+        )) as string;
+        const cdnBaseUrl = `https://cdn.jsdelivr.net/npm/aitu-app@${appVersion}`;
+        let rewrittenCount = 0;
+
+        const rewriteAssetUrl = (localPath: string) => {
+          const [pathname, suffix = ''] = localPath.split(/([?#].*)/, 2);
+          return `${cdnBaseUrl}/${pathname.replace(/^\.\//, '')}${suffix}`;
+        };
+
+        const rewriteManagedLinkTag = (
+          beforeHref: string,
+          localHref: string,
+          afterHref: string
+        ) => {
+          const hasSelfClosingSlash = /\/\s*$/.test(afterHref);
+          const normalizedAfterHref = afterHref.replace(/\/\s*$/, '');
+          rewrittenCount += 1;
+          return `<link${beforeHref}href="${rewriteAssetUrl(
+            localHref
+          )}" data-local-href="${localHref}" data-cdn-fallback-managed="1"${normalizedAfterHref} onerror="window.__OPENTU_BOOT_ASSET_FALLBACK__&&window.__OPENTU_BOOT_ASSET_FALLBACK__(this)"${
+            hasSelfClosingSlash ? ' /' : ''
+          }>`;
+        };
+
+        let nextHtml = html.replace(
+          /<script\b([^>]*\btype="module"[^>]*)\bsrc="(\.\/assets\/[^"]+)"([^>]*)><\/script>/g,
+          (_match, beforeSrc, localSrc, afterSrc) => {
+            rewrittenCount += 1;
+            return `<script${beforeSrc}src="${rewriteAssetUrl(
+              localSrc
+            )}" data-local-src="${localSrc}" data-cdn-fallback-managed="1"${afterSrc} onerror="window.__OPENTU_BOOT_ASSET_FALLBACK__&&window.__OPENTU_BOOT_ASSET_FALLBACK__(this)"></script>`;
+          }
+        );
+
+        nextHtml = nextHtml.replace(
+          /<link\b([^>]*\brel="stylesheet"[^>]*)\bhref="(\.\/assets\/[^"]+)"([^>]*)>/g,
+          (_match, beforeHref, localHref, afterHref) =>
+            rewriteManagedLinkTag(beforeHref, localHref, afterHref)
+        );
+
+        nextHtml = nextHtml.replace(
+          /<link\b([^>]*\brel="(?:manifest|icon|apple-touch-icon)"[^>]*)\bhref="(\.\/[^"]+)"([^>]*)>/g,
+          (_match, beforeHref, localHref, afterHref) =>
+            rewriteManagedLinkTag(beforeHref, localHref, afterHref)
+        );
+
+        if (rewrittenCount === 0) {
+          return;
+        }
+
+        await writeFileWithFdRetry(indexHtmlPath, nextHtml);
+        console.log(
+          `[EntryAssets] Rewrote ${rewrittenCount} entry asset tag(s) to prefer CDN`
+        );
+      },
+    },
+  };
+}
+
 
 function rewriteManifestAssetsToCDNPlugin(): Plugin {
   return {
@@ -781,10 +1095,12 @@ function rewriteManifestAssetsToCDNPlugin(): Plugin {
         };
 
         if (Array.isArray(manifest.icons)) {
-          manifest.icons = manifest.icons.map((icon: Record<string, unknown>) => ({
-            ...icon,
-            src: rewriteManifestAssetUrl(String(icon.src || '')),
-          }));
+          manifest.icons = manifest.icons.map(
+            (icon: Record<string, unknown>) => ({
+              ...icon,
+              src: rewriteManifestAssetUrl(String(icon.src || '')),
+            })
+          );
         }
 
         if (Array.isArray(manifest.shortcuts)) {
@@ -805,7 +1121,10 @@ function rewriteManifestAssetsToCDNPlugin(): Plugin {
           return;
         }
 
-        fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+        fs.writeFileSync(
+          manifestPath,
+          JSON.stringify(manifest, null, 2) + '\n'
+        );
         console.log(
           `[ManifestAssets] Rewrote ${rewrittenCount} manifest asset url(s) to prefer CDN`
         );
@@ -816,6 +1135,8 @@ function rewriteManifestAssetsToCDNPlugin(): Plugin {
 
 // 检测是否在 watch 模式下运行（命令行包含 --watch）
 const isWatchMode = process.argv.includes('--watch');
+const isServeMode = process.argv.includes('serve');
+const reactNodeEnv = isWatchMode || isServeMode ? 'development' : 'production';
 
 export default defineConfig({
   root: __dirname,
@@ -827,6 +1148,7 @@ export default defineConfig({
 
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
+    'process.env.NODE_ENV': JSON.stringify(reactNodeEnv),
     __APP_VERSION__: JSON.stringify(appVersion),
     // Vue feature flags - @milkdown/crepe 内部使用了 Vue，需要定义这些编译时标志
     __VUE_OPTIONS_API__: JSON.stringify(false),
@@ -834,12 +1156,16 @@ export default defineConfig({
     __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: JSON.stringify(false),
   },
 
+  esbuild: {
+    jsxDev: false,
+  },
+
   server: {
     port: 7200,
     host: 'localhost',
     headers: {
       'Content-Security-Policy':
-        "upgrade-insecure-requests; default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://us.i.posthog.com https://us-assets.i.posthog.com https://wiki.tu-zi.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss: data:; frame-ancestors 'self' localhost:* 127.0.0.1:* https://api.tu-zi.com;",
+        "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://us.i.posthog.com https://us-assets.i.posthog.com https://wiki.tu-zi.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' http: https: ws: wss: data:; frame-ancestors 'self' localhost:* 127.0.0.1:* https://api.tu-zi.com;",
     },
   },
 
@@ -862,12 +1188,23 @@ export default defineConfig({
       brotliSize: true,
     }),
     deferEntryAssetsPlugin(),
+    rewriteEntryAssetsToCDNPlugin(),
     rewriteManifestAssetsToCDNPlugin(),
     precacheManifestPlugin(),
     idlePrefetchManifestPlugin(),
   ],
 
   resolve: {
+    alias: [
+      ...diagramEngineAliases,
+      {
+        find: /^tdesign-react$/,
+        replacement: path.resolve(
+          __dirname,
+          '../../packages/drawnix/src/utils/tdesign.ts'
+        ),
+      },
+    ],
     dedupe: ['react', 'react-dom'],
   },
 
@@ -888,8 +1225,8 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          return resolveIdlePrefetchGroup(id);
+        manualChunks(id, context) {
+          return resolveManualChunk(id, context);
         },
       },
     },

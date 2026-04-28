@@ -257,6 +257,47 @@ describe('task-queue-service image edit retry persistence', () => {
     ]);
   });
 
+  it('allows explicit manual retry for completed image tasks and clears stale results', async () => {
+    const { taskQueueService, mocks } = await setupTaskQueueServiceHarness([
+      TaskStatus.COMPLETED,
+      TaskStatus.COMPLETED,
+    ]);
+
+    const task = taskQueueService.createTask(
+      {
+        prompt: 'Regenerate completed image',
+        model: 'gpt-image-2',
+        size: '1x1',
+      },
+      TaskType.IMAGE
+    );
+
+    await flushAsyncWork();
+
+    expect(mocks.generateImage).toHaveBeenCalledTimes(1);
+    expect(taskQueueService.getTask(task.id)?.status).toBe(
+      TaskStatus.COMPLETED
+    );
+    expect(taskQueueService.getTask(task.id)?.result).toBeTruthy();
+
+    taskQueueService.retryTask(task.id, { allowCompleted: true });
+
+    expect(taskQueueService.getTask(task.id)?.status).toBe(
+      TaskStatus.PROCESSING
+    );
+    expect(taskQueueService.getTask(task.id)?.result).toBeUndefined();
+    expect(taskQueueService.getTask(task.id)?.insertedToCanvas).toBe(false);
+
+    await flushAsyncWork();
+
+    expect(mocks.generateImage).toHaveBeenCalledTimes(2);
+    expect(mocks.generateImage.mock.calls[1]?.[0]).toMatchObject({
+      prompt: 'Regenerate completed image',
+      model: 'gpt-image-2',
+      size: '1x1',
+    });
+  });
+
   it('rehydrates stripped edit params after restoreTasks before retry execution', async () => {
     const { taskQueueService, storedTasks, mocks } =
       await setupTaskQueueServiceHarness([TaskStatus.COMPLETED]);

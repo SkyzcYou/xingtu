@@ -64,6 +64,7 @@ import {
   PPT_EDITOR_OPEN_EVENT,
   type PPTEditorOpenEventDetail,
 } from '../../services/ppt/ppt-ui-events';
+import { analytics } from '../../utils/posthog-analytics';
 import './project-drawer.scss';
 
 export interface ProjectDrawerProps {
@@ -88,6 +89,28 @@ export const PROJECT_DRAWER_WIDTH_KEY = 'project-drawer-width';
 export const PROJECT_DRAWER_ACTIVE_TAB_KEY = 'project-drawer-active-tab';
 
 type ProjectDrawerTab = 'boards' | 'frames' | 'layers';
+
+function getFileSizeBucket(size: number): string {
+  if (size <= 0) return '0';
+  if (size < 1024 * 1024) return '<1MB';
+  if (size < 10 * 1024 * 1024) return '1-10MB';
+  if (size < 50 * 1024 * 1024) return '10-50MB';
+  if (size < 200 * 1024 * 1024) return '50-200MB';
+  return '200MB+';
+}
+
+function trackProjectDrawerAction(
+  action: string,
+  params: Record<string, unknown> = {}
+): void {
+  analytics.trackUIInteraction({
+    area: 'project_drawer',
+    action,
+    control: 'workspace_manager',
+    source: 'project_drawer',
+    metadata: params,
+  });
+}
 
 const PROJECT_DRAWER_TABS: readonly ProjectDrawerTab[] = [
   'boards',
@@ -1373,8 +1396,12 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
   // Handle export
   const handleExport = useCallback(async () => {
     if (isExporting) return;
+    const startedAt = Date.now();
 
     try {
+      trackProjectDrawerAction('workspace_export', {
+        status: 'start',
+      });
       setIsExporting(true);
       setShowExportDialog(true);
       setExportProgress({ progress: 0, message: '准备导出...' });
@@ -1390,9 +1417,24 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
         },
       });
       workspaceExportService.downloadZip(blob);
+      trackProjectDrawerAction('workspace_export', {
+        status: 'success',
+        durationMs: Date.now() - startedAt,
+        duration_ms: Date.now() - startedAt,
+        fileSize: blob.size,
+        file_size: blob.size,
+        fileSizeBucket: getFileSizeBucket(blob.size),
+        file_size_bucket: getFileSizeBucket(blob.size),
+      });
       MessagePlugin.success('导出成功');
     } catch (error: any) {
       console.error('[ProjectDrawer] Export failed:', error);
+      trackProjectDrawerAction('workspace_export', {
+        status: 'failed',
+        durationMs: Date.now() - startedAt,
+        duration_ms: Date.now() - startedAt,
+        error: error.message || 'export_failed',
+      });
       MessagePlugin.error(`导出失败: ${error.message}`);
     } finally {
       setIsExporting(false);
@@ -1402,6 +1444,9 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
 
   // Handle import button click
   const handleImportClick = useCallback(() => {
+    trackProjectDrawerAction('workspace_import_file_picker', {
+      status: 'start',
+    });
     fileInputRef.current?.click();
   }, []);
 
@@ -1410,16 +1455,32 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      const startedAt = Date.now();
 
       // Reset input
       e.target.value = '';
 
       // Validate file type
       if (!file.name.endsWith('.zip')) {
+        trackProjectDrawerAction('workspace_import', {
+          status: 'failed',
+          reason: 'invalid_file_type',
+          fileSize: file.size,
+          file_size: file.size,
+          fileSizeBucket: getFileSizeBucket(file.size),
+          file_size_bucket: getFileSizeBucket(file.size),
+        });
         MessagePlugin.error('请选择 ZIP 文件');
         return;
       }
 
+      trackProjectDrawerAction('workspace_import', {
+        status: 'start',
+        fileSize: file.size,
+        file_size: file.size,
+        fileSizeBucket: getFileSizeBucket(file.size),
+        file_size_bucket: getFileSizeBucket(file.size),
+      });
       setShowImportDialog(true);
       setIsImporting(true);
       setImportProgress({ progress: 0, message: '准备导入...' });
@@ -1438,12 +1499,46 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
         });
 
         if (result.success) {
+          trackProjectDrawerAction('workspace_import', {
+            status: 'success',
+            durationMs: Date.now() - startedAt,
+            duration_ms: Date.now() - startedAt,
+            fileSize: file.size,
+            file_size: file.size,
+            fileSizeBucket: getFileSizeBucket(file.size),
+            file_size_bucket: getFileSizeBucket(file.size),
+            folderCount: result.folders,
+            folder_count: result.folders,
+            boardCount: result.boards,
+            board_count: result.boards,
+            assetCount: result.assets,
+            asset_count: result.assets,
+            errorCount: result.errors.length,
+            error_count: result.errors.length,
+          });
           MessagePlugin.success(
             `导入成功：${result.folders} 个文件夹，${result.boards} 个画板，${result.assets} 个素材`
           );
           // Reload the page to refresh workspace
           void safeReload();
         } else {
+          trackProjectDrawerAction('workspace_import', {
+            status: result.errors.length > 0 ? 'partial' : 'failed',
+            durationMs: Date.now() - startedAt,
+            duration_ms: Date.now() - startedAt,
+            fileSize: file.size,
+            file_size: file.size,
+            fileSizeBucket: getFileSizeBucket(file.size),
+            file_size_bucket: getFileSizeBucket(file.size),
+            folderCount: result.folders,
+            folder_count: result.folders,
+            boardCount: result.boards,
+            board_count: result.boards,
+            assetCount: result.assets,
+            asset_count: result.assets,
+            errorCount: result.errors.length,
+            error_count: result.errors.length,
+          });
           if (result.errors.length > 0) {
             MessagePlugin.warning(
               `导入完成，但有 ${result.errors.length} 个错误`
@@ -1455,6 +1550,16 @@ export const ProjectDrawer: React.FC<ProjectDrawerProps> = ({
         }
       } catch (error: any) {
         console.error('[ProjectDrawer] Import failed:', error);
+        trackProjectDrawerAction('workspace_import', {
+          status: 'failed',
+          durationMs: Date.now() - startedAt,
+          duration_ms: Date.now() - startedAt,
+          fileSize: file.size,
+          file_size: file.size,
+          fileSizeBucket: getFileSizeBucket(file.size),
+          file_size_bucket: getFileSizeBucket(file.size),
+          error: error.message || 'import_failed',
+        });
         MessagePlugin.error(`导入失败: ${error.message}`);
       } finally {
         setIsImporting(false);

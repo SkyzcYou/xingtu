@@ -7,6 +7,7 @@
 
 import { taskStorageReader } from '../task-storage-reader';
 import type { Task, TaskStatus } from '../../types/task.types';
+import { IMAGE_GENERATION_TIMEOUT_MS } from '../../constants/TASK_CONSTANTS';
 
 /**
  * 轮询选项
@@ -14,7 +15,7 @@ import type { Task, TaskStatus } from '../../types/task.types';
 export interface PollingOptions {
   /** 轮询间隔（毫秒），默认 1000 */
   interval?: number;
-  /** 最大等待时间（毫秒），默认 10 分钟 */
+  /** 最大等待时间（毫秒），默认 15 分钟 */
   timeout?: number;
   /** 取消信号 */
   signal?: AbortSignal;
@@ -46,7 +47,7 @@ export async function waitForTaskCompletion(
 ): Promise<PollingResult> {
   const {
     interval = 1000,
-    timeout = 10 * 60 * 1000, // 10 分钟
+    timeout = IMAGE_GENERATION_TIMEOUT_MS,
     signal,
     onProgress,
   } = options;

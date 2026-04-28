@@ -135,6 +135,68 @@ const MAX_RESOURCE_SUMMARY_ITEMS = 8;
 /** 错误上下文中的字符串最大长度 */
 const MAX_CONTEXT_STRING_LENGTH = 240;
 
+function getErrorName(value: unknown): string {
+  if (value && typeof value === 'object' && 'name' in value) {
+    const name = (value as { name?: unknown }).name;
+    return typeof name === 'string' ? name : '';
+  }
+  return '';
+}
+
+function getErrorMessage(value: unknown, fallback = ''): string {
+  if (value && typeof value === 'object' && 'message' in value) {
+    const message = (value as { message?: unknown }).message;
+    if (typeof message === 'string') {
+      return message;
+    }
+  }
+
+  return typeof value === 'string' ? value : fallback;
+}
+
+function isExpectedBrowserCapabilityError(
+  value: unknown,
+  fallbackMessage = ''
+): boolean {
+  const name = getErrorName(value);
+  const message = getErrorMessage(value, fallbackMessage);
+  const isAbortError =
+    name === 'AbortError' ||
+    message.startsWith('AbortError:') ||
+    message.includes('AbortError');
+  const isNotAllowedError =
+    name === 'NotAllowedError' || message.startsWith('NotAllowedError:');
+  const isDataError = name === 'DataError' || message.startsWith('DataError:');
+
+  if (
+    message.includes(
+      'ResizeObserver loop completed with undelivered notifications'
+    ) ||
+    message.includes('ResizeObserver loop limit exceeded')
+  ) {
+    return true;
+  }
+
+  if (
+    isAbortError &&
+    (message.includes('The user aborted a request') ||
+      message.includes("Failed to execute 'showOpenFilePicker'") ||
+      message.includes("Failed to execute 'showSaveFilePicker'"))
+  ) {
+    return true;
+  }
+
+  if (
+    isNotAllowedError &&
+    message.includes("Failed to execute 'write' on 'Clipboard'") &&
+    message.includes('permissions policy')
+  ) {
+    return true;
+  }
+
+  return isDataError && message.includes('No key or key range specified');
+}
+
 // ==================== 内部状态 ====================
 
 let snapshotInterval: number | null = null;
@@ -632,11 +694,7 @@ export function stopPeriodicSnapshots(): void {
 export function setupErrorCapture(): void {
   // JavaScript 未捕获错误
   window.addEventListener('error', (event) => {
-    if (
-      event.error instanceof DOMException &&
-      (event.error.name === 'AbortError' ||
-        event.error.name === 'NotAllowedError')
-    ) {
+    if (isExpectedBrowserCapabilityError(event.error, event.message)) {
       return;
     }
 
@@ -670,13 +728,7 @@ export function setupErrorCapture(): void {
     const errorMessage = reason?.message || String(reason) || '';
     const errorStack = reason?.stack || '';
 
-    if (
-      reason instanceof DOMException &&
-      (reason.name === 'AbortError' ||
-        reason.name === 'NotAllowedError' ||
-        (reason.name === 'DataError' &&
-          errorMessage.includes('No key or key range specified')))
-    ) {
+    if (isExpectedBrowserCapabilityError(reason, errorMessage)) {
       return;
     }
 

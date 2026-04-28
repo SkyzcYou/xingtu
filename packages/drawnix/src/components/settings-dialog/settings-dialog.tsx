@@ -58,8 +58,8 @@ import {
   getRouteProfileId,
   invocationPresetsSettings,
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
-  providerCatalogsSettings,
   providerProfilesSettings,
+  settingsManager,
   TUZI_MIX_PROVIDER_PROFILE_ID,
   TUZI_CODEX_PROVIDER_PROFILE_ID,
   TUZI_ORIGINAL_PROVIDER_PROFILE_ID,
@@ -621,7 +621,6 @@ export const SettingsDialog = ({
   const [imageModelName, setImageModelName] = useState('');
   const [videoModelName, setVideoModelName] = useState('');
   const [textModelName, setTextModelName] = useState('');
-  const [showProviderApiKey, setShowProviderApiKey] = useState(false);
   const [showWorkZoneCard, setShowWorkZoneCard] = useState(true);
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [discoveryDialogOpen, setDiscoveryDialogOpen] = useState(false);
@@ -634,6 +633,7 @@ export const SettingsDialog = ({
   const [collapsedGroups, setCollapsedGroups] = useState<Set<ModelType>>(
     new Set()
   );
+  const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
 
   const toggleGroupCollapse = (type: ModelType) => {
     setCollapsedGroups((prev) => {
@@ -703,6 +703,10 @@ export const SettingsDialog = ({
     appState.openSettings && currentDraftSignature !== initialDraftSignature;
 
   useEffect(() => {
+    setIsApiKeyVisible(false);
+  }, [selectedProfile?.id]);
+
+  useEffect(() => {
     const target = dialogRef.current;
 
     if (!target || typeof ResizeObserver === 'undefined') {
@@ -760,7 +764,6 @@ export const SettingsDialog = ({
       },
     });
     setSelectedProfileId(profileId);
-    setShowProviderApiKey(false);
 
     if (isCompactLayout) {
       setCompactProviderMode('detail');
@@ -822,6 +825,7 @@ export const SettingsDialog = ({
       return;
     }
 
+    setIsApiKeyVisible(false);
     const nextProfiles = cloneValue(providerProfilesSettings.get());
     const nextPresets = cloneValue(invocationPresetsSettings.get());
     const nextActivePresetId =
@@ -874,7 +878,6 @@ export const SettingsDialog = ({
     setCompactPresetMode('catalog');
     setModelSearchQuery('');
     setDiscoveryDialogOpen(false);
-    setShowProviderApiKey(false);
     setInitialDraftSignature(
       createSettingsDraftSignature({
         profiles: nextProfiles,
@@ -1375,8 +1378,12 @@ export const SettingsDialog = ({
 
     if (hasPendingChanges) {
       const savingMessage = MessagePlugin.loading('正在保存当前配置...', 0);
-      const saved = await persistDrafts(false);
-      MessagePlugin.close(savingMessage);
+      let saved = false;
+      try {
+        saved = await persistDrafts(false);
+      } finally {
+        MessagePlugin.close(savingMessage);
+      }
       if (!saved) {
         return;
       }
@@ -1640,24 +1647,23 @@ export const SettingsDialog = ({
         );
       });
 
-      await geminiSettings.update({
-        apiKey: legacyProfile?.apiKey || '',
-        baseUrl: normalizedLegacyBaseUrl,
-        audioModelName: normalizedActiveAudioModel,
-        imageModelName: normalizedActiveImageModel,
-        videoModelName: normalizedActiveVideoModel,
-        textModelName: normalizedActiveTextModel,
-      });
-      await providerProfilesSettings.update(normalizedProfiles);
-      await providerCatalogsSettings.update(
-        runtimeModelDiscovery
+      await settingsManager.updateSettings({
+        gemini: {
+          ...geminiSettings.get(),
+          apiKey: legacyProfile?.apiKey || '',
+          baseUrl: normalizedLegacyBaseUrl,
+          audioModelName: normalizedActiveAudioModel,
+          imageModelName: normalizedActiveImageModel,
+          videoModelName: normalizedActiveVideoModel,
+          textModelName: normalizedActiveTextModel,
+        },
+        providerProfiles: normalizedProfiles,
+        providerCatalogs: runtimeModelDiscovery
           .getCatalogs()
-          .filter((catalog) => profileIds.has(catalog.profileId))
-      );
-      await invocationPresetsSettings.update(normalizedPresets);
-      await invocationPresetsSettings.setActivePresetId(
-        normalizedActivePresetId
-      );
+          .filter((catalog) => profileIds.has(catalog.profileId)),
+        invocationPresets: normalizedPresets,
+        activePresetId: normalizedActivePresetId,
+      });
 
       try {
         localStorage.setItem(
@@ -1754,8 +1760,12 @@ export const SettingsDialog = ({
 
     void (async () => {
       const savingMessage = MessagePlugin.loading('正在保存设置...', 0);
-      const saved = await persistDrafts(true);
-      MessagePlugin.close(savingMessage);
+      let saved = false;
+      try {
+        saved = await persistDrafts(true);
+      } finally {
+        MessagePlugin.close(savingMessage);
+      }
 
       if (!saved) {
         MessagePlugin.warning('设置尚未保存，请检查后重试');
@@ -2274,16 +2284,12 @@ export const SettingsDialog = ({
                 }}
               >
                 <div
-                  style={{
-                    position: 'relative',
-                    flex: isCompactLayout ? 'none' : 1,
-                    width: '100%',
-                  }}
+                  className="settings-dialog__secret-input-wrap"
+                  style={{ flex: isCompactLayout ? 'none' : 1 }}
                 >
                   <input
-                    type={showProviderApiKey ? 'text' : 'password'}
-                    className="settings-dialog__input"
-                    style={{ width: '100%', paddingRight: '40px' }}
+                    type={isApiKeyVisible ? 'text' : 'password'}
+                    className="settings-dialog__input settings-dialog__secret-input"
                     value={selectedProfile.apiKey}
                     onChange={(event) =>
                       updateProfile(selectedProfile.id, (profile) => ({
@@ -2295,25 +2301,15 @@ export const SettingsDialog = ({
                   />
                   <button
                     type="button"
-                    aria-label={showProviderApiKey ? '隐藏 API Key' : '显示 API Key'}
-                    title={showProviderApiKey ? '隐藏 API Key' : '显示 API Key'}
-                    onClick={() => setShowProviderApiKey((prev) => !prev)}
-                    style={{
-                      position: 'absolute',
-                      top: '50%',
-                      right: 10,
-                      transform: 'translateY(-50%)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: 'none',
-                      background: 'transparent',
-                      padding: 0,
-                      color: '#666',
-                      cursor: 'pointer',
-                    }}
+                    className="settings-dialog__secret-toggle"
+                    aria-label={
+                      isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'
+                    }
+                    title={isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setIsApiKeyVisible((visible) => !visible)}
                   >
-                    {showProviderApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                    {isApiKeyVisible ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
                 <button

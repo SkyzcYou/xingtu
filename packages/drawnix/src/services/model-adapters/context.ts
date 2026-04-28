@@ -9,6 +9,7 @@ import {
   type ResolvedInvocationRoute,
 } from '../../utils/settings-manager';
 import type { ModelType } from '../../constants/model-config';
+import { IMAGE_GENERATION_TIMEOUT_MS } from '../../constants/TASK_CONSTANTS';
 import { resolveInvocationPlanFromRoute } from '../provider-routing';
 import type { AdapterContext } from './types';
 
@@ -26,6 +27,7 @@ export const getAdapterContextFromSettings = (
   if (plan) {
     return {
       baseUrl: plan.provider.baseUrl,
+      operation: routeType,
       apiKey: plan.provider.apiKey,
       authType: plan.provider.authType,
       extraHeaders: plan.provider.extraHeaders,
@@ -40,6 +42,7 @@ export const getAdapterContextFromSettings = (
   );
   return {
     baseUrl: route.baseUrl,
+    operation: routeType,
     apiKey: route.apiKey,
     authType: 'bearer',
     provider: null,
@@ -74,10 +77,15 @@ export function sendAdapterRequest(
   request: ProviderTransportRequest,
   baseUrlOverride?: string
 ): Promise<Response> {
+  const timeoutMs =
+    request.timeoutMs ??
+    (context.operation === 'image' ? IMAGE_GENERATION_TIMEOUT_MS : undefined);
+
   return providerTransport.send(
     buildProviderContextFromAdapterContext(context, baseUrlOverride),
     {
       ...request,
+      timeoutMs,
       fetcher: context.fetcher || request.fetcher,
     }
   );

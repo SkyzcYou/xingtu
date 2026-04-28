@@ -10,7 +10,7 @@ import {
   RectangleClient,
   getSelectedElements,
 } from '@plait/core';
-import { isFrameElement, PlaitFrame } from '../types/frame.types';
+import { isFrameElement, type PlaitFrame } from '../types/frame.types';
 
 /** 工具栏右边界兜底值：默认贴边 + 58px 工具栏 */
 const DEFAULT_TOOLBAR_RIGHT_EDGE = 58;
@@ -61,6 +61,85 @@ function getToolbarOcclusion(totalWidth: number): {
   };
 }
 
+function fitRectInViewport(
+  board: PlaitBoard,
+  targetRect: RectangleClient
+): boolean {
+  if (targetRect.width <= 0 || targetRect.height <= 0) return false;
+
+  const container = PlaitBoard.getBoardContainer(board);
+  const totalWidth = container.clientWidth;
+  const totalHeight = container.clientHeight;
+
+  // 工具栏/抽屉遮挡：工具栏拖到右侧后，抽屉会改为向左展开
+  const toolbarOcclusion = getToolbarOcclusion(totalWidth);
+  const leftOccluded = toolbarOcclusion.left;
+
+  // 右侧遮挡：ChatDrawer（如果打开）
+  const chatDrawerEl = document.querySelector(
+    '.chat-drawer--open'
+  ) as HTMLElement | null;
+  const rightOccluded = Math.max(
+    toolbarOcclusion.right,
+    chatDrawerEl ? chatDrawerEl.offsetWidth : 0
+  );
+
+  const availableWidth =
+    totalWidth - leftOccluded - rightOccluded - FIT_PADDING * 2;
+  const availableHeight =
+    totalHeight - TOP_BAR_HEIGHT - BOTTOM_BAR_HEIGHT - FIT_PADDING * 2;
+
+  if (availableWidth <= 0 || availableHeight <= 0) return false;
+
+  const zoom = Math.min(
+    availableWidth / targetRect.width,
+    availableHeight / targetRect.height,
+    3
+  );
+
+  const visibleCenterX = leftOccluded + FIT_PADDING + availableWidth / 2;
+  const visibleCenterY = TOP_BAR_HEIGHT + FIT_PADDING + availableHeight / 2;
+  const targetCenterX = targetRect.x + targetRect.width / 2;
+  const targetCenterY = targetRect.y + targetRect.height / 2;
+  const origination: [number, number] = [
+    targetCenterX - visibleCenterX / zoom,
+    targetCenterY - visibleCenterY / zoom,
+  ];
+
+  BoardTransforms.updateViewport(board, origination, zoom);
+  return true;
+}
+
+function getAllFrameBounds(board: PlaitBoard): RectangleClient | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const el of board.children) {
+    if (!isFrameElement(el)) continue;
+
+    const rect = RectangleClient.getRectangleByPoints(el.points);
+    if (rect.width <= 0 || rect.height <= 0) continue;
+
+    minX = Math.min(minX, rect.x);
+    minY = Math.min(minY, rect.y);
+    maxX = Math.max(maxX, rect.x + rect.width);
+    maxY = Math.max(maxY, rect.y + rect.height);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
+    return null;
+  }
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
 /**
  * 将视口自适应到指定 Frame 或自动选择一个 Frame
  * @returns 是否成功定位到 Frame
@@ -91,50 +170,16 @@ export function fitFrame(board: PlaitBoard): boolean {
   // 2. 计算 Frame 的世界坐标矩形
   const frameRect = RectangleClient.getRectangleByPoints(targetFrame.points);
 
-  // 3. 计算可视区域（排除遮挡元素）
-  const container = PlaitBoard.getBoardContainer(board);
-  const totalWidth = container.clientWidth;
-  const totalHeight = container.clientHeight;
+  return fitRectInViewport(board, frameRect);
+}
 
-  // 工具栏/抽屉遮挡：工具栏拖到右侧后，抽屉会改为向左展开
-  const toolbarOcclusion = getToolbarOcclusion(totalWidth);
-  const leftOccluded = toolbarOcclusion.left;
+/**
+ * 将视口自适应到所有 PPT 页面（Frame）的联合边界
+ * @returns 是否成功定位到页面全局范围
+ */
+export function fitAllPPTFrames(board: PlaitBoard): boolean {
+  const frameBounds = getAllFrameBounds(board);
+  if (!frameBounds) return false;
 
-  // 右侧遮挡：ChatDrawer（如果打开）
-  const chatDrawerEl = document.querySelector('.chat-drawer--open') as HTMLElement;
-  const rightOccluded = Math.max(
-    toolbarOcclusion.right,
-    chatDrawerEl ? chatDrawerEl.offsetWidth : 0
-  );
-
-  // 可用视口尺寸
-  const availableWidth = totalWidth - leftOccluded - rightOccluded - FIT_PADDING * 2;
-  const availableHeight = totalHeight - TOP_BAR_HEIGHT - BOTTOM_BAR_HEIGHT - FIT_PADDING * 2;
-
-  if (availableWidth <= 0 || availableHeight <= 0) return false;
-
-  // 4. 计算缩放比例（不超过 3x）
-  const zoom = Math.min(
-    availableWidth / frameRect.width,
-    availableHeight / frameRect.height,
-    3
-  );
-
-  // 5. 计算 origination（视口左上角的世界坐标）
-  // 可视区域中心在屏幕坐标中的位置
-  const visibleCenterX = leftOccluded + FIT_PADDING + availableWidth / 2;
-  const visibleCenterY = TOP_BAR_HEIGHT + FIT_PADDING + availableHeight / 2;
-
-  // Frame 中心的世界坐标
-  const frameCenterX = frameRect.x + frameRect.width / 2;
-  const frameCenterY = frameRect.y + frameRect.height / 2;
-
-  // origination = Frame 中心 - 可视区域中心偏移量（换算成世界坐标）
-  const origination: [number, number] = [
-    frameCenterX - visibleCenterX / zoom,
-    frameCenterY - visibleCenterY / zoom,
-  ];
-
-  BoardTransforms.updateViewport(board, origination, zoom);
-  return true;
+  return fitRectInViewport(board, frameBounds);
 }

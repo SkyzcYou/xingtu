@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { MessagePlugin } from 'tdesign-react';
+import { MessagePlugin } from '../../utils/message-plugin';
 import {
   Clipboard,
   Edit3,

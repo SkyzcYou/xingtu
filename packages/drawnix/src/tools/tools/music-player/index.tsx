@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ToolPluginModule } from '../../registry';
+import type { ToolPluginModule } from '../../types';
 import { ToolCategory } from '../../../types/toolbox.types';
 import { Music4 } from 'lucide-react';
 import { MusicPlayerTool } from './MusicPlayerTool';

@@ -222,14 +222,18 @@ class GenerationAPIService {
       hasReferenceImage: hasRefImage,
     });
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
     try {
       // Get timeout for this task type
       const timeout =
-        TASK_TIMEOUT[type.toUpperCase() as keyof typeof TASK_TIMEOUT];
+        TASK_TIMEOUT[type.toUpperCase() as keyof typeof TASK_TIMEOUT] ??
+        TASK_TIMEOUT.IMAGE;
 
       // Create timeout promise
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
+          abortController.abort();
           reject(new Error('TIMEOUT'));
         }, timeout);
       });
@@ -308,6 +312,9 @@ class GenerationAPIService {
 
       throw error;
     } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       // Cleanup abort controller
       this.abortControllers.delete(taskId);
     }
@@ -515,9 +522,15 @@ class GenerationAPIService {
     routeModel?: string | ModelRef | null
   ): Promise<TaskResult> {
     const timeout = TASK_TIMEOUT.IMAGE;
+    const abortController = new AbortController();
+    this.abortControllers.set(taskId, abortController);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('TIMEOUT')), timeout);
+      timeoutId = setTimeout(() => {
+        abortController.abort();
+        reject(new Error('TIMEOUT'));
+      }, timeout);
     });
 
     try {
@@ -525,6 +538,7 @@ class GenerationAPIService {
         asyncImageAPIService.resumePolling(remoteId, {
           interval: 5000,
           routeModel,
+          signal: abortController.signal,
           onProgress: (progress) => {
             taskQueueService.updateTaskProgress(taskId, progress);
           },
@@ -548,6 +562,13 @@ class GenerationAPIService {
         (wrappedError as any).httpStatus = error.httpStatus;
       }
       throw wrappedError;
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      if (this.abortControllers.get(taskId) === abortController) {
+        this.abortControllers.delete(taskId);
+      }
     }
   }
 

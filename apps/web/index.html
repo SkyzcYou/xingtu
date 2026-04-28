@@ -159,7 +159,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
-    <meta name="app-version" content="0.6.80" />
+    <meta name="app-version" content="0.6.88" />
     <style>
       :root {
         --app-boot-bg: radial-gradient(
@@ -232,6 +232,7 @@
         font-weight: 700;
         letter-spacing: 0.02em;
         white-space: nowrap;
+        text-decoration: none;
       }
 
       .app-boot-title {
@@ -518,7 +519,13 @@
       aria-label="应用正在加载"
     >
       <div class="app-boot-card">
-        <div class="app-boot-mark" aria-hidden="true">🌟星图ai🌟</div>
+        <a
+          class="app-boot-mark"
+          href="https://opentu.ai/"
+          data-official-site-link
+          aria-label="打开 Xingtu 星图官网"
+          >Xingtu 星图</a
+        >
         <p class="app-boot-title" data-app-boot-title>正在唤起工作台</p>
         <p class="app-boot-tip" data-app-boot-tip>
           脚本与资源加载中，马上就好...
@@ -676,11 +683,32 @@
         var BOOT_CDN_PACKAGE_NAME = 'aitu-app';
         var BOOT_CDN_BASE_URL = 'https://cdn.jsdelivr.net/npm/';
         var BOOT_LOCAL_RETRY_STORAGE_KEY = '__OPENTU_BOOT_LOCAL_RETRY_AT__';
+        var BOOT_IMPORT_RETRY_STORAGE_KEY = '__OPENTU_BOOT_IMPORT_RETRY_AT__';
         var BOOT_LOCAL_RETRY_TTL_MS = 2 * 60 * 1000;
         var forceLocalBootAssets = false;
         window.__OPENTU_START_MAIN_ENTRY__ = new Promise(function (resolve) {
           resolveMainEntryReady = resolve;
         });
+
+        (function setupOfficialSiteLink() {
+          try {
+            var officialSiteLink = document.querySelector(
+              '[data-official-site-link]'
+            );
+            if (!officialSiteLink) {
+              return;
+            }
+
+            if (window.location.hostname.toLowerCase() === 'opentu.ai') {
+              officialSiteLink.removeAttribute('href');
+              officialSiteLink.addEventListener('click', function (event) {
+                event.preventDefault();
+              });
+            }
+          } catch (error) {
+            // 启动页兜底逻辑不能影响主应用加载。
+          }
+        })();
 
         (function initializeBootLocalRetryFlag() {
           try {
@@ -710,6 +738,7 @@
           forceLocalBootAssets = false;
           try {
             window.sessionStorage.removeItem(BOOT_LOCAL_RETRY_STORAGE_KEY);
+            window.sessionStorage.removeItem(BOOT_IMPORT_RETRY_STORAGE_KEY);
           } catch (_error) {
             // ignore sessionStorage cleanup failures
           }
@@ -736,6 +765,123 @@
           window.location.reload();
           return true;
         }
+
+        function isRecoverableBootImportError(error) {
+          var message =
+            error && typeof error.message === 'string'
+              ? error.message
+              : String(error || '');
+
+          return (
+            /Failed to fetch dynamically imported module/i.test(message) ||
+            /Importing a module script failed/i.test(message) ||
+            /Loading chunk [\w-]+ failed/i.test(message) ||
+            /ChunkLoadError/i.test(message)
+          );
+        }
+
+        function hasBootImportRetryParam() {
+          try {
+            return new URLSearchParams(window.location.search).has(
+              '_lazy_chunk_retry'
+            );
+          } catch (_error) {
+            return window.location.search.indexOf('_lazy_chunk_retry=') !== -1;
+          }
+        }
+
+        function createBootImportRecoveryUrl() {
+          var recoveryUrl = new URL(window.location.href);
+          recoveryUrl.searchParams.set('_lazy_chunk_retry', '1');
+          recoveryUrl.searchParams.set('_t', String(Date.now()));
+          return recoveryUrl.toString();
+        }
+
+        function prepareBootImportRecovery() {
+          var tasks = [];
+
+          try {
+            if (
+              navigator.serviceWorker &&
+              navigator.serviceWorker.controller
+            ) {
+              navigator.serviceWorker.controller.postMessage({
+                type: 'RECOVER_DYNAMIC_IMPORT_FAILURE',
+                appVersion: getBootAppVersion(),
+                moduleKey: 'boot-main-entry',
+              });
+            }
+          } catch (_error) {
+            // ignore best-effort SW notification failures
+          }
+
+          try {
+            if (window.caches && typeof window.caches.keys === 'function') {
+              tasks.push(
+                window.caches.keys().then(function (cacheNames) {
+                  return Promise.all(
+                    cacheNames
+                      .filter(function (name) {
+                        return name.indexOf('drawnix-static-v') === 0;
+                      })
+                      .map(function (name) {
+                        return window.caches.delete(name);
+                      })
+                  );
+                })
+              );
+            }
+          } catch (_error) {
+            // ignore cache cleanup failures
+          }
+
+          return Promise.allSettled(tasks);
+        }
+
+        window.__OPENTU_BOOT_DYNAMIC_IMPORT_RECOVERY__ = function (error) {
+          if (!isRecoverableBootImportError(error) || isBootLocalDevelopment()) {
+            return false;
+          }
+
+          try {
+            var lastRetryAt = Number(
+              window.sessionStorage.getItem(BOOT_IMPORT_RETRY_STORAGE_KEY)
+            );
+            if (
+              isFinite(lastRetryAt) &&
+              Date.now() - lastRetryAt <= BOOT_LOCAL_RETRY_TTL_MS
+            ) {
+              return false;
+            }
+            window.sessionStorage.setItem(
+              BOOT_IMPORT_RETRY_STORAGE_KEY,
+              String(Date.now())
+            );
+          } catch (_error) {
+            if (hasBootImportRetryParam()) {
+              return false;
+            }
+          }
+
+          var recoveryUrl = createBootImportRecoveryUrl();
+          var didReload = false;
+          var reload = function () {
+            if (didReload) {
+              return;
+            }
+            didReload = true;
+            window.location.replace(recoveryUrl);
+          };
+
+          var tip = document.querySelector('[data-app-boot-tip]');
+          if (tip) {
+            tip.textContent = '启动资源已更新，正在自动刷新恢复...';
+          }
+
+          window.setTimeout(reload, 700);
+          prepareBootImportRecovery().then(reload, reload);
+          return true;
+        };
 
         function clearBootTimers() {
           if (slowTipTimer) {
@@ -1150,11 +1296,25 @@
 
         function shouldEnableEarlyServiceWorkerBootstrap() {
           try {
-            return (
-              new URLSearchParams(window.location.search).get('sw') !== '0'
-            );
+            var swParam = new URLSearchParams(window.location.search).get('sw');
+            var isLocalDev =
+              window.location.hostname === 'localhost' ||
+              window.location.hostname === '127.0.0.1';
+            if (swParam === '0') {
+              return false;
+            }
+            if (isLocalDev) {
+              return swParam === '1';
+            }
+            return true;
           } catch {
-            return window.location.search.indexOf('sw=0') === -1;
+            var isFallbackLocalDev =
+              window.location.hostname === 'localhost' ||
+              window.location.hostname === '127.0.0.1';
+            if (window.location.search.indexOf('sw=0') !== -1) {
+              return false;
+            }
+            return !isFallbackLocalDev || window.location.search.indexOf('sw=1') !== -1;
           }
         }
 
@@ -1315,8 +1475,18 @@
     <div id="root"></div>
     <script type="module">
       (async function () {
-        await (window.__OPENTU_START_MAIN_ENTRY__ || Promise.resolve());
-        await import('./src/main.tsx');
+        try {
+          await (window.__OPENTU_START_MAIN_ENTRY__ || Promise.resolve());
+          await import('./src/main.tsx');
+        } catch (error) {
+          if (
+            window.__OPENTU_BOOT_DYNAMIC_IMPORT_RECOVERY__ &&
+            window.__OPENTU_BOOT_DYNAMIC_IMPORT_RECOVERY__(error)
+          ) {
+            return;
+          }
+          throw error;
+        }
       })();
     </script>
   </body>
@@ -1388,22 +1558,60 @@
       var isIgnorableExceptionEvent = function (event) {
         if (!event || event.event !== '$exception') return false;
         var properties = event.properties || {};
-        var values = properties.$exception_values || [];
-        var list = properties.$exception_list || [];
         var messages = [];
 
-        if (Array.isArray(values)) messages = messages.concat(values);
-        if (Array.isArray(list)) {
-          for (var i = 0; i < list.length; i++) {
-            if (list[i] && list[i].value) messages.push(list[i].value);
+        var appendMessages = function (value) {
+          if (!value) return;
+          if (typeof value === 'string') {
+            messages.push(value);
+            if (
+              value.length < 2000 &&
+              (value.charAt(0) === '[' || value.charAt(0) === '{')
+            ) {
+              try {
+                appendMessages(JSON.parse(value));
+              } catch (_) {}
+            }
+            return;
           }
-        }
+
+          if (Array.isArray(value)) {
+            for (var i = 0; i < value.length; i++) {
+              appendMessages(value[i]);
+            }
+            return;
+          }
+
+          if (typeof value === 'object') {
+            if (typeof value.value === 'string') messages.push(value.value);
+            if (typeof value.message === 'string') messages.push(value.message);
+            if (typeof value.name === 'string') messages.push(value.name);
+          }
+        };
+
+        appendMessages(properties.$exception_values);
+        appendMessages(properties.$exception_list);
+        appendMessages(properties.$exception_message);
+        appendMessages(properties.$exception_type);
+        appendMessages(properties.$exception_types);
+        appendMessages(properties.message);
+        appendMessages(properties.name);
+        appendMessages(event.exception);
+        appendMessages(event.error);
 
         var text = messages.join('\n');
         return (
+          text.indexOf(
+            'ResizeObserver loop completed with undelivered notifications'
+          ) !== -1 ||
+          text.indexOf('ResizeObserver loop limit exceeded') !== -1 ||
           (text.indexOf("Failed to execute 'write' on 'Clipboard'") !== -1 &&
             text.indexOf('permissions policy') !== -1) ||
-          text.indexOf("Failed to execute 'showOpenFilePicker'") !== -1 ||
+          ((text.indexOf('AbortError') !== -1 ||
+            text.indexOf('The user aborted a request') !== -1) &&
+            (text.indexOf("Failed to execute 'showOpenFilePicker'") !== -1 ||
+              text.indexOf("Failed to execute 'showSaveFilePicker'") !== -1 ||
+              text.indexOf('The user aborted a request') !== -1)) ||
           text.indexOf('No key or key range specified') !== -1
         );
       };

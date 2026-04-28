@@ -11,6 +11,7 @@ import {
 import { useEffect, useRef } from 'react';
 import {
   consumeIgnoredViewportScroll,
+  refreshSelectedElementActiveSectionsForViewportChange,
   updateZoomFromCurrentViewport,
 } from '../utils/viewport';
 import { useEventListener } from './use-event-listener';
@@ -86,6 +87,7 @@ const useBoardEvent = (
       initializeViewportContainer(board);
       initializeViewBox(board);
       updateViewportOffset(board);
+      refreshSelectedElementActiveSectionsForViewportChange(board);
     });
     resizeObserver.observe(PlaitBoard.getBoardContainer(board));
     return () => {

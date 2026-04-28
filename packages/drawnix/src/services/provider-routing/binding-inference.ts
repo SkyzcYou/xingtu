@@ -4,7 +4,7 @@ import {
   type ModelConfig,
 } from '../../constants/model-config';
 import type { PricingEndpointInfo } from '../../utils/model-pricing-types';
-import type { ImageApiCompatibility } from '../../utils/settings-manager';
+import type { ImageApiCompatibility } from '../../utils/settings-types';
 import {
   OFFICIAL_GPT_IMAGE_EDIT_REQUEST_SCHEMA,
   TUZI_GPT_IMAGE_EDIT_REQUEST_SCHEMA,

@@ -4,7 +4,6 @@
  */
 
 import { logDebug, logInfo, logSuccess, logWarning, logError } from './sync-log-service';
-import JSZip from 'jszip';
 import { dataSerializer } from './data-serializer';
 import { mediaCollector } from './media-collector';
 import { unifiedCacheService } from '../unified-cache-service';
@@ -121,6 +120,7 @@ class LocalExportService {
     };
 
     try {
+      const { default: JSZip } = await import('jszip');
       const zip = new JSZip();
 
       // 阶段 1：收集同步数据
@@ -288,6 +288,7 @@ class LocalExportService {
 
     try {
       onProgress?.(5, '正在读取文件...', 'collecting');
+      const { default: JSZip } = await import('jszip');
       const zip = await JSZip.loadAsync(file);
 
       onProgress?.(10, '正在验证文件格式...', 'collecting');

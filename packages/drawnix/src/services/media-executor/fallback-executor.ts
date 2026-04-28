@@ -66,6 +66,7 @@ import {
   executeImageViaAdapter,
   executeVideoViaAdapter,
 } from './fallback-adapter-routes';
+import { IMAGE_GENERATION_TIMEOUT_MS } from '../../constants/TASK_CONSTANTS';
 
 function inferAuthTypeFromRoute(
   route: ReturnType<typeof resolveInvocationRoute>
@@ -300,6 +301,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
           },
           body: JSON.stringify(requestBody),
           signal: options?.signal,
+          timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
         }
       );
 

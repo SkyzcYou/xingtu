@@ -6,13 +6,18 @@
  */
 
 /**
+ * Image generation timeout for model calls, polling, and task waits.
+ */
+export const IMAGE_GENERATION_TIMEOUT_MS = 15 * 60 * 1000;
+
+/**
  * Task timeout durations (in milliseconds)
  * Different timeouts for different content types
  * This is the total task timeout, not HTTP request timeout
  */
 export const TASK_TIMEOUT = {
-  /** Image generation task timeout: 45 minutes */
-  IMAGE: 45 * 60 * 1000,
+  /** Image generation task timeout: 15 minutes */
+  IMAGE: IMAGE_GENERATION_TIMEOUT_MS,
   /** Video generation task timeout: 1.5 hours (90 minutes) */
   VIDEO: 90 * 60 * 1000,
   /** Audio generation task timeout: 30 minutes */

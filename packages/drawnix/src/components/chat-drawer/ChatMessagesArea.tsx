@@ -3,7 +3,7 @@ import { WorkflowMessageBubble } from './WorkflowMessageBubble';
 import { UserMessageBubble } from './UserMessageBubble';
 import type { WorkflowMessageData } from '../../types/chat.types';
 import type { ChatHandler, Message } from '../../types/chat-ui.types';
-import MarkdownEditor from '../MarkdownEditor';
+import MarkdownReadonly from '../MarkdownReadonly';
 
 // 工作流消息的特殊标记前缀
 const WORKFLOW_MESSAGE_PREFIX = '[[WORKFLOW_MESSAGE]]';
@@ -45,10 +45,22 @@ export const ChatMessagesArea: React.FC<ChatMessagesAreaProps> = ({
   }, []);
 
   const getMessageMarkdown = useCallback((message: Message) => {
-    const parts = message.parts
-      .filter((part) => part.type === 'text' && 'text' in part)
-      .map((part) => (typeof (part as any).text === 'string' ? (part as any).text : String((part as any).text ?? '')));
-    return parts.join('');
+    let firstText: string | null = null;
+    let textParts: string[] | null = null;
+
+    for (const part of message.parts) {
+      if (part.type !== 'text') continue;
+      if (firstText === null) {
+        firstText = part.text;
+        continue;
+      }
+      if (!textParts) {
+        textParts = [firstText];
+      }
+      textParts.push(part.text);
+    }
+
+    return textParts ? textParts.join('') : firstText ?? '';
   }, []);
 
   const showLoading =
@@ -108,11 +120,8 @@ export const ChatMessagesArea: React.FC<ChatMessagesAreaProps> = ({
                   <span>{message.role === 'user' ? '👤' : '🤖'}</span>
                 </div>
                 <div className="chat-message-content">
-                  <MarkdownEditor
+                  <MarkdownReadonly
                     markdown={getMessageMarkdown(message)}
-                    readOnly
-                    showModeSwitch={false}
-                    initialMode="wysiwyg"
                     className="chat-markdown"
                   />
                 </div>

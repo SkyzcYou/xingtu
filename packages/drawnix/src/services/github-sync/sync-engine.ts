@@ -12,7 +12,7 @@ import { syncPasswordService } from './sync-password-service';
 import { DecryptionError } from './crypto-service';
 import { kvStorageService } from '../kv-storage-service';
 import { workspaceStorageService } from '../workspace-storage-service';
-import { workspaceService } from '../workspace-service';
+import { reloadWorkspace } from '../workspace-runtime-bridge';
 import {
   startSyncSession,
   endSyncSession,
@@ -2074,7 +2074,7 @@ class SyncEngine {
         });
 
         // 刷新工作区
-        await workspaceService.reload();
+        await reloadWorkspace();
 
         logSuccess('恢复画板成功', { boardId: id });
         return { success: true };

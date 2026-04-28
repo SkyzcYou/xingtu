@@ -1,4 +1,4 @@
-@import "open-color/open-color.scss";
+@import "./open-color";
 
 @mixin isMobile() {
   @at-root .drawnix--mobile#{&} {

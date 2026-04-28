@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { MessagePlugin } from 'tdesign-react';
+import { MessagePlugin } from '../utils/message-plugin';
 import { audioPlaylistService } from '../services/audio-playlist-service';
 import type {
   AudioPlaylist,

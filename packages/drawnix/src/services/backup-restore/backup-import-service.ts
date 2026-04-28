@@ -3,7 +3,7 @@
  * 从 ZIP 文件导入数据（增量去重），兼容 v2/v3 manifest
  */
 
-import JSZip from 'jszip';
+import type JSZip from 'jszip';
 import { workspaceStorageService } from '../workspace-storage-service';
 import { workspaceService } from '../workspace-service';
 import { kvStorageService } from '../kv-storage-service';
@@ -23,7 +23,7 @@ import localforage from 'localforage';
 import { ASSET_CONSTANTS } from '../../constants/ASSET_CONSTANTS';
 import { unifiedCacheService } from '../unified-cache-service';
 import { analytics } from '../../utils/posthog-analytics';
-import { knowledgeBaseService } from '../knowledge-base-service';
+import { importAllData as importKnowledgeBaseData } from '../kb-import-export-service';
 import {
   BACKUP_SIGNATURE,
   BackupManifest,
@@ -69,6 +69,7 @@ class BackupImportService {
 
     try {
       onProgress?.(5, '正在读取文件...');
+      const { default: JSZip } = await import('jszip');
       const zip = await JSZip.loadAsync(file);
 
       onProgress?.(10, '正在验证文件格式...');
@@ -162,7 +163,7 @@ class BackupImportService {
     try {
       const content = await kbFile.async('string');
       const data = JSON.parse(content);
-      const r = await knowledgeBaseService.importAllData(data);
+      const r = await importKnowledgeBaseData(data);
       return { directories: r.dirCount, notes: r.noteCount, tags: r.tagCount, skipped: 0, errors: [] };
     } catch (error) {
       console.error('Failed to import knowledge base:', error);

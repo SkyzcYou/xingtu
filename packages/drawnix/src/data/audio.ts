@@ -20,7 +20,7 @@ import {
   isAudioNodeElement,
   type AudioNodeMetadata,
 } from '../types/audio-node.types';
-import { AudioNodeTransforms } from '../plugins/with-audio-node';
+import { AudioNodeTransforms } from './audio-node-transforms';
 import type { CanvasAudioPlaybackSource } from '../services/canvas-audio-playback-service';
 
 export const AUDIO_CARD_DEFAULT_WIDTH = AUDIO_NODE_DEFAULT_WIDTH;

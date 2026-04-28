@@ -24,6 +24,7 @@ import {
   modelBenchmarkService,
   rankBenchmarkEntries,
   computeValueScore,
+  trackBenchmarkEvent,
   type BenchmarkCompareMode,
   type BenchmarkModality,
   type BenchmarkRankingMode,
@@ -96,6 +97,55 @@ const ENTRY_STATUS_LABELS: Record<string, string> = {
 const MAX_AUTO_CUSTOM_TARGETS = 6;
 const QUEUE_PREVIEW_LIMIT = 8;
 const MAX_EXCEL_CELL_LENGTH = 32000;
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'unknown_error';
+}
+
+function getBenchmarkExportSummary(sessions: ModelBenchmarkSession[]) {
+  const modelKeys = new Set<string>();
+  const summary = sessions.reduce(
+    (acc, session) => {
+      session.entries.forEach((entry) => {
+        modelKeys.add(`${session.modality}::${entry.selectionKey}`);
+        acc.detailRowCount += 1;
+        if (entry.status === 'completed') acc.completedEntryCount += 1;
+        if (entry.status === 'failed') acc.failedEntryCount += 1;
+        if (entry.status === 'running') acc.runningEntryCount += 1;
+        if (entry.status === 'pending') acc.pendingEntryCount += 1;
+        if (entry.favorite) acc.favoriteEntryCount += 1;
+        if (entry.rejected) acc.rejectedEntryCount += 1;
+      });
+      return acc;
+    },
+    {
+      sessionCount: sessions.length,
+      detailRowCount: 0,
+      completedEntryCount: 0,
+      failedEntryCount: 0,
+      runningEntryCount: 0,
+      pendingEntryCount: 0,
+      favoriteEntryCount: 0,
+      rejectedEntryCount: 0,
+    }
+  );
+
+  return {
+    ...summary,
+    modelSummaryRowCount: modelKeys.size,
+  };
+}
+
+function trackWorkbenchConfigChange(
+  control: string,
+  metadata: Record<string, unknown>
+): void {
+  trackBenchmarkEvent('model_benchmark_config_changed', {
+    source: 'workbench',
+    control,
+    ...metadata,
+  });
+}
 
 function formatDateTime(value: number | null): string {
   if (!value) {
@@ -1012,6 +1062,13 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
       return;
     }
 
+    const startedAt = Date.now();
+    const exportSummary = getBenchmarkExportSummary(sessions);
+    trackBenchmarkEvent('model_benchmark_excel_export_started', {
+      source: 'workbench',
+      ...exportSummary,
+    });
+
     setIsExportingExcel(true);
     try {
       const XLSX = await import('xlsx');
@@ -1251,9 +1308,22 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
       downloadFromBlob(blob, buildExportFilename());
+      trackBenchmarkEvent('model_benchmark_excel_export_completed', {
+        source: 'workbench',
+        ...exportSummary,
+        modelSummaryRowCount: modelSummaryRows.length,
+        durationMs: Date.now() - startedAt,
+        fileSize: blob.size,
+      });
       MessagePlugin.success(`已导出 ${modelSummaryRows.length} 个模型结果`);
     } catch (error) {
       console.error('[ModelBenchmark] Excel export failed:', error);
+      trackBenchmarkEvent('model_benchmark_excel_export_failed', {
+        source: 'workbench',
+        ...exportSummary,
+        durationMs: Date.now() - startedAt,
+        errorMessage: getErrorMessage(error),
+      });
       MessagePlugin.error('导出 Excel 失败，请稍后重试');
     } finally {
       setIsExportingExcel(false);
@@ -1603,7 +1673,15 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                       key={value}
                       type="button"
                       className={modality === value ? 'active' : ''}
-                      onClick={() => setModality(value)}
+                      onClick={() => {
+                        if (modality !== value) {
+                          trackWorkbenchConfigChange('modality', {
+                            previousModality: modality,
+                            modality: value,
+                          });
+                        }
+                        setModality(value);
+                      }}
                     >
                       {MODALITY_LABELS[value]}
                     </button>
@@ -1622,9 +1700,17 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                       <button
                         type="button"
                         className={compareMode === value ? 'active' : ''}
-                        onClick={() =>
-                          setCompareMode(value as BenchmarkCompareMode)
-                        }
+                        onClick={() => {
+                          const nextCompareMode = value as BenchmarkCompareMode;
+                          if (compareMode !== nextCompareMode) {
+                            trackWorkbenchConfigChange('compare_mode', {
+                              modality,
+                              previousCompareMode: compareMode,
+                              compareMode: nextCompareMode,
+                            });
+                          }
+                          setCompareMode(nextCompareMode);
+                        }}
                       >
                         {label}
                       </button>
@@ -1642,9 +1728,16 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                       className="model-benchmark__select"
                       label="目标供应商: "
                       value={selectedProfileId}
-                      onChange={(value) =>
-                        setSelectedProfileId(value as string)
-                      }
+                      onChange={(value) => {
+                        const nextProfileId = value as string;
+                        trackWorkbenchConfigChange('target_profile', {
+                          modality,
+                          compareMode,
+                          previousProfileId: selectedProfileId,
+                          profileId: nextProfileId,
+                        });
+                        setSelectedProfileId(nextProfileId);
+                      }}
                       options={availableProfiles.map((p) => ({
                         label: p.name,
                         value: p.id,
@@ -1660,9 +1753,16 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                       value={selectedModelId}
                       options={crossProviderModelOptions}
                       placeholder="搜索并选择要横向对比的模型"
-                      onChange={(value) =>
-                        setSelectedModelId((value as string) || '')
-                      }
+                      onChange={(value) => {
+                        const nextModelId = (value as string) || '';
+                        trackWorkbenchConfigChange('target_model', {
+                          modality,
+                          compareMode,
+                          previousModelId: selectedModelId,
+                          modelId: nextModelId,
+                        });
+                        setSelectedModelId(nextModelId);
+                      }}
                     />
                   ) : null}
                 </div>
@@ -1680,19 +1780,32 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                         <div className="model-benchmark__select-actions">
                           <button
                             type="button"
-                            onClick={() =>
-                              setSelectedProviderIds(
-                                crossProviderOptions.map(
-                                  (o) => o.value as string
-                                )
-                              )
-                            }
+                            onClick={() => {
+                              const nextProviderIds = crossProviderOptions.map(
+                                (o) => o.value as string
+                              );
+                              trackWorkbenchConfigChange('provider_selection', {
+                                modality,
+                                compareMode,
+                                selectionAction: 'select_all',
+                                selectedCount: nextProviderIds.length,
+                              });
+                              setSelectedProviderIds(nextProviderIds);
+                            }}
                           >
                             全选
                           </button>
                           <button
                             type="button"
-                            onClick={() => setSelectedProviderIds([])}
+                            onClick={() => {
+                              trackWorkbenchConfigChange('provider_selection', {
+                                modality,
+                                compareMode,
+                                selectionAction: 'clear',
+                                selectedCount: 0,
+                              });
+                              setSelectedProviderIds([]);
+                            }}
                           >
                             清除
                           </button>
@@ -1703,11 +1816,19 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                       value={selectedProviderIds}
                       options={crossProviderOptions}
                       placeholder="多选要参与对比的供应商 (已选即为批测队列)"
-                      onChange={(value) =>
-                        setSelectedProviderIds(
-                          Array.isArray(value) ? (value as string[]) : []
-                        )
-                      }
+                      onChange={(value) => {
+                        const nextProviderIds = Array.isArray(value)
+                          ? (value as string[])
+                          : [];
+                        trackWorkbenchConfigChange('provider_selection', {
+                          modality,
+                          compareMode,
+                          selectionAction: 'change',
+                          previousSelectedCount: selectedProviderIds.length,
+                          selectedCount: nextProviderIds.length,
+                        });
+                        setSelectedProviderIds(nextProviderIds);
+                      }}
                     />
                   ) : null}
 
@@ -1723,17 +1844,32 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                         <div className="model-benchmark__select-actions">
                           <button
                             type="button"
-                            onClick={() =>
-                              setSelectedModelIds(
-                                activeProfileModels.map((m) => m.id)
-                              )
-                            }
+                            onClick={() => {
+                              const nextModelIds = activeProfileModels.map(
+                                (m) => m.id
+                              );
+                              trackWorkbenchConfigChange('model_selection', {
+                                modality,
+                                compareMode,
+                                selectionAction: 'select_all',
+                                selectedCount: nextModelIds.length,
+                              });
+                              setSelectedModelIds(nextModelIds);
+                            }}
                           >
                             全选
                           </button>
                           <button
                             type="button"
-                            onClick={() => setSelectedModelIds([])}
+                            onClick={() => {
+                              trackWorkbenchConfigChange('model_selection', {
+                                modality,
+                                compareMode,
+                                selectionAction: 'clear',
+                                selectedCount: 0,
+                              });
+                              setSelectedModelIds([]);
+                            }}
                           >
                             清除
                           </button>
@@ -1747,11 +1883,19 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                         value: m.id,
                       }))}
                       placeholder="多选要测试的模型 (已选即为批测队列)"
-                      onChange={(value) =>
-                        setSelectedModelIds(
-                          Array.isArray(value) ? (value as string[]) : []
-                        )
-                      }
+                      onChange={(value) => {
+                        const nextModelIds = Array.isArray(value)
+                          ? (value as string[])
+                          : [];
+                        trackWorkbenchConfigChange('model_selection', {
+                          modality,
+                          compareMode,
+                          selectionAction: 'change',
+                          previousSelectedCount: selectedModelIds.length,
+                          selectedCount: nextModelIds.length,
+                        });
+                        setSelectedModelIds(nextModelIds);
+                      }}
                     />
                   ) : null}
 
@@ -1767,17 +1911,32 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                         <div className="model-benchmark__select-actions">
                           <button
                             type="button"
-                            onClick={() =>
-                              setSelectedCustomKeys(
-                                customTargets.map((t) => t.selectionKey)
-                              )
-                            }
+                            onClick={() => {
+                              const nextCustomKeys = customTargets.map(
+                                (t) => t.selectionKey
+                              );
+                              trackWorkbenchConfigChange('custom_selection', {
+                                modality,
+                                compareMode,
+                                selectionAction: 'select_all',
+                                selectedCount: nextCustomKeys.length,
+                              });
+                              setSelectedCustomKeys(nextCustomKeys);
+                            }}
                           >
                             全选
                           </button>
                           <button
                             type="button"
-                            onClick={() => setSelectedCustomKeys([])}
+                            onClick={() => {
+                              trackWorkbenchConfigChange('custom_selection', {
+                                modality,
+                                compareMode,
+                                selectionAction: 'clear',
+                                selectedCount: 0,
+                              });
+                              setSelectedCustomKeys([]);
+                            }}
                           >
                             清除
                           </button>
@@ -1791,11 +1950,19 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                         value: t.selectionKey,
                       }))}
                       placeholder="手动编排供应商与模型组合"
-                      onChange={(value) =>
-                        setSelectedCustomKeys(
-                          Array.isArray(value) ? (value as string[]) : []
-                        )
-                      }
+                      onChange={(value) => {
+                        const nextCustomKeys = Array.isArray(value)
+                          ? (value as string[])
+                          : [];
+                        trackWorkbenchConfigChange('custom_selection', {
+                          modality,
+                          compareMode,
+                          selectionAction: 'change',
+                          previousSelectedCount: selectedCustomKeys.length,
+                          selectedCount: nextCustomKeys.length,
+                        });
+                        setSelectedCustomKeys(nextCustomKeys);
+                      }}
                     />
                   ) : null}
                 </div>

@@ -9,11 +9,9 @@ import {
   PlaitPlugin,
   PlaitPluginElementContext,
   Point,
-  Transforms,
   RectangleClient,
   PlaitElement,
   Selection,
-  PlaitHistoryBoard,
 } from '@plait/core';
 import {
   CommonElementFlavour,
@@ -22,20 +20,18 @@ import {
 } from '@plait/common';
 import { createRoot, Root } from 'react-dom/client';
 import React from 'react';
-import type { PlaitWorkZone, WorkZoneCreateOptions } from '../types/workzone.types';
-import { DEFAULT_WORKZONE_SIZE } from '../types/workzone.types';
+import type { PlaitWorkZone } from '../types/workzone.types';
 import type { WorkflowMessageData } from '../types/chat.types';
 import { WorkZoneContent } from '../components/workzone-element/WorkZoneContent';
 import { ToolProviderWrapper } from '../components/startup/ToolProviderWrapper';
+import {
+  isWorkZoneElement,
+  WorkZoneTransforms,
+} from './workzone-transforms';
 
 import { LS_KEYS } from '../constants/storage-keys';
 
-/**
- * 判断是否为 WorkZone 元素
- */
-export function isWorkZoneElement(element: any): element is PlaitWorkZone {
-  return element && element.type === 'workzone';
-}
+export { isWorkZoneElement, WorkZoneTransforms } from './workzone-transforms';
 
 const WORKZONE_VISIBILITY_EVENT = 'workzone-visibility-changed';
 
@@ -368,92 +364,6 @@ export const withWorkZone: PlaitPlugin = (board: PlaitBoard) => {
 
   // console.log('[WorkZone] Plugin initialized');
   return board;
-};
-
-/**
- * 生成唯一 ID
- */
-function generateId(): string {
-  return `workzone_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-}
-
-/**
- * WorkZone 操作 API
- */
-export const WorkZoneTransforms = {
-  /**
-   * 插入 WorkZone 到画布（不记录到撤销历史）
-   * WorkZone 是临时的 AI 生成面板，不应该被撤销恢复
-   */
-  insertWorkZone(board: PlaitBoard, options: WorkZoneCreateOptions): PlaitWorkZone {
-    const { workflow, position, size = DEFAULT_WORKZONE_SIZE, expectedInsertPosition, targetFrameId, targetFrameDimensions, zoom } = options;
-
-    const workzoneElement: PlaitWorkZone = {
-      id: generateId(),
-      type: 'workzone',
-      points: [position, [position[0] + size.width, position[1] + size.height]],
-      angle: 0,
-      workflow,
-      createdAt: Date.now(),
-      expectedInsertPosition,
-      targetFrameId,
-      targetFrameDimensions,
-      zoom,
-    };
-
-    // 使用 withoutSaving 来跳过撤销历史
-    PlaitHistoryBoard.withoutSaving(board, () => {
-      Transforms.insertNode(board, workzoneElement, [board.children.length]);
-    });
-
-    // console.log('[WorkZone] Inserted (without history):', workzoneElement.id);
-    return workzoneElement;
-  },
-
-  /**
-   * 更新 WorkZone 的 workflow 数据（不记录到撤销历史）
-   */
-  updateWorkflow(board: PlaitBoard, elementId: string, workflow: Partial<PlaitWorkZone['workflow']>): void {
-    const index = board.children.findIndex((el: any) => el.id === elementId);
-    if (index >= 0) {
-      const element = board.children[index] as PlaitWorkZone;
-      const updatedWorkflow = { ...element.workflow, ...workflow };
-      // 使用 withoutSaving 来跳过撤销历史
-      PlaitHistoryBoard.withoutSaving(board, () => {
-        Transforms.setNode(board, { workflow: updatedWorkflow } as Partial<PlaitWorkZone>, [index]);
-      });
-    }
-  },
-
-  /**
-   * 删除 WorkZone（不记录到撤销历史）
-   * WorkZone 是临时的 AI 生成面板，不应该被撤销恢复
-   */
-  removeWorkZone(board: PlaitBoard, elementId: string): void {
-    const index = board.children.findIndex((el: any) => el.id === elementId);
-    if (index >= 0) {
-      // 使用 withoutSaving 来跳过撤销历史
-      PlaitHistoryBoard.withoutSaving(board, () => {
-        Transforms.removeNode(board, [index]);
-      });
-      // console.log('[WorkZone] Removed (without history):', elementId);
-    }
-  },
-
-  /**
-   * 根据 ID 获取 WorkZone
-   */
-  getWorkZoneById(board: PlaitBoard, elementId: string): PlaitWorkZone | null {
-    const element = board.children.find((el: any) => el.id === elementId);
-    return element && isWorkZoneElement(element) ? element : null;
-  },
-
-  /**
-   * 获取所有 WorkZone
-   */
-  getAllWorkZones(board: PlaitBoard): PlaitWorkZone[] {
-    return board.children.filter(isWorkZoneElement) as PlaitWorkZone[];
-  },
 };
 
 export default withWorkZone;

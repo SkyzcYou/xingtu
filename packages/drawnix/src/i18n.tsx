@@ -47,6 +47,7 @@ export interface Translations {
   'zoom.out': string;
   'zoom.fit': string;
   'zoom.fitFrame': string;
+  'zoom.fitPPTGlobal': string;
   'zoom.100': string;
   
   // Themes
@@ -243,6 +244,7 @@ const translations: Record<Language, Translations> = {
     'zoom.out': '缩小 — Cmd+-',
     'zoom.fit': '自适应',
     'zoom.fitFrame': '自适应 PPT 页面',
+    'zoom.fitPPTGlobal': 'PPT全局',
     'zoom.100': '缩放至 100%',
     
     // Themes
@@ -436,6 +438,7 @@ const translations: Record<Language, Translations> = {
     'zoom.out': 'Zoom Out — Cmd+-',
     'zoom.fit': 'Fit to Screen',
     'zoom.fitFrame': 'Fit PPT Page',
+    'zoom.fitPPTGlobal': 'Fit All PPT Pages',
     'zoom.100': 'Zoom to 100%',
     
     // Themes

@@ -22,7 +22,7 @@ import localforage from 'localforage';
 import { ASSET_CONSTANTS } from '../../constants/ASSET_CONSTANTS';
 import { unifiedCacheService } from '../unified-cache-service';
 import { analytics } from '../../utils/posthog-analytics';
-import { knowledgeBaseService } from '../knowledge-base-service';
+import { exportAllData as exportKnowledgeBaseData } from '../kb-import-export-service';
 import { BackupPartManager } from './backup-part-manager';
 import {
   BACKUP_VERSION,
@@ -144,7 +144,7 @@ class BackupExportService {
     if (options.includeKnowledgeBase) {
       onProgress?.(30, '正在导出知识库...');
       try {
-        const kbData = await knowledgeBaseService.exportAllData();
+        const kbData = await exportKnowledgeBaseData();
         partManager.addFile('knowledge-base.json', kbData);
         manifest.stats.kbNoteCount = kbData.notes.length;
       } catch (error) {

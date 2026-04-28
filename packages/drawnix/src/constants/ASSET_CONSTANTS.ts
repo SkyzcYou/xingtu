@@ -15,7 +15,13 @@ export const ASSET_CONSTANTS = {
 
   // 文件类型
   ALLOWED_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
-  ALLOWED_VIDEO_TYPES: ['video/mp4', 'video/webm', 'video/ogg'],
+  ALLOWED_VIDEO_TYPES: [
+    'video/mp4',
+    'video/webm',
+    'video/ogg',
+    'video/quicktime',
+    'video/x-m4v',
+  ],
   ALLOWED_ZIP_TYPES: ['application/zip', 'application/x-zip-compressed'],
   ALLOWED_AUDIO_TYPES: ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/flac'],
 

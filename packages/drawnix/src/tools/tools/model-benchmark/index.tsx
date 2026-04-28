@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, type CSSProperties } from 'react';
-import type { ToolPluginModule } from '../../registry';
+import type { ToolPluginModule } from '../../types';
 import { ToolCategory } from '../../../types/toolbox.types';
 import { MODEL_BENCHMARK_TOOL_ID } from '../../tool-ids';
 

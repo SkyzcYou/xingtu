@@ -28,9 +28,9 @@
       hreflang="x-default"
       href="https://opentu.ai/home.html"
     />
-    <lastmod>2026-04-25</lastmod>
+    <lastmod>2026-04-28</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.95</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://opentu.ai/en/home.html</loc>
@@ -49,9 +49,9 @@
       hreflang="x-default"
       href="https://opentu.ai/home.html"
     />
-    <lastmod>2026-04-27</lastmod>
+    <lastmod>2026-04-28</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <priority>0.75</priority>
   </url>
   <url>
     <loc>https://opentu.ai/user-manual/index.html</loc>
@@ -153,13 +153,13 @@
     <loc>https://opentu.ai/user-manual/drawing-flowchart.html</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://opentu.ai/user-manual/drawing-mindmap.html</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://opentu.ai/user-manual/drawing-pencil-tool.html</loc>

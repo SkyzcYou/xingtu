@@ -12,8 +12,22 @@
  * - ESC 关闭
  */
 
-import Viewer from 'viewerjs';
-import 'viewerjs/dist/viewer.css';
+import type Viewer from 'viewerjs';
+
+type ViewerConstructor = typeof import('viewerjs')['default'];
+
+let viewerConstructorPromise: Promise<ViewerConstructor> | null = null;
+
+function loadViewerConstructor(): Promise<ViewerConstructor> {
+  if (!viewerConstructorPromise) {
+    viewerConstructorPromise = Promise.all([
+      import('viewerjs'),
+      import('viewerjs/dist/viewer.css'),
+    ]).then(([module]) => module.default);
+  }
+
+  return viewerConstructorPromise;
+}
 
 export interface ImageViewerOptions {
   zoomStep?: number;
@@ -32,6 +46,7 @@ export class ImageViewer {
   private options: Required<ImageViewerOptions>;
   private viewer: Viewer | null = null;
   private container: HTMLDivElement | null = null;
+  private openVersion = 0;
 
   constructor(options: ImageViewerOptions = {}) {
     this.options = {
@@ -50,6 +65,7 @@ export class ImageViewer {
   open(src: string, alt = ''): void {
     // 如果已有查看器打开，先关闭
     this.close();
+    const openVersion = ++this.openVersion;
 
     // 创建隐藏的图片容器
     this.container = document.createElement('div');
@@ -89,38 +105,55 @@ export class ImageViewer {
       flipVertical: 1,
     };
 
-    // 创建 ViewerJS 实例
-    this.viewer = new Viewer(this.container, {
-      inline: false,
-      button: true,
-      navbar: false,
-      title: !!alt,
-      toolbar: toolbar as any,
-      fullscreen: !isMobile, // 移动端禁用全屏按钮
-      keyboard: this.options.enableKeyboard,
-      backdrop: true,
-      loading: true,
-      loop: false,
-      minZoomRatio: this.options.minZoom,
-      maxZoomRatio: this.options.maxZoom,
-      zoomRatio: this.options.zoomStep,
-      hidden: () => {
-        // 当查看器隐藏时清理资源
-        this.cleanup();
-      },
-    });
+    void loadViewerConstructor()
+      .then((Viewer) => {
+        if (openVersion !== this.openVersion || !this.container) {
+          return;
+        }
 
-    // 显示查看器
-    this.viewer.show();
+        // 创建 ViewerJS 实例
+        this.viewer = new Viewer(this.container, {
+          inline: false,
+          button: true,
+          navbar: false,
+          title: !!alt,
+          toolbar: toolbar as any,
+          fullscreen: !isMobile, // 移动端禁用全屏按钮
+          keyboard: this.options.enableKeyboard,
+          backdrop: true,
+          loading: true,
+          loop: false,
+          minZoomRatio: this.options.minZoom,
+          maxZoomRatio: this.options.maxZoom,
+          zoomRatio: this.options.zoomStep,
+          hidden: () => {
+            // 当查看器隐藏时清理资源
+            this.cleanup();
+          },
+        });
+
+        // 显示查看器
+        this.viewer.show();
+      })
+      .catch((error) => {
+        if (openVersion === this.openVersion) {
+          console.warn('[ImageViewer] failed to load viewerjs:', error);
+          this.cleanup();
+        }
+      });
   }
 
   /**
    * 关闭图片查看器
    */
   close(): void {
+    this.openVersion += 1;
     if (this.viewer) {
       this.viewer.hide();
+      return;
     }
+
+    this.cleanup();
   }
 
   /**

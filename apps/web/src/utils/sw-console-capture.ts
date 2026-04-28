@@ -1,6 +1,6 @@
 /**
  * Service Worker Console Log Capture
- * 
+ *
  * 捕获控制台日志发送给 Service Worker 供调试面板显示。
  * - warn/error: 始终捕获（用于错误追踪）
  * - log/info: 仅在调试模式开启时捕获（用于调试分析）
@@ -21,7 +21,10 @@ function getDebugModeFromStorage(): boolean {
 }
 function setDebugModeToStorage(enabled: boolean | undefined): void {
   try {
-    sessionStorage.setItem(DEBUG_STORAGE_KEY, enabled === true ? 'true' : 'false');
+    sessionStorage.setItem(
+      DEBUG_STORAGE_KEY,
+      enabled === true ? 'true' : 'false'
+    );
   } catch {
     // 忽略
   }
@@ -54,31 +57,43 @@ const originalConsole = {
  */
 function sendToSW(level: string, message: string, stack?: string) {
   // 防止循环：不转发来自 SW 的日志
-  if (message.includes('[SW]') ||
-      message.includes('[SWTaskQueue]') ||
-      message.includes('[SWChannelManager]') ||
-      message.includes('[SWChannelClient]') ||
-      message.includes('[ServiceWorkerChannel]') ||
-      message.includes('Invalid message structure')) {
+  if (
+    message.includes('[SW]') ||
+    message.includes('[SWTaskQueue]') ||
+    message.includes('[SWChannelManager]') ||
+    message.includes('[SWChannelClient]') ||
+    message.includes('[ServiceWorkerChannel]') ||
+    message.includes('Invalid message structure')
+  ) {
     return;
   }
 
   // 过滤监控服务相关的错误（PostHog）
-  if (message.includes('posthog.com') ||
-      (stack && stack.includes('posthog'))) {
+  if (message.includes('posthog.com') || (stack && stack.includes('posthog'))) {
+    return;
+  }
+
+  if (
+    message.includes(
+      'ResizeObserver loop completed with undelivered notifications'
+    ) ||
+    message.includes('ResizeObserver loop limit exceeded')
+  ) {
     return;
   }
 
   // 发送单条日志
   const doSend = () => {
     if (!swChannelClient.isInitialized()) return;
-    swChannelClient.reportConsoleLog(
-      level,
-      [{ message, stack: stack || '', source: window.location.href }],
-      Date.now()
-    ).catch(() => {
-      // 忽略发送错误
-    });
+    swChannelClient
+      .reportConsoleLog(
+        level,
+        [{ message, stack: stack || '', source: window.location.href }],
+        Date.now()
+      )
+      .catch(() => {
+        // 忽略发送错误
+      });
   };
 
   // 清空队列中的日志
@@ -88,11 +103,19 @@ function sendToSW(level: string, message: string, stack?: string) {
       if (!item) {
         continue;
       }
-      swChannelClient.reportConsoleLog(
-        item.level,
-        [{ message: item.message, stack: item.stack || '', source: window.location.href }],
-        Date.now()
-      ).catch(() => undefined);
+      swChannelClient
+        .reportConsoleLog(
+          item.level,
+          [
+            {
+              message: item.message,
+              stack: item.stack || '',
+              source: window.location.href,
+            },
+          ],
+          Date.now()
+        )
+        .catch(() => undefined);
     }
   };
 
@@ -102,19 +125,23 @@ function sendToSW(level: string, message: string, stack?: string) {
       return;
     }
 
-    initPromise = swChannelClient.initialize().then((success) => {
-      if (!success) {
-        nextInitRetryAt = Date.now() + INIT_RETRY_COOLDOWN_MS;
-        return;
-      }
+    initPromise = swChannelClient
+      .initialize()
+      .then((success) => {
+        if (!success) {
+          nextInitRetryAt = Date.now() + INIT_RETRY_COOLDOWN_MS;
+          return;
+        }
 
-      nextInitRetryAt = 0;
-      flushQueue();
-    }).catch(() => {
-      nextInitRetryAt = Date.now() + INIT_RETRY_COOLDOWN_MS;
-    }).finally(() => {
-      initPromise = null;
-    });
+        nextInitRetryAt = 0;
+        flushQueue();
+      })
+      .catch(() => {
+        nextInitRetryAt = Date.now() + INIT_RETRY_COOLDOWN_MS;
+      })
+      .finally(() => {
+        initPromise = null;
+      });
   };
 
   if (swChannelClient.isInitialized()) {
@@ -132,19 +159,21 @@ function sendToSW(level: string, message: string, stack?: string) {
  * 格式化日志参数为字符串
  */
 function formatArgs(args: unknown[]): string {
-  return args.map(arg => {
-    if (arg instanceof Error) {
-      return arg.message;
-    }
-    if (typeof arg === 'object') {
-      try {
-        return JSON.stringify(arg);
-      } catch {
-        return String(arg);
+  return args
+    .map((arg) => {
+      if (arg instanceof Error) {
+        return arg.message;
       }
-    }
-    return String(arg);
-  }).join(' ');
+      if (typeof arg === 'object') {
+        try {
+          return JSON.stringify(arg);
+        } catch {
+          return String(arg);
+        }
+      }
+      return String(arg);
+    })
+    .join(' ');
 }
 
 /**
@@ -183,37 +212,51 @@ export function initSWConsoleCapture(): void {
         debugModeEnabled = enabled;
         setDebugModeToStorage(enabled);
       });
-      swChannelClient.getDebugStatus().then((status: { enabled?: boolean; debugModeEnabled?: boolean }) => {
-        const enabled = status.enabled ?? status.debugModeEnabled ?? false;
-        debugModeEnabled = enabled;
-        setDebugModeToStorage(enabled);
-      });
+      swChannelClient
+        .getDebugStatus()
+        .then((status: { enabled?: boolean; debugModeEnabled?: boolean }) => {
+          const enabled = status.enabled ?? status.debugModeEnabled ?? false;
+          debugModeEnabled = enabled;
+          setDebugModeToStorage(enabled);
+        });
     } else {
       const now = Date.now();
       if (!initPromise && now >= nextInitRetryAt) {
-        initPromise = swChannelClient.initialize().then((success) => {
-          if (!success) {
-            nextInitRetryAt = Date.now() + INIT_RETRY_COOLDOWN_MS;
-            return;
-          }
-
-          nextInitRetryAt = 0;
-          while (logQueue.length > 0 && swChannelClient.isInitialized()) {
-            const item = logQueue.shift();
-            if (!item) {
-              continue;
+        initPromise = swChannelClient
+          .initialize()
+          .then((success) => {
+            if (!success) {
+              nextInitRetryAt = Date.now() + INIT_RETRY_COOLDOWN_MS;
+              return;
             }
-            swChannelClient.reportConsoleLog(
-              item.level,
-              [{ message: item.message, stack: item.stack || '', source: window.location.href }],
-              Date.now()
-            ).catch(() => undefined);
-          }
-        }).catch(() => {
-          nextInitRetryAt = Date.now() + INIT_RETRY_COOLDOWN_MS;
-        }).finally(() => {
-          initPromise = null;
-        });
+
+            nextInitRetryAt = 0;
+            while (logQueue.length > 0 && swChannelClient.isInitialized()) {
+              const item = logQueue.shift();
+              if (!item) {
+                continue;
+              }
+              swChannelClient
+                .reportConsoleLog(
+                  item.level,
+                  [
+                    {
+                      message: item.message,
+                      stack: item.stack || '',
+                      source: window.location.href,
+                    },
+                  ],
+                  Date.now()
+                )
+                .catch(() => undefined);
+            }
+          })
+          .catch(() => {
+            nextInitRetryAt = Date.now() + INIT_RETRY_COOLDOWN_MS;
+          })
+          .finally(() => {
+            initPromise = null;
+          });
       }
       setTimeout(setupDebugStatusListener, 500);
     }
@@ -266,9 +309,10 @@ export function initSWConsoleCapture(): void {
   // 监听未捕获的 Promise 错误
   window.addEventListener('unhandledrejection', (event) => {
     const reason = event.reason;
-    const message = reason instanceof Error 
-      ? reason.message 
-      : `Unhandled Promise: ${String(reason)}`;
+    const message =
+      reason instanceof Error
+        ? reason.message
+        : `Unhandled Promise: ${String(reason)}`;
     const stack = reason instanceof Error ? reason.stack || '' : '';
     sendToSW('error', message, stack);
   });

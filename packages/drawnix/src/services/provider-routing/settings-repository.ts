@@ -10,6 +10,7 @@ import {
 } from '../../constants/model-config';
 import {
   DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+  LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
   TUZI_DEFAULT_PROVIDER_NAME,
   TUZI_PROVIDER_DEFAULT_BASE_URL,
@@ -107,8 +108,7 @@ function toProviderProfileSnapshot(
       profile.authType
     ),
     imageApiCompatibility:
-      profile.imageApiCompatibility ||
-      DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+      profile.imageApiCompatibility || DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
     extraHeaders: profile.extraHeaders,
   };
 }
@@ -166,6 +166,11 @@ function buildLegacyProfileSnapshot(): ProviderProfileSnapshot {
     .get()
     .find((profile) => profile.id === LEGACY_DEFAULT_PROVIDER_PROFILE_ID);
   const baseUrl = gemini.baseUrl?.trim() || TUZI_PROVIDER_DEFAULT_BASE_URL;
+  const legacyImageApiCompatibilityFallback = baseUrl
+    .toLowerCase()
+    .includes('api.tu-zi.com')
+    ? LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY
+    : DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY;
   const providerType =
     existingLegacyProfile?.providerType === 'openai-compatible' ||
     existingLegacyProfile?.providerType === 'gemini-compatible' ||
@@ -186,7 +191,7 @@ function buildLegacyProfileSnapshot(): ProviderProfileSnapshot {
     ),
     imageApiCompatibility:
       existingLegacyProfile?.imageApiCompatibility ||
-      DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+      legacyImageApiCompatibilityFallback,
   };
 }
 

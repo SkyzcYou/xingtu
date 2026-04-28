@@ -4,12 +4,12 @@
  * 单个工具项组件 - 展示工具信息和图标
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Button } from 'tdesign-react';
 import { JumpIcon, DeleteIcon } from 'tdesign-icons-react';
 import { InsertToCanvasIcon } from '../icons';
 import { ToolDefinition } from '../../types/toolbox.types';
-import { toolRegistry } from '../../tools/registry';
+import { isBuiltInToolId } from '../../constants/built-in-tools';
 import { HoverTip } from '../shared';
 
 export interface ToolItemProps {
@@ -45,8 +45,61 @@ export const ToolItem: React.FC<ToolItemProps> = ({
   onDelete,
 }) => {
   // 判断是否为内置工具（内置工具不能编辑/删除）
-  const isBuiltInTool = toolRegistry.isBuiltInTool(tool.id);
+  const isBuiltInTool = isBuiltInToolId(tool.id);
   const isCustomTool = !isBuiltInTool;
+  const baseTrackParams = useMemo(
+    () => ({
+      area: 'toolbox',
+      control: 'tool_item',
+      source: 'toolbox_drawer',
+      toolId: tool.id,
+      tool_id: tool.id,
+      toolName: tool.name,
+      tool_name: tool.name,
+      category: tool.category,
+      isCustomTool,
+      is_custom_tool: isCustomTool,
+    }),
+    [isCustomTool, tool.category, tool.id, tool.name]
+  );
+  const cardTrackParams = useMemo(
+    () =>
+      JSON.stringify({
+        ...baseTrackParams,
+        action: 'card_click',
+        usageType: 'window',
+        usage_type: 'window',
+      }),
+    [baseTrackParams]
+  );
+  const insertTrackParams = useMemo(
+    () =>
+      JSON.stringify({
+        ...baseTrackParams,
+        action: 'insert_click',
+        usageType: 'insert',
+        usage_type: 'insert',
+      }),
+    [baseTrackParams]
+  );
+  const openWindowTrackParams = useMemo(
+    () =>
+      JSON.stringify({
+        ...baseTrackParams,
+        action: 'open_window_click',
+        usageType: 'window',
+        usage_type: 'window',
+      }),
+    [baseTrackParams]
+  );
+  const deleteTrackParams = useMemo(
+    () =>
+      JSON.stringify({
+        ...baseTrackParams,
+        action: 'delete_click',
+      }),
+    [baseTrackParams]
+  );
 
   /**
    * 处理删除按钮点击
@@ -85,6 +138,7 @@ export const ToolItem: React.FC<ToolItemProps> = ({
     <div
       className="tool-item"
       data-track="toolbox_click_tool"
+      data-track-params={cardTrackParams}
       data-tool-id={tool.id}
       onClick={handleCardClick}
     >
@@ -108,6 +162,7 @@ export const ToolItem: React.FC<ToolItemProps> = ({
               onClick={handleDelete}
               className="tool-item__action-btn tool-item__action-btn--delete"
               data-track="toolbox_click_delete_tool"
+              data-track-params={deleteTrackParams}
             />
           </HoverTip>
         )}
@@ -120,6 +175,7 @@ export const ToolItem: React.FC<ToolItemProps> = ({
             onClick={handleInsert}
             className="tool-item__action-btn tool-item__action-btn--insert"
             data-track="toolbox_click_insert_tool"
+            data-track-params={insertTrackParams}
           />
         </HoverTip>
         <HoverTip content="在窗口中打开" placement="left">
@@ -131,6 +187,7 @@ export const ToolItem: React.FC<ToolItemProps> = ({
             onClick={handleOpenWindow}
             className="tool-item__action-btn tool-item__action-btn--open-window"
             data-track="toolbox_click_open_window_tool"
+            data-track-params={openWindowTrackParams}
           />
         </HoverTip>
       </div>

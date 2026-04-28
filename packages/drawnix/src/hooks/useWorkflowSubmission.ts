@@ -14,14 +14,13 @@ import { useEffect, useCallback, useRef } from 'react';
 import { Subscription } from 'rxjs';
 import {
   workflowSubmissionService,
-  type WorkflowDefinition as SWWorkflowDefinition,
   type WorkflowEvent,
   type CanvasInsertEvent,
   type WorkflowStepsAddedEvent,
 } from '../services/workflow-submission-service';
 import { useWorkflowControl } from '../contexts/WorkflowContext';
 import { useChatDrawerControl } from '../contexts/ChatDrawerContext';
-import type { WorkflowMessageData, WorkflowRetryContext, PostProcessingStatus } from '../types/chat.types';
+import type { WorkflowMessageData, WorkflowRetryContext } from '../types/chat.types';
 import type { ParsedGenerationParams } from '../utils/ai-input-parser';
 import { convertToWorkflow, type WorkflowDefinition as LegacyWorkflowDefinition } from '../components/ai-input-bar/workflow-converter';
 import { WorkZoneTransforms } from '../plugins/with-workzone';
@@ -29,6 +28,9 @@ import { PlaitBoard } from '@plait/core';
 import { geminiSettings } from '../utils/settings-manager';
 import { getDefaultImageModel } from '../constants/model-config';
 import { useTaskWorkflowSync } from './useTaskWorkflowSync';
+import { toWorkflowMessageData } from './workflow-message-data';
+
+export { toWorkflowMessageData } from './workflow-message-data';
 
 // ============================================================================
 // Workflow Recovery Coordination
@@ -72,43 +74,6 @@ export interface UseWorkflowSubmissionReturn {
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Convert internal workflow to WorkflowMessageData for ChatDrawer
- */
-export function toWorkflowMessageData(
-  workflow: LegacyWorkflowDefinition,
-  retryContext?: WorkflowRetryContext,
-  postProcessingStatus?: PostProcessingStatus,
-  insertedCount?: number
-): WorkflowMessageData {
-  // Safely access metadata with defaults
-  const metadata = workflow.metadata || {};
-  
-  return {
-    id: workflow.id,
-    name: workflow.name,
-    generationType: workflow.generationType,
-    prompt: metadata.prompt || retryContext?.aiContext?.finalPrompt || '',
-    aiAnalysis: workflow.aiAnalysis,
-    count: metadata.count,
-    createdAt: workflow.createdAt,
-    steps: workflow.steps.map(step => ({
-      id: step.id,
-      description: step.description,
-      status: step.status,
-      mcp: step.mcp,
-      args: step.args,
-      result: step.result,
-      error: step.error,
-      duration: step.duration,
-      options: step.options,
-    })),
-    retryContext,
-    postProcessingStatus,
-    insertedCount,
-  };
-}
 
 /**
  * Handle canvas insert operation

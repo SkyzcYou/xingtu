@@ -24,9 +24,14 @@ import {
 } from './utils';
 import { providerTransport } from '../provider-routing/provider-transport';
 import { getDefaultImageModel } from '../../constants/model-config';
+import { IMAGE_GENERATION_TIMEOUT_MS } from '../../constants/TASK_CONSTANTS';
 
 // 重新导出工具函数，方便外部使用
 export { isAsyncImageModel, aspectRatioToSize };
+
+function getDefaultImagePollingMaxAttempts(interval: number): number {
+  return Math.ceil(IMAGE_GENERATION_TIMEOUT_MS / Math.max(interval, 1));
+}
 
 function normalizeImageResultUrl(
   item: Record<string, unknown>
@@ -158,6 +163,7 @@ export async function generateImageSync(
       },
       body: JSON.stringify(requestBody),
       signal,
+      timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
       fetcher: fetchFn,
     }
   );
@@ -192,8 +198,10 @@ export async function generateImageAsync(
     onSubmitted,
     signal,
     interval = 5000,
-    maxAttempts = 1080,
+    maxAttempts,
   } = options;
+  const maxPollingAttempts =
+    maxAttempts ?? getDefaultImagePollingMaxAttempts(interval);
   const fetchFn = config.fetchImpl || fetch;
   const baseUrl = normalizeApiBase(config.baseUrl);
   const providerContext = buildProviderContextFromApiConfig(config, baseUrl);
@@ -232,6 +240,7 @@ export async function generateImageAsync(
     method: 'POST',
     body: formData,
     signal,
+    timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
     fetcher: fetchFn,
   });
   if (!submitResponse.ok) {
@@ -266,7 +275,7 @@ export async function generateImageAsync(
   // 轮询等待结果
   let progress = submitData.progress ?? 0;
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+  for (let attempt = 0; attempt < maxPollingAttempts; attempt++) {
     if (signal?.aborted) {
       throw new Error('Async image generation cancelled');
     }
@@ -277,6 +286,7 @@ export async function generateImageAsync(
       path: `/v1/videos/${taskRemoteId}`,
       method: 'GET',
       signal,
+      timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
       fetcher: fetchFn,
     });
 
@@ -333,12 +343,14 @@ export async function resumeAsyncImagePolling(
   config: ImageApiConfig,
   options: AsyncImageOptions = {}
 ): Promise<ImageGenerationResult> {
-  const { onProgress, signal, interval = 5000, maxAttempts = 1080 } = options;
+  const { onProgress, signal, interval = 5000, maxAttempts } = options;
+  const maxPollingAttempts =
+    maxAttempts ?? getDefaultImagePollingMaxAttempts(interval);
   const fetchFn = config.fetchImpl || fetch;
   const baseUrl = normalizeApiBase(config.baseUrl);
   const providerContext = buildProviderContextFromApiConfig(config, baseUrl);
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+  for (let attempt = 0; attempt < maxPollingAttempts; attempt++) {
     if (signal?.aborted) {
       throw new Error('Async image generation cancelled');
     }
@@ -347,6 +359,7 @@ export async function resumeAsyncImagePolling(
       path: `/v1/videos/${remoteId}`,
       method: 'GET',
       signal,
+      timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
       fetcher: fetchFn,
     });
 

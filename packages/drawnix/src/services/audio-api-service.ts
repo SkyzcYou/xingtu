@@ -20,7 +20,7 @@ import {
 import type {
   AudioGenerationClipResult,
   AudioGenerationResult,
-} from './model-adapters';
+} from './model-adapters/types';
 import { getForcedSunoParams } from '../utils/suno-model-aliases';
 import {
   startLLMApiLog,

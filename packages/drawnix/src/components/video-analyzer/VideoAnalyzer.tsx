@@ -21,7 +21,7 @@ import { insertImageFromUrl } from '../../data/image';
 import { insertVideoFromUrl } from '../../data/video';
 import { TaskType } from '../../types/task.types';
 import type { Task } from '../../types/task.types';
-import { MessagePlugin } from 'tdesign-react';
+import { MessagePlugin } from '../../utils/message-plugin';
 import './VideoAnalyzer.scss';
 
 const VideoAnalyzer: React.FC = () => {

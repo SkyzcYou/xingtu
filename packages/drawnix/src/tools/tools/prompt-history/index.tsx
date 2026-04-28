@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, type CSSProperties } from 'react';
 import { History } from 'lucide-react';
-import type { ToolPluginModule } from '../../registry';
+import type { ToolPluginModule } from '../../types';
 import { ToolCategory } from '../../../types/toolbox.types';
 import type { PromptHistoryCategory } from '../../../services/prompt-history-service';
 

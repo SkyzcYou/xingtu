@@ -285,7 +285,8 @@ export const insertImage = async (
   board: PlaitBoard,
   imageFile: File,
   startPoint?: Point,
-  isDrop?: boolean
+  isDrop?: boolean,
+  skipScroll?: boolean
 ) => {
   // 只有在没有提供startPoint时,才获取当前选中元素
   // 当从文件选择器上传时,已经没有选中状态了,不应该依赖当前选中
@@ -363,7 +364,7 @@ export const insertImage = async (
 
     DrawTransforms.insertImage(board, imageItem, insertionPoint);
 
-    if (insertionPoint && !isDrop) {
+    if (insertionPoint && !isDrop && !skipScroll) {
       const centerPoint: Point = [
         insertionPoint[0] + imageItem.width / 2,
         insertionPoint[1] + imageItem.height / 2,
@@ -403,6 +404,18 @@ export const insertImageFromUrl = async (
     if (cachedUrl !== resolvedUrl) {
       resolvedUrl = cachedUrl;
     }
+  }
+
+  if (!startPoint && !isDrop && !referenceDimensions) {
+    const { insertMediaIntoSelectedFrame } = await import(
+      '../utils/frame-insertion-utils'
+    );
+    const inserted = await insertMediaIntoSelectedFrame(
+      board,
+      resolvedUrl,
+      'image'
+    );
+    if (inserted) return;
   }
   // console.log(`[insertImageFromUrl] Called with:`, {
   //   imageUrl: imageUrl?.substring(0, 80),

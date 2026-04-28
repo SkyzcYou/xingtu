@@ -19,7 +19,7 @@
  * - LangChain 工具链式调用（多个调用块顺序执行）
  */
 
-import type { WorkflowStep } from './workflow-converter';
+import type { WorkflowStep } from './workflow-types';
 import type { SkillDSLVariables, SkillParseResult } from './skill-dsl.types';
 import { mcpRegistry } from '../../mcp/registry';
 
@@ -169,7 +169,7 @@ export class SkillDSLParser {
    * @param step - 工作流步骤
    * @param userInput - 用户输入文本
    */
-  static injectUserInput(step: import('./workflow-converter').WorkflowStep, userInput: string): void {
+  static injectUserInput(step: WorkflowStep, userInput: string): void {
     // 主要文本参数候选列表
     const PRIMARY_TEXT_PARAMS = ['topic', 'theme', 'prompt', 'query', 'text', 'content'];
 

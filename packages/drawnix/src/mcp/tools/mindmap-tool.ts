@@ -24,30 +24,27 @@ export interface MindmapToolParams {
   markdown: string;
 }
 
-/**
- * markdown-to-drawnix 库的动态加载器
- */
-interface MarkdownToDrawnixLib {
-  loaded: boolean;
-  api: Promise<{
-    parseMarkdownToDrawnix: (
-      definition: string,
-      mainTopic?: string
-    ) => MindElement;
-  }>;
-}
-
-const markdownToDrawnixLib: MarkdownToDrawnixLib = {
-  loaded: false,
-  api: new Promise((resolve, reject) => {
-    import('@plait-board/markdown-to-drawnix')
-      .then((module) => {
-        markdownToDrawnixLib.loaded = true;
-        resolve(module);
-      })
-      .catch(reject);
-  }),
+type MarkdownToDrawnixModule = {
+  parseMarkdownToDrawnix: (
+    definition: string,
+    mainTopic?: string
+  ) => MindElement;
 };
+
+let markdownToDrawnixPromise: Promise<MarkdownToDrawnixModule> | null = null;
+
+function loadMarkdownToDrawnix(): Promise<MarkdownToDrawnixModule> {
+  if (!markdownToDrawnixPromise) {
+    markdownToDrawnixPromise = import('@plait-board/markdown-to-drawnix').catch(
+      (error) => {
+        markdownToDrawnixPromise = null;
+        throw error;
+      }
+    );
+  }
+
+  return markdownToDrawnixPromise;
+}
 
 /**
  * 从输入中提取 Markdown 代码
@@ -94,7 +91,7 @@ async function executeMindmapTool(params: MindmapToolParams): Promise<MCPResult>
     // console.log('[MindmapTool] Extracted markdown code:', markdownCode.substring(0, 100) + '...');
 
     // 2. 加载并调用 markdown-to-drawnix 库
-    const api = await markdownToDrawnixLib.api;
+    const api = await loadMarkdownToDrawnix();
 
     let mindElement: MindElement;
     try {

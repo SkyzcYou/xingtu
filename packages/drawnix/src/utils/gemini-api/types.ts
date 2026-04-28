@@ -6,7 +6,7 @@ import type {
   ProviderAuthStrategy,
   ProviderModelBinding,
   ResolvedProviderContext,
-} from '../../services/provider-routing';
+} from '../../services/provider-routing/types';
 
 export interface GeminiConfig {
   apiKey: string;

@@ -19,6 +19,7 @@ import {
 } from './postmessage-logger';
 import { withTimeout } from './utils/timeout-utils';
 import { RPC_METHODS, SW_EVENTS } from './channel-manager/constants';
+import { getSwRuntimeBridge } from './sw-runtime-bridge';
 
 // 从 channel-manager 模块导入常量
 export { RPC_METHODS, SW_EVENTS } from './channel-manager/constants';
@@ -501,8 +502,7 @@ export class SWChannelManager {
     data: CrashSnapshotParams
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const { saveCrashSnapshot } = await import('../index');
-      await saveCrashSnapshot(data.snapshot as any);
+      await getSwRuntimeBridge().saveCrashSnapshot?.(data.snapshot);
       return { success: true };
     } catch (error: any) {
       console.error('[SWChannelManager] Crash snapshot save failed:', error);
@@ -542,13 +542,12 @@ export class SWChannelManager {
     data: ConsoleReportParams
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const { addConsoleLog } = await import('../index');
       const logArgs = data.logArgs ?? [];
       const parts = Array.isArray(logArgs)
         ? logArgs.map((a) => this.serializeLogArg(a))
         : [this.serializeLogArg(logArgs)];
       const logMessage = parts.join(' ');
-      addConsoleLog({
+      getSwRuntimeBridge().addConsoleLog?.({
         logLevel: data.logLevel as 'log' | 'info' | 'warn' | 'error' | 'debug',
         logMessage: logMessage || '-',
       });
@@ -564,9 +563,11 @@ export class SWChannelManager {
 
   private async handleDebugGetStatus(): Promise<Record<string, unknown>> {
     try {
-      const { getDebugStatus, getCacheStats } = await import('../index');
-      const status = getDebugStatus();
-      const cacheStats = await getCacheStats();
+      const runtime = getSwRuntimeBridge();
+      const status = runtime.getDebugStatus?.() || {};
+      const cacheStats = runtime.getCacheStats
+        ? await runtime.getCacheStats()
+        : undefined;
       // 返回完整状态，同时提供 enabled 别名以兼容 DebugStatusResult 类型
       return { ...status, enabled: status.debugModeEnabled, cacheStats };
     } catch {
@@ -579,9 +580,9 @@ export class SWChannelManager {
     status?: Record<string, unknown>;
   }> {
     try {
-      const { enableDebugMode, getDebugStatus } = await import('../index');
-      await enableDebugMode();
-      const status = getDebugStatus();
+      const runtime = getSwRuntimeBridge();
+      await runtime.enableDebugMode?.();
+      const status = runtime.getDebugStatus?.() || {};
       // 广播调试状态变更
       this.sendDebugStatusChanged(true);
       return { success: true, status };
@@ -595,9 +596,9 @@ export class SWChannelManager {
     status?: Record<string, unknown>;
   }> {
     try {
-      const { disableDebugMode, getDebugStatus } = await import('../index');
-      await disableDebugMode();
-      const status = getDebugStatus();
+      const runtime = getSwRuntimeBridge();
+      await runtime.disableDebugMode?.();
+      const status = runtime.getDebugStatus?.() || {};
       // 广播调试状态变更
       this.sendDebugStatusChanged(false);
       return { success: true, status };
@@ -617,23 +618,33 @@ export class SWChannelManager {
     limit: number;
   }> {
     try {
-      const { getDebugLogs, getInternalFetchLogs } = await import('../index');
+      const runtime = getSwRuntimeBridge();
       const { limit = 100, offset = 0, filter } = data || {};
 
       // Merge internal fetch logs with debug logs
-      const internalLogs = getInternalFetchLogs().map((log) => ({
+      const internalLogs: Array<Record<string, unknown>> = (
+        (runtime.getInternalFetchLogs?.() as
+          | Array<Record<string, unknown>>
+          | undefined) || []
+      ).map((log) => ({
         ...log,
         type: 'fetch' as const,
       }));
-      const debugLogs = getDebugLogs();
+      const debugLogs = runtime.getDebugLogs?.() || [];
 
       // Combine and deduplicate by ID
       const logMap = new Map<string, unknown>();
       for (const log of debugLogs) {
-        logMap.set((log as { id: string }).id, log);
+        const id = (log as { id?: unknown }).id;
+        if (typeof id === 'string') {
+          logMap.set(id, log);
+        }
       }
       for (const log of internalLogs) {
-        logMap.set((log as { id: string }).id, log);
+        const id = log.id;
+        if (typeof id === 'string') {
+          logMap.set(id, log);
+        }
       }
 
       // Sort by timestamp descending
@@ -665,8 +676,7 @@ export class SWChannelManager {
 
   private async handleDebugClearLogs(): Promise<{ success: boolean }> {
     try {
-      const { clearDebugLogs } = await import('../index');
-      clearDebugLogs();
+      getSwRuntimeBridge().clearDebugLogs?.();
       return { success: true };
     } catch {
       return { success: false };
@@ -685,9 +695,9 @@ export class SWChannelManager {
     error?: string;
   }> {
     try {
-      const { loadConsoleLogsFromDB } = await import('../index');
       const { limit = 500, offset = 0, filter } = data || {};
-      let logs = await loadConsoleLogsFromDB();
+      let logs = await (getSwRuntimeBridge().loadConsoleLogsFromDB?.() ||
+        Promise.resolve([]));
 
       // Apply filters
       if (filter) {
@@ -719,11 +729,9 @@ export class SWChannelManager {
 
   private async handleDebugClearConsoleLogs(): Promise<{ success: boolean }> {
     try {
-      const { clearConsoleLogs, clearAllConsoleLogs } = await import(
-        '../index'
-      );
-      clearConsoleLogs();
-      await clearAllConsoleLogs();
+      const runtime = getSwRuntimeBridge();
+      runtime.clearConsoleLogs?.();
+      await runtime.clearAllConsoleLogs?.();
       return { success: true };
     } catch {
       return { success: false };
@@ -795,8 +803,8 @@ export class SWChannelManager {
     error?: string;
   }> {
     try {
-      const { getCrashSnapshots } = await import('../index');
-      const snapshots = await getCrashSnapshots();
+      const snapshots = await (getSwRuntimeBridge().getCrashSnapshots?.() ||
+        Promise.resolve([]));
       return { snapshots, total: snapshots.length };
     } catch (error: any) {
       return { snapshots: [], total: 0, error: String(error) };
@@ -807,8 +815,7 @@ export class SWChannelManager {
     success: boolean;
   }> {
     try {
-      const { clearCrashSnapshots } = await import('../index');
-      await clearCrashSnapshots();
+      await getSwRuntimeBridge().clearCrashSnapshots?.();
       return { success: true };
     } catch {
       return { success: false };
@@ -925,9 +932,9 @@ export class SWChannelManager {
     error?: string;
   }> {
     try {
-      const { IMAGE_CACHE_NAME } = await import('../index');
       const {
-        cacheName = IMAGE_CACHE_NAME,
+        cacheName = getSwRuntimeBridge().getImageCacheName?.() ||
+          'drawnix-images',
         limit = 50,
         offset = 0,
       } = data || {};
@@ -1029,22 +1036,18 @@ export class SWChannelManager {
     postmessageLogs: unknown[];
   }> {
     try {
-      const {
-        getDebugStatus,
-        getDebugLogs,
-        loadConsoleLogsFromDB,
-        APP_VERSION,
-      } = await import('../index');
+      const runtime = getSwRuntimeBridge();
       const { getAllLogs } = await import('./postmessage-logger');
 
-      const allConsoleLogs = await loadConsoleLogsFromDB();
+      const allConsoleLogs = await (runtime.loadConsoleLogsFromDB?.() ||
+        Promise.resolve([]));
       const postmessageLogs = getAllLogs();
-      const debugLogs = getDebugLogs();
+      const debugLogs = runtime.getDebugLogs?.() || [];
 
       return {
         exportTime: new Date().toISOString(),
-        swVersion: APP_VERSION,
-        status: getDebugStatus(),
+        swVersion: runtime.getAppVersion?.() || 'unknown',
+        status: runtime.getDebugStatus?.() || {},
         fetchLogs: debugLogs,
         consoleLogs: allConsoleLogs,
         postmessageLogs,
@@ -1067,8 +1070,7 @@ export class SWChannelManager {
 
   private async handleCDNGetStatus(): Promise<{ status: unknown }> {
     try {
-      const { getCDNStatusReport } = await import('../index');
-      return { status: getCDNStatusReport() };
+      return { status: getSwRuntimeBridge().getCDNStatusReport?.() || {} };
     } catch {
       return { status: {} };
     }
@@ -1076,8 +1078,7 @@ export class SWChannelManager {
 
   private async handleCDNResetStatus(): Promise<{ success: boolean }> {
     try {
-      const { resetCDNStatus } = await import('../index');
-      resetCDNStatus();
+      getSwRuntimeBridge().resetCDNStatus?.();
       return { success: true };
     } catch {
       return { success: false };
@@ -1088,8 +1089,10 @@ export class SWChannelManager {
     results: Record<string, unknown>;
   }> {
     try {
-      const { performHealthCheck, APP_VERSION } = await import('../index');
-      const results = await performHealthCheck(APP_VERSION);
+      const runtime = getSwRuntimeBridge();
+      const results = runtime.performHealthCheck
+        ? await runtime.performHealthCheck(runtime.getAppVersion?.() || 'unknown')
+        : new Map<string, unknown>();
       return { results: Object.fromEntries(results) };
     } catch {
       return { results: {} };
@@ -1102,8 +1105,7 @@ export class SWChannelManager {
 
   private async handleUpgradeGetStatus(): Promise<{ version: string }> {
     try {
-      const { APP_VERSION } = await import('../index');
-      return { version: APP_VERSION };
+      return { version: getSwRuntimeBridge().getAppVersion?.() || 'unknown' };
     } catch {
       return { version: 'unknown' };
     }
@@ -1114,8 +1116,7 @@ export class SWChannelManager {
       const sw = self as unknown as ServiceWorkerGlobalScope;
       sw.skipWaiting();
       // 广播 SW 已更新
-      const { APP_VERSION } = await import('../index');
-      this.sendSWUpdated(APP_VERSION);
+      this.sendSWUpdated(getSwRuntimeBridge().getAppVersion?.() || 'unknown');
       return { success: true };
     } catch {
       return { success: false };
@@ -1130,8 +1131,7 @@ export class SWChannelManager {
     url: string;
   }): Promise<{ success: boolean; error?: string }> {
     try {
-      const { deleteCacheByUrl } = await import('../index');
-      await deleteCacheByUrl(data.url);
+      await getSwRuntimeBridge().deleteCacheByUrl?.(data.url);
       // 广播缓存删除事件
       this.sendCacheDeleted(data.url);
       return { success: true };

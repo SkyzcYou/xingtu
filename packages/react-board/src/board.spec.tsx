@@ -1,9 +1,10 @@
 import { cleanup, render, waitFor } from '@testing-library/react';
 import {
+  PlaitElement,
+  getSelectedElements,
   initializeViewBox,
   initializeViewportContainer,
   updateViewportOffset,
-  type PlaitElement,
   type Viewport,
 } from '@plait/core';
 import React from 'react';
@@ -11,6 +12,7 @@ import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -26,6 +28,11 @@ vi.mock('@plait/core', async () => {
   );
   return {
     ...actual,
+    PlaitElement: {
+      ...actual.PlaitElement,
+      getElementRef: vi.fn(actual.PlaitElement.getElementRef),
+    },
+    getSelectedElements: vi.fn(actual.getSelectedElements),
     initializeViewportContainer: vi.fn(),
     initializeViewBox: vi.fn(),
     initializeViewportOffset: vi.fn(),
@@ -56,6 +63,8 @@ const mockedInitializeViewportContainer = vi.mocked(
 );
 const mockedInitializeViewBox = vi.mocked(initializeViewBox);
 const mockedUpdateViewportOffset = vi.mocked(updateViewportOffset);
+const mockedGetSelectedElements = vi.mocked(getSelectedElements);
+const mockedGetElementRef = vi.mocked(PlaitElement.getElementRef);
 
 const renderBoard = (value: PlaitElement[], viewport?: Viewport) => (
   <Wrapper value={value} viewport={viewport} options={{}} plugins={[]}>
@@ -69,6 +78,11 @@ describe('ReactBoard', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
       boardRect
     );
+  });
+
+  beforeEach(() => {
+    mockedGetSelectedElements.mockReturnValue([]);
+    mockedGetElementRef.mockReturnValue(undefined as any);
   });
 
   afterEach(() => {
@@ -128,5 +142,86 @@ describe('ReactBoard', () => {
 
     expect(mockedInitializeViewBox).toHaveBeenCalledTimes(1);
     expect(mockedUpdateViewportOffset).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes selected active sections after viewport prop changes', async () => {
+    const value: PlaitElement[] = [];
+    const selectedElement = { id: 'selected' } as PlaitElement;
+    const elementRef = { updateActiveSection: vi.fn() };
+    const restoredViewport = {
+      zoom: 1.25,
+      origination: [100, 600],
+    } as Viewport;
+
+    mockedGetSelectedElements.mockReturnValue([selectedElement]);
+    mockedGetElementRef.mockReturnValue(elementRef as any);
+
+    const { rerender } = render(renderBoard(value));
+
+    vi.clearAllMocks();
+    mockedGetSelectedElements.mockReturnValue([selectedElement]);
+    mockedGetElementRef.mockReturnValue(elementRef as any);
+
+    rerender(renderBoard(value, restoredViewport));
+
+    await waitFor(() => {
+      expect(elementRef.updateActiveSection).toHaveBeenCalled();
+    });
+    expect(mockedGetElementRef).toHaveBeenCalledWith(selectedElement);
+  });
+
+  it('refreshes selected active sections after restoring viewport scroll', async () => {
+    const value: PlaitElement[] = [];
+    const selectedElement = { id: 'selected' } as PlaitElement;
+    const elementRef = { updateActiveSection: vi.fn() };
+    const restoredViewport = {
+      zoom: 2,
+      origination: [20, 30],
+    } as Viewport;
+
+    mockedGetSelectedElements.mockReturnValue([selectedElement]);
+    mockedGetElementRef.mockReturnValue(elementRef as any);
+
+    const { container, rerender } = render(renderBoard(value));
+    container
+      .querySelector('.board-host-svg')
+      ?.setAttribute('viewBox', '0 0 1000 800');
+    const viewportContainer = container.querySelector(
+      '.viewport-container'
+    ) as HTMLElement;
+
+    vi.clearAllMocks();
+    mockedGetSelectedElements.mockReturnValue([selectedElement]);
+    mockedGetElementRef.mockReturnValue(elementRef as any);
+
+    rerender(renderBoard(value, restoredViewport));
+
+    await waitFor(() => {
+      expect(viewportContainer.scrollLeft).toBe(40);
+      expect(viewportContainer.scrollTop).toBe(60);
+    });
+    expect(elementRef.updateActiveSection.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('does not refresh element refs when viewport changes without selection', async () => {
+    const value: PlaitElement[] = [];
+    const restoredViewport = {
+      zoom: 1.25,
+      origination: [100, 600],
+    } as Viewport;
+
+    mockedGetSelectedElements.mockReturnValue([]);
+
+    const { rerender } = render(renderBoard(value));
+
+    vi.clearAllMocks();
+    mockedGetSelectedElements.mockReturnValue([]);
+
+    rerender(renderBoard(value, restoredViewport));
+
+    await waitFor(() => {
+      expect(mockedInitializeViewportContainer).toHaveBeenCalledTimes(1);
+    });
+    expect(mockedGetElementRef).not.toHaveBeenCalled();
   });
 });

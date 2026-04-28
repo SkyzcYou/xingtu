@@ -26,6 +26,7 @@ export { toolbarConfigService } from './services/toolbar-config-service';
 export { memoryMonitorService } from './services/memory-monitor-service';
 export { swChannelClient } from './services/sw-channel/client';
 export { unifiedLogService } from './services/unified-log-service';
+export { MessagePlugin } from './utils/message-plugin';
 export {
   requestServiceWorkerIdlePrefetch,
   type IdlePrefetchGroup,

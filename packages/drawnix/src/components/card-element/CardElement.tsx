@@ -1,71 +1,19 @@
 /**
  * Card 元素的 React 渲染组件
  *
- * 复用 MarkdownEditor 进行 Markdown 内容展示（只读模式）
+ * 使用轻量 MarkdownReadonly 进行 Markdown 内容展示（只读模式）
  * Card 在画布上仅作只读展示，编辑通过知识库进行
  */
-import React, { Suspense, lazy, useCallback, useMemo } from 'react';
+import React, { useCallback } from 'react';
 import { BookOpen } from 'lucide-react';
 import { HoverTip } from '../shared/hover';
+import MarkdownReadonly from '../MarkdownReadonly';
 import {
   getTitleColor,
   getBodyColor,
   getCardDisplayTitle,
 } from '../../constants/card-colors';
 import type { PlaitCard } from '../../types/card.types';
-
-const MarkdownEditor = lazy(() =>
-  import('../MarkdownEditor').then((module) => ({
-    default: module.MarkdownEditor ?? module.default,
-  }))
-);
-
-/**
- * 将纯文本中的单个换行转为 Markdown 硬换行（行尾双空格），
- * 保留已有的 Markdown 结构（代码块、空行、标题、列表等）不做处理。
- */
-function preserveLineBreaks(text: string): string {
-  const lines = text.split('\n');
-  const result: string[] = [];
-  let inCodeBlock = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    // 跟踪代码块状态
-    if (line.trimStart().startsWith('```')) {
-      inCodeBlock = !inCodeBlock;
-      result.push(line);
-      continue;
-    }
-    // 代码块内不处理
-    if (inCodeBlock) {
-      result.push(line);
-      continue;
-    }
-    // 空行、标题、列表、引用、已有硬换行、图片/素材引用 → 不处理
-    const trimmed = line.trimEnd();
-    if (
-      trimmed === '' ||
-      /^#{1,6}\s/.test(trimmed) ||
-      /^[-*+]\s/.test(trimmed) ||
-      /^\d+\.\s/.test(trimmed) ||
-      /^\s*>/.test(trimmed) ||
-      /^!\[.*\]\(.*\)/.test(trimmed) ||
-      trimmed.endsWith('  ')
-    ) {
-      result.push(line);
-      continue;
-    }
-    // 下一行非空且非 Markdown 块级元素 → 加双空格硬换行
-    const next = lines[i + 1];
-    if (next !== undefined && next.trim() !== '') {
-      result.push(trimmed + '  ');
-    } else {
-      result.push(line);
-    }
-  }
-  return result.join('\n');
-}
 
 const cardBodyElements = new Map<string, HTMLElement>();
 
@@ -95,16 +43,12 @@ interface CardElementProps {
 }
 
 /**
- * Card 内容组件 - 渲染标题 + MarkdownEditor 正文（只读）
+ * Card 内容组件 - 渲染标题 + MarkdownReadonly 正文（只读）
  */
 export const CardElement: React.FC<CardElementProps> = ({ element }) => {
   const displayTitle = getCardDisplayTitle(element.title);
   const titleColor = getTitleColor(element.fillColor);
   const bodyColor = getBodyColor(element.fillColor);
-  const displayBody = useMemo(
-    () => preserveLineBreaks(element.body),
-    [element.body]
-  );
   const hasKnowledgeBaseLink = !!element.noteId;
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
@@ -227,31 +171,10 @@ export const CardElement: React.FC<CardElementProps> = ({ element }) => {
         onPointerDown={(e) => e.stopPropagation()}
         onWheel={handleWheel}
       >
-        <Suspense
-          fallback={
-            <div
-              className="card-markdown-viewer card-markdown-viewer--fallback"
-              style={{
-                padding: '12px 14px',
-                fontSize: 13,
-                lineHeight: 1.6,
-                color: '#333',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
-              {displayBody}
-            </div>
-          }
-        >
-          <MarkdownEditor
-            markdown={displayBody}
-            readOnly={true}
-            showModeSwitch={false}
-            enableAssetEmbeds={true}
-            className="card-markdown-viewer"
-          />
-        </Suspense>
+        <MarkdownReadonly
+          markdown={element.body}
+          className="card-markdown-viewer"
+        />
       </div>
     </div>
   );

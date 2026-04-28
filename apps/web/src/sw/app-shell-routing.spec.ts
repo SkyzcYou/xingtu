@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  shouldBypassAppShellCacheForLazyChunkRecovery,
   shouldUseCDNFirstPreload,
   shouldMirrorToAppShellAliases,
   shouldUseOriginFirstPreload,
@@ -49,5 +50,23 @@ describe('app-shell-routing', () => {
       true
     );
     expect(shouldUseCDNFirstPreload('/user-manual/index.html')).toBe(true);
+  });
+
+  it('bypasses the cached app shell only for fresh lazy chunk recovery reloads', () => {
+    expect(
+      shouldBypassAppShellCacheForLazyChunkRecovery(
+        '?_lazy_chunk_retry=1&_t=1000',
+        1000 + 60 * 1000
+      )
+    ).toBe(true);
+    expect(
+      shouldBypassAppShellCacheForLazyChunkRecovery(
+        '?_lazy_chunk_retry=1&_t=1000',
+        1000 + 11 * 60 * 1000
+      )
+    ).toBe(false);
+    expect(shouldBypassAppShellCacheForLazyChunkRecovery('?board=abc')).toBe(
+      false
+    );
   });
 });

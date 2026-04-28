@@ -1,7 +1,7 @@
 /**
  * Card 标签贴元素渲染生成器
  *
- * 使用 SVG foreignObject 嵌入 HTML，通过 React 渲染 MarkdownEditor（只读模式）
+ * 使用 SVG foreignObject 嵌入 HTML，通过 React 渲染 MarkdownReadonly（只读模式）
  */
 import { RectangleClient } from '@plait/core';
 import { PlaitCard } from '../../types/card.types';

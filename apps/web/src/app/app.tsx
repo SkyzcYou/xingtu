@@ -12,6 +12,7 @@ import {
   useDocumentTitle,
   markTabSyncVersion,
   requestServiceWorkerIdlePrefetch,
+  MessagePlugin,
 } from '@drawnix/drawnix/runtime';
 import {
   PlaitBoard,
@@ -22,7 +23,6 @@ import {
   initializeViewBox,
   updateViewportOffset,
 } from '@plait/core';
-import { MessagePlugin } from 'tdesign-react';
 import { ErrorFallbackUI, safeModeReload, goToDebug } from './ErrorBoundary';
 import { collectAndDownloadErrorLog } from '../utils/error-log-exporter';
 

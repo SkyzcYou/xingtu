@@ -5,6 +5,8 @@
  * 预览图存储在独立的 Cache Storage (drawnix-images-thumb) 中，使用原URL作为key
  */
 
+import { getSwRuntimeBridge } from '../sw-runtime-bridge';
+
 const IMAGE_CACHE_NAME_THUMB = 'drawnix-images-thumb';
 const THUMBNAIL_MAX_SIZE_SMALL = 128; // 小尺寸：用于任务列表、缩略图导航
 const THUMBNAIL_MAX_SIZE_LARGE = 400; // 大尺寸：用于素材库大图预览
@@ -307,16 +309,15 @@ async function generateVideoThumbnailForSize(
  * @param _maxSize 最大尺寸（未使用，由主线程决定）
  */
 async function requestVideoThumbnailFromMainThread(url: string, _blob: Blob, maxSize: number = THUMBNAIL_MAX_SIZE_LARGE): Promise<Blob | null> {
-  const { getChannelManager } = await import('../channel-manager');
-  const cm = getChannelManager();
-  
-  if (!cm || cm.getConnectedClientCount() === 0) {
+  const requestVideoThumbnail = getSwRuntimeBridge().requestVideoThumbnail;
+
+  if (!requestVideoThumbnail) {
     console.warn('[ThumbnailUtils] No connected clients for video thumbnail generation');
     return null;
   }
   
   // 直接使用 publish 发起请求，等待主线程响应（双工通讯）
-  const thumbnailUrl = await cm.requestVideoThumbnail(url, 30000, maxSize);
+  const thumbnailUrl = await requestVideoThumbnail(url, 30000, maxSize);
   
   if (!thumbnailUrl) {
     return null;

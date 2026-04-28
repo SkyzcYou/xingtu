@@ -1,4 +1,3 @@
-import JSZip from 'jszip';
 import type { PPTSlideTransition, PPTSlideTransitionType } from './ppt.types';
 
 const PPT_TRANSITION_TYPES = new Set<PPTSlideTransitionType>([
@@ -224,6 +223,7 @@ async function injectPPTXSlideTransitions(
     return pptxBlob;
   }
 
+  const { default: JSZip } = await import('jszip');
   const zip = await JSZip.loadAsync(pptxBlob);
   await Promise.all(
     transitions.map(async (transition, index) => {

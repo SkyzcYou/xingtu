@@ -5,7 +5,6 @@
  * Supports single file download and batch download as ZIP
  */
 
-import JSZip from 'jszip';
 import {
   sanitizeFilename,
   isVolcesDomain,
@@ -356,6 +355,7 @@ export async function downloadAsZip(
     throw new Error('No files to download');
   }
 
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
   const finalZipName = zipFilename || `aitu_download_${timestamp}.zip`;

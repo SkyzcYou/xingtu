@@ -5,7 +5,13 @@
  * 用户点击工具项后，将工具插入到画布中心
  */
 
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  useEffect,
+} from 'react';
 import { Button, Input, MessagePlugin } from 'tdesign-react';
 import { SearchIcon, AddIcon } from 'tdesign-icons-react';
 import { PlaitBoard, getViewportOrigination } from '@plait/core';
@@ -15,7 +21,11 @@ import { toolboxService } from '../../services/toolbox-service';
 import { toolWindowService } from '../../services/tool-window-service';
 import { analytics } from '../../utils/posthog-analytics';
 import { ToolDefinition } from '../../types/toolbox.types';
-import { DEFAULT_TOOL_CONFIG, TOOL_CATEGORY_LABELS } from '../../constants/built-in-tools';
+import {
+  DEFAULT_TOOL_CONFIG,
+  TOOL_CATEGORY_LABELS,
+  isBuiltInToolId,
+} from '../../constants/built-in-tools';
 import { ToolList } from './ToolList';
 import { CustomToolDialog } from '../custom-tool-dialog/CustomToolDialog';
 import { BaseDrawer } from '../side-drawer';
@@ -96,6 +106,7 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
         console.warn('Board not ready');
         return;
       }
+      const isCustomTool = !isBuiltInToolId(tool.id);
 
       // 计算画布中心位置
       // 使用 Plait 的 getViewportOrigination 获取视口原点
@@ -136,11 +147,19 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
 
         // 埋点：工具实际使用（插入画布）
         analytics.track('tool_actually_used', {
+          area: 'toolbox',
+          action: 'tool_inserted',
+          control: 'tool_item',
+          source: 'toolbox_drawer',
           toolId: tool.id,
+          tool_id: tool.id,
           toolName: tool.name,
+          tool_name: tool.name,
           category: tool.category,
           usageType: 'insert',
-          isCustomTool: !tool.id.startsWith('builtin-'),
+          usage_type: 'insert',
+          isCustomTool,
+          is_custom_tool: isCustomTool,
         });
         analytics.trackUIInteraction({
           area: 'toolbox',
@@ -151,7 +170,7 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
             toolId: tool.id,
             toolName: tool.name,
             category: tool.category,
-            isCustomTool: !tool.id.startsWith('builtin-'),
+            isCustomTool,
           },
         });
       } else {
@@ -172,6 +191,7 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
       // 检查 URL 是否需要 API Key 配置
       const toolUrl = (tool as any).url;
       if (toolUrl && needsApiKeyConfiguration(toolUrl)) {
+        const isCustomTool = !isBuiltInToolId(tool.id);
         analytics.trackUIInteraction({
           area: 'toolbox',
           action: 'api_key_required',
@@ -182,7 +202,7 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
             toolName: tool.name,
             category: tool.category,
             usageType: 'insert',
-            isCustomTool: !tool.id.startsWith('builtin-'),
+            isCustomTool,
           },
         });
         // 需要配置 API Key，保存待处理的操作并打开设置弹窗
@@ -203,16 +223,25 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
    */
   const executeToolOpenWindow = useCallback(
     (tool: ToolDefinition) => {
+      const isCustomTool = !isBuiltInToolId(tool.id);
       // 存储原始模板 URL，在渲染时由 ToolWinBoxManager 替换
       toolWindowService.openTool(tool);
 
       // 埋点：工具实际使用（在窗口中打开）
       analytics.track('tool_actually_used', {
+        area: 'toolbox',
+        action: 'tool_opened_window',
+        control: 'tool_item',
+        source: 'toolbox_drawer',
         toolId: tool.id,
+        tool_id: tool.id,
         toolName: tool.name,
+        tool_name: tool.name,
         category: tool.category,
         usageType: 'window',
-        isCustomTool: !tool.id.startsWith('builtin-'),
+        usage_type: 'window',
+        isCustomTool,
+        is_custom_tool: isCustomTool,
       });
       analytics.trackUIInteraction({
         area: 'toolbox',
@@ -223,7 +252,7 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
           toolId: tool.id,
           toolName: tool.name,
           category: tool.category,
-          isCustomTool: !tool.id.startsWith('builtin-'),
+          isCustomTool,
         },
       });
 
@@ -241,6 +270,7 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
       // 检查 URL 是否需要 API Key 配置
       const toolUrl = (tool as any).url;
       if (toolUrl && needsApiKeyConfiguration(toolUrl)) {
+        const isCustomTool = !isBuiltInToolId(tool.id);
         analytics.trackUIInteraction({
           area: 'toolbox',
           action: 'api_key_required',
@@ -251,7 +281,7 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
             toolName: tool.name,
             category: tool.category,
             usageType: 'window',
-            isCustomTool: !tool.id.startsWith('builtin-'),
+            isCustomTool,
           },
         });
         // 需要配置 API Key，保存待处理的操作并打开设置弹窗
@@ -364,43 +394,46 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
   /**
    * 处理删除工具
    */
-  const handleDeleteTool = useCallback(async (tool: ToolDefinition) => {
-    const confirmed = await confirm({
-      title: '确认删除',
-      description: `确定要删除工具 "${tool.name}" 吗？此操作不可撤销。`,
-      confirmText: '删除',
-      cancelText: '取消',
-      danger: true,
-    });
+  const handleDeleteTool = useCallback(
+    async (tool: ToolDefinition) => {
+      const confirmed = await confirm({
+        title: '确认删除',
+        description: `确定要删除工具 "${tool.name}" 吗？此操作不可撤销。`,
+        confirmText: '删除',
+        cancelText: '取消',
+        danger: true,
+      });
 
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      const removed = await toolboxService.removeCustomTool(tool.id);
-      if (removed) {
-        analytics.trackUIInteraction({
-          area: 'toolbox',
-          action: 'custom_tool_deleted',
-          control: 'delete_tool',
-          source: 'toolbox_drawer',
-          metadata: {
-            toolId: tool.id,
-            toolName: tool.name,
-            category: tool.category,
-          },
-        });
-        MessagePlugin.success('工具已删除');
-        setRefreshKey((prev) => prev + 1);
-      } else {
-        MessagePlugin.warning('工具不存在或删除失败');
+      if (!confirmed) {
+        return;
       }
-    } catch (error) {
-      console.error('Failed to delete tool:', error);
-      MessagePlugin.error('删除工具失败，请重试');
-    }
-  }, [confirm]);
+
+      try {
+        const removed = await toolboxService.removeCustomTool(tool.id);
+        if (removed) {
+          analytics.trackUIInteraction({
+            area: 'toolbox',
+            action: 'custom_tool_deleted',
+            control: 'delete_tool',
+            source: 'toolbox_drawer',
+            metadata: {
+              toolId: tool.id,
+              toolName: tool.name,
+              category: tool.category,
+            },
+          });
+          MessagePlugin.success('工具已删除');
+          setRefreshKey((prev) => prev + 1);
+        } else {
+          MessagePlugin.warning('工具不存在或删除失败');
+        }
+      } catch (error) {
+        console.error('Failed to delete tool:', error);
+        MessagePlugin.error('删除工具失败，请重试');
+      }
+    },
+    [confirm]
+  );
 
   /**
    * 处理添加成功

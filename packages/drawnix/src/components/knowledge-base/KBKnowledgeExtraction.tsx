@@ -38,7 +38,7 @@ import {
 import type { GeminiMessage } from '../../utils/gemini-api/types';
 import './knowledge-base-extraction.scss';
 import { Button, MessagePlugin } from 'tdesign-react';
-import { ModelSelector } from '../chat-drawer';
+import { ModelSelector } from '../chat-drawer/ModelSelector';
 import MarkdownEditor from '../MarkdownEditor';
 import { HoverTip } from '../shared';
 import {
@@ -47,9 +47,91 @@ import {
   type ModelRef,
 } from '../../utils/settings-manager';
 import { copyToClipboard } from '../../utils/runtime-helpers';
+import { analytics } from '../../utils/posthog-analytics';
 
 // 默认使用的模型，避免使用 gpt-5.1 导致 500 错误
 const DEFAULT_MODEL = 'gemini-3.1-pro-preview';
+
+type KBExtractionAction =
+  | 'chat'
+  | 'quick_extract'
+  | 'stop_generation'
+  | 'copy_result'
+  | 'insert_to_note'
+  | 'download_markdown'
+  | 'change_model';
+
+function getLengthBucket(length: number): string {
+  if (length <= 0) return '0';
+  if (length <= 200) return '1-200';
+  if (length <= 1000) return '201-1000';
+  if (length <= 5000) return '1001-5000';
+  if (length <= 20000) return '5001-20000';
+  return '20000+';
+}
+
+function trackKnowledgeExtractionAction(
+  action: KBExtractionAction,
+  params: {
+    status?: 'start' | 'success' | 'failed' | 'cancelled';
+    model?: string;
+    profileId?: string | null;
+    noteLength?: number;
+    inputLength?: number;
+    resultLength?: number;
+    knowledgePointCount?: number;
+    durationMs?: number;
+    error?: string;
+  } = {}
+): void {
+  analytics.trackUIInteraction({
+    area: 'knowledge_base',
+    action,
+    control: 'knowledge_extraction',
+    source: 'knowledge_base_extraction',
+    metadata: {
+      status: params.status,
+      model: params.model,
+      profileId: params.profileId,
+      profile_id: params.profileId,
+      noteLength: params.noteLength,
+      note_length: params.noteLength,
+      noteLengthBucket:
+        params.noteLength === undefined
+          ? undefined
+          : getLengthBucket(params.noteLength),
+      note_length_bucket:
+        params.noteLength === undefined
+          ? undefined
+          : getLengthBucket(params.noteLength),
+      inputLength: params.inputLength,
+      input_length: params.inputLength,
+      inputLengthBucket:
+        params.inputLength === undefined
+          ? undefined
+          : getLengthBucket(params.inputLength),
+      input_length_bucket:
+        params.inputLength === undefined
+          ? undefined
+          : getLengthBucket(params.inputLength),
+      resultLength: params.resultLength,
+      result_length: params.resultLength,
+      resultLengthBucket:
+        params.resultLength === undefined
+          ? undefined
+          : getLengthBucket(params.resultLength),
+      result_length_bucket:
+        params.resultLength === undefined
+          ? undefined
+          : getLengthBucket(params.resultLength),
+      knowledgePointCount: params.knowledgePointCount,
+      knowledge_point_count: params.knowledgePointCount,
+      durationMs: params.durationMs,
+      duration_ms: params.durationMs,
+      error: params.error,
+    },
+  });
+}
 
 function formatExtractionResultToMarkdown(
   result: KnowledgeExtractionResult
@@ -110,7 +192,11 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
     initialRoute.modelId || DEFAULT_MODEL
   );
   const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
-    () => createModelRef(initialRoute.profileId, initialRoute.modelId || DEFAULT_MODEL)
+    () =>
+      createModelRef(
+        initialRoute.profileId,
+        initialRoute.modelId || DEFAULT_MODEL
+      )
   );
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
@@ -183,6 +269,12 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
 
   const stopGeneration = useCallback(() => {
     if (abortController) {
+      trackKnowledgeExtractionAction('stop_generation', {
+        status: 'cancelled',
+        model: selectedModel,
+        profileId: selectedModelRef?.profileId,
+        noteLength: noteContent.length,
+      });
       abortController.abort();
       setAbortController(null);
       setIsLoading(false);
@@ -199,15 +291,24 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
         },
       ]);
     }
-  }, [abortController]);
+  }, [abortController, noteContent.length, selectedModel, selectedModelRef]);
 
   const handleSendMessage = useCallback(async () => {
-    if (!input.trim() || isLoading) return;
+    const trimmedInput = input.trim();
+    if (!trimmedInput || isLoading) return;
+    const startedAt = Date.now();
+    trackKnowledgeExtractionAction('chat', {
+      status: 'start',
+      model: selectedModel,
+      profileId: selectedModelRef?.profileId,
+      noteLength: noteContent.length,
+      inputLength: trimmedInput.length,
+    });
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: input,
+      content: trimmedInput,
       type: 'text',
       timestamp: Date.now(),
     };
@@ -277,8 +378,25 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
         },
         signal: controller.signal,
       });
+      trackKnowledgeExtractionAction('chat', {
+        status: 'success',
+        model: selectedModel,
+        profileId: selectedModelRef?.profileId,
+        noteLength: noteContent.length,
+        inputLength: trimmedInput.length,
+        durationMs: Date.now() - startedAt,
+      });
     } catch (e: any) {
       if (e.name !== 'AbortError') {
+        trackKnowledgeExtractionAction('chat', {
+          status: 'failed',
+          model: selectedModel,
+          profileId: selectedModelRef?.profileId,
+          noteLength: noteContent.length,
+          inputLength: trimmedInput.length,
+          durationMs: Date.now() - startedAt,
+          error: e.message || 'chat_failed',
+        });
         setMessages((prev) => [
           ...prev,
           {
@@ -289,6 +407,15 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
             timestamp: Date.now(),
           },
         ]);
+      } else {
+        trackKnowledgeExtractionAction('chat', {
+          status: 'cancelled',
+          model: selectedModel,
+          profileId: selectedModelRef?.profileId,
+          noteLength: noteContent.length,
+          inputLength: trimmedInput.length,
+          durationMs: Date.now() - startedAt,
+        });
       }
     } finally {
       setIsLoading(false);
@@ -306,6 +433,13 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
 
   const handleQuickExtract = useCallback(async () => {
     if (isLoading) return;
+    const startedAt = Date.now();
+    trackKnowledgeExtractionAction('quick_extract', {
+      status: 'start',
+      model: selectedModel,
+      profileId: selectedModelRef?.profileId,
+      noteLength: noteContent.length,
+    });
     setIsLoading(true);
 
     // 添加用户指令消息
@@ -340,6 +474,16 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
         model: selectedModelRef || selectedModel,
         signal: controller.signal,
       });
+      const resultMarkdown = formatExtractionResultToMarkdown(result);
+      trackKnowledgeExtractionAction('quick_extract', {
+        status: 'success',
+        model: selectedModel,
+        profileId: selectedModelRef?.profileId,
+        noteLength: noteContent.length,
+        resultLength: resultMarkdown.length,
+        knowledgePointCount: result.knowledgePoints.length,
+        durationMs: Date.now() - startedAt,
+      });
 
       // 替换占位消息为结果消息
       setMessages((prev) =>
@@ -356,6 +500,14 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
       );
     } catch (e: any) {
       if (e.name !== 'AbortError') {
+        trackKnowledgeExtractionAction('quick_extract', {
+          status: 'failed',
+          model: selectedModel,
+          profileId: selectedModelRef?.profileId,
+          noteLength: noteContent.length,
+          durationMs: Date.now() - startedAt,
+          error: e.message || 'extract_failed',
+        });
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMsgId
@@ -363,6 +515,14 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
               : msg
           )
         );
+      } else {
+        trackKnowledgeExtractionAction('quick_extract', {
+          status: 'cancelled',
+          model: selectedModel,
+          profileId: selectedModelRef?.profileId,
+          noteLength: noteContent.length,
+          durationMs: Date.now() - startedAt,
+        });
       }
     } finally {
       setIsLoading(false);
@@ -382,11 +542,23 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
       MessagePlugin.warning('没有可复制的内容');
       return;
     }
+    trackKnowledgeExtractionAction('copy_result', {
+      status: 'start',
+      resultLength: text.length,
+    });
     copyToClipboard(text)
       .then(() => {
+        trackKnowledgeExtractionAction('copy_result', {
+          status: 'success',
+          resultLength: text.length,
+        });
         MessagePlugin.success('复制成功');
       })
       .catch(() => {
+        trackKnowledgeExtractionAction('copy_result', {
+          status: 'failed',
+          resultLength: text.length,
+        });
         MessagePlugin.error('复制失败');
       });
   }, []);
@@ -414,8 +586,18 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
           exportResult.filename,
           exportResult.mimeType
         );
+        trackKnowledgeExtractionAction('download_markdown', {
+          status: 'success',
+          resultLength: exportResult.content.length,
+          knowledgePointCount: msg.data.knowledgePoints.length,
+        });
       } catch (e) {
         console.error('Failed to export', e);
+        trackKnowledgeExtractionAction('download_markdown', {
+          status: 'failed',
+          knowledgePointCount: msg.data.knowledgePoints.length,
+          error: e instanceof Error ? e.message : 'export_failed',
+        });
         MessagePlugin.error('导出失败');
       }
     }
@@ -441,11 +623,20 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
                 {msg.role === 'model' ? (
                   <div className="kb-message__content-scroll">
                     {msg.type === 'text' ? (
-                      msg.id === streamingMsgId && (msg.content === '正在思考...' || msg.content === '正在分析笔记内容并提取知识点...') ? (
-                        <div className="kb-message__thinking" aria-label="思考中">
-                          <span className="kb-message__thinking-text">{msg.content.replace(/\.+$/, '')}</span>
+                      msg.id === streamingMsgId &&
+                      (msg.content === '正在思考...' ||
+                        msg.content === '正在分析笔记内容并提取知识点...') ? (
+                        <div
+                          className="kb-message__thinking"
+                          aria-label="思考中"
+                        >
+                          <span className="kb-message__thinking-text">
+                            {msg.content.replace(/\.+$/, '')}
+                          </span>
                           <span className="kb-message__thinking-dots">
-                            <span>.</span><span>.</span><span>.</span>
+                            <span>.</span>
+                            <span>.</span>
+                            <span>.</span>
                           </span>
                         </div>
                       ) : msg.content ? (
@@ -463,12 +654,10 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
                       <ExtractionResultView result={msg.data!} />
                     )}
                   </div>
+                ) : msg.type === 'text' ? (
+                  <div className="kb-message__text">{msg.content}</div>
                 ) : (
-                  msg.type === 'text' ? (
-                    <div className="kb-message__text">{msg.content}</div>
-                  ) : (
-                    <ExtractionResultView result={msg.data!} />
-                  )
+                  <ExtractionResultView result={msg.data!} />
                 )}
               </div>
               {msg.role === 'model' && (
@@ -486,7 +675,17 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
                       className="kb-message__action-btn"
                       onClick={() => {
                         const text = getMessageText(msg);
-                        if (text) onInsertToNote?.(text);
+                        if (text) {
+                          trackKnowledgeExtractionAction('insert_to_note', {
+                            status: 'success',
+                            resultLength: text.length,
+                            knowledgePointCount:
+                              msg.type === 'extraction-result'
+                                ? msg.data?.knowledgePoints.length
+                                : undefined,
+                          });
+                          onInsertToNote?.(text);
+                        }
                       }}
                     >
                       <NotebookPen size={14} />
@@ -528,6 +727,12 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
               value={selectedModel}
               valueRef={selectedModelRef}
               onChange={(modelId, modelRef) => {
+                trackKnowledgeExtractionAction('change_model', {
+                  status: 'success',
+                  model: modelId,
+                  profileId: modelRef?.profileId,
+                  noteLength: noteContent.length,
+                });
                 setSelectedModel(modelId);
                 setSelectedModelRef(modelRef || createModelRef(null, modelId));
               }}

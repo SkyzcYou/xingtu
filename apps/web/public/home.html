@@ -8,11 +8,11 @@
     </title>
     <meta
       name="description"
-      content="Xingtu 星图 是面向 AI 创作者的开源画布工作台，支持 GPT-Image-2 图片生成、DeepSeek-v4 文本推理、流程图、思维导图、素材库和作品整理。立即打开 Xingtu 星图，把提示词、模型生成和作品展示放进同一块画布。"
+      content="Xingtu 星图是面向 AI 创作者的开源画布工作台，把 AI 图片生成、提示词推理、流程图、思维导图、素材库和作品整理放进同一块浏览器画布，适合创作者在线使用或自部署改造。"
     />
     <meta
       name="keywords"
-      content="Xingtu,星图,gpt-image-2,DeepSeek-v4,AI图片生成,AI创作工作台,AI白板,开源画布,图片生成器,思维导图,流程图"
+      content="Xingtu,星图,开源AI画布,AI图片生成工作流,AI创作工作台,AI白板,GPT-Image-2,DeepSeek-v4,图片生成器,思维导图,流程图"
     />
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <link rel="canonical" href="https://opentu.ai/home.html" />
@@ -30,7 +30,7 @@
     />
     <meta
       property="og:description"
-      content="用 Xingtu 星图 在浏览器里完成 AI 图片生成、文本推理、素材整理、流程图和作品展示。"
+      content="用 Xingtu 星图在浏览器里完成 AI 图片生成、提示词推理、素材整理、流程图、思维导图和作品展示。"
     />
     <meta property="og:url" content="https://opentu.ai/home.html" />
     <meta property="og:locale" content="zh_CN" />
@@ -43,7 +43,7 @@
     <meta name="twitter:title" content="Xingtu 星图 AI 创作工作台" />
     <meta
       name="twitter:description"
-      content="支持 GPT-Image-2、DeepSeek-v4、AI 图片生成、知识画布和作品整理的开源创作工作台。"
+      content="支持 AI 图片生成、提示词推理、流程图、思维导图和作品整理的开源 AI 画布工作台。"
     />
     <script type="application/ld+json">
       {
@@ -57,7 +57,7 @@
             "url": "https://opentu.ai/home.html",
             "applicationCategory": "DesignApplication",
             "operatingSystem": "Any",
-            "description": "Xingtu 星图 是面向 AI 创作者的开源画布工作台，支持 GPT-Image-2 图片生成、DeepSeek-v4 文本推理、流程图、思维导图、素材库和作品整理。",
+            "description": "Xingtu 星图是面向 AI 创作者的开源画布工作台，把 AI 图片生成、提示词推理、流程图、思维导图、素材库和作品整理放进同一块浏览器画布。",
             "keywords": [
               "Xingtu 星图",
               "GPT-Image-2",
@@ -596,6 +596,21 @@
         padding: 24px;
       }
 
+      .text-link {
+        display: inline-flex;
+        margin-top: 10px;
+        color: var(--accent);
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .text-link:hover {
+        color: #9a3412;
+        text-decoration: underline;
+        text-underline-offset: 4px;
+      }
+
       .steps {
         display: grid;
         gap: 20px;
@@ -799,22 +814,22 @@
 
       <section class="hero">
         <div class="hero-copy">
-          <h1>开源 AI 创作台</h1>
+          <h1>Xingtu 星图：开源 AI 画布工作台</h1>
           <p class="lead">
-            在一块浏览器画布里完成图片生成、文本推理、流程图和素材整理，让灵感持续沉淀为可展示、可复用的作品。
+            在一块浏览器画布里完成 AI 图片生成、提示词推理、流程图和素材整理，让灵感持续沉淀为可展示、可复用、可自部署的作品工作流。
           </p>
           <ul class="proof" aria-label="Xingtu 星图 核心能力">
             <li class="proof-item">
-              <span class="proof-value">一块画布</span>
-              <span class="proof-label">承接灵感、生成、整理与展示</span>
+              <span class="proof-value">开源画布</span>
+              <span class="proof-label">在线使用，也可自部署改造</span>
             </li>
             <li class="proof-item">
-              <span class="proof-value">多模型</span>
-              <span class="proof-label">连接图片、文本和多模态任务</span>
+              <span class="proof-value">AI 工作流</span>
+              <span class="proof-label">连接图片、提示词和多模态任务</span>
             </li>
             <li class="proof-item">
-              <span class="proof-value">开源可控</span>
-              <span class="proof-label">在线即用，也可自部署改造</span>
+              <span class="proof-value">结构沉淀</span>
+              <span class="proof-label">把流程图、脑图和素材留在一处</span>
             </li>
           </ul>
           <div class="cta-row">
@@ -958,6 +973,13 @@
               <p>
                 批量生成多张候选图，按主题、风格、用途筛选，快速确定可交付版本。
               </p>
+              <a
+                class="text-link"
+                href="/user-manual/ai-generation-image-generation.html"
+                data-seo-track="home_work_card_click"
+                data-seo-target="image_generation_manual"
+                >查看 AI 生成图片教程</a
+              >
             </div>
           </article>
           <article
@@ -973,6 +995,13 @@
             <div class="work-body">
               <h3>流程与项目规划</h3>
               <p>把步骤、需求、决策链转换成流程图，让复杂项目一眼看懂。</p>
+              <a
+                class="text-link"
+                href="/user-manual/drawing-flowchart.html"
+                data-seo-track="home_work_card_click"
+                data-seo-target="flowchart_manual"
+                >查看流程图教程</a
+              >
             </div>
           </article>
           <article
@@ -990,6 +1019,13 @@
               <p>
                 把提示词、参考资料、模型输出和最终作品放在一处，形成自己的创作知识库。
               </p>
+              <a
+                class="text-link"
+                href="/user-manual/drawing-mindmap.html"
+                data-seo-track="home_work_card_click"
+                data-seo-target="mindmap_manual"
+                >查看思维导图教程</a
+              >
             </div>
           </article>
         </div>
@@ -1168,7 +1204,7 @@
             utm_campaign: sanitizeValue(params.get('utm_campaign')),
             primary_image_model: 'gpt-image-2',
             primary_reasoning_model: 'deepseek-v4',
-            content_variant: 'home-2026-04-25',
+            content_variant: 'home-2026-04-28',
           };
         }
 
@@ -1258,9 +1294,32 @@
             request_queue: { flush_interval_ms: 2000 },
           });
 
-          if (window.posthog.register) {
-            window.posthog.register(getCommonProperties());
-          }
+          clearHomeSuperProperties();
+        }
+
+        function clearHomeSuperProperties() {
+          if (!window.posthog || !window.posthog.unregister) return;
+
+          [
+            'page_name',
+            'page_path',
+            'page_title',
+            'landing_page',
+            'referrer_host',
+            'search_engine',
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+            'primary_image_model',
+            'primary_reasoning_model',
+            'content_variant',
+          ].forEach(function (key) {
+            try {
+              window.posthog.unregister(key);
+            } catch (error) {
+              void error;
+            }
+          });
         }
 
         function scheduleWhenIdle(callback, timeout) {

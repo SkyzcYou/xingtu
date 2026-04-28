@@ -1623,14 +1623,38 @@ export function useAutoInsertToCanvas(
     const replayTimer = window.setTimeout(replayRestoredCompletedTasks, 0);
 
     const handleAnchorRetry = (rawEvent: Event) => {
-      const event = rawEvent as CustomEvent<{ taskId?: string }>;
+      const event = rawEvent as CustomEvent<{
+        taskId?: string;
+        anchorId?: string;
+      }>;
       const taskId = event.detail?.taskId;
+      const anchorId = event.detail?.anchorId;
+      const updateRetryAnchor = (
+        state: Parameters<typeof buildImageGenerationAnchorPresentationPatch>[0],
+        options?: Parameters<typeof buildImageGenerationAnchorPresentationPatch>[1]
+      ) => {
+        if (!anchorId) {
+          return;
+        }
+        const board = getCanvasBoard();
+        if (!board) {
+          return;
+        }
+        ImageGenerationAnchorTransforms.updateAnchor(
+          board,
+          anchorId,
+          buildImageGenerationAnchorPresentationPatch(state, options)
+        );
+      };
+
       if (!taskId) {
+        updateRetryAnchor('failed', { error: '任务未绑定，无法重试' });
         return;
       }
 
       const retryTask = getTaskQueueService().getTask(taskId);
       if (!retryTask) {
+        updateRetryAnchor('failed', { error: '任务已丢失，无法重试' });
         return;
       }
 
@@ -1643,6 +1667,7 @@ export function useAutoInsertToCanvas(
           postProcessingStatus === 'completed'
         ) {
           insertedTaskIds.add(taskId);
+          updateRetryAnchor('completed');
           return;
         }
 
@@ -1654,18 +1679,36 @@ export function useAutoInsertToCanvas(
         }
       }
 
-      releaseTaskInsertion(taskId);
-      workflowCompletionService.clearTask(taskId);
+      if (
+        retryTask.status === TaskStatus.PENDING ||
+        retryTask.status === TaskStatus.PROCESSING
+      ) {
+        updateRetryAnchor('accepted', { subtitle: '任务仍在执行，请稍候' });
+        return;
+      }
+
+      const shouldRegenerateCompletedTask =
+        retryTask.status === TaskStatus.COMPLETED &&
+        postProcessingStatus === 'failed';
 
       if (
         retryTask.status === TaskStatus.FAILED ||
-        retryTask.status === TaskStatus.CANCELLED
+        retryTask.status === TaskStatus.CANCELLED ||
+        shouldRegenerateCompletedTask
       ) {
-        getTaskQueueService().retryTask(taskId);
+        updateRetryAnchor('retrying');
+        releaseTaskInsertion(taskId);
+        workflowCompletionService.clearTask(taskId);
+        getTaskQueueService().retryTask(
+          taskId,
+          shouldRegenerateCompletedTask ? { allowCompleted: true } : undefined
+        );
         return;
       }
 
       if (retryTask.status === TaskStatus.COMPLETED) {
+        releaseTaskInsertion(taskId);
+        workflowCompletionService.clearTask(taskId);
         handleTaskCompleted(retryTask);
       }
     };

@@ -23,7 +23,6 @@ import {
   isFromScrolling,
   setIsFromScrolling,
   setIsFromViewportChange,
-  getSelectedElements,
   updateViewportOffset,
   initializeViewBox,
   initializeViewportContainer,
@@ -35,11 +34,15 @@ import {
 import { BoardChangeData } from './plugins/board';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { withReact } from './plugins/with-react';
-import { PlaitCommonElementRef, withImage, withText } from '@plait/common';
+import { withImage, withText } from '@plait/common';
 import { BoardContext, BoardContextValue } from './hooks/use-board';
 import React from 'react';
 import { withPinchZoom } from './plugins/with-pinch-zoom-plugin';
-import { ignoreUpcomingViewportScroll } from './utils/viewport';
+import {
+  ignoreUpcomingViewportScroll,
+  refreshSelectedElementActiveSections,
+  refreshSelectedElementActiveSectionsForViewportChange,
+} from './utils/viewport';
 
 export type WrapperProps = {
   value: PlaitElement[];
@@ -163,6 +166,7 @@ export const Wrapper: React.FC<WrapperProps> = ({
           parent: board,
           parentG: PlaitBoard.getElementHost(board),
         });
+        refreshSelectedElementActiveSectionsForViewportChange(board);
         return;
       }
       listRender.update(board.children, {
@@ -176,12 +180,11 @@ export const Wrapper: React.FC<WrapperProps> = ({
         updateViewBox(board);
       }
       updateViewportOffset(board);
-      const selectedElements = getSelectedElements(board);
-      selectedElements.forEach((element) => {
-        const elementRef =
-          PlaitElement.getElementRef<PlaitCommonElementRef>(element);
-        elementRef?.updateActiveSection();
-      });
+      if (isSetViewport) {
+        refreshSelectedElementActiveSectionsForViewportChange(board);
+      } else {
+        refreshSelectedElementActiveSections(board);
+      }
     });
 
     BOARD_TO_AFTER_CHANGE.set(board, () => {
@@ -303,6 +306,7 @@ const syncViewportContainer = (board: PlaitBoard, reason: string) => {
   initializeViewportContainer(board);
   initializeViewBox(board);
   updateViewportOffset(board);
+  refreshSelectedElementActiveSectionsForViewportChange(board);
   stabilizeViewportOffset(board, reason);
 };
 
@@ -423,6 +427,7 @@ const stabilizeViewportOffset = (board: PlaitBoard, reason: string) => {
       });
       clearViewportRestoreInteractionCancel(board);
       setIsFromViewportChange(board, false);
+      refreshSelectedElementActiveSectionsForViewportChange(board);
       return;
     }
 
@@ -440,6 +445,7 @@ const stabilizeViewportOffset = (board: PlaitBoard, reason: string) => {
     if (needsRestore) {
       restoreViewportContainerScroll(board, target);
     }
+    refreshSelectedElementActiveSectionsForViewportChange(board);
 
     const afterDeltaLeft = Math.abs(
       viewportContainer.scrollLeft - target.targetScrollLeft
@@ -505,6 +511,7 @@ const restoreViewportContainerScroll = (
   ) {
     updateViewportOffset(board);
   }
+  refreshSelectedElementActiveSectionsForViewportChange(board);
 };
 
 const attachViewportRestoreInteractionCancel = (

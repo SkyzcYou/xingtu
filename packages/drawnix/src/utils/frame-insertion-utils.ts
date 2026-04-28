@@ -5,8 +5,14 @@
  * 并自动绑定到 Frame（设置 frameId）。
  */
 
-import type { PlaitBoard, Point } from '@plait/core';
-import { RectangleClient, Transforms, idCreator } from '@plait/core';
+import type { PlaitBoard, PlaitElement, Point } from '@plait/core';
+import {
+  RectangleClient,
+  Transforms,
+  getSelectedElements,
+  idCreator,
+} from '@plait/core';
+import { DrawTransforms } from '@plait/draw';
 import { isFrameElement, type PlaitFrame } from '../types/frame.types';
 import { FrameTransforms } from '../plugins/with-frame';
 import { getImageRegion } from '../services/ppt/ppt-layout-engine';
@@ -23,6 +29,14 @@ type PPTImageStatus = 'placeholder' | 'loading' | 'generated' | 'failed';
 const PPT_SLIDE_IMAGE_HISTORY_LIMIT = 20;
 const DEFAULT_FRAME_NAME_REGEXP = /^(Frame|Slide|PPT\s*页面)\s*\d+$/i;
 const PPT_FRAME_TITLE_PROMPT_LENGTH = 10;
+
+export type FrameMediaInsertionResult =
+  | {
+      point: Point;
+      size: { width: number; height: number };
+      elementId?: string;
+    }
+  | undefined;
 
 export interface PPTSlideImageInfo {
   element?: any;
@@ -244,6 +258,37 @@ function appendPPTSlideImageHistoryItems(
   );
 }
 
+function loadFrameImageElement(imageUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.referrerPolicy = 'no-referrer';
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = imageUrl;
+  });
+}
+
+function fitMediaIntoRegion(
+  mediaDimensions: { width: number; height: number },
+  regionDimensions: { width: number; height: number }
+): { width: number; height: number } {
+  const mediaAspect = mediaDimensions.width / mediaDimensions.height;
+  const regionAspect = regionDimensions.width / regionDimensions.height;
+
+  if (mediaAspect > regionAspect) {
+    return {
+      width: regionDimensions.width,
+      height: regionDimensions.width / mediaAspect,
+    };
+  }
+
+  return {
+    width: regionDimensions.height * mediaAspect,
+    height: regionDimensions.height,
+  };
+}
+
 export function findPPTSlideImage(
   board: PlaitBoard,
   frameId: string
@@ -463,6 +508,41 @@ export function replacePPTSlideImage(
   }
 }
 
+export function syncEditedPPTSlideImage(
+  board: PlaitBoard,
+  elementId: string,
+  imageUrl: string
+): void {
+  const element = board.children.find((el: any) => el.id === elementId) as
+    | (PlaitElement & {
+        frameId?: string;
+        pptSlideImage?: boolean;
+      })
+    | undefined;
+  const frameId = element?.frameId;
+  if (!frameId) {
+    return;
+  }
+
+  const pptMeta = getFramePPTMeta(board, frameId);
+  const isCurrentPPTSlideImage =
+    element.pptSlideImage === true || pptMeta?.slideImageElementId === elementId;
+  if (!isCurrentPPTSlideImage) {
+    return;
+  }
+
+  markPPTSlideImage(
+    board,
+    frameId,
+    elementId,
+    imageUrl,
+    undefined,
+    [],
+    undefined,
+    getPPTSlidePrompt(pptMeta)
+  );
+}
+
 export function setPPTImagePlaceholderStatus(
   board: PlaitBoard,
   frameId: string,
@@ -518,6 +598,49 @@ export function insertPPTImagePlaceholder(
   Transforms.insertNode(board, placeholderElement, [board.children.length]);
 }
 
+export function getSelectedInsertionFrame(board: PlaitBoard): PlaitFrame | null {
+  const selectedElements = getSelectedElements(board);
+  if (selectedElements.length > 0) {
+    const selectedElement = selectedElements[0];
+    return selectedElements.length === 1 && isFrameElement(selectedElement)
+      ? selectedElement
+      : null;
+  }
+
+  const savedElementIds = (board as any).appState?.lastSelectedElementIds;
+  if (!Array.isArray(savedElementIds) || savedElementIds.length !== 1) {
+    return null;
+  }
+
+  const savedElement = board.children.find(
+    (element) => element.id === savedElementIds[0]
+  );
+  return savedElement && isFrameElement(savedElement) ? savedElement : null;
+}
+
+export async function insertMediaIntoSelectedFrame(
+  board: PlaitBoard,
+  mediaUrl: string,
+  mediaType: 'image' | 'video',
+  mediaDimensions?: { width: number; height: number },
+  options?: { fit?: 'contain' | 'stretch' }
+): Promise<FrameMediaInsertionResult> {
+  const frame = getSelectedInsertionFrame(board);
+  if (!frame) return undefined;
+
+  const frameRect = RectangleClient.getRectangleByPoints(frame.points);
+  return insertMediaIntoFrame(
+    board,
+    mediaUrl,
+    mediaType,
+    frame.id,
+    { width: frameRect.width, height: frameRect.height },
+    mediaDimensions,
+    undefined,
+    options
+  );
+}
+
 /**
  * 将图片/视频插入到指定 Frame 内部
  *
@@ -544,14 +667,7 @@ export async function insertMediaIntoFrame(
   mediaDimensions?: { width: number; height: number },
   targetRegion?: { x: number; y: number; width: number; height: number },
   options?: { fit?: 'contain' | 'stretch' }
-): Promise<
-  | {
-      point: Point;
-      size: { width: number; height: number };
-      elementId?: string;
-    }
-  | undefined
-> {
+): Promise<FrameMediaInsertionResult> {
   // 查找目标 Frame
   const frameElement = board.children.find(
     (el) => el.id === frameId && isFrameElement(el)
@@ -559,17 +675,9 @@ export async function insertMediaIntoFrame(
 
   if (!frameElement) {
     console.warn(
-      '[insertMediaIntoFrame] Frame not found, falling back to normal insertion:',
+      '[insertMediaIntoFrame] Frame not found, skip frame insertion:',
       frameId
     );
-    // Frame 不存在，回退到普通插入
-    if (mediaType === 'video') {
-      const { insertVideoFromUrl } = await import('../data/video');
-      await insertVideoFromUrl(board, mediaUrl);
-    } else {
-      const { insertImageFromUrl } = await import('../data/image');
-      await insertImageFromUrl(board, mediaUrl);
-    }
     return undefined;
   }
 
@@ -609,6 +717,13 @@ export async function insertMediaIntoFrame(
       mediaHeight = regionDimensions.height;
       mediaWidth = regionDimensions.height * mediaAspect;
     }
+  } else if (mediaType === 'video') {
+    const fitted = fitMediaIntoRegion(
+      { width: 16, height: 9 },
+      regionDimensions
+    );
+    mediaWidth = fitted.width;
+    mediaHeight = fitted.height;
   } else {
     mediaWidth = regionDimensions.width;
     mediaHeight = regionDimensions.height;
@@ -623,27 +738,43 @@ export async function insertMediaIntoFrame(
   const childrenCountBefore = board.children.length;
 
   if (mediaType === 'video') {
-    const { insertVideoFromUrl } = await import('../data/video');
-    await insertVideoFromUrl(
+    const videoWithFragment = mediaUrl.includes('#')
+      ? mediaUrl
+      : `${mediaUrl}#video`;
+    DrawTransforms.insertImage(
       board,
-      mediaUrl,
-      insertionPoint,
-      false,
-      { width: mediaWidth, height: mediaHeight },
-      true, // skipScroll
-      true // skipCentering（insertionPoint 已经是左上角坐标）
+      {
+        url: videoWithFragment,
+        width: mediaWidth,
+        height: mediaHeight,
+        isVideo: true,
+        videoType: 'video',
+      } as any,
+      insertionPoint
     );
   } else {
-    const { insertImageFromUrl } = await import('../data/image');
-    await insertImageFromUrl(
+    if (shouldLoadImageForContain) {
+      try {
+        const image = await loadFrameImageElement(mediaUrl);
+        const fitted = fitMediaIntoRegion(
+          { width: image.width, height: image.height },
+          regionDimensions
+        );
+        mediaWidth = fitted.width;
+        mediaHeight = fitted.height;
+      } catch {
+        // 图片尺寸不可读时沿用目标区域尺寸，保持插入不中断。
+      }
+    }
+
+    DrawTransforms.insertImage(
       board,
-      mediaUrl,
-      insertionPoint,
-      false,
-      { width: mediaWidth, height: mediaHeight },
-      true, // skipScroll
-      !shouldLoadImageForContain, // skipImageLoad（未知图片尺寸时先加载，确保 contain 完整展示）
-      shouldStretch // lockReferenceDimensions（显式 stretch 时保持目标尺寸）
+      {
+        url: mediaUrl,
+        width: mediaWidth,
+        height: mediaHeight,
+      },
+      insertionPoint
     );
   }
 

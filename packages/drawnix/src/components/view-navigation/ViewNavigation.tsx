@@ -6,7 +6,12 @@
  */
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { PlaitBoard, BoardTransforms, getViewportOrigination } from '@plait/core';
+import {
+  ATTACHED_ELEMENT_CLASS_NAME,
+  PlaitBoard,
+  BoardTransforms,
+  getViewportOrigination,
+} from '@plait/core';
 import { MinusIcon, AddIcon, ChevronDownIcon } from 'tdesign-icons-react';
 import { useBoard } from '@plait-board/react-board';
 import { Minimap } from '../minimap/Minimap';
@@ -14,8 +19,10 @@ import { useChatDrawerControl } from '../../contexts/ChatDrawerContext';
 import { Popover, PopoverContent, PopoverTrigger } from '../popover/popover';
 import { Z_INDEX } from '../../constants/z-index';
 import { useI18n } from '../../i18n';
-import { fitFrame } from '../../utils/fit-frame';
+import { fitAllPPTFrames, fitFrame } from '../../utils/fit-frame';
 import { HoverTip } from '../shared/hover';
+import { isFrameElement } from '../../types/frame.types';
+import { requestOpenPPTEditor } from '../../services/ppt/ppt-ui-events';
 import './view-navigation.scss';
 
 export interface ViewNavigationProps {
@@ -96,11 +103,32 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
     setZoomMenuOpen(false);
   }, [board]);
 
+  const openPPTEditorIfNoFrame = useCallback((): boolean => {
+    const hasFrame = board.children.some(isFrameElement);
+    if (hasFrame) {
+      return false;
+    }
+
+    requestOpenPPTEditor({ viewMode: 'slides' });
+    return true;
+  }, [board]);
+
   // 自适应 Frame：将选中的 Frame（或第一个 Frame）缩放到可视区域完整显示
   const handleFitFrame = useCallback(() => {
-    fitFrame(board);
     setZoomMenuOpen(false);
-  }, [board]);
+    if (openPPTEditorIfNoFrame()) {
+      return;
+    }
+    fitFrame(board);
+  }, [board, openPPTEditorIfNoFrame]);
+
+  const handleFitPPTGlobal = useCallback(() => {
+    setZoomMenuOpen(false);
+    if (openPPTEditorIfNoFrame()) {
+      return;
+    }
+    fitAllPPTFrames(board);
+  }, [board, openPPTEditorIfNoFrame]);
 
   // 手动切换 minimap 展开状态
   const toggleMinimap = useCallback(() => {
@@ -204,7 +232,7 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
 
   return (
     <div
-      className="view-navigation"
+      className={`view-navigation ${ATTACHED_ELEMENT_CLASS_NAME}`}
       style={{
         right: rightOffset,
         zIndex: Z_INDEX.VIEW_NAVIGATION,
@@ -245,7 +273,11 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
               </button>
             </PopoverTrigger>
           </HoverTip>
-          <PopoverContent container={container} style={{ zIndex: Z_INDEX.POPOVER }}>
+          <PopoverContent
+            className={ATTACHED_ELEMENT_CLASS_NAME}
+            container={container}
+            style={{ zIndex: Z_INDEX.POPOVER }}
+          >
             <div className="view-navigation-zoom-menu">
               <button
                 className="zoom-menu-item"
@@ -261,6 +293,13 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
                 data-track="view_nav_zoom_fit_frame"
               >
                 <span className="zoom-menu-item__label">{t('zoom.fitFrame')}</span>
+              </button>
+              <button
+                className="zoom-menu-item"
+                onClick={handleFitPPTGlobal}
+                data-track="view_nav_zoom_fit_ppt_global"
+              >
+                <span className="zoom-menu-item__label">{t('zoom.fitPPTGlobal')}</span>
               </button>
               <button
                 className="zoom-menu-item"

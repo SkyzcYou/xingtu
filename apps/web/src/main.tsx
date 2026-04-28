@@ -1,7 +1,10 @@
 import { StrictMode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import App from './app/app';
-import { ErrorBoundary } from './app/ErrorBoundary';
+import {
+  ErrorBoundary,
+  tryRecoverDynamicImportError,
+} from './app/ErrorBoundary';
 import { initCrashLogger } from './crash-logger';
 import './utils/permissions-policy-fix';
 import {
@@ -31,11 +34,57 @@ const swQueryParam =
   typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('sw')
     : null;
+const isServiceWorkerExplicitlyEnabled = swQueryParam === '1';
 const isServiceWorkerExplicitlyDisabled = swQueryParam === '0';
 const hasServiceWorkerSupport =
   typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
 const shouldUseServiceWorker =
-  hasServiceWorkerSupport && !isServiceWorkerExplicitlyDisabled;
+  hasServiceWorkerSupport &&
+  !isServiceWorkerExplicitlyDisabled &&
+  (!isLocalDev || isServiceWorkerExplicitlyEnabled);
+
+function setupLazyAssetRecoveryListeners(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const stopRecoveredEvent = (event: Event) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+
+  window.addEventListener(
+    'vite:preloadError',
+    (event) => {
+      if (tryRecoverDynamicImportError(event)) {
+        stopRecoveredEvent(event);
+      }
+    },
+    true
+  );
+
+  window.addEventListener(
+    'unhandledrejection',
+    (event) => {
+      if (tryRecoverDynamicImportError(event)) {
+        stopRecoveredEvent(event);
+      }
+    },
+    true
+  );
+
+  window.addEventListener(
+    'error',
+    (event) => {
+      if (tryRecoverDynamicImportError(event)) {
+        stopRecoveredEvent(event);
+      }
+    },
+    true
+  );
+}
+
+setupLazyAssetRecoveryListeners();
 
 // ===== 控制台日志捕获（尽早初始化，确保默认 console 被改写） =====
 // 必须在其他业务代码之前执行，否则后续工具（如 rrweb）可能先改写 console 导致捕获失效
@@ -412,7 +461,11 @@ if (typeof window !== 'undefined') {
   });
 }
 
-if (hasServiceWorkerSupport && isServiceWorkerExplicitlyDisabled) {
+if (
+  hasServiceWorkerSupport &&
+  (isServiceWorkerExplicitlyDisabled ||
+    (isLocalDev && !isServiceWorkerExplicitlyEnabled))
+) {
   cleanupDisabledServiceWorker();
 }
 

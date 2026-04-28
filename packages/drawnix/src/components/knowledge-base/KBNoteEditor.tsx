@@ -28,6 +28,7 @@ import { KBTagSelector } from './KBTagSelector';
 import { McpToolSelector } from './McpToolSelector';
 import { useCanvasAudioPlayback } from '../../hooks/useCanvasAudioPlayback';
 import { knowledgeBaseService } from '../../services/knowledge-base-service';
+import { exportNoteAsMarkdown } from '../../services/kb-import-export-service';
 import { openMusicPlayerToolAndPlay } from '../../services/tool-launch-service';
 import { createReadingPlaybackSource } from '../../services/reading-playback-source';
 import { buildBlockAssetEmbedMarkdown } from '../../utils/markdown-asset-embeds';
@@ -239,7 +240,7 @@ setOutputType((note.metadata?.outputType as 'image' | 'text' | 'video' | 'audio'
   // 导出 Markdown
   const handleExportMarkdown = useCallback(async () => {
     if (!note) return;
-    const result = await knowledgeBaseService.exportNoteAsMarkdown(note.id);
+    const result = await exportNoteAsMarkdown(note.id);
     if (!result) return;
 
     const blob = new Blob([result.content], { type: 'text/markdown;charset=utf-8' });

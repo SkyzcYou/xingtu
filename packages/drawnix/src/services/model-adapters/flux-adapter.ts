@@ -6,6 +6,7 @@ import type {
 import { registerModelAdapter } from './registry';
 import { ModelVendor } from '../../constants/model-config';
 import { sendAdapterRequest } from './context';
+import { IMAGE_GENERATION_TIMEOUT_MS } from '../../constants/TASK_CONSTANTS';
 
 type FluxSubmitResponse = {
   id: string;
@@ -32,7 +33,9 @@ const FLUX_MODELS = [
 ];
 
 const DEFAULT_POLL_INTERVAL_MS = 3000;
-const DEFAULT_POLL_MAX_ATTEMPTS = 200; // ~10 min
+const DEFAULT_POLL_MAX_ATTEMPTS = Math.ceil(
+  IMAGE_GENERATION_TIMEOUT_MS / DEFAULT_POLL_INTERVAL_MS
+);
 
 /**
  * 宽高比 → Flux 像素尺寸映射（均为 16 的倍数）

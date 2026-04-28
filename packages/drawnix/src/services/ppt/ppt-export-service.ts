@@ -1,4 +1,4 @@
-import PptxGenJS from 'pptxgenjs';
+import type { default as PptxGenJS } from 'pptxgenjs';
 import type { PlaitBoard, PlaitElement } from '@plait/core';
 import {
   RectangleClient,
@@ -1859,7 +1859,8 @@ export async function exportFramesToPPT(
 
   const sortedFrames = sortFramesForPPT(frames);
   const partition = partitionElementsByExportFrames(board, sortedFrames);
-  const pptx = new PptxGenJS();
+  const { default: PptxGen } = await import('pptxgenjs');
+  const pptx = new PptxGen();
   const resolvedOptions = resolveExportPPTOptions(options);
 
   let addedCount = 0;

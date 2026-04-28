@@ -20,7 +20,7 @@ import { isCacheUrl, countElementsByAssetUrls } from '../../utils/asset-cleanup'
 import { useDrawnix } from '../../hooks/use-drawnix';
 import { ConfirmDialog } from '../dialog/ConfirmDialog';
 import { VideoPosterPreview } from '../shared/VideoPosterPreview';
-import { HoverTip } from '../shared';
+import { HoverTip } from '../shared/hover';
 import type { MediaLibraryInspectorProps } from '../../types/asset.types';
 import './MediaLibraryInspector.scss';
 

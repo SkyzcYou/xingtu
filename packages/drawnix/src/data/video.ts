@@ -237,6 +237,7 @@ const calculateDisplayDimensions = (
  * @param referenceDimensions 参考尺寸（可选，用于适应选中元素的大小）
  * @param skipScroll 是否跳过滚动
  * @param skipCentering 是否跳过自动居中（当 startPoint 已经是左上角坐标时使用）
+ * @param lockReferenceDimensions 是否直接使用参考尺寸作为最终尺寸
  */
 export const insertVideoFromUrl = async (
   board: PlaitBoard | null,
@@ -245,24 +246,40 @@ export const insertVideoFromUrl = async (
   isDrop?: boolean,
   referenceDimensions?: { width: number; height: number },
   skipScroll?: boolean,
-  skipCentering?: boolean
+  skipCentering?: boolean,
+  lockReferenceDimensions?: boolean
 ) => {
   if (!board) {
     throw new Error('Board is required for video insertion');
   }
 
   try {
+    if (!startPoint && !isDrop && !referenceDimensions) {
+      const { insertMediaIntoSelectedFrame } = await import(
+        '../utils/frame-insertion-utils'
+      );
+      const inserted = await insertMediaIntoSelectedFrame(
+        board,
+        videoUrl,
+        'video'
+      );
+      if (inserted) return;
+    }
+
     // 使用默认尺寸立即插入，不等待获取视频真实尺寸
     // 这样可以让视频立刻出现在画布上，提升用户体验
     // 默认使用 16:9 比例的尺寸
     const defaultDimensions: VideoDimensions = { width: 400, height: 225 };
 
     // 计算适合画板显示的尺寸（保持比例但使用参考尺寸或限制大小）
-    const displayDimensions = calculateDisplayDimensions(
-      defaultDimensions.width,
-      defaultDimensions.height,
-      referenceDimensions
-    );
+    const displayDimensions =
+      lockReferenceDimensions && referenceDimensions
+        ? referenceDimensions
+        : calculateDisplayDimensions(
+            defaultDimensions.width,
+            defaultDimensions.height,
+            referenceDimensions
+          );
     // console.log('Using default dimensions for immediate insertion:', displayDimensions);
 
     // 注意：合并视频已在 video-merge-webcodecs.ts 中通过 cacheMediaFromBlob 缓存
