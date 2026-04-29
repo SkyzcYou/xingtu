@@ -2395,9 +2395,8 @@ const DEFAULT_SETTINGS = {
 // OpenAI 要在 DeepSeek 前面时，把 ModelVendor.GPT 放到 ModelVendor.DEEPSEEK 前
 export const DISCOVERY_VENDOR_ORDER = [ModelVendor.GPT, ModelVendor.DEEPSEEK];
 
-// 5. 下线内置文本模型时，同步注释旧清单与推荐分，并让默认设置引用统一默认函数
-// 'gpt-5.5': 99,
-export const DEFAULT_TEXT_MODEL_ID = 'gpt-5.4';
+// 5. 更新默认文本模型时，让默认设置引用统一默认函数
+export const DEFAULT_TEXT_MODEL_ID = 'gpt-5.5';
 ```
 
 ### 中断任务延迟判定

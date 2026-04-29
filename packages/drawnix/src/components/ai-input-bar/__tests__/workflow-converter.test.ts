@@ -443,7 +443,7 @@ describe('workflow-converter', () => {
       expect(workflow.steps[0].args.modelRef).toEqual(imageRef);
     });
 
-    it('PPT Skill 只将文本模型透传给 generate_ppt', async () => {
+    it('PPT Skill 只将文本模型和参考图片透传给 generate_ppt', async () => {
       const imageRef = { profileId: 'image-profile', modelId: 'gpt-image-2' };
       const textRef = { profileId: 'text-profile', modelId: 'deepseek-v3.2' };
       const params = createMockParams({
@@ -455,23 +455,30 @@ describe('workflow-converter', () => {
         defaultModels: { image: 'gpt-image-2' },
         defaultModelRefs: { image: imageRef },
       });
+      const referenceImages = ['https://example.com/reference.png'];
 
-      const workflow = await convertSkillFlowToWorkflow(params, {
-        id: 'ppt',
-        name: '生成PPT大纲',
-        type: 'system',
-        mcpTool: 'generate_ppt',
-        outputType: 'ppt',
-        description: '调用 generate_ppt',
-      });
+      const workflow = await convertSkillFlowToWorkflow(
+        params,
+        {
+          id: 'ppt',
+          name: '生成PPT大纲',
+          type: 'system',
+          mcpTool: 'generate_ppt',
+          outputType: 'ppt',
+          description: '调用 generate_ppt',
+        },
+        referenceImages
+      );
 
       expect(workflow.steps[0].mcp).toBe('generate_ppt');
+      expect(workflow.steps[0].args.referenceImages).toEqual(referenceImages);
       expect(workflow.steps[0].args.model).toBeUndefined();
       expect(workflow.steps[0].args.modelRef).toBeUndefined();
       expect(workflow.steps[0].args.imageModel).toBeUndefined();
       expect(workflow.steps[0].args.imageModelRef).toBeUndefined();
       expect(workflow.steps[0].args.textModel).toBe('deepseek-v3.2');
       expect(workflow.steps[0].args.textModelRef).toEqual(textRef);
+      expect(workflow.metadata.referenceImages).toEqual(referenceImages);
     });
 
     it('图片型 skill 在回退到 Agent 路径时仍应注入 generate_image 工具链', async () => {

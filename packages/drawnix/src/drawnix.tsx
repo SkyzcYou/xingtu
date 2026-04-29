@@ -45,6 +45,7 @@ import {
   DrawnixBoard,
   DrawnixContext,
   DrawnixState,
+  DialogType,
   useDrawnix,
 } from './hooks/use-drawnix';
 import { ClosePencilToolbar } from './components/toolbar/pencil-mode-toolbar';
@@ -349,6 +350,19 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     },
     [enableDeferredRuntime]
   );
+
+  const enableGenerationRuntime = useCallback(() => {
+    enableDeferredRuntime(TOOL_WINDOW_GROUPS);
+  }, [enableDeferredRuntime]);
+
+  useEffect(() => {
+    if (
+      appState.openDialogTypes.has(DialogType.aiImageGeneration) ||
+      appState.openDialogTypes.has(DialogType.aiVideoGeneration)
+    ) {
+      enableGenerationRuntime();
+    }
+  }, [appState.openDialogTypes, enableGenerationRuntime]);
 
   // 处理知识库切换（通过 WinBox 打开）
   const handleKnowledgeBaseToggle = useCallback(() => {
@@ -909,6 +923,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                       toolWindowManagerEnabled={toolWindowManagerEnabled}
                       minimizedToolsBarEnabled={minimizedToolsBarEnabled}
                       enableToolWindows={enableToolWindows}
+                      enableGenerationRuntime={enableGenerationRuntime}
                     />
                   </DrawnixContext.Provider>
                 </ChatDrawerProvider>
@@ -946,6 +961,7 @@ interface DrawnixContentProps {
   toolWindowManagerEnabled: boolean;
   minimizedToolsBarEnabled: boolean;
   enableToolWindows: () => void;
+  enableGenerationRuntime: () => void;
   onChange?: (value: BoardChangeData) => void;
   onSelectionChange: (selection: Selection | null) => void;
   onViewportChange?: (value: Viewport) => void;
@@ -1000,6 +1016,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   toolWindowManagerEnabled,
   minimizedToolsBarEnabled,
   enableToolWindows,
+  enableGenerationRuntime,
   cloudSyncOpen,
   onChange,
   onSelectionChange,
@@ -1644,6 +1661,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
               isDataReady={isDataReady}
               activationKey={0}
               onEnableToolWindows={enableToolWindows}
+              onEnableRuntime={enableGenerationRuntime}
             />
           </Suspense>
           {/* Quick Creation Toolbar - 双击空白区域显示的快捷工具栏 */}

@@ -318,6 +318,9 @@ importers:
       localforage:
         specifier: ^1.10.0
         version: 1.10.0
+      mermaid:
+        specifier: 10.9.3
+        version: 10.9.3
       postmessage-duplex:
         specifier: ^1.2.0
         version: 1.2.0
@@ -354,6 +357,9 @@ importers:
       rxjs:
         specifier: ~7.8.0
         version: 7.8.2
+      slate:
+        specifier: ^0.116.0
+        version: 0.116.0
 
   packages/react-text:
     dependencies:

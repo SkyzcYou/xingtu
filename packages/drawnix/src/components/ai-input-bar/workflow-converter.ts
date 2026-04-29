@@ -143,6 +143,38 @@ function applyMediaDefaultsToWorkflowSteps(
   }));
 }
 
+function applyReferenceImagesToWorkflowSteps(
+  steps: WorkflowStep[],
+  referenceImages: string[]
+): WorkflowStep[] {
+  if (referenceImages.length === 0) {
+    return steps;
+  }
+
+  return steps.map((step) => {
+    if (step.args.referenceImages) {
+      return step;
+    }
+
+    const tool = mcpRegistry.getTool(step.mcp);
+    const acceptsReferenceImages =
+      step.mcp === 'generate_ppt' ||
+      Boolean(tool?.inputSchema.properties?.referenceImages);
+
+    if (!acceptsReferenceImages) {
+      return step;
+    }
+
+    return {
+      ...step,
+      args: {
+        ...step.args,
+        referenceImages,
+      },
+    };
+  });
+}
+
 /**
  * 场景1-3: 将直接生成场景转换为工作流定义
  *
@@ -681,10 +713,9 @@ export async function convertSkillFlowToWorkflow(
     userInputText
   );
   if (regexResult) {
-    const steps = applyMediaDefaultsToWorkflowSteps(
-      regexResult.steps,
-      params,
-      true
+    const steps = applyReferenceImagesToWorkflowSteps(
+      applyMediaDefaultsToWorkflowSteps(regexResult.steps, params, true),
+      referenceImages
     );
     return {
       id: workflowId,

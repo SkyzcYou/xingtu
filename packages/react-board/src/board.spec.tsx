@@ -6,6 +6,7 @@ import {
   initializeViewportContainer,
   updateViewportOffset,
   type Viewport,
+  type PlaitBoard,
 } from '@plait/core';
 import React from 'react';
 import {
@@ -66,9 +67,13 @@ const mockedUpdateViewportOffset = vi.mocked(updateViewportOffset);
 const mockedGetSelectedElements = vi.mocked(getSelectedElements);
 const mockedGetElementRef = vi.mocked(PlaitElement.getElementRef);
 
-const renderBoard = (value: PlaitElement[], viewport?: Viewport) => (
+const renderBoard = (
+  value: PlaitElement[],
+  viewport?: Viewport,
+  afterInit?: (board: PlaitBoard) => void
+) => (
   <Wrapper value={value} viewport={viewport} options={{}} plugins={[]}>
-    <Board />
+    <Board afterInit={afterInit} />
   </Wrapper>
 );
 
@@ -121,6 +126,45 @@ describe('ReactBoard', () => {
     expect(
       mockedInitializeViewBox.mock.invocationCallOrder[0]
     ).toBeLessThan(mockedUpdateViewportOffset.mock.invocationCallOrder[0]);
+  });
+
+  it('clears stale history after replacing value props', async () => {
+    const initialValue: PlaitElement[] = [];
+    const restoredValue: PlaitElement[] = [];
+    let board: PlaitBoard | null = null;
+
+    const { rerender } = render(
+      renderBoard(initialValue, undefined, (initializedBoard) => {
+        board = initializedBoard;
+      })
+    );
+
+    await waitFor(() => {
+      expect(board).not.toBeNull();
+    });
+
+    board!.history.undos.push([
+      {
+        type: 'remove_node',
+        path: [44],
+        node: { id: 'removed-element' },
+      },
+    ]);
+    board!.history.redos.push([
+      {
+        type: 'insert_node',
+        path: [44],
+        node: { id: 'removed-element' },
+      },
+    ]);
+
+    rerender(renderBoard(restoredValue));
+
+    await waitFor(() => {
+      expect(board!.history.undos).toHaveLength(0);
+    });
+    expect(board!.history.redos).toHaveLength(0);
+    expect(() => board!.undo()).not.toThrow();
   });
 
   it('syncs the viewport container when only the viewport prop changes', async () => {

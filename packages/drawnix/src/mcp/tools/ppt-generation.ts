@@ -25,6 +25,15 @@ import { PlaitFrame, isFrameElement } from '../../types/frame.types';
 import { defaultGeminiClient } from '../../utils/gemini-api';
 import { geminiSettings } from '../../utils/settings-manager';
 import type { GeminiMessage } from '../../utils/gemini-api/types';
+import {
+  appendImagePartsToLastUserMessage,
+  buildImagePartsFromUrls,
+} from '../../utils/gemini-api/message-utils';
+import {
+  getTextBindingMaxImageCount,
+  resolveInvocationPlanFromRoute,
+  supportsTextBindingImageInput,
+} from '../../services/provider-routing';
 import { analytics } from '../../utils/posthog-analytics';
 import {
   type PPTGenerationParams,
@@ -35,6 +44,7 @@ import {
   generateOutlineUserPrompt,
   generateSlideImagePrompt,
   formatPPTCommonPrompt,
+  normalizePPTReferenceImages,
   parseOutlineResponse,
   PPT_FRAME_WIDTH,
   PPT_FRAME_HEIGHT,
@@ -47,7 +57,9 @@ import {
 function isPPTFrame(
   element: PlaitElement
 ): element is PlaitFrame & { pptMeta: PPTFrameMeta } {
-  return isFrameElement(element) && !!(element as { pptMeta?: unknown }).pptMeta;
+  return (
+    isFrameElement(element) && !!(element as { pptMeta?: unknown }).pptMeta
+  );
 }
 
 function collectReferencedPPTElementIds(frame: PlaitFrame): string[] {
@@ -141,8 +153,9 @@ async function generatePPTOutline(
     extraRequirements: options.extraRequirements,
   });
   const userPrompt = generateOutlineUserPrompt(topic, options);
+  const referenceImages = (options.referenceImages || []).filter(Boolean);
 
-  const messages: GeminiMessage[] = [
+  let messages: GeminiMessage[] = [
     {
       role: 'system',
       content: [{ type: 'text', text: systemPrompt }],
@@ -152,6 +165,26 @@ async function generatePPTOutline(
       content: [{ type: 'text', text: userPrompt }],
     },
   ];
+
+  if (referenceImages.length > 0) {
+    let textPlan: ReturnType<typeof resolveInvocationPlanFromRoute> = null;
+    try {
+      textPlan = resolveInvocationPlanFromRoute('text', textModel);
+    } catch {
+      textPlan = null;
+    }
+    if (supportsTextBindingImageInput(textPlan?.binding)) {
+      try {
+        const imageParts = await buildImagePartsFromUrls(
+          referenceImages,
+          getTextBindingMaxImageCount(textPlan?.binding)
+        );
+        messages = appendImagePartsToLastUserMessage(messages, imageParts);
+      } catch (error) {
+        console.warn('[PPT] Failed to attach reference images:', error);
+      }
+    }
+  }
 
   let fullResponse = '';
 
@@ -182,6 +215,13 @@ function createPPTPage(
   framePosition: Point,
   generateOptions: PPTGenerationParams
 ): { frame: PlaitFrame; slidePrompt: string } {
+  const referenceImages = normalizePPTReferenceImages(
+    generateOptions.referenceImages
+  );
+  const promptOptions: PPTGenerationParams = {
+    ...generateOptions,
+    referenceImages,
+  };
   // 1. 创建 Frame
   const framePoints: [Point, Point] = [
     framePosition,
@@ -195,7 +235,7 @@ function createPPTPage(
     outline,
     pageSpec,
     pageIndex,
-    generateOptions
+    promptOptions
   );
   const pptMeta: PPTFrameMeta = {
     deckTitle: outline.title,
@@ -203,10 +243,13 @@ function createPPTPage(
     pageIndex,
     slidePrompt,
     styleSpec: outline.styleSpec,
-    commonPrompt: formatPPTCommonPrompt(outline.styleSpec, generateOptions),
+    commonPrompt: formatPPTCommonPrompt(outline.styleSpec, promptOptions),
     slideImageStatus: 'placeholder',
     imageStatus: 'placeholder',
   };
+  if (referenceImages.length > 0) {
+    pptMeta.referenceImages = referenceImages;
+  }
   if (pageSpec.imagePrompt) {
     pptMeta.imagePrompt = pageSpec.imagePrompt;
   }
@@ -264,6 +307,12 @@ async function executePPTGeneration(
   }
 
   try {
+    const rawReferenceImages = (params.referenceImages || []).filter(Boolean);
+    const referenceImages = normalizePPTReferenceImages(params.referenceImages);
+    const generationParams: PPTGenerationParams = {
+      ...params,
+      referenceImages,
+    };
     const settings = geminiSettings.get();
     const textModel =
       params.textModelRef ||
@@ -284,14 +333,23 @@ async function executePPTGeneration(
       metadata: {
         page_count_option: pageCount || 'normal',
         has_extra_requirements: Boolean(extraRequirements?.trim()),
+        reference_image_count: referenceImages.length,
         language,
       },
     });
     // 通知开始生成
     options.onChunk?.(`🎯 正在为「${topic}」生成 PPT 大纲...\n\n`);
+    if (referenceImages.length > 0) {
+      options.onChunk?.(
+        `已关联 ${referenceImages.length} 张参考图片作为配图参考。\n\n`
+      );
+    }
 
     // 1. 生成大纲
-    const outline = await generatePPTOutline(topic, params);
+    const outline = await generatePPTOutline(topic, {
+      ...params,
+      referenceImages: rawReferenceImages,
+    });
 
     options.onChunk?.(`\n\n✓ 大纲生成完成，共 ${outline.pages.length} 页\n\n`);
     options.onChunk?.(`📑 **PPT 结构**：\n`);
@@ -336,7 +394,7 @@ async function executePPTGeneration(
         pageSpec,
         pageIndex,
         framePosition,
-        params
+        generationParams
       );
       createdFrames[i] = frame;
 
@@ -370,6 +428,7 @@ async function executePPTGeneration(
           },
           {}
         ),
+        reference_image_count: referenceImages.length,
       },
     });
 
@@ -465,6 +524,11 @@ export const pptGenerationTool: MCPTool = {
       textModel: {
         type: 'string',
         description: 'PPT 大纲生成文本模型，默认使用输入栏当前文本模型',
+      },
+      referenceImages: {
+        type: 'array',
+        description: '参考图片 URL 列表，用于规划 PPT 配图和后续页面生图参考',
+        items: { type: 'string' },
       },
     },
     required: ['topic'],

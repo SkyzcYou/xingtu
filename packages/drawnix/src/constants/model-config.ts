@@ -1541,7 +1541,7 @@ export const DEFAULT_VIDEO_MODEL = DEFAULT_VIDEO_MODEL_ID;
 /**
  * 默认文本模型 ID
  */
-export const DEFAULT_TEXT_MODEL_ID = 'gpt-5.4';
+export const DEFAULT_TEXT_MODEL_ID = 'gpt-5.5';
 
 /**
  * 获取默认文本模型 ID

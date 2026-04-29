@@ -32,6 +32,16 @@ export class ToolGenerator {
   // 加载超时时间（毫秒）
   private static readonly LOAD_TIMEOUT = 10000; // 10 秒
 
+  private scheduleRootUnmount(root: Root): void {
+    setTimeout(() => {
+      try {
+        root.unmount();
+      } catch {
+        // Ignore unmount failures during teardown.
+      }
+    }, 0);
+  }
+
   constructor(board: PlaitBoard) {
     this.board = board;
 
@@ -172,8 +182,8 @@ export class ToolGenerator {
     // 清理旧的 React Root
     const oldRoot = this.reactRoots.get(element.id);
     if (oldRoot) {
-      oldRoot.unmount();
       this.reactRoots.delete(element.id);
+      this.scheduleRootUnmount(oldRoot);
     }
 
     nodeG.innerHTML = '';
@@ -384,7 +394,8 @@ export class ToolGenerator {
       const refreshBtn = this.createTitleButton('↻', '刷新', () => {
         const iframe = this.iframeCache.get(element.id);
         if (iframe) {
-          iframe.src = iframe.src; // 重新加载
+          const { src } = iframe;
+          iframe.src = src; // 重新加载
         }
       });
       titleRight.appendChild(refreshBtn);
@@ -891,7 +902,7 @@ export class ToolGenerator {
 
     // 清理所有 React Roots
     this.reactRoots.forEach((root) => {
-      root.unmount();
+      this.scheduleRootUnmount(root);
     });
     this.reactRoots.clear();
 

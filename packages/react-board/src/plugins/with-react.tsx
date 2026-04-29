@@ -5,8 +5,9 @@ import {
 } from '@plait/common';
 import type { PlaitBoard } from '@plait/core';
 import { createRoot } from 'react-dom/client';
-import { Text } from '@plait-board/react-text';
+import { Text, type CustomEditor } from '@plait-board/react-text';
 import { ReactEditor } from 'slate-react';
+import { Node as SlateNode, Transforms } from 'slate';
 import type { ReactBoard } from './board';
 
 export const withReact = (board: PlaitBoard & PlaitTextBoard) => {
@@ -17,13 +18,21 @@ export const withReact = (board: PlaitBoard & PlaitTextBoard) => {
     props: TextProps
   ) => {
     const root = createRoot(container);
-    let currentEditor: ReactEditor;
+    let currentEditor: CustomEditor;
+    let destroyed = false;
+    let focusTimer: ReturnType<typeof setTimeout> | undefined;
+    const clearFocusTimer = () => {
+      if (focusTimer) {
+        clearTimeout(focusTimer);
+        focusTimer = undefined;
+      }
+    };
     const text = (
       <Text
         {...props}
         afterInit={(editor) => {
-          currentEditor = editor as ReactEditor;
-          props.afterInit && props.afterInit(editor);
+          currentEditor = editor as CustomEditor;
+          props.afterInit && props.afterInit(currentEditor);
         }}
       ></Text>
     );
@@ -31,11 +40,19 @@ export const withReact = (board: PlaitBoard & PlaitTextBoard) => {
     let newProps = { ...props };
     const ref: RenderComponentRef<TextProps> = {
       destroy: () => {
+        if (destroyed) {
+          return;
+        }
+        destroyed = true;
+        clearFocusTimer();
         setTimeout(() => {
           root.unmount();
         }, 0);
       },
       update: (updatedProps: Partial<TextProps>) => {
+        if (destroyed) {
+          return;
+        }
         const hasUpdated =
           updatedProps &&
           newProps &&
@@ -52,10 +69,17 @@ export const withReact = (board: PlaitBoard & PlaitTextBoard) => {
         root.render(<Text {...newProps}></Text>);
 
         if (readonly === true && newProps.readonly === false) {
-          setTimeout(() => {
+          clearFocusTimer();
+          focusTimer = setTimeout(() => {
+            focusTimer = undefined;
+            if (destroyed) {
+              return;
+            }
+            ensureValidSelection(currentEditor);
             ReactEditor.focus(currentEditor);
           }, 0);
         } else if (readonly === false && newProps.readonly === true) {
+          clearFocusTimer();
           ReactEditor.blur(currentEditor);
           ReactEditor.deselect(currentEditor);
         }
@@ -65,4 +89,18 @@ export const withReact = (board: PlaitBoard & PlaitTextBoard) => {
   };
 
   return newBoard;
+};
+
+const ensureValidSelection = (editor: CustomEditor) => {
+  const { selection } = editor;
+  if (!selection) {
+    return;
+  }
+  if (
+    SlateNode.has(editor, selection.anchor.path) &&
+    SlateNode.has(editor, selection.focus.path)
+  ) {
+    return;
+  }
+  Transforms.deselect(editor);
 };

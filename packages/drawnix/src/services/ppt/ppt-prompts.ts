@@ -55,6 +55,8 @@ const LAYOUT_GUIDANCE: Record<PPTLayoutType, string> = {
 
 const STYLE_FIELD_TEXT_LIMIT = 480;
 const STYLE_REQUIREMENT_TEXT_LIMIT = 280;
+const PPT_REFERENCE_IMAGE_LIMIT = 3;
+const PPT_REFERENCE_IMAGE_URL_LIMIT = 4096;
 const PROMPT_ONLY_LABEL_PATTERN =
   /^(?:封面页?|目录页?|大纲|PPT\s*大纲|页面标题|标题|副标题|页面要点|要点|核心要点|视觉概念|页面描述|内容描述)$/i;
 const PROMPT_ONLY_LABEL_PREFIX_PATTERN =
@@ -68,6 +70,30 @@ function truncateText(value: string, maxLength: number): string {
 
 function normalizeInlineText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
+}
+
+export function normalizePPTReferenceImages(
+  referenceImages: string[] = []
+): string[] {
+  const uniqueImages = new Set<string>();
+
+  for (const rawUrl of referenceImages) {
+    const url = normalizeInlineText(rawUrl || '');
+    const lowerUrl = url.toLowerCase();
+    if (
+      !url ||
+      lowerUrl.startsWith('data:') ||
+      url.length > PPT_REFERENCE_IMAGE_URL_LIMIT
+    ) {
+      continue;
+    }
+    uniqueImages.add(url);
+    if (uniqueImages.size >= PPT_REFERENCE_IMAGE_LIMIT) {
+      break;
+    }
+  }
+
+  return Array.from(uniqueImages);
 }
 
 function sanitizeVisiblePPTText(value?: string): string {
@@ -268,7 +294,7 @@ export function generateOutlineUserPrompt(
   topic: string,
   options: PPTGenerateOptions = {}
 ): string {
-  const { extraRequirements } = options;
+  const { extraRequirements, referenceImages = [] } = options;
 
   let prompt = `请为以下主题生成PPT大纲：
 
@@ -278,6 +304,12 @@ export function generateOutlineUserPrompt(
     prompt += `
 
 额外要求：${extraRequirements}`;
+  }
+
+  if (referenceImages.length > 0) {
+    prompt += `
+
+参考图片：用户已提供 ${referenceImages.length} 张参考图片。请优先从参考图片中提取可用的配图主体、视觉风格、色彩和构图线索；生成 image-text 或关键内容页时，把参考图片规划为页面配图或视觉锚点，但不要把“参考图片”等说明文字写进幻灯片可见文字。`;
   }
 
   prompt += `
@@ -340,6 +372,18 @@ function formatDeckConsistencyRules(): string {
 - 每页必须有一个视觉锚点：可以是主图形、关键数字、流程节点、对比焦点或图文主体，用于建立清晰焦点。`;
 }
 
+function formatReferenceImageRules(options: PPTGenerateOptions = {}): string {
+  const referenceImages = normalizePPTReferenceImages(options.referenceImages);
+  if (referenceImages.length === 0) {
+    return '';
+  }
+
+  return `## 参考图片配图规则
+- 已提供 ${referenceImages.length} 张参考图片。生成每页幻灯片时，优先把参考图片作为配图、主视觉或风格参考。
+- 参考图片可以被裁切、缩放、融入卡片或图文版式，但不要机械铺满整页，也不要破坏整套 PPT 的统一风格。
+- 如当前页不适合直接展示参考图片，也要延续其色彩、材质、构图或视觉母题。`;
+}
+
 function formatCoreRequirements(options: PPTGenerateOptions = {}): string {
   const { language = '中文' } = options;
   return `## 核心要求
@@ -380,6 +424,8 @@ ${formatDeckConsistencyRules()}
 ${formatSlideBoundaryRules()}
 
 ${formatRenderingGuardrails()}
+
+${formatReferenceImageRules(options)}
 
 ## 全局风格规格
 ${formatStyleSpec(normalizePPTStyleSpec(styleSpec, options))}`;
@@ -441,9 +487,7 @@ function buildSlideVisualAnchor(page: PPTPageSpec): string {
   }
 
   const title = sanitizeVisiblePPTText(page.title);
-  const firstBullet = page.bullets
-    ?.map(sanitizeVisiblePPTText)
-    .find(Boolean);
+  const firstBullet = page.bullets?.map(sanitizeVisiblePPTText).find(Boolean);
   const anchorSource = firstBullet || title || '本页核心信息';
 
   switch (page.layout) {
@@ -489,6 +533,7 @@ export function generateSlideImagePrompt(
   const safeSubtitle = sanitizeVisiblePPTText(page.subtitle) || '无';
   const layoutGuidance = LAYOUT_GUIDANCE[page.layout];
   const visualAnchor = buildSlideVisualAnchor(page);
+  const referenceImages = normalizePPTReferenceImages(options.referenceImages);
 
   return `请生成一张完整的 16:9 PowerPoint 幻灯片图片，适合直接作为 PPT 第 ${pageIndex}/${totalPages} 页使用。
 
@@ -505,6 +550,11 @@ ${formatVisibleSlideTexts(outline.title, page)}
 - 内容语义：${formatReferenceBullets(page.bullets)}
 - 本页视觉锚点：${visualAnchor}
 - 版式指导：${layoutGuidance}
+${
+  referenceImages.length > 0
+    ? `- 参考图片策略：优先将已提供的参考图片作为本页配图或视觉风格来源。`
+    : ''
+}
 
 ## 相邻页面上下文（仅用于保持连续性，不要照抄或渲染为文字）
 - 上一页概要：${summarizePage(previousPage)}

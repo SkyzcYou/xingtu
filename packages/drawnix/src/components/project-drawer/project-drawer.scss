@@ -787,6 +787,17 @@
     gap: 10px;
   }
 
+  &__outline-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    gap: 10px;
+    overflow: auto;
+    padding-right: 4px;
+    scrollbar-gutter: stable;
+  }
+
   &__outline-common {
     position: relative;
     display: flex;
@@ -869,27 +880,35 @@
 
   &__outline-list {
     display: flex;
-    flex: 1;
-    min-height: 0;
     flex-direction: column;
     gap: 8px;
-    overflow: auto;
-    padding-right: 4px;
-    scrollbar-gutter: stable;
   }
 
   &__outline-item {
     display: flex;
-    align-items: flex-start;
+    align-items: stretch;
+    flex-direction: column;
     gap: 8px;
     padding: 10px;
     border: 1px solid var(--frame-panel-outline-border);
     border-radius: 8px;
     background: var(--frame-panel-outline-surface);
 
+    .t-textarea__inner {
+      border-color: var(--frame-panel-outline-border);
+      background: var(--frame-panel-outline-surface);
+    }
+  }
+
+  &__outline-item-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    width: 100%;
+
     > .t-checkbox {
       flex: 0 0 auto;
-      margin-top: 4px;
 
       .t-checkbox__input {
         width: 18px;
@@ -908,27 +927,24 @@
         box-shadow: 0 2px 6px rgba(243, 156, 18, 0.28);
       }
     }
-
-    .t-textarea__inner {
-      border-color: var(--frame-panel-outline-border);
-      background: var(--frame-panel-outline-surface);
-    }
-  }
-
-  &__outline-item-main {
-    display: flex;
-    min-width: 0;
-    flex: 1;
-    flex-direction: column;
-    gap: 6px;
   }
 
   &__outline-item-header {
     display: flex;
     align-items: center;
+    flex: 1 1 auto;
     justify-content: space-between;
     gap: 8px;
     min-width: 0;
+  }
+
+  &__outline-slide-prompt {
+    min-width: 0;
+    width: 100%;
+
+    .t-textarea {
+      width: 100%;
+    }
   }
 
   &__outline-item-title {

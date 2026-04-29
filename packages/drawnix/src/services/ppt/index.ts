@@ -30,6 +30,7 @@ export {
   generateSlideImagePrompt,
   createDefaultPPTStyleSpec,
   normalizePPTStyleSpec,
+  normalizePPTReferenceImages,
   formatPPTCommonPrompt,
   buildPPTImageGenerationPrompt,
   normalizePPTSlidePrompt,

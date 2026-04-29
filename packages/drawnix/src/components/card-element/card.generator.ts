@@ -125,12 +125,15 @@ export class CardGenerator {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.reactRoot) {
-      try {
-        this.reactRoot.unmount();
-      } catch {
-        // 忽略卸载错误
-      }
+      const root = this.reactRoot;
       this.reactRoot = null;
+      setTimeout(() => {
+        try {
+          root.unmount();
+        } catch {
+          // 忽略卸载错误
+        }
+      }, 0);
     }
     this.containerG = null;
     this.foreignObject = null;

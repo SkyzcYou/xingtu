@@ -12,6 +12,7 @@ export enum InspirationCategory {
   IMAGE = '图片生成',
   MINDMAP = '思维导图',
   FLOWCHART = '流程图',
+  PPT = 'PPT大纲',
   GRID = '宫格图',
   SVG = 'SVG矢量图',
 }
@@ -34,6 +35,8 @@ export interface InspirationTemplate {
   imageUrl: string;
   /** 分类标签颜色 (Tailwind/CSS class) */
   badgeColor: string;
+  /** 选择模板后自动激活的系统 Skill */
+  skillId?: string;
 }
 
 /** 灵感模版选择回调参数 */
@@ -41,6 +44,8 @@ export interface InspirationSelectInfo {
   prompt: string;
   /** 生成类型：灵感创意的模版都是 agent 类型 */
   modelType: 'agent';
+  /** 选择模板后自动激活的系统 Skill */
+  skillId?: string;
 }
 
 /**

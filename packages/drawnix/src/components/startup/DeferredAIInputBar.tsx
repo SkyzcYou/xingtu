@@ -7,12 +7,14 @@ interface DeferredAIInputBarProps {
   isDataReady: boolean;
   activationKey: number;
   onEnableToolWindows?: () => void;
+  onEnableRuntime?: () => void;
 }
 
 export function DeferredAIInputBar({
   isDataReady,
   activationKey,
   onEnableToolWindows,
+  onEnableRuntime,
 }: DeferredAIInputBarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -40,6 +42,7 @@ export function DeferredAIInputBar({
           <AIInputBar
             isDataReady={isDataReady}
             onEnableToolWindows={onEnableToolWindows}
+            onEnableRuntime={onEnableRuntime}
           />
         </div>
       </ModelHealthProvider>

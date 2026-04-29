@@ -91,6 +91,54 @@ const STRIPPED_TASK_PARAM_KEYS = [
 
 type InsertionSource = 'manual' | 'auto_insert';
 type StrippedTaskParamKey = (typeof STRIPPED_TASK_PARAM_KEYS)[number];
+const STORAGE_SYNC_FIELDS = [
+  'status',
+  'progress',
+  'result',
+  'error',
+  'completedAt',
+  'startedAt',
+  'remoteId',
+  'insertedToCanvas',
+  'executionPhase',
+  'savedToLibrary',
+] as const satisfies readonly (keyof Task)[];
+
+function stableStringify(value: unknown): string | undefined {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function areStorageSyncValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+
+  if (
+    left &&
+    right &&
+    typeof left === 'object' &&
+    typeof right === 'object'
+  ) {
+    const leftJson = stableStringify(left);
+    const rightJson = stableStringify(right);
+    return leftJson !== undefined && leftJson === rightJson;
+  }
+
+  return false;
+}
+
+function hasStorageTaskChanges(task: Task, storageTask: Partial<Task>): boolean {
+  return STORAGE_SYNC_FIELDS.some((field) => {
+    if (!(field in storageTask)) {
+      return false;
+    }
+    return !areStorageSyncValuesEqual(task[field], storageTask[field]);
+  });
+}
 
 function getTaskResultCount(task: Task): number {
   if (Array.isArray(task.result?.urls) && task.result.urls.length > 0) {
@@ -1947,11 +1995,9 @@ class TaskQueueService {
 
     const task = this.tasks.get(taskId);
     if (!task) return;
-    if (
-      task.status === storageTask.status &&
-      task.progress === storageTask.progress
-    )
+    if (!hasStorageTaskChanges(task, storageTask)) {
       return;
+    }
 
     const updatedTask: Task = {
       ...task,

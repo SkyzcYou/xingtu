@@ -12,7 +12,8 @@
     "@plait/mind": "^0.84.0",
     "@plait/text-plugins": "^0.84.0",
     "classnames": "^2.5.1",
-    "rxjs": "~7.8.0"
+    "rxjs": "~7.8.0",
+    "slate": "^0.116.0"
   },
   "exports": {
     ".": {

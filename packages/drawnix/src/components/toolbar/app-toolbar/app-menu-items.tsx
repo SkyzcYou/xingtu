@@ -64,6 +64,8 @@ export const OpenFile = () => {
     theme?: PlaitTheme
   ) => {
     board.children = value;
+    board.history.undos = [];
+    board.history.redos = [];
     board.viewport = viewport || { zoom: 1 };
     board.theme = theme || { themeColorMode: ThemeColorMode.default };
     listRender.update(board.children, {

@@ -225,6 +225,7 @@ export const Wrapper: React.FC<WrapperProps> = ({
 
     if (value !== context.board.children && !FLUSHING.get(board)) {
       board.children = value;
+      resetBoardHistory(board);
       listRender.update(board.children, {
         board: board,
         parent: board,
@@ -286,6 +287,11 @@ const initializeBoard = (
   }
 
   return board;
+};
+
+const resetBoardHistory = (board: PlaitBoard) => {
+  board.history.undos = [];
+  board.history.redos = [];
 };
 
 const initializeListRender = (board: PlaitBoard) => {

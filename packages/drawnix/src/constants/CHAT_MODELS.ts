@@ -260,7 +260,7 @@ export const CHAT_MODELS: ChatModel[] = [
 ];
 
 /** Default model ID */
-export const DEFAULT_CHAT_MODEL_ID = 'gpt-5.1';
+export const DEFAULT_CHAT_MODEL_ID = 'gpt-5.5';
 
 /** Get model by ID */
 export function getChatModelById(id: string): ChatModel | undefined {

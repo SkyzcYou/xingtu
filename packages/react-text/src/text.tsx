@@ -4,6 +4,7 @@ import {
   Range,
   Transforms,
   Text as SlateText,
+  Node as SlateNode,
   type NodeEntry,
   type BaseRange,
 } from 'slate';
@@ -25,7 +26,7 @@ import {
 import React, { useMemo, useCallback, useEffect, CSSProperties } from 'react';
 import { withHistory } from 'slate-history';
 import { withText } from './plugins/with-text';
-import { RenderElementPropsFor } from './custom-types';
+import { type CustomEditor, RenderElementPropsFor } from './custom-types';
 import { useSearchHighlightQuery } from './search-highlight';
 
 import './styles/index.scss';
@@ -83,6 +84,8 @@ export const Text: React.FC<TextComponentProps> = (
       return;
     }
     editor.children = [text];
+    resetEditorHistory(editor);
+    ensureValidSelection(editor);
     editor.onChange();
   }, [text, editor]);
 
@@ -147,6 +150,25 @@ export const Text: React.FC<TextComponentProps> = (
       />
     </Slate>
   );
+};
+
+const resetEditorHistory = (editor: CustomEditor) => {
+  editor.history.undos = [];
+  editor.history.redos = [];
+};
+
+const ensureValidSelection = (editor: CustomEditor) => {
+  const { selection } = editor;
+  if (!selection) {
+    return;
+  }
+  if (
+    SlateNode.has(editor, selection.anchor.path) &&
+    SlateNode.has(editor, selection.focus.path)
+  ) {
+    return;
+  }
+  Transforms.deselect(editor);
 };
 
 const Element = (props: RenderElementProps) => {

@@ -398,4 +398,55 @@ describe('task-queue-service image edit retry persistence', () => {
     );
     expect(storedTasks.get(task.id)?.status).toBe(TaskStatus.CANCELLED);
   });
+
+  it('emits storage sync updates when completed result or insertion flag changes without status progress changes', async () => {
+    const { taskQueueService } =
+      await setupTaskQueueServiceHarness([TaskStatus.COMPLETED]);
+    const task: Task = {
+      id: 'task-storage-sync-1',
+      type: TaskType.IMAGE,
+      status: TaskStatus.COMPLETED,
+      progress: 100,
+      params: {
+        prompt: 'Sync completed storage task',
+        autoInsertToCanvas: true,
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const updatedTasks: Task[] = [];
+
+    taskQueueService.trackExternalTask(clone(task));
+    const subscription = taskQueueService
+      .observeTaskUpdates()
+      .subscribe((event) => {
+        if (event.type === 'taskUpdated') {
+          updatedTasks.push(event.task);
+        }
+      });
+
+    taskQueueService.syncTaskFromStorage(task.id, {
+      status: TaskStatus.COMPLETED,
+      progress: 100,
+      completedAt: 2,
+      result: {
+        url: 'https://example.com/storage-result.png',
+        format: 'png',
+        size: 1,
+      },
+    });
+    taskQueueService.syncTaskFromStorage(task.id, {
+      status: TaskStatus.COMPLETED,
+      progress: 100,
+      insertedToCanvas: true,
+    });
+
+    expect(updatedTasks).toHaveLength(2);
+    expect(taskQueueService.getTask(task.id)?.result?.url).toBe(
+      'https://example.com/storage-result.png'
+    );
+    expect(taskQueueService.getTask(task.id)?.insertedToCanvas).toBe(true);
+
+    subscription.unsubscribe();
+  });
 });

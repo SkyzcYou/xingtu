@@ -127,6 +127,7 @@ import {
   findMindRootFromSelection,
   formatPPTCommonPrompt,
   isPlaitMind,
+  normalizePPTReferenceImages,
 } from '../../../services/ppt';
 import type { PPTFrameMeta } from '../../../services/ppt';
 import {
@@ -820,6 +821,23 @@ export const PopupToolbar = () => {
         name: `${selectedFrame.name || 'frame'}-previous-reference.png`,
       });
     }
+    const existingReferenceUrls = new Set(
+      initialImages.map((image) => image.url)
+    );
+    normalizePPTReferenceImages(pptMeta?.referenceImages).forEach(
+      (url, index) => {
+        if (existingReferenceUrls.has(url)) {
+          return;
+        }
+        existingReferenceUrls.add(url);
+        initialImages.push({
+          url,
+          name: `${selectedFrame.name || 'frame'}-deck-reference-${
+            index + 1
+          }.png`,
+        });
+      }
+    );
 
     openDialog(DialogType.aiImageGeneration, {
       initialPrompt: buildPPTImageGenerationPrompt(commonPrompt, slidePrompt),

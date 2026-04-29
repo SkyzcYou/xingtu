@@ -100,12 +100,15 @@ export class AudioNodeGenerator {
 
   destroy(): void {
     if (this.reactRoot) {
-      try {
-        this.reactRoot.unmount();
-      } catch {
-        // Ignore unmount failures during teardown.
-      }
+      const root = this.reactRoot;
       this.reactRoot = null;
+      setTimeout(() => {
+        try {
+          root.unmount();
+        } catch {
+          // Ignore unmount failures during teardown.
+        }
+      }, 0);
     }
 
     this.foreignObject = null;

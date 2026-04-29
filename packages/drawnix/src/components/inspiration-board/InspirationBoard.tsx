@@ -9,7 +9,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from 'tdesign-icons-react';
 import { Lightbulb, X } from 'lucide-react';
 import { InspirationCard } from './InspirationCard';
 import { INSPIRATION_TEMPLATES, ITEMS_PER_PAGE } from './constants';
-import type { InspirationBoardProps } from './types';
+import type { InspirationBoardProps, InspirationTemplate } from './types';
 import './inspiration-board.scss';
 
 const HIDE_INSPIRATION_KEY = 'aitu_hide_inspiration_board';
@@ -57,8 +57,12 @@ export const InspirationBoard: React.FC<InspirationBoardProps> = ({
   }, [totalPages]);
 
   // 选择模版（灵感创意的模版都是 agent 类型）
-  const handleSelectTemplate = useCallback((prompt: string) => {
-    onSelectPrompt({ prompt, modelType: 'agent' });
+  const handleSelectTemplate = useCallback((template: InspirationTemplate) => {
+    onSelectPrompt({
+      prompt: template.prompt,
+      modelType: 'agent',
+      skillId: template.skillId,
+    });
   }, [onSelectPrompt]);
 
   // 处理"不再提示"按钮点击
@@ -143,7 +147,7 @@ export const InspirationBoard: React.FC<InspirationBoardProps> = ({
           <InspirationCard
             key={template.id}
             template={template}
-            onClick={() => handleSelectTemplate(template.prompt)}
+            onClick={() => handleSelectTemplate(template)}
           />
         ))}
 

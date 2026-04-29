@@ -66,6 +66,8 @@ export interface PPTGenerateOptions {
   language?: string;
   /** 额外要求 */
   extraRequirements?: string;
+  /** 参考图片 URL 列表（仅保存轻量 URL，不保存 base64 大图） */
+  referenceImages?: string[];
 }
 
 /** Frame 上的 PPT 扩展元数据 */
@@ -111,6 +113,8 @@ export interface PPTFrameMeta {
   styleSpec?: PPTStyleSpec;
   /** 整套 PPT 共用的公共提示词（轻量文本，不存图片/base64） */
   commonPrompt?: string;
+  /** 整套 PPT 的参考图片 URL（轻量 URL，不保存 base64 大图） */
+  referenceImages?: string[];
   /** 当前整页幻灯片图片 URL */
   slideImageUrl?: string;
   /** 当前整页幻灯片图片元素 ID */
@@ -173,6 +177,8 @@ export interface PPTGenerationParams {
   model?: string;
   /** 兼容 Agent 媒体模型注入的模型来源字段 */
   modelRef?: ModelRef | null;
+  /** 参考图片 URL 列表，用于规划配图和后续 PPT 生图参考 */
+  referenceImages?: string[];
 }
 
 // ============================================

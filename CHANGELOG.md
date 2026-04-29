@@ -1,3 +1,34 @@
+## 0.6.90 (2026-04-29)
+
+### 🔧 Chores
+
+- 更新应用版本号至0.6.89 ([9ebe98d3](https://github.com/ljquan/aitu/commit/9ebe98d3))
+- style(project-drawer): 重构PPT大纲面板样式以改进布局结构 ([c77741bb](https://github.com/ljquan/aitu/commit/c77741bb))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.89 (2026-04-29)
+
+### 🚀 Features
+
+- 添加PPT生成参考图片支持并修复React组件卸载问题 ([b470e504](https://github.com/ljquan/aitu/commit/b470e504))
+
+### 🩹 Fixes
+
+- 修复图片生成完成后画布自动插入卡住 ([e383c362](https://github.com/ljquan/aitu/commit/e383c362))
+
+### 🔧 Chores
+
+- 添加 mermaid 依赖用于图表渲染 ([2999f6f1](https://github.com/ljquan/aitu/commit/2999f6f1))
+- 更新应用版本号至0.6.88并同步构建时间 ([84e6f206](https://github.com/ljquan/aitu/commit/84e6f206))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+- gongchengtu <1817063960@qq.com>
+
 ## 0.6.88 (2026-04-28)
 
 ### 🩹 Fixes

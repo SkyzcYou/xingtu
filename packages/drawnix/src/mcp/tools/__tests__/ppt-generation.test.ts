@@ -217,4 +217,38 @@ describe('ppt-generation MCP tool', () => {
     ]);
     expect(chunks.join('')).toContain('已替换画布中原有 1 个 PPT 页面');
   });
+
+  it('stores lightweight reference image URLs for generated PPT slides', async () => {
+    const board = createTestingBoard([], []) as any;
+    setBoard(board);
+
+    const chunks: string[] = [];
+    const result = await pptGenerationTool.execute(
+      {
+        topic: '新产品发布',
+        pageCount: 'short',
+        language: '中文',
+        referenceImages: [
+          'https://example.com/reference.png',
+          'data:image/png;base64,large-inline-image',
+        ],
+      },
+      {
+        onChunk: (chunk) => chunks.push(chunk),
+      }
+    );
+
+    expect(result.success).toBe(true);
+    expect(chunks.join('')).toContain('已关联 1 张参考图片');
+
+    const pptFrames = board.children.filter((element: any) => element.pptMeta);
+    expect(pptFrames).toHaveLength(3);
+    pptFrames.forEach((frame: any) => {
+      expect(frame.pptMeta.referenceImages).toEqual([
+        'https://example.com/reference.png',
+      ]);
+      expect(frame.pptMeta.commonPrompt).toContain('参考图片配图规则');
+      expect(frame.pptMeta.slidePrompt).toContain('参考图片策略');
+    });
+  });
 });

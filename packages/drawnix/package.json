@@ -22,6 +22,7 @@
     "jotai": "^2.18.0",
     "katex": "^0.16.27",
     "localforage": "^1.10.0",
+    "mermaid": "10.9.3",
     "postmessage-duplex": "^1.2.0",
     "pptxgenjs": "^4.0.1",
     "web-vitals": "^5.1.0"
