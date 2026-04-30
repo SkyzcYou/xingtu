@@ -39,6 +39,26 @@ function waitForIdle(timeout = 100): Promise<void> {
   });
 }
 
+function getTaskSignalAt(task: {
+  updatedAt?: number;
+  startedAt?: number;
+  createdAt?: number;
+}): number {
+  return task.updatedAt || task.startedAt || task.createdAt || 0;
+}
+
+function getPageSessionStartedAt(): number {
+  if (
+    typeof performance !== 'undefined' &&
+    Number.isFinite(performance.timeOrigin) &&
+    performance.timeOrigin > 0
+  ) {
+    return performance.timeOrigin;
+  }
+
+  return Date.now();
+}
+
 /**
  * Hook for task queue initialization and restoration
  *
@@ -57,6 +77,8 @@ export function useTaskStorage(): boolean {
 
     // Initialize storage and load tasks (deferred to browser idle time)
     const initializeStorage = async () => {
+      const pageSessionStartedAt = getPageSessionStartedAt();
+
       // Wait for browser idle time to avoid blocking page load
       await waitForIdle(50);
       console.warn('[useTaskStorage] Idle callback fired, starting init');
@@ -73,13 +95,30 @@ export function useTaskStorage(): boolean {
         console.warn(`[useTaskStorage] Loaded ${storedTasks.length} tasks from IndexedDB`);
 
         if (storedTasks.length > 0) {
+          const preRestoreMemoryTasksById = new Map(
+            taskQueueService.getAllTasks().map((task) => [task.id, task])
+          );
+
           taskQueueService.restoreTasks(storedTasks);
           console.warn(`[useTaskStorage] Restored ${storedTasks.length} tasks to memory`);
 
           // Handle interrupted processing tasks based on task type and remoteId
-          const processingTasks = storedTasks.filter(
-            (task) => task.status === 'processing'
-          );
+          const processingTasks = storedTasks.filter((task) => {
+            if (task.status !== TaskStatus.PROCESSING) {
+              return false;
+            }
+
+            const memoryTask = preRestoreMemoryTasksById.get(task.id);
+            if (
+              memoryTask &&
+              memoryTask.status === TaskStatus.PROCESSING &&
+              getTaskSignalAt(memoryTask) >= getTaskSignalAt(task)
+            ) {
+              return false;
+            }
+
+            return getTaskSignalAt(task) < pageSessionStartedAt;
+          });
 
           if (processingTasks.length > 0) {
             console.warn(`[useTaskStorage] Found ${processingTasks.length} interrupted processing tasks`);
