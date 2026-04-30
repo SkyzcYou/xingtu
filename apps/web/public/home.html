@@ -1152,14 +1152,14 @@
     <script>
       (function () {
         var pageName = 'opentu_home_seo';
-        var posthogKey = 'phc_13URtidKwTR9POlwnB153NsN99shRykvPguKWf3vZVn';
-        var posthogHost = 'https://us.i.posthog.com';
+        var posthogKey = '';
+        var posthogHost = '';
         var isLocalDev =
           window.location.hostname === 'localhost' ||
           window.location.hostname === '127.0.0.1';
         var forceReport =
           new URLSearchParams(window.location.search).get('report') === '1';
-        var shouldReportAnalytics = !isLocalDev || forceReport;
+        var shouldReportAnalytics = !!posthogKey && (!isLocalDev || forceReport);
 
         function getSearchEngine() {
           var referrer = document.referrer || '';

@@ -1470,14 +1470,16 @@
   <!-- 本地开发环境（localhost/127.0.0.1）默认不加载，除非 URL 带 report=1 参数 -->
   <script>
     (function () {
+      var posthogKey = '';
+      var posthogHost = '';
       var isLocalDev =
         window.location.hostname === 'localhost' ||
         window.location.hostname === '127.0.0.1';
       var forceReport =
         new URLSearchParams(window.location.search).get('report') === '1';
 
-      // 本地开发环境且没有 report=1 参数时，不加载 PostHog
-      if (isLocalDev && !forceReport) {
+      // 未配置业务 token 时，不加载 PostHog
+      if (!posthogKey || (isLocalDev && !forceReport)) {
         return;
       }
 
@@ -1595,8 +1597,8 @@
         );
       };
 
-      posthog.init('phc_13URtidKwTR9POlwnB153NsN99shRykvPguKWf3vZVn', {
-        api_host: 'https://us.i.posthog.com',
+      posthog.init(posthogKey, {
+        api_host: posthogHost,
         defaults: '2025-11-30',
         person_profiles: 'identified_only',
         // 关闭 Session Recording，避免 rrweb 主线程开销（wheel/setInterval）与 413

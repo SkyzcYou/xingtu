@@ -1098,17 +1098,14 @@
     <script>
       (function () {
         var pageName = 'opentu_home_seo_en';
-        var posthogKey = 'phc_13URtidKwTR9POlwnB153NsN99shRykvPguKWf3vZVn';
-        var posthogHost = 'https://us.i.posthog.com';
+        var posthogKey = '';
+        var posthogHost = '';
         var isLocalDev =
           window.location.hostname === 'localhost' ||
           window.location.hostname === '127.0.0.1';
         var forceReport =
           new URLSearchParams(window.location.search).get('report') === '1';
-
-        if (isLocalDev && !forceReport) {
-          return;
-        }
+        var shouldReportAnalytics = !!posthogKey && (!isLocalDev || forceReport);
 
         function sanitizeValue(value) {
           return String(value || '').slice(0, 120);
@@ -1159,6 +1156,7 @@
         }
 
         function track(eventName, properties) {
+          if (!shouldReportAnalytics) return;
           if (!window.posthog || !window.posthog.capture) return;
           try {
             window.posthog.capture(
@@ -1171,6 +1169,10 @@
         }
 
         function initAnalytics() {
+          if (!shouldReportAnalytics) {
+            return;
+          }
+
           !(function (t, e) {
             var o, n, p, r;
             e.__SV ||
