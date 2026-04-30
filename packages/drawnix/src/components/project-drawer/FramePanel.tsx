@@ -102,6 +102,7 @@ import { taskQueueService } from '../../services/task-queue';
 import { useSharedTaskState } from '../../hooks/useTaskQueue';
 import { usePromptHistory } from '../../hooks/usePromptHistory';
 import { TaskStatus, TaskType, type Task } from '../../types/task.types';
+import { AI_GENERATION_CONCURRENCY_LIMIT } from '../../constants/TASK_CONSTANTS';
 import { duplicateFrame, focusFrame } from '../../utils/frame-duplicate';
 import {
   getFrameAwareSelection,
@@ -182,7 +183,7 @@ type OutlinePromptOptimizeTarget =
 
 const PPT_HISTORY_PROMPT_PREVIEW_LENGTH = 36;
 const PPT_COMMON_PROMPT_HISTORY_DISPLAY_LIMIT = 60;
-const PPT_PARALLEL_GENERATION_LIMIT = 5;
+const PPT_PARALLEL_GENERATION_LIMIT = AI_GENERATION_CONCURRENCY_LIMIT;
 const PPT_TASK_WAIT_TIMEOUT_MS = IMAGE_GENERATION_TIMEOUT_MS;
 const PPT_OUTLINE_BATCH_PREFIX = 'ppt_outline_';
 const PPT_OUTLINE_CANCELLED_ERROR = 'PPT_OUTLINE_GENERATION_CANCELLED';

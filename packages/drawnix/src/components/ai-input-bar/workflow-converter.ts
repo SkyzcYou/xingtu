@@ -277,9 +277,17 @@ export function convertDirectGenerationToWorkflow(
       if (referenceImages.length > 0) {
         videoArgs.referenceImages = referenceImages;
       }
-      // 透传额外参数（如 aspect_ratio）
-      if (extraParams) {
-        videoArgs.params = extraParams;
+      // 透传额外参数（如 ratio）
+      const videoParams: Record<string, string> = { ...(extraParams || {}) };
+      if (
+        modelId === 'happyhorse-1.0-video-edit' &&
+        selection?.videos?.[0] &&
+        !videoParams.input_video
+      ) {
+        videoParams.input_video = selection.videos[0];
+      }
+      if (Object.keys(videoParams).length > 0) {
+        videoArgs.params = videoParams;
       }
 
       steps.push({

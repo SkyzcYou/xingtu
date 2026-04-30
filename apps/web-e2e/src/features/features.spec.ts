@@ -23,7 +23,9 @@ test.describe('@feature 功能测试', () => {
     await expect(aiInput).toHaveValue('生成一张美丽的风景图片');
 
     // 模型选择器（必须通过）
-    const modelSelector = page.getByRole('button', { name: /#/ }).first();
+    const modelSelector = page
+      .locator('[data-testid="model-selector"]')
+      .first();
     await expect(modelSelector).toBeVisible();
     await modelSelector.click();
     await page.waitForTimeout(300);
@@ -37,8 +39,40 @@ test.describe('@feature 功能测试', () => {
     await page.keyboard.press('Escape');
 
     // === 灵感创意板（必须通过）===
-    const inspirationTitle = page.getByRole('heading', { name: '灵感创意', level: 3 });
+    const inspirationBoard = page.locator('[data-testid="inspiration-board"]');
+    await expect(inspirationBoard).toBeVisible();
+    const inspirationTitle = page.getByRole('heading', {
+      name: '灵感创意',
+      level: 3,
+    });
     await expect(inspirationTitle).toBeVisible();
+    const firstInspirationCard = inspirationBoard.getByRole('heading', {
+      name: '智能拆分宫格图',
+      level: 3,
+    });
+    await expect(firstInspirationCard).toBeVisible();
+    await expect(
+      inspirationBoard.getByRole('heading', { name: '生成PPT大纲', level: 3 })
+    ).toBeVisible();
+
+    await firstInspirationCard.click();
+    await expect(aiInput).toHaveValue('生成16宫格猫咪表情包');
+    const sendGuide = page.locator('[data-testid="inspiration-send-guide"]');
+    await expect(sendGuide).toBeVisible();
+    await expect(
+      inspirationBoard.getByRole('heading', { name: '确认后发送', level: 3 })
+    ).toBeVisible();
+    await expect(
+      sendGuide.getByText('下一步：点击发送按钮开始生成')
+    ).toBeVisible();
+
+    await page.locator('[data-testid="inspiration-guide-back"]').click();
+    await expect(sendGuide).toBeHidden();
+    await expect(inspirationTitle).toBeVisible();
+    await expect(firstInspirationCard).toBeVisible();
+    await expect(
+      inspirationBoard.getByRole('heading', { name: '生成PPT大纲', level: 3 })
+    ).toBeVisible();
 
     // === 绘图功能（必须通过）===
     const canvas = page.locator('.board-host-svg');
@@ -78,15 +112,19 @@ test.describe('@feature 功能测试', () => {
 
     // === 项目抽屉 ===
     const openProjectBtn = page.getByRole('button', { name: '打开项目' });
-    
+
     // 如果显示"打开项目"按钮，点击打开
     if (await openProjectBtn.isVisible().catch(() => false)) {
       await openProjectBtn.click();
       await page.waitForTimeout(500);
     }
-    
+
     // 验证项目抽屉已打开（必须通过）
-    const projectTitle = page.getByRole('heading', { name: '项目', level: 3, exact: true });
+    const projectTitle = page.getByRole('heading', {
+      name: '项目',
+      level: 3,
+      exact: true,
+    });
     await expect(projectTitle).toBeVisible();
 
     // 新建画板按钮（必须通过）
@@ -109,9 +147,13 @@ test.describe('@feature 功能测试', () => {
       await openToolboxBtn.click();
       await page.waitForTimeout(500);
     }
-    
+
     // 验证工具箱已打开（必须通过）
-    const toolboxTitle = page.getByRole('heading', { name: '工具箱', level: 3, exact: true });
+    const toolboxTitle = page.getByRole('heading', {
+      name: '工具箱',
+      level: 3,
+      exact: true,
+    });
     await expect(toolboxTitle).toBeVisible();
 
     // 工具分类按钮（必须通过）
@@ -141,11 +183,14 @@ test.describe('@feature 功能测试', () => {
     await page.waitForTimeout(1500);
 
     // 素材库按钮（必须通过）
-    const mediaLibraryContainer = page.locator('div').filter({ has: page.getByRole('radio', { name: '素材库' }) }).first();
+    const mediaLibraryContainer = page
+      .locator('div')
+      .filter({ has: page.getByRole('radio', { name: '素材库' }) })
+      .first();
     await expect(mediaLibraryContainer).toBeVisible();
     await mediaLibraryContainer.click({ force: true });
     await page.waitForTimeout(500);
-    
+
     // 关闭
     await page.keyboard.press('Escape');
   });

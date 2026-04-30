@@ -1,5 +1,6 @@
 import classNames from 'classnames';
 import './radio-group.scss';
+import { HoverTip } from './shared/hover';
 
 export type RadioGroupChoice<T> = {
   value: T;
@@ -23,22 +24,26 @@ export const RadioGroup = function <T>({
   return (
     <div className="RadioGroup">
       {choices.map((choice) => (
-        <div
-          className={classNames('RadioGroup__choice', {
-            active: choice.value === value,
-          })}
+        <HoverTip
           key={String(choice.value)}
-          title={choice.ariaLabel}
+          content={choice.ariaLabel}
+          showArrow={false}
         >
-          <input
-            name={name}
-            type="radio"
-            checked={choice.value === value}
-            onChange={() => onChange(choice.value)}
-            aria-label={choice.ariaLabel}
-          />
-          {choice.label}
-        </div>
+          <div
+            className={classNames('RadioGroup__choice', {
+              active: choice.value === value,
+            })}
+          >
+            <input
+              name={name}
+              type="radio"
+              checked={choice.value === value}
+              onChange={() => onChange(choice.value)}
+              aria-label={choice.ariaLabel}
+            />
+            {choice.label}
+          </div>
+        </HoverTip>
       ))}
     </div>
   );

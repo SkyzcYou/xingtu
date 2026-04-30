@@ -3,8 +3,10 @@
  * 水平色相选择条，覆盖 0-360 度色相范围
  */
 
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback } from 'react';
 import type { HueSliderProps } from './types';
+import { useDocumentDrag } from './use-document-drag';
+import type { DragPoint } from './use-document-drag';
 
 export const HueSlider: React.FC<HueSliderProps> = ({
   hue,
@@ -12,7 +14,6 @@ export const HueSlider: React.FC<HueSliderProps> = ({
   disabled = false,
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
 
   // 计算指示器位置
   const indicatorPosition = (hue / 360) * 100;
@@ -28,65 +29,21 @@ export const HueSlider: React.FC<HueSliderProps> = ({
     onChange(newHue);
   }, [onChange]);
 
-  // 鼠标按下
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (disabled) return;
-    e.preventDefault();
-    setIsDragging(true);
-    calculateHue(e.clientX);
-  }, [disabled, calculateHue]);
+  const handleDrag = useCallback(({ clientX }: DragPoint) => {
+    calculateHue(clientX);
+  }, [calculateHue]);
 
-  // 触摸开始
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (disabled) return;
-    e.preventDefault();
-    setIsDragging(true);
-    const touch = e.touches[0];
-    calculateHue(touch.clientX);
-  }, [disabled, calculateHue]);
-
-  // 全局鼠标移动和释放
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      e.preventDefault();
-      calculateHue(e.clientX);
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      calculateHue(touch.clientX);
-    };
-
-    const handleTouchEnd = () => {
-      setIsDragging(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', handleTouchEnd);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [isDragging, calculateHue]);
+  const dragHandlers = useDocumentDrag({
+    disabled,
+    onDrag: handleDrag,
+  });
 
   return (
     <div
       ref={sliderRef}
       className="ucp-hue-slider"
-      onMouseDown={handleMouseDown}
-      onTouchStart={handleTouchStart}
+      onMouseDown={dragHandlers.onMouseDown}
+      onTouchStart={dragHandlers.onTouchStart}
     >
       {/* 色相渐变背景 */}
       <div className="ucp-hue-slider__track" />

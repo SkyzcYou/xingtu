@@ -19,6 +19,7 @@ import { Task, TaskStatus, TaskType } from '../types/task.types';
 import { CharacterStatus } from '../types/character.types';
 import { isTaskTimeout } from '../utils/task-utils';
 import { isAsyncImageModel } from '../constants/model-config';
+import { AI_GENERATION_CONCURRENCY_LIMIT } from '../constants/TASK_CONSTANTS';
 import { classifyApiCredentialError } from '../utils/api-auth-error-event';
 
 /**
@@ -183,7 +184,7 @@ function getFriendlyErrorMessage(error: any): string {
  * }
  */
 // 最大并发任务数，防止页面加载时大量任务同时执行导致 OOM
-const MAX_CONCURRENT_TASKS = 3;
+const MAX_CONCURRENT_TASKS = AI_GENERATION_CONCURRENCY_LIMIT;
 // 页面加载后延迟执行积压任务，避免与页面初始化竞争资源
 const STARTUP_DELAY_MS = 2000;
 

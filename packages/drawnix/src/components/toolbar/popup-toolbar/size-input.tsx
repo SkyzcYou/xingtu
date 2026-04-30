@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../../popover/popover';
 import { ChevronDown } from 'lucide-react';
 import { useI18n } from '../../../i18n';
 import { PRESET_SIZES, PresetSize } from '../../../constants/frame-presets';
+import { HoverTip } from '../../shared/hover';
 import './size-input.scss';
 
 export interface SizeInputProps {
@@ -312,13 +313,17 @@ export const SizeInput: React.FC<SizeInputProps> = ({ board }) => {
           onKeyDown={handleKeyDown}
         />
       </div>
-      <button
-        className={`size-lock-button ${locked ? 'locked' : ''}`}
-        onClick={() => setLocked(!locked)}
-        title={locked ? '解锁比例' : '锁定比例'}
+      <HoverTip
+        content={locked ? '解锁比例' : '锁定比例'}
+        showArrow={false}
       >
-        {locked ? <LockIcon /> : <UnlockIcon />}
-      </button>
+        <button
+          className={`size-lock-button ${locked ? 'locked' : ''}`}
+          onClick={() => setLocked(!locked)}
+        >
+          {locked ? <LockIcon /> : <UnlockIcon />}
+        </button>
+      </HoverTip>
       <div className="size-input-group">
         <span className="size-input-label">H</span>
         <input
@@ -338,15 +343,17 @@ export const SizeInput: React.FC<SizeInputProps> = ({ board }) => {
         placement="bottom-end"
         sideOffset={8}
       >
-        <PopoverTrigger asChild>
-          <button
+        <HoverTip
+          content={isZh ? '常用尺寸' : 'Preset Sizes'}
+          showArrow={false}
+        >
+          <PopoverTrigger
             className={`size-preset-button ${presetOpen ? 'active' : ''}`}
-            title={isZh ? '常用尺寸' : 'Preset Sizes'}
             onClick={() => setPresetOpen(!presetOpen)}
           >
             <ChevronDown size={12} />
-          </button>
-        </PopoverTrigger>
+          </PopoverTrigger>
+        </HoverTip>
         <PopoverContent container={container}>
           <div className="size-preset-panel">
             {PRESET_SIZES.map((group) => (

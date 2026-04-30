@@ -36,7 +36,7 @@ import './knowledge-base-editor.scss';
 import type { Asset } from '../../types/asset.types';
 import { SelectionMode } from '../../types/asset.types';
 import type { KBNote, KBTag, KBTagWithCount } from '../../types/knowledge-base.types';
-import { HoverTip } from '../shared';
+import { HoverTip } from '../shared/hover';
 
 interface KBNoteEditorProps {
   note: KBNote | null;
@@ -369,14 +369,18 @@ setOutputType((note.metadata?.outputType as 'image' | 'text' | 'video' | 'audio'
       {/* 来源信息区域 - 可折叠 */}
       {hasSourceInfo && (
         <div className={`kb-note-editor__metadata-section ${metadataCollapsed ? 'kb-note-editor__metadata-section--collapsed' : ''}`}>
-          <button
-            className="kb-note-editor__metadata-toggle"
-            onClick={() => setMetadataCollapsed(!metadataCollapsed)}
-            title={metadataCollapsed ? '展开来源信息' : '收起来源信息'}
+          <HoverTip
+            content={metadataCollapsed ? '展开来源信息' : '收起来源信息'}
+            showArrow={false}
           >
-            {metadataCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-            <span>来源信息</span>
-          </button>
+            <button
+              className="kb-note-editor__metadata-toggle"
+              onClick={() => setMetadataCollapsed(!metadataCollapsed)}
+            >
+              {metadataCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              <span>来源信息</span>
+            </button>
+          </HoverTip>
 
           {/* 折叠时显示简要信息 */}
           {metadataCollapsed && (
@@ -388,17 +392,18 @@ setOutputType((note.metadata?.outputType as 'image' | 'text' | 'video' | 'audio'
                 </span>
               )}
               {metadata.sourceUrl && (
-                <a
-                  href={metadata.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="kb-note-editor__metadata-collapsed-link"
-                  onClick={(e) => e.stopPropagation()}
-                  title={metadata.sourceUrl}
-                >
-                  <ExternalLink size={10} />
-                  <span>{metadata.domain || metadata.sourceUrl}</span>
-                </a>
+                <HoverTip content={metadata.sourceUrl} showArrow={false}>
+                  <a
+                    href={metadata.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="kb-note-editor__metadata-collapsed-link"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink size={10} />
+                    <span>{metadata.domain || metadata.sourceUrl}</span>
+                  </a>
+                </HoverTip>
               )}
             </div>
           )}

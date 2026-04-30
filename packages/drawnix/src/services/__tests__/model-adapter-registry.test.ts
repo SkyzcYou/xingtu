@@ -91,6 +91,17 @@ const seedanceVideoAdapter: VideoModelAdapter = {
   },
 };
 
+const happyHorseVideoAdapter: VideoModelAdapter = {
+  id: 'happyhorse-video',
+  label: 'HappyHorse Video',
+  kind: 'video',
+  matchProtocols: ['happyhorse.video'],
+  matchRequestSchemas: ['happyhorse.video.json'],
+  async generateVideo() {
+    throw new Error('not implemented');
+  },
+};
+
 describe('model adapter registry', () => {
   beforeEach(() => {
     clearModelAdapters();
@@ -99,6 +110,7 @@ describe('model adapter registry', () => {
     registerModelAdapter(gptImageAdapter);
     registerModelAdapter(tuziGptImageAdapter);
     registerModelAdapter(seedanceVideoAdapter);
+    registerModelAdapter(happyHorseVideoAdapter);
   });
 
   afterEach(() => {
@@ -193,5 +205,21 @@ describe('model adapter registry', () => {
     );
 
     expect(adapter?.id).toBe('seedance-video');
+  });
+
+  it('routes HappyHorse video schemas to the dedicated adapter', () => {
+    const adapter = resolveAdapterForBinding(
+      createBinding({
+        modelId: 'happyhorse-1.0-r2v',
+        operation: 'video',
+        protocol: 'happyhorse.video',
+        requestSchema: 'happyhorse.video.json',
+        responseSchema: 'happyhorse.video.task',
+        submitPath: '/videos',
+      }),
+      'video'
+    );
+
+    expect(adapter?.id).toBe('happyhorse-video');
   });
 });

@@ -64,6 +64,13 @@ const INTERNAL_COMPONENT_LOADERS = new Map<string, InternalComponentLoader>([
         default: module.MVCreatorToolComponent,
       })),
   ],
+  [
+    'comic-creator',
+    () =>
+      import('./tools/comic-creator').then((module) => ({
+        default: module.ComicCreatorToolComponent,
+      })),
+  ],
 ]);
 
 class ToolRegistry {

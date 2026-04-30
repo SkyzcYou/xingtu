@@ -84,7 +84,16 @@ export class SharedBackupPartManager {
       partIndex: this.partIndex,
       totalParts: null,
       isFinalPart: false,
-      includes: { prompts: false, projects: false, assets: true, tasks: false, knowledgeBase: false },
+      schemaVersion: BACKUP_VERSION,
+      backupMode: 'incremental',
+      includes: {
+        prompts: false,
+        projects: false,
+        assets: true,
+        tasks: false,
+        knowledgeBase: false,
+        environment: false,
+      },
     };
 
     const zipToUse = this.partIndex === 1 ? this.part1Zip : this.currentZip;

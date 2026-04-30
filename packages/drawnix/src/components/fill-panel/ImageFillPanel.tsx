@@ -26,6 +26,7 @@ import { DEFAULT_IMAGE_FILL } from '../../types/fill.types';
 import { AssetType, SelectionMode } from '../../types/asset.types';
 import type { Asset } from '../../types/asset.types';
 import { compressImageBlob, getCompressionStrategy } from '@aitu/utils';
+import { HoverTip } from '../shared/hover';
 import './image-fill-panel.scss';
 
 const MediaLibraryModal = lazy(() =>
@@ -213,13 +214,17 @@ export const ImageFillPanel: React.FC<ImageFillPanelProps> = ({
       return (
         <div className="ifp-image-preview">
           <img src={config.imageUrl} alt="Fill preview" />
-          <button
-            className="ifp-image-remove"
-            onClick={() => updateConfig({ imageUrl: '' })}
-            title={language === 'zh' ? '移除图片' : 'Remove image'}
+          <HoverTip
+            content={language === 'zh' ? '移除图片' : 'Remove image'}
+            showArrow={false}
           >
-            ×
-          </button>
+            <button
+              className="ifp-image-remove"
+              onClick={() => updateConfig({ imageUrl: '' })}
+            >
+              ×
+            </button>
+          </HoverTip>
         </div>
       );
     }
@@ -273,17 +278,21 @@ export const ImageFillPanel: React.FC<ImageFillPanelProps> = ({
             </div>
             <div className="ifp-mode-buttons">
               {FILL_MODES.map((mode) => (
-                <button
+                <HoverTip
                   key={mode.value}
-                  className={classNames('ifp-mode-btn', { active: config.mode === mode.value })}
-                  onClick={() => updateConfig({ mode: mode.value })}
-                  title={language === 'zh' ? mode.labelZh : mode.labelEn}
+                  content={language === 'zh' ? mode.labelZh : mode.labelEn}
+                  showArrow={false}
                 >
-                  <span className="ifp-mode-icon">{mode.icon}</span>
-                  <span className="ifp-mode-label">
-                    {language === 'zh' ? mode.labelZh : mode.labelEn}
-                  </span>
-                </button>
+                  <button
+                    className={classNames('ifp-mode-btn', { active: config.mode === mode.value })}
+                    onClick={() => updateConfig({ mode: mode.value })}
+                  >
+                    <span className="ifp-mode-icon">{mode.icon}</span>
+                    <span className="ifp-mode-label">
+                      {language === 'zh' ? mode.labelZh : mode.labelEn}
+                    </span>
+                  </button>
+                </HoverTip>
               ))}
             </div>
           </div>

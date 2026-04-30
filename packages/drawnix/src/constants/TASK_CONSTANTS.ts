@@ -31,6 +31,12 @@ export const TASK_TIMEOUT = {
 export const DUPLICATE_SUBMISSION_WINDOW = 5 * 1000; // 5 seconds
 
 /**
+ * Maximum concurrent AI/model generation calls.
+ * Keep non-AI Blob/ZIP/cache/GitHub paths on their own lower limits.
+ */
+export const AI_GENERATION_CONCURRENCY_LIMIT = 20;
+
+/**
  * Form reset delay (in milliseconds)
  * Delay before resetting the form after task creation
  */

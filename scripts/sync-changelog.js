@@ -10,6 +10,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const MAX_CHANGELOG_VERSIONS = 50;
+
 function compareSemver(a, b) {
   const pa = a.split('.').map(Number);
   const pb = b.split('.').map(Number);
@@ -132,7 +134,7 @@ function parseChangelog(content) {
     }
   }
 
-  return { versions };
+  return { versions: versions.slice(0, MAX_CHANGELOG_VERSIONS) };
 }
 
 function syncChangelog() {
@@ -148,7 +150,9 @@ function syncChangelog() {
   const data = parseChangelog(content);
 
   fs.writeFileSync(outputPath, JSON.stringify(data, null, 2) + '\n');
-  console.log(`✅ changelog.json 已同步（${data.versions.length} 个版本）`);
+  console.log(
+    `✅ changelog.json 已同步（${data.versions.length} 个版本，最多保留 ${MAX_CHANGELOG_VERSIONS} 个）`
+  );
 }
 
 // 支持独立运行和 require() 调用

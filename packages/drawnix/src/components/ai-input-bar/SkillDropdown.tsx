@@ -9,6 +9,7 @@ import { externalSkillService } from '../../services/external-skill-service';
 import type { KBNoteMeta } from '../../types/knowledge-base.types';
 import { KeyboardDropdown } from './KeyboardDropdown';
 import type { SkillOutputType } from './skill-media-type';
+import { HoverTip } from '../shared/hover';
 
 export interface SkillDropdownProps {
   value: string;
@@ -200,23 +201,24 @@ export const SkillDropdown: React.FC<SkillDropdownProps> = ({
     >
       {({ containerRef, menuRef, portalPosition, handleTriggerKeyDown }) => (
         <div className="skill-dropdown" ref={containerRef}>
-          <button
-            className={`skill-dropdown__trigger ${isOpen ? 'skill-dropdown__trigger--open' : ''}`}
-            onMouseDown={handleToggle}
-            onKeyDown={handleTriggerKeyDown}
-            disabled={disabled}
-            type="button"
-            title={`Skill: ${selectedOption.name}`}
-          >
-            <span className="skill-dropdown__icon-prefix">
-              <Zap size={14} />
-            </span>
-            <span className="skill-dropdown__label">{selectedOption.name}</span>
-            <ChevronDown
-              size={14}
-              className={`skill-dropdown__chevron ${isOpen ? 'skill-dropdown__chevron--open' : ''}`}
-            />
-          </button>
+          <HoverTip content={`Skill: ${selectedOption.name}`} showArrow={false}>
+            <button
+              className={`skill-dropdown__trigger ${isOpen ? 'skill-dropdown__trigger--open' : ''}`}
+              onMouseDown={handleToggle}
+              onKeyDown={handleTriggerKeyDown}
+              disabled={disabled}
+              type="button"
+            >
+              <span className="skill-dropdown__icon-prefix">
+                <Zap size={14} />
+              </span>
+              <span className="skill-dropdown__label">{selectedOption.name}</span>
+              <ChevronDown
+                size={14}
+                className={`skill-dropdown__chevron ${isOpen ? 'skill-dropdown__chevron--open' : ''}`}
+              />
+            </button>
+          </HoverTip>
           {isOpen &&
             createPortal(
               <div

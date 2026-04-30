@@ -15,6 +15,7 @@ import {
 import { Z_INDEX } from '../../constants/z-index';
 import './size-dropdown.scss';
 import { KeyboardDropdown } from './KeyboardDropdown';
+import { HoverTip } from '../shared/hover';
 
 export interface SizeDropdownProps {
   /** 当前选中的尺寸 */
@@ -139,18 +140,19 @@ export const SizeDropdown: React.FC<SizeDropdownProps> = ({
       {({ containerRef, menuRef, portalPosition, handleTriggerKeyDown }) => (
         <div className="size-dropdown" ref={containerRef}>
           {/* 触发按钮 */}
-          <button
-            className={`size-dropdown__trigger ${isOpen ? 'size-dropdown__trigger--open' : ''}`}
-            onClick={handleToggle}
-            onKeyDown={handleTriggerKeyDown}
-            type="button"
-            aria-haspopup="listbox"
-            aria-expanded={isOpen}
-            title={`${fullLabel} (↑↓ Tab)`}
-          >
-            <span className="size-dropdown__label">{triggerLabel}</span>
-            <ChevronDown size={14} className={`size-dropdown__icon ${isOpen ? 'size-dropdown__icon--open' : ''}`} />
-          </button>
+          <HoverTip content={`${fullLabel} (↑↓ Tab)`} showArrow={false}>
+            <button
+              className={`size-dropdown__trigger ${isOpen ? 'size-dropdown__trigger--open' : ''}`}
+              onClick={handleToggle}
+              onKeyDown={handleTriggerKeyDown}
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded={isOpen}
+            >
+              <span className="size-dropdown__label">{triggerLabel}</span>
+              <ChevronDown size={14} className={`size-dropdown__icon ${isOpen ? 'size-dropdown__icon--open' : ''}`} />
+            </button>
+          </HoverTip>
           {isOpen && createPortal(
             <div
               ref={menuRef}

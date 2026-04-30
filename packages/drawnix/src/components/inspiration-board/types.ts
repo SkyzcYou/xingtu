@@ -46,6 +46,12 @@ export interface InspirationSelectInfo {
   modelType: 'agent';
   /** 选择模板后自动激活的系统 Skill */
   skillId?: string;
+  /** 被选择的模板 ID，用于引导与埋点 */
+  templateId?: string;
+  /** 被选择的模板标题，用于引导与埋点 */
+  title?: string;
+  /** 被选择的模板分类，用于引导与埋点 */
+  category?: InspirationCategory;
 }
 
 /**

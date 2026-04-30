@@ -107,7 +107,7 @@ jobs:
 
       # 生成用户手册
       - name: Generate User Manual
-        run: pnpm run generate:manual
+        run: pnpm run manual:build
 
       # 上传测试报告
       - name: Upload E2E Test Report
@@ -131,4 +131,3 @@ jobs:
         with:
           name: user-manual
           path: docs/user-manual/
-

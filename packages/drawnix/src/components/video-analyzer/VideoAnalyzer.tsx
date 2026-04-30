@@ -5,15 +5,13 @@
  * 支持历史记录和收藏
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import type { PageId, AnalysisRecord } from './types';
 import { loadRecords, updateRecord } from './storage';
-import { StepBar } from './components/StepBar';
 import { AnalyzePage } from './pages/AnalyzePage';
 import { ScriptPage } from './pages/ScriptPage';
 import { GeneratePage } from './pages/GeneratePage';
 import { HistoryPage } from './pages/HistoryPage';
-import { taskQueueService } from '../../services/task-queue';
 import { syncVideoAnalyzerTask, isVideoAnalyzerTask } from './task-sync';
 import { switchToVersion } from './utils';
 import { useDrawnix } from '../../hooks/use-drawnix';
@@ -22,89 +20,95 @@ import { insertVideoFromUrl } from '../../data/video';
 import { TaskType } from '../../types/task.types';
 import type { Task } from '../../types/task.types';
 import { MessagePlugin } from '../../utils/message-plugin';
+import {
+  WorkflowNavBar,
+  useWorkflowNavigation,
+  useWorkflowRecords,
+  type WorkflowStepConfig,
+} from '../shared/workflow';
+import { useWorkflowTaskSync } from '../shared/workflow/useWorkflowTaskSync';
 import './VideoAnalyzer.scss';
 
+type WorkflowPageId = Exclude<PageId, 'history'>;
+
+const VIDEO_STEPS: Array<Omit<WorkflowStepConfig<WorkflowPageId>, 'disabled'>> = [
+  { id: 'analyze', label: '分析' },
+  { id: 'script', label: '脚本' },
+  { id: 'generate', label: '生成' },
+];
+
 const VideoAnalyzer: React.FC = () => {
-  const [page, setPage] = useState<PageId>('analyze');
-  const [currentRecord, setCurrentRecord] = useState<AnalysisRecord | null>(null);
-  const [records, setRecords] = useState<AnalysisRecord[]>([]);
-  const [showStarred, setShowStarred] = useState(false);
   const { board } = useDrawnix();
+  const {
+    records,
+    setRecords,
+    currentRecord,
+    setCurrentRecord,
+    showStarred,
+    setShowStarred,
+    starredCount,
+    selectRecord,
+    updateCurrentRecord,
+    restart,
+    applySyncedRecord,
+  } = useWorkflowRecords<AnalysisRecord>({
+    loadRecords,
+    logPrefix: '[VideoAnalyzer]',
+  });
+  const {
+    page,
+    setPage,
+    navigateToStep,
+    goToDefaultPage,
+    openHistory,
+    openStarred,
+    toggleStarred,
+  } = useWorkflowNavigation<PageId, WorkflowPageId>({
+    initialPage: 'analyze',
+    defaultPage: 'analyze',
+    historyPage: 'history',
+    setShowStarred,
+  });
 
-  useEffect(() => {
-    loadRecords().then(setRecords);
+  const syncTask = useCallback(async (task: Task) => {
+    if (!isVideoAnalyzerTask(task)) {
+      return null;
+    }
+    return syncVideoAnalyzerTask(task);
   }, []);
 
-  useEffect(() => {
-    let disposed = false;
-    const syncingTaskIds = new Set<string>();
+  useWorkflowTaskSync<AnalysisRecord>({
+    syncTask,
+    applySyncedRecord,
+    logPrefix: '[VideoAnalyzer]',
+  });
 
-    const syncTask = async (task: Parameters<typeof syncVideoAnalyzerTask>[0]) => {
-      if (!isVideoAnalyzerTask(task) || syncingTaskIds.has(task.id)) {
-        return;
-      }
-
-      syncingTaskIds.add(task.id);
-      try {
-        const synced = await syncVideoAnalyzerTask(task);
-        if (!synced || disposed) {
-          return;
-        }
-
-        setRecords(synced.records);
-        setCurrentRecord(prev => {
-          if (prev?.id === synced.record.id) {
-            return synced.record;
-          }
-          return prev;
-        });
-      } catch (error) {
-        console.error('[VideoAnalyzer] Failed to sync task result:', error);
-      } finally {
-        syncingTaskIds.delete(task.id);
-      }
-    };
-
-    taskQueueService.getAllTasks().forEach(task => {
-      void syncTask(task);
-    });
-
-    const subscription = taskQueueService.observeTaskUpdates().subscribe(event => {
-      if (event.task.status === 'completed') {
-        void syncTask(event.task);
-      }
-    });
-
-    return () => {
-      disposed = true;
-      subscription.unsubscribe();
-    };
-  }, []);
+  const steps = useMemo<WorkflowStepConfig<WorkflowPageId>[]>(
+    () =>
+      VIDEO_STEPS.map((step, index) => ({
+        ...step,
+        disabled: !currentRecord && index > 0,
+      })),
+    [currentRecord]
+  );
 
   const handleAnalysisComplete = useCallback((record: AnalysisRecord) => {
-    setCurrentRecord(record);
-  }, []);
+    updateCurrentRecord(record);
+  }, [updateCurrentRecord]);
 
   const handleHistorySelect = useCallback((record: AnalysisRecord) => {
-    setCurrentRecord(record);
-    setPage('analyze');
-  }, []);
+    selectRecord(record);
+    goToDefaultPage();
+  }, [goToDefaultPage, selectRecord]);
 
   const handleRecordUpdate = useCallback((record: AnalysisRecord) => {
-    setCurrentRecord(record);
-  }, []);
+    updateCurrentRecord(record);
+  }, [updateCurrentRecord]);
 
   const handleRestart = useCallback(() => {
-    setCurrentRecord(null);
-    setPage('analyze');
-  }, []);
-
-  const handleNavigate = useCallback((target: PageId) => {
-    if (target === 'history') {
-      setShowStarred(false);
-    }
-    setPage(target);
-  }, []);
+    restart();
+    goToDefaultPage();
+  }, [goToDefaultPage, restart]);
 
   const handleInsertTask = useCallback(async (task: Task) => {
     if ((!task.result?.url && !task.result?.urls?.length) || !board) {
@@ -147,39 +151,23 @@ const VideoAnalyzer: React.FC = () => {
 
     setCurrentRecord(updatedRecord);
     setPage('script');
-  }, []);
+  }, [setCurrentRecord, setPage, setRecords]);
 
   return (
     <div className="video-analyzer">
-      {/* 顶部导航栏：步骤条 + 历史/收藏入口 */}
-      <div className="va-nav">
-        {page === 'history' ? (
-          <>
-            <button className="va-nav-back" onClick={() => setPage('analyze')}>←</button>
-            <span className="va-nav-title">{showStarred ? '收藏' : '历史记录'}</span>
-            <button
-              className={`va-nav-btn ${showStarred ? 'active' : ''}`}
-              onClick={() => setShowStarred(s => !s)}
-            >
-              {showStarred ? '★ 收藏' : '☆ 全部'}
-            </button>
-          </>
-        ) : (
-          <>
-            <StepBar current={page} onNavigate={handleNavigate} hasRecord={!!currentRecord} />
-            <div className="va-nav-actions">
-              <button className="va-nav-btn" onClick={() => { setShowStarred(false); setPage('history'); }}>
-                <span role="img" aria-label="history">📋</span>
-                {records.length > 0 && <span className="va-nav-count">{records.length}</span>}
-              </button>
-              <button className="va-nav-btn" onClick={() => { setShowStarred(true); setPage('history'); }}>
-                <span role="img" aria-label="starred">⭐</span>
-                {records.filter(r => r.starred).length > 0 && <span className="va-nav-count">{records.filter(r => r.starred).length}</span>}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+      <WorkflowNavBar
+        isHistoryPage={page === 'history'}
+        showStarred={showStarred}
+        recordsCount={records.length}
+        starredCount={starredCount}
+        currentStep={page}
+        steps={steps}
+        onStepNavigate={navigateToStep}
+        onBackFromHistory={goToDefaultPage}
+        onOpenHistory={openHistory}
+        onOpenStarred={openStarred}
+        onToggleStarred={toggleStarred}
+      />
 
       {/* 页面内容 */}
       {page === 'analyze' && (

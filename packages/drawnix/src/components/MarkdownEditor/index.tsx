@@ -10,6 +10,7 @@ import { Eye, Code2, ImagePlus } from 'lucide-react';
 import { AssetContext } from '../../contexts/asset-context-instance';
 import { AssetType, SelectionMode } from '../../types/asset.types';
 import { MediaLibraryModal } from '../media-library';
+import { HoverTip } from '../shared/hover';
 import { assetEmbedPlugins } from './asset-embed-plugin';
 import { markdownImageBlockPlugins } from './image-block-plugin';
 import './MarkdownEditor.css';
@@ -447,22 +448,24 @@ export const MarkdownEditor = memo(forwardRef<MarkdownEditorRef, MarkdownEditorP
 
         {showModeSwitch && (
           <div className="collimind-markdown-editor-mode-switch">
-            <button
-              type="button"
-              className={`collimind-markdown-editor-mode-btn ${mode === 'wysiwyg' ? 'active' : ''}`}
-              onClick={() => handleModeChange('wysiwyg')}
-              title="所见即所得模式"
-            >
-              <Eye className="collimind-icon-sm" />
-            </button>
-            <button
-              type="button"
-              className={`collimind-markdown-editor-mode-btn ${mode === 'source' ? 'active' : ''}`}
-              onClick={() => handleModeChange('source')}
-              title="Markdown 源码模式"
-            >
-              <Code2 className="collimind-icon-sm" />
-            </button>
+            <HoverTip content="所见即所得模式" showArrow={false}>
+              <button
+                type="button"
+                className={`collimind-markdown-editor-mode-btn ${mode === 'wysiwyg' ? 'active' : ''}`}
+                onClick={() => handleModeChange('wysiwyg')}
+              >
+                <Eye className="collimind-icon-sm" />
+              </button>
+            </HoverTip>
+            <HoverTip content="Markdown 源码模式" showArrow={false}>
+              <button
+                type="button"
+                className={`collimind-markdown-editor-mode-btn ${mode === 'source' ? 'active' : ''}`}
+                onClick={() => handleModeChange('source')}
+              >
+                <Code2 className="collimind-icon-sm" />
+              </button>
+            </HoverTip>
           </div>
         )}
 

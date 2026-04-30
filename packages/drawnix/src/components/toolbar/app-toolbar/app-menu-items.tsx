@@ -22,6 +22,7 @@ import {
   ThemeColorMode,
   Viewport,
   Transforms,
+  clearSelectedElement,
 } from '@plait/core';
 import { PlaitDrawElement } from '@plait/draw';
 import { isVideoElement } from '../../../plugins/with-video';
@@ -66,6 +67,8 @@ export const OpenFile = () => {
     board.children = value;
     board.history.undos = [];
     board.history.redos = [];
+    clearSelectedElement(board);
+    board.selection = null;
     board.viewport = viewport || { zoom: 1 };
     board.theme = theme || { themeColorMode: ThemeColorMode.default };
     listRender.update(board.children, {

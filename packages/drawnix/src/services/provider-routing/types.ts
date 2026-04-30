@@ -19,6 +19,7 @@ export type ProviderProtocol =
   | 'flux.task'
   | 'kling.video'
   | 'seedance.task'
+  | 'happyhorse.video'
   | (string & {});
 
 export type ProviderBindingConfidence = 'high' | 'medium' | 'low';

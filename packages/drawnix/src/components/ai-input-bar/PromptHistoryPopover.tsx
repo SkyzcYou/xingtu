@@ -15,6 +15,7 @@ import { usePromptHistory } from '../../hooks/usePromptHistory';
 import { useGenerationHistory } from '../../hooks/useGenerationHistory';
 import { useConfirmDialog } from '../dialog/ConfirmDialog';
 import { PromptListPanel } from '../shared';
+import { HoverTip } from '../shared/hover';
 import {
   promptStorageService,
   type PromptType,
@@ -266,15 +267,16 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
   return (
     <div ref={containerRef} className="prompt-history-popover">
       <div className="prompt-history-popover__actions">
-        <button
-          className="prompt-history-popover__trigger"
-          title={promptPanelTitle}
-          data-track="ai_input_click_history"
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        >
-          <MoreHorizontal size={18} />
-        </button>
+        <HoverTip content={promptPanelTitle} showArrow={false}>
+          <button
+            className="prompt-history-popover__trigger"
+            data-track="ai_input_click_history"
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+          >
+            <MoreHorizontal size={18} />
+          </button>
+        </HoverTip>
         {extraActions}
       </div>
 

@@ -24,6 +24,12 @@ import {
   AUDIO_NODE_DEFAULT_WIDTH,
 } from '../../../types/audio-node.types';
 import { MarkdownAudioAssetCard } from '../MarkdownAudioAssetCard';
+import {
+  clamp,
+  clampSizeByHeight,
+  clampSizeByWidth,
+  normalizeDimension,
+} from '../media-size-utils';
 import { VideoPosterPreview } from '../../shared/VideoPosterPreview';
 import { assetEmbedSchema } from './schema';
 
@@ -46,56 +52,7 @@ interface AssetEmbedAttrs {
   height: number | null;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function normalizeDimension(value: number | null | undefined): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    return undefined;
-  }
-
-  return Math.round(value);
-}
-
 const AUDIO_EMBED_MAX_HEIGHT = Math.round(AUDIO_NODE_DEFAULT_HEIGHT * 1.15);
-
-interface AspectResizeBounds {
-  minWidth: number;
-  maxWidth: number;
-  minHeight: number;
-  maxHeight: number;
-}
-
-function clampSizeByWidth(targetWidth: number, aspectRatio: number, bounds: AspectResizeBounds) {
-  let width = clamp(targetWidth, bounds.minWidth, bounds.maxWidth);
-  let height = width / aspectRatio;
-
-  if (height < bounds.minHeight || height > bounds.maxHeight) {
-    height = clamp(height, bounds.minHeight, bounds.maxHeight);
-    width = height * aspectRatio;
-  }
-
-  return {
-    width: clamp(width, bounds.minWidth, bounds.maxWidth),
-    height: clamp(height, bounds.minHeight, bounds.maxHeight),
-  };
-}
-
-function clampSizeByHeight(targetHeight: number, aspectRatio: number, bounds: AspectResizeBounds) {
-  let height = clamp(targetHeight, bounds.minHeight, bounds.maxHeight);
-  let width = height * aspectRatio;
-
-  if (width < bounds.minWidth || width > bounds.maxWidth) {
-    width = clamp(width, bounds.minWidth, bounds.maxWidth);
-    height = width / aspectRatio;
-  }
-
-  return {
-    width: clamp(width, bounds.minWidth, bounds.maxWidth),
-    height: clamp(height, bounds.minHeight, bounds.maxHeight),
-  };
-}
 
 function resolveAdaptiveAudioHeight(width: number): number {
   return clamp(

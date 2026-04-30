@@ -466,18 +466,36 @@ function createDeployPackage() {
           encoding: 'utf8',
         });
         const files = fileList.split('\n').filter((f) => f.trim());
+        const fileSet = new Set(files);
+        const rootIndexEntry =
+          files.find((f) => f === 'web/index.html') ||
+          files.find((f) => /(^|\/)index\.html$/.test(f));
         const hasAssets = files.some((f) => f.includes('assets/'));
-        const hasIndex = files.some((f) => f.includes('index.html'));
+        const hasIndex = Boolean(rootIndexEntry);
         const assetCount = files.filter(
           (f) =>
             f.includes('assets/') && (f.endsWith('.js') || f.endsWith('.css'))
         ).length;
+        let entryAssets = [];
+        let missingEntryAssets = [];
+
+        if (rootIndexEntry) {
+          const indexHtml = execSync(
+            `tar -xOzf "${tarPath}" "${rootIndexEntry}" 2>/dev/null`,
+            { encoding: 'utf8' }
+          );
+          const rootDir = path.posix.dirname(rootIndexEntry);
+          entryAssets = collectEntryAssetsFromHtml(indexHtml);
+          missingEntryAssets = entryAssets.filter(
+            (asset) => !fileSet.has(path.posix.join(rootDir, asset))
+          );
+        }
+        const hasEntryJs = entryAssets.some((asset) => asset.endsWith('.js'));
+        const hasEntryCss = entryAssets.some((asset) => asset.endsWith('.css'));
 
         // 检查当前构建产物的关键资源组（文件名哈希是动态的，只检查 chunk 前缀 / manifest 语义）
         const hasAssetChunk = (pattern) =>
           files.some((f) => f.includes('assets/') && pattern.test(f));
-        const hasMainJs = hasAssetChunk(/\/?assets\/main-[^/]+\.js$/);
-        const hasMainCss = hasAssetChunk(/\/?assets\/main-[^/]+\.css$/);
         const hasToolWindowsJs = hasAssetChunk(
           /\/?assets\/tool-windows-[^/]+\.js$/
         );
@@ -553,8 +571,9 @@ function createDeployPackage() {
           hasToolRuntimeJs || hasToolDrawersJs || hasToolDialogsJs;
         const missingCriticalGroups = [];
 
-        if (!hasMainJs) missingCriticalGroups.push('main-*.js');
-        if (!hasMainCss) missingCriticalGroups.push('main-*.css');
+        if (!hasEntryJs) missingCriticalGroups.push('entry script');
+        if (!hasEntryCss) missingCriticalGroups.push('entry stylesheet');
+        missingCriticalGroups.push(...missingEntryAssets);
         if (usesCurrentToolChunkLayout) {
           if (!hasToolWindowsJs)
             missingCriticalGroups.push('tool-windows-*.js');
@@ -574,8 +593,24 @@ function createDeployPackage() {
         console.log(`   总文件数: ${files.length}`);
         console.log(`   Assets 文件数: ${assetCount}`);
         console.log(`   关键资源组检查:`);
-        console.log(`     - main-*.js: ${hasMainJs ? '✅' : '❌'}`);
-        console.log(`     - main-*.css: ${hasMainCss ? '✅' : '❌'}`);
+        console.log(
+          `     - entry script: ${
+            hasEntryJs
+              ? `✅ (${entryAssets
+                  .filter((asset) => asset.endsWith('.js'))
+                  .join(', ')})`
+              : '❌'
+          }`
+        );
+        console.log(
+          `     - entry stylesheet: ${
+            hasEntryCss
+              ? `✅ (${entryAssets
+                  .filter((asset) => asset.endsWith('.css'))
+                  .join(', ')})`
+              : '❌'
+          }`
+        );
         if (usesCurrentToolChunkLayout) {
           console.log(
             `     - tool-windows-*.js: ${hasToolWindowsJs ? '✅' : '❌'}`
@@ -649,12 +684,13 @@ function createDeployPackage() {
           );
         }
         if (missingCriticalGroups.length > 0) {
-          console.warn(
-            `⚠️  警告: 缺少关键资源组: ${missingCriticalGroups.join(', ')}`
-          );
+          throw new Error(`关键资源缺失: ${missingCriticalGroups.join(', ')}`);
         }
       } catch (e) {
-        if (e.message === '关键文件缺失') {
+        if (
+          e.message === '关键文件缺失' ||
+          e.message.startsWith('关键资源缺失:')
+        ) {
           throw e;
         }
         console.warn(`⚠️  无法验证包内文件列表: ${e.message}`);

@@ -10,7 +10,7 @@ import { Badge } from 'tdesign-react';
 import { ToolButton } from '../tool-button';
 import { useTaskQueue } from '../../hooks/useTaskQueue';
 import type { Task } from '../../types/task.types';
-import { MessageButton } from '../feedback-button';
+import { FeedbackButton, MessageButton } from '../feedback-button';
 import { FolderIcon, ToolboxIcon, TaskIcon } from '../icons';
 import './bottom-actions-section.scss';
 
@@ -112,6 +112,8 @@ export const BottomActionsSection: React.FC<BottomActionsSectionProps> = ({
         open={messageDrawerOpen}
         onToggle={onMessageDrawerToggle}
       />
+
+      <FeedbackButton />
 
       {/* 打开项目按钮 - 使用 ToolButton */}
       <ToolButton

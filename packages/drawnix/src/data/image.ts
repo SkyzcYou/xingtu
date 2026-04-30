@@ -1,7 +1,6 @@
 import {
   getHitElementByPoint,
   getSelectedElements,
-  getRectangleByElements,
   PlaitBoard,
   Point,
   addSelectedElement,
@@ -22,62 +21,7 @@ import { analytics } from '../utils/posthog-analytics';
 import { cacheRemoteUrl } from '../services/media-executor/fallback-utils';
 import { normalizeImageDataUrl } from '@aitu/utils';
 import { AssetSource, AssetType } from '../types/asset.types';
-
-/**
- * 从保存的选中元素IDs计算插入点
- * @param board - PlaitBoard实例
- * @param imageWidth - 图片宽度,用于调整X坐标使图片居中
- * @returns 插入点坐标,如果没有保存的选中元素则返回undefined
- */
-const getInsertionPointFromSavedSelection = (
-  board: PlaitBoard,
-  imageWidth: number
-): Point | undefined => {
-  const appState = (board as any).appState;
-  const savedElementIds = appState?.lastSelectedElementIds || [];
-
-  if (savedElementIds.length === 0) {
-    return undefined;
-  }
-
-  // 查找对应的元素
-  const elements = savedElementIds
-    .map((id: string) => board.children.find((el: any) => el.id === id))
-    .filter(Boolean);
-
-  if (elements.length === 0) {
-    console.warn(
-      'getInsertionPointFromSavedSelection: No elements found for saved IDs:',
-      savedElementIds
-    );
-    return undefined;
-  }
-
-  try {
-    const boundingRect = getRectangleByElements(board, elements, false);
-    const centerX = boundingRect.x + boundingRect.width / 2;
-    const insertionY = boundingRect.y + boundingRect.height + 50;
-
-    // console.log(
-    //   'getInsertionPointFromSavedSelection: Calculated insertion point:',
-    //   {
-    //     centerX,
-    //     insertionY,
-    //     boundingRect,
-    //     imageWidth,
-    //   }
-    // );
-
-    // 将X坐标向左偏移图片宽度的一半，让图片以中心点对齐
-    return [centerX - imageWidth / 2, insertionY] as Point;
-  } catch (error) {
-    console.warn(
-      'getInsertionPointFromSavedSelection: Error calculating insertion point:',
-      error
-    );
-    return undefined;
-  }
-};
+import { getInsertionPointFromSavedSelection } from '../utils/canvas-insertion-layout';
 
 export const loadHTMLImageElement = (dataURL: DataURL, crossOrigin = false) => {
   const normalizedURL = normalizeImageDataUrl(dataURL) as DataURL;
@@ -343,7 +287,11 @@ export const insertImage = async (
     if (!startPoint && !isDrop) {
       insertionPoint = getInsertionPointFromSavedSelection(
         board,
-        imageItem.width
+        {
+          align: 'center',
+          targetWidth: imageItem.width,
+          logPrefix: 'image',
+        }
       );
 
       if (!insertionPoint) {
@@ -480,7 +428,11 @@ export const insertImageFromUrl = async (
     // 优先使用保存的选中元素IDs计算插入位置
     insertionPoint = getInsertionPointFromSavedSelection(
       board,
-      imageItem.width
+      {
+        align: 'center',
+        targetWidth: imageItem.width,
+        logPrefix: 'image',
+      }
     );
 
     // 如果没有保存的选中元素,回退到使用当前选中元素(向后兼容)

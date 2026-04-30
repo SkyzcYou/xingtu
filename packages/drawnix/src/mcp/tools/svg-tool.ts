@@ -10,8 +10,18 @@
 import type { MCPTool, MCPResult } from '../types';
 import { getBoard, extractCodeBlock } from './shared';
 import { DrawTransforms } from '@plait/draw';
-import { Point, getRectangleByElements } from '@plait/core';
+import { Point } from '@plait/core';
 import { scrollToPointIfNeeded } from '../../utils/selection-utils';
+import {
+  CANVAS_INSERTION_LAYOUT,
+  getBottomMostInsertionPoint,
+  getInsertionPointFromSavedSelection,
+} from '../../utils/canvas-insertion-layout';
+import {
+  normalizeSvg,
+  parseSvgDimensions,
+  svgToDataUrl,
+} from '../../utils/svg-utils';
 
 /**
  * SVG工具输入参数
@@ -29,8 +39,6 @@ export interface SvgToolParams {
  * 布局常量
  */
 const LAYOUT_CONSTANTS = {
-  /** 默认垂直间距 */
-  DEFAULT_VERTICAL_GAP: 50,
   /** SVG 默认宽度 */
   SVG_DEFAULT_WIDTH: 400,
   /** SVG 最大宽度 */
@@ -78,111 +86,6 @@ function validateSvg(svg: string): { valid: boolean; error?: string } {
   }
 
   return { valid: true };
-}
-
-/**
- * 规范化SVG代码，确保有正确的命名空间
- */
-function normalizeSvg(svg: string): string {
-  let normalized = svg.trim();
-
-  // 确保有 xmlns 属性
-  if (!normalized.includes('xmlns=')) {
-    normalized = normalized.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-  }
-
-  return normalized;
-}
-
-/**
- * 解析SVG尺寸
- */
-function parseSvgDimensions(svg: string): { width: number; height: number } {
-  // 尝试从 viewBox 解析
-  const viewBoxMatch = svg.match(/viewBox=["']([^"']+)["']/i);
-  if (viewBoxMatch) {
-    const [, , vbWidth, vbHeight] = viewBoxMatch[1].split(/\s+/).map(Number);
-    if (vbWidth && vbHeight) {
-      return { width: vbWidth, height: vbHeight };
-    }
-  }
-
-  // 尝试从 width/height 属性解析
-  const widthMatch = svg.match(/width=["'](\d+)(?:px)?["']/i);
-  const heightMatch = svg.match(/height=["'](\d+)(?:px)?["']/i);
-  if (widthMatch && heightMatch) {
-    return { width: parseInt(widthMatch[1]), height: parseInt(heightMatch[1]) };
-  }
-
-  // 默认尺寸
-  return { width: 400, height: 400 };
-}
-
-/**
- * 将SVG转换为Data URL
- */
-function svgToDataUrl(svg: string): string {
-  const encoded = encodeURIComponent(svg)
-    .replace(/'/g, '%27')
-    .replace(/"/g, '%22');
-  return `data:image/svg+xml,${encoded}`;
-}
-
-/**
- * 从保存的选中元素IDs获取起始插入位置
- */
-function getStartPointFromSelection(board: any): Point | undefined {
-  const appState = board.appState;
-  const savedElementIds = appState?.lastSelectedElementIds || [];
-
-  if (savedElementIds.length === 0) {
-    return undefined;
-  }
-
-  const elements = savedElementIds
-    .map((id: string) => board.children.find((el: any) => el.id === id))
-    .filter(Boolean);
-
-  if (elements.length === 0) {
-    return undefined;
-  }
-
-  try {
-    const boundingRect = getRectangleByElements(board, elements, false);
-    const centerX = boundingRect.x + boundingRect.width / 2;
-    const insertionY = boundingRect.y + boundingRect.height + LAYOUT_CONSTANTS.DEFAULT_VERTICAL_GAP;
-    return [centerX, insertionY] as Point;
-  } catch (error) {
-    console.warn('[SvgTool] Error calculating start point:', error);
-    return undefined;
-  }
-}
-
-/**
- * 获取画布底部最后一个元素的位置
- */
-function getBottomMostPoint(board: any): Point {
-  if (!board.children || board.children.length === 0) {
-    return [100, 100] as Point;
-  }
-
-  let maxY = 0;
-  let maxYCenterX = 100;
-
-  for (const element of board.children) {
-    try {
-      const rect = getRectangleByElements(board, [element], false);
-      const elementBottom = rect.y + rect.height;
-      if (elementBottom > maxY) {
-        maxY = elementBottom;
-        maxYCenterX = rect.x + rect.width / 2;
-      }
-    } catch {
-      // 忽略无法计算矩形的元素
-    }
-  }
-
-  return [maxYCenterX, maxY + LAYOUT_CONSTANTS.DEFAULT_VERTICAL_GAP] as Point;
 }
 
 /**
@@ -234,10 +137,17 @@ async function executeSvgTool(params: SvgToolParams): Promise<MCPResult> {
     // 5. 确定插入位置
     let insertionPoint = startPoint;
     if (!insertionPoint) {
-      insertionPoint = getStartPointFromSelection(board);
+      insertionPoint = getInsertionPointFromSavedSelection(board, {
+        align: 'center',
+        logPrefix: 'SvgTool',
+      });
     }
     if (!insertionPoint) {
-      insertionPoint = getBottomMostPoint(board);
+      insertionPoint =
+        getBottomMostInsertionPoint(board, {
+          align: 'center',
+          emptyPoint: CANVAS_INSERTION_LAYOUT.DEFAULT_POINT,
+        }) || CANVAS_INSERTION_LAYOUT.DEFAULT_POINT;
     }
 
     // 居中调整

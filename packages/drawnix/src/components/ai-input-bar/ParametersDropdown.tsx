@@ -13,7 +13,7 @@ import React, {
   useMemo,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Settings2 } from 'lucide-react';
+import { Check, ChevronDown, Dices, Settings2 } from 'lucide-react';
 import { ATTACHED_ELEMENT_CLASS_NAME } from '@plait/core';
 import {
   getCompatibleParams,
@@ -23,6 +23,7 @@ import { Z_INDEX } from '../../constants/z-index';
 import { useControllableState } from '../../hooks/useControllableState';
 import './parameters-dropdown.scss';
 import { KeyboardDropdown } from './KeyboardDropdown';
+import { HoverTip } from '../shared/hover';
 
 function getCompactEnumSummaryLabel(
   paramId: string,
@@ -46,6 +47,27 @@ function getCompactEnumSummaryLabel(
   }
 
   return label;
+}
+
+function isRandomizableSeedParam(param: ParamConfig): boolean {
+  return (
+    param.valueType === 'number' && param.id.toLowerCase().includes('seed')
+  );
+}
+
+function getRandomParamValue(param: ParamConfig): string {
+  const min = Number.isFinite(param.min) ? (param.min as number) : 0;
+  const max = Number.isFinite(param.max) ? (param.max as number) : 2147483647;
+  const lower = Math.min(min, max);
+  const upper = Math.max(min, max);
+
+  if (param.integer !== false) {
+    return String(Math.floor(Math.random() * (upper - lower + 1)) + lower);
+  }
+
+  const step = Number.isFinite(param.step) && param.step ? param.step : 1;
+  const steps = Math.floor((upper - lower) / step);
+  return String(lower + Math.floor(Math.random() * (steps + 1)) * step);
 }
 
 export interface ParametersDropdownProps {
@@ -256,6 +278,13 @@ export const ParametersDropdown: React.FC<ParametersDropdownProps> = ({
     [onParamChange]
   );
 
+  const handleRandomParamValue = useCallback(
+    (param: ParamConfig) => {
+      onParamChange(param.id, getRandomParamValue(param), { keepOpen: true });
+    },
+    [onParamChange]
+  );
+
   if (compatibleParams.length === 0) return null;
 
   return (
@@ -296,24 +325,25 @@ export const ParametersDropdown: React.FC<ParametersDropdownProps> = ({
 
         return (
           <div className="parameters-dropdown" ref={containerRef}>
-            <button
-              className={`parameters-dropdown__trigger ${
-                isOpen ? 'parameters-dropdown__trigger--open' : ''
-              }`}
-              onMouseDown={handleToggle}
-              onKeyDown={handleTriggerKeyDown}
-              type="button"
-              disabled={disabled}
-              title={`${triggerLabel} (↑↓ Tab)`}
-            >
-              <span className="parameters-dropdown__label">{triggerLabel}</span>
-              <ChevronDown
-                size={14}
-                className={`parameters-dropdown__icon ${
-                  isOpen ? 'parameters-dropdown__icon--open' : ''
+            <HoverTip content={`${triggerLabel} (↑↓ Tab)`} showArrow={false}>
+              <button
+                className={`parameters-dropdown__trigger ${
+                  isOpen ? 'parameters-dropdown__trigger--open' : ''
                 }`}
-              />
-            </button>
+                onMouseDown={handleToggle}
+                onKeyDown={handleTriggerKeyDown}
+                type="button"
+                disabled={disabled}
+              >
+                <span className="parameters-dropdown__label">{triggerLabel}</span>
+                <ChevronDown
+                  size={14}
+                  className={`parameters-dropdown__icon ${
+                    isOpen ? 'parameters-dropdown__icon--open' : ''
+                  }`}
+                />
+              </button>
+            </HoverTip>
             {isOpen &&
               createPortal(
                 <div
@@ -392,7 +422,13 @@ export const ParametersDropdown: React.FC<ParametersDropdownProps> = ({
                               })}
                             </div>
                           ) : (
-                            <div className="parameters-dropdown__field">
+                            <div
+                              className={`parameters-dropdown__field ${
+                                isRandomizableSeedParam(param)
+                                  ? 'parameters-dropdown__field--with-action'
+                                  : ''
+                              }`}
+                            >
                               <input
                                 type={
                                   param.valueType === 'number'
@@ -423,6 +459,27 @@ export const ParametersDropdown: React.FC<ParametersDropdownProps> = ({
                                 onMouseDown={(event) => event.stopPropagation()}
                                 onKeyDown={(event) => event.stopPropagation()}
                               />
+                              {isRandomizableSeedParam(param) && (
+                                <HoverTip
+                                  content={
+                                    language === 'zh'
+                                      ? '随机生成种子'
+                                      : 'Randomize seed'
+                                  }
+                                  showArrow={false}
+                                >
+                                  <button
+                                    type="button"
+                                    className="parameters-dropdown__field-action"
+                                    onClick={() => handleRandomParamValue(param)}
+                                    onMouseDown={(event) =>
+                                      event.stopPropagation()
+                                    }
+                                  >
+                                    <Dices size={14} />
+                                  </button>
+                                </HoverTip>
+                              )}
                             </div>
                           )}
                         </div>

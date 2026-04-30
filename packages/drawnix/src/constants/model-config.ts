@@ -229,6 +229,10 @@ const BUILT_IN_MODEL_RECOMMENDATION_SCORES: Readonly<Record<string, number>> = {
   'seedance-1.0-pro': 96,
   'seedance-1.0-pro-fast': 95,
   'seedance-1.0-lite': 94,
+  'happyhorse-1.0-i2v': 89,
+  'happyhorse-1.0-r2v': 88,
+  'happyhorse-1.0-t2v': 87,
+  'happyhorse-1.0-video-edit': 86,
   'veo3.1': 93,
   'veo3-fast-frames': 92,
   'veo3-pro': 91,
@@ -725,6 +729,13 @@ const SEEDANCE_DEFAULT_PARAMS: VideoModelDefaults = {
   aspectRatio: '16:9',
 };
 
+/** HappyHorse 模型默认参数（5秒，1080P） */
+const HAPPYHORSE_DEFAULT_PARAMS: VideoModelDefaults = {
+  duration: '5',
+  size: '1080P',
+  aspectRatio: '16:9',
+};
+
 /**
  * 视频模型配置
  */
@@ -775,6 +786,56 @@ const BUILT_IN_VIDEO_MODELS: ModelConfig[] = [
     type: 'video',
     vendor: ModelVendor.DOUBAO,
     videoDefaults: SEEDANCE_DEFAULT_PARAMS,
+  },
+  {
+    id: 'happyhorse-1.0-i2v',
+    label: 'HappyHorse 1.0 I2V',
+    shortCode: 'h10i',
+    description: 'HappyHorse 首帧图生视频，输出比例跟随首帧',
+    type: 'video',
+    vendor: ModelVendor.OTHER,
+    supportsTools: true,
+    videoDefaults: {
+      ...HAPPYHORSE_DEFAULT_PARAMS,
+      size: '1080P',
+    },
+    tags: ['happyhorse'],
+  },
+  {
+    id: 'happyhorse-1.0-r2v',
+    label: 'HappyHorse 1.0 R2V',
+    shortCode: 'h10r',
+    description: 'HappyHorse 多参考图生视频，支持 1-9 张参考图和比例控制',
+    type: 'video',
+    vendor: ModelVendor.OTHER,
+    supportsTools: true,
+    videoDefaults: HAPPYHORSE_DEFAULT_PARAMS,
+    tags: ['happyhorse'],
+  },
+  {
+    id: 'happyhorse-1.0-t2v',
+    label: 'HappyHorse 1.0 T2V',
+    shortCode: 'h10t',
+    description: 'HappyHorse 文生视频，支持分辨率、比例和 3-15 秒时长控制',
+    type: 'video',
+    vendor: ModelVendor.OTHER,
+    supportsTools: true,
+    videoDefaults: HAPPYHORSE_DEFAULT_PARAMS,
+    tags: ['happyhorse'],
+  },
+  {
+    id: 'happyhorse-1.0-video-edit',
+    label: 'HappyHorse 1.0 Video Edit',
+    shortCode: 'h10v',
+    description: 'HappyHorse 视频参考生成视频，时长跟随输入视频，支持保留原音频',
+    type: 'video',
+    vendor: ModelVendor.OTHER,
+    supportsTools: true,
+    videoDefaults: {
+      ...HAPPYHORSE_DEFAULT_PARAMS,
+      size: '1080P',
+    },
+    tags: ['happyhorse'],
   },
   {
     id: 'veo3.1',
@@ -1610,6 +1671,16 @@ const SEEDANCE_MODEL_IDS = [
   'seedance-1.0-lite',
 ];
 
+/** HappyHorse 视频模型 ID */
+const HAPPYHORSE_MODEL_IDS = [
+  'happyhorse-1.0-i2v',
+  'happyhorse-1.0-r2v',
+  'happyhorse-1.0-t2v',
+  'happyhorse-1.0-video-edit',
+];
+
+const HAPPYHORSE_RATIO_MODEL_IDS = ['happyhorse-1.0-r2v', 'happyhorse-1.0-t2v'];
+
 /** Seedream 图片模型 ID */
 const SEEDREAM_IMAGE_MODEL_IDS = [
   'doubao-seedream-4-0-250828',
@@ -1808,6 +1879,109 @@ export const VIDEO_PARAMS: ParamConfig[] = [
     ],
     defaultValue: '16:9',
     compatibleModels: SEEDANCE_MODEL_IDS,
+    modelType: 'video',
+  },
+  {
+    id: 'duration',
+    label: '视频时长',
+    shortLabel: '时长',
+    description: 'HappyHorse 视频时长（3-15 秒整数；Video Edit 跟随输入视频，不支持此参数）',
+    valueType: 'enum',
+    options: [
+      { value: '3', label: '3秒' },
+      { value: '4', label: '4秒' },
+      { value: '5', label: '5秒' },
+      { value: '6', label: '6秒' },
+      { value: '7', label: '7秒' },
+      { value: '8', label: '8秒' },
+      { value: '9', label: '9秒' },
+      { value: '10', label: '10秒' },
+      { value: '11', label: '11秒' },
+      { value: '12', label: '12秒' },
+      { value: '13', label: '13秒' },
+      { value: '14', label: '14秒' },
+      { value: '15', label: '15秒' },
+    ],
+    defaultValue: '5',
+    compatibleModels: [
+      'happyhorse-1.0-i2v',
+      'happyhorse-1.0-r2v',
+      'happyhorse-1.0-t2v',
+    ],
+    modelType: 'video',
+  },
+  {
+    id: 'size',
+    label: '视频分辨率',
+    shortLabel: '分辨率',
+    description: 'HappyHorse parameters.resolution，支持 720P / 1080P',
+    valueType: 'enum',
+    options: [
+      { value: '1080P', label: '1080P' },
+      { value: '720P', label: '720P' },
+    ],
+    defaultValue: '1080P',
+    compatibleModels: HAPPYHORSE_MODEL_IDS,
+    modelType: 'video',
+  },
+  {
+    id: 'ratio',
+    label: '视频比例',
+    shortLabel: '比例',
+    description: 'HappyHorse 输出宽高比；I2V 跟随首帧，Video Edit 不支持',
+    valueType: 'enum',
+    options: [
+      { value: '16:9', label: '16:9 横屏' },
+      { value: '9:16', label: '9:16 竖屏' },
+      { value: '1:1', label: '1:1 方形' },
+      { value: '4:3', label: '4:3 横屏' },
+      { value: '3:4', label: '3:4 竖屏' },
+    ],
+    defaultValue: '16:9',
+    compatibleModels: HAPPYHORSE_RATIO_MODEL_IDS,
+    modelType: 'video',
+  },
+  {
+    id: 'watermark',
+    label: '水印',
+    shortLabel: '水印',
+    description: '是否添加 Happy Horse 水印；项目默认关闭',
+    valueType: 'enum',
+    options: [
+      { value: 'true', label: '开启' },
+      { value: 'false', label: '关闭' },
+    ],
+    defaultValue: 'false',
+    compatibleModels: HAPPYHORSE_MODEL_IDS,
+    compatibleTags: ['happyhorse'],
+    modelType: 'video',
+  },
+  {
+    id: 'seed',
+    label: '随机种子',
+    shortLabel: 'Seed',
+    description: '0 到 2147483647 的整数，留空则由接口随机生成',
+    valueType: 'number',
+    min: 0,
+    max: 2147483647,
+    step: 1,
+    integer: true,
+    compatibleModels: HAPPYHORSE_MODEL_IDS,
+    compatibleTags: ['happyhorse'],
+    modelType: 'video',
+  },
+  {
+    id: 'audio_setting',
+    label: '声音控制',
+    shortLabel: '声音',
+    description: '仅 Video Edit 支持；origin 表示保留原视频音频',
+    valueType: 'enum',
+    options: [
+      { value: 'auto', label: '自动' },
+      { value: 'origin', label: '保留原音频' },
+    ],
+    defaultValue: 'auto',
+    compatibleModels: ['happyhorse-1.0-video-edit'],
     modelType: 'video',
   },
   {
@@ -2478,6 +2652,7 @@ export function getCompatibleParams(modelId: string): ParamConfig[] {
   if (idLower.includes('veo')) modelTags.add('veo');
   if (idLower.includes('sora')) modelTags.add('sora');
   if (idLower.includes('seedance')) modelTags.add('seedance');
+  if (idLower.includes('happyhorse')) modelTags.add('happyhorse');
   if (idLower.includes('suno') || idLower.includes('chirp')) {
     modelTags.add('suno');
     modelTags.add('audio');

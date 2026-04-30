@@ -18,6 +18,7 @@ import { useViewportScale } from '../../hooks/useViewportScale';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import { AIImageIcon, AIVideoIcon } from '../icons';
 import { DialogType, useDrawnix } from '../../hooks/use-drawnix';
+import { HoverTip } from '../shared/hover';
 
 const TaskQueuePanel = lazy(() =>
   import('../task-queue/TaskQueuePanel').then((module) => ({
@@ -481,18 +482,19 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
           data-testid="unified-toolbar"
         >
           {!isMobileOrTablet && (
-            <button
-              type="button"
-              className="unified-toolbar__drag-handle"
-              aria-label="拖动工具栏位置"
-              title="拖动工具栏位置，双击复位"
-              data-testid="toolbar-drag-handle"
-              onPointerDown={handleToolbarDragStart}
-              onPointerMove={handleToolbarDragMove}
-              onPointerUp={finishToolbarDrag}
-              onPointerCancel={finishToolbarDrag}
-              onDoubleClick={handleToolbarPositionReset}
-            />
+            <HoverTip content="拖动工具栏位置，双击复位" showArrow={false}>
+              <button
+                type="button"
+                className="unified-toolbar__drag-handle"
+                aria-label="拖动工具栏位置，双击复位"
+                data-testid="toolbar-drag-handle"
+                onPointerDown={handleToolbarDragStart}
+                onPointerMove={handleToolbarDragMove}
+                onPointerUp={finishToolbarDrag}
+                onPointerCancel={finishToolbarDrag}
+                onDoubleClick={handleToolbarPositionReset}
+              />
+            </HoverTip>
           )}
 
           {/* 移动端收起状态的快捷按钮区域 */}

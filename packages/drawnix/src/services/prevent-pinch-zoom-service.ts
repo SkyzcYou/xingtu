@@ -50,7 +50,6 @@ function isInteractiveElement(target: EventTarget | null): boolean {
     // 滑块和颜色选择器
     '.t-slider',
     '.unified-color-picker',
-    '.color-picker',
     // 媒体库
     '.media-library',
     // 图片预览器 (ViewerJS)
@@ -122,7 +121,7 @@ function isInCanvasArea(target: EventTarget | null): boolean {
  */
 export function initPreventPinchZoom(): () => void {
   if (typeof window === 'undefined') {
-    return () => {};
+    return () => undefined;
   }
 
   // console.log('[PreventPinchZoom] Initializing');

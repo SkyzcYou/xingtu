@@ -24,13 +24,22 @@ export type KnownVideoModel =
   | 'seedance-1.5-pro'
   | 'seedance-1.0-pro'
   | 'seedance-1.0-pro-fast'
-  | 'seedance-1.0-lite';
+  | 'seedance-1.0-lite'
+  | 'happyhorse-1.0-t2v'
+  | 'happyhorse-1.0-i2v'
+  | 'happyhorse-1.0-r2v'
+  | 'happyhorse-1.0-video-edit';
 
 // Video generation models also allow runtime-discovered ids.
 export type VideoModel = KnownVideoModel | string;
 
 // Video model provider
-export type VideoProvider = 'sora' | 'veo' | 'kling' | 'seedance';
+export type VideoProvider =
+  | 'sora'
+  | 'veo'
+  | 'kling'
+  | 'seedance'
+  | 'happyhorse';
 
 // Image upload mode
 export type ImageUploadMode = 'reference' | 'frames' | 'components';

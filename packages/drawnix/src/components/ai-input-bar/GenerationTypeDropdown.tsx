@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n';
 import { Z_INDEX } from '../../constants/z-index';
 import type { GenerationType } from '../../utils/ai-input-parser';
 import { KeyboardDropdown } from './KeyboardDropdown';
+import { HoverTip } from '../shared/hover';
 
 export interface GenerationTypeDropdownProps {
   value: GenerationType;
@@ -96,20 +97,24 @@ export const GenerationTypeDropdown: React.FC<GenerationTypeDropdownProps> = ({
     >
       {({ containerRef, menuRef, portalPosition, handleTriggerKeyDown }) => (
         <div className="generation-type-dropdown" ref={containerRef}>
-          <button
-            className={`generation-type-dropdown__trigger ${isOpen ? 'generation-type-dropdown__trigger--open' : ''}`}
-            onMouseDown={handleToggle}
-            onKeyDown={handleTriggerKeyDown}
-            disabled={disabled}
-            type="button"
-            title={`${language === 'zh' ? '生成类型' : 'Type'}: ${language === 'zh' ? selectedOption.zh : selectedOption.en} (↑↓ Tab)`}
+          <HoverTip
+            content={`${language === 'zh' ? '生成类型' : 'Type'}: ${language === 'zh' ? selectedOption.zh : selectedOption.en} (↑↓ Tab)`}
+            showArrow={false}
           >
-            <span className="generation-type-dropdown__icon-prefix">{selectedOption.icon}</span>
-            <span className="generation-type-dropdown__label">
-              {language === 'zh' ? selectedOption.zh : selectedOption.en}
-            </span>
-            <ChevronDown size={14} className={`generation-type-dropdown__chevron ${isOpen ? 'generation-type-dropdown__chevron--open' : ''}`} />
-          </button>
+            <button
+              className={`generation-type-dropdown__trigger ${isOpen ? 'generation-type-dropdown__trigger--open' : ''}`}
+              onMouseDown={handleToggle}
+              onKeyDown={handleTriggerKeyDown}
+              disabled={disabled}
+              type="button"
+            >
+              <span className="generation-type-dropdown__icon-prefix">{selectedOption.icon}</span>
+              <span className="generation-type-dropdown__label">
+                {language === 'zh' ? selectedOption.zh : selectedOption.en}
+              </span>
+              <ChevronDown size={14} className={`generation-type-dropdown__chevron ${isOpen ? 'generation-type-dropdown__chevron--open' : ''}`} />
+            </button>
+          </HoverTip>
           {isOpen && createPortal(
             <div
               ref={menuRef}

@@ -17,13 +17,12 @@ import {
   withResize,
   ResizeRef,
   ResizeState,
-  getRectangleResizeHandleRefs,
-  RESIZE_HANDLE_DIAMETER,
 } from '@plait/common';
 import { PlaitDrawElement } from '@plait/draw';
 import {
   ResizeHandle,
   calculateResizedRect,
+  getHitRectangleResizeHandleRef,
 } from '../utils/resize-utils';
 
 const DEFAULT_FONT_SIZE = 14;
@@ -37,22 +36,6 @@ interface TextNode {
 
 let originalElement: Record<string, unknown> | null = null;
 let originalRectangle: RectangleClient | null = null;
-
-function getHitRectangleResizeHandleRef(
-  rectangle: RectangleClient,
-  point: Point
-) {
-  const resizeHandleRefs = getRectangleResizeHandleRefs(
-    rectangle,
-    RESIZE_HANDLE_DIAMETER
-  );
-  return resizeHandleRefs.find((resizeHandleRef) => {
-    return RectangleClient.isHit(
-      RectangleClient.getRectangleByPoints([point, point]),
-      resizeHandleRef.rectangle
-    );
-  });
-}
 
 /**
  * 递归缩放文本节点树中的所有 font-size 值

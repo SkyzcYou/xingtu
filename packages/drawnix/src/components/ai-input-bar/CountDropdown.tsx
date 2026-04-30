@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n';
 import { Z_INDEX } from '../../constants/z-index';
 import { KeyboardDropdown } from './KeyboardDropdown';
 import { useControllableState } from '../../hooks/useControllableState';
+import { HoverTip } from '../shared/hover';
 
 export interface CountDropdownProps {
   value: number;
@@ -99,19 +100,23 @@ export const CountDropdown: React.FC<CountDropdownProps> = ({
     >
       {({ containerRef, menuRef, portalPosition, handleTriggerKeyDown }) => (
         <div className="count-dropdown" ref={containerRef}>
-          <button
-            className={`count-dropdown__trigger ${isOpen ? 'count-dropdown__trigger--open' : ''}`}
-            onMouseDown={handleToggle}
-            onKeyDown={handleTriggerKeyDown}
-            disabled={disabled}
-            type="button"
-            title={`${language === 'zh' ? '生成数量' : 'Count'}: ${value} (↑↓ Tab)`}
+          <HoverTip
+            content={`${language === 'zh' ? '生成数量' : 'Count'}: ${value} (↑↓ Tab)`}
+            showArrow={false}
           >
-            <span className="count-dropdown__label">
-              {value}{language === 'zh' ? '个' : ''}
-            </span>
-            <ChevronDown size={14} className={`count-dropdown__chevron ${isOpen ? 'count-dropdown__chevron--open' : ''}`} />
-          </button>
+            <button
+              className={`count-dropdown__trigger ${isOpen ? 'count-dropdown__trigger--open' : ''}`}
+              onMouseDown={handleToggle}
+              onKeyDown={handleTriggerKeyDown}
+              disabled={disabled}
+              type="button"
+            >
+              <span className="count-dropdown__label">
+                {value}{language === 'zh' ? '个' : ''}
+              </span>
+              <ChevronDown size={14} className={`count-dropdown__chevron ${isOpen ? 'count-dropdown__chevron--open' : ''}`} />
+            </button>
+          </HoverTip>
           {isOpen && createPortal(
             <div
               ref={menuRef}

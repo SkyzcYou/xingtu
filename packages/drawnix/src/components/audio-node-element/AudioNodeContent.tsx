@@ -3,6 +3,7 @@ import classNames from 'classnames';
 import { Pause, Play } from 'lucide-react';
 import type { PlaitAudioNode } from '../../types/audio-node.types';
 import { AudioCover } from '../shared/AudioCover';
+import { HoverTip } from '../shared/hover';
 import {
   useCanvasAudioPlaybackControls,
   useCanvasAudioPlaybackSelector,
@@ -598,24 +599,25 @@ export const AudioNodeContent: React.FC<AudioNodeContentProps> = ({
       style={pulseStyle}
     >
       <div className="audio-node__media">
-        <button
-          type="button"
-          className="audio-node__artwork"
-          data-slideshow-media-control="true"
-          onClick={handleToggle}
-          onPointerDown={(event) => event.stopPropagation()}
-          title={isPlaying ? 'Pause audio' : 'Play audio'}
-        >
-          <AudioCover
-            src={element.previewImageUrl}
-            alt={element.title || 'Audio artwork'}
-            fallbackClassName="audio-node__artwork-fallback"
-            iconSize={22}
-          />
-          <div className="audio-node__artwork-overlay">
-            {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-          </div>
-        </button>
+        <HoverTip content={isPlaying ? 'Pause audio' : 'Play audio'} showArrow={false}>
+          <button
+            type="button"
+            className="audio-node__artwork"
+            data-slideshow-media-control="true"
+            onClick={handleToggle}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <AudioCover
+              src={element.previewImageUrl}
+              alt={element.title || 'Audio artwork'}
+              fallbackClassName="audio-node__artwork-fallback"
+              iconSize={22}
+            />
+            <div className="audio-node__artwork-overlay">
+              {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+            </div>
+          </button>
+        </HoverTip>
       </div>
 
       <div className="audio-node__body">

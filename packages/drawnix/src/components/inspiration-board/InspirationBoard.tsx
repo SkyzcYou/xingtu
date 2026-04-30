@@ -6,13 +6,20 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from 'tdesign-icons-react';
-import { Lightbulb, X } from 'lucide-react';
+import { ArrowLeft, Lightbulb, MousePointerClick, Send, X } from 'lucide-react';
+import { MessagePlugin } from 'tdesign-react';
 import { InspirationCard } from './InspirationCard';
-import { INSPIRATION_TEMPLATES, ITEMS_PER_PAGE } from './constants';
+import {
+  CATEGORY_COLORS,
+  INSPIRATION_TEMPLATES,
+  ITEMS_PER_PAGE,
+} from './constants';
 import type { InspirationBoardProps, InspirationTemplate } from './types';
+import { HoverTip } from '../shared/hover';
 import './inspiration-board.scss';
 
 const HIDE_INSPIRATION_KEY = 'aitu_hide_inspiration_board';
+type InspirationBoardView = 'board' | 'guide';
 
 export const InspirationBoard: React.FC<InspirationBoardProps> = ({
   isCanvasEmpty,
@@ -23,6 +30,9 @@ export const InspirationBoard: React.FC<InspirationBoardProps> = ({
 }) => {
   const [currentPage, setCurrentPage] = useState(0);
   const [isHidden, setIsHidden] = useState(false);
+  const [viewMode, setViewMode] = useState<InspirationBoardView>('board');
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<InspirationTemplate | null>(null);
 
   // 组件加载时从 localStorage 读取用户设置
   useEffect(() => {
@@ -43,34 +53,62 @@ export const InspirationBoard: React.FC<InspirationBoardProps> = ({
   );
 
   // 切换到上一页
-  const handlePrev = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setCurrentPage((prev) => (prev - 1 + totalPages) % totalPages);
-  }, [totalPages]);
+  const handlePrev = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setCurrentPage((prev) => (prev - 1 + totalPages) % totalPages);
+    },
+    [totalPages]
+  );
 
   // 切换到下一页
-  const handleNext = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setCurrentPage((prev) => (prev + 1) % totalPages);
-  }, [totalPages]);
+  const handleNext = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setCurrentPage((prev) => (prev + 1) % totalPages);
+    },
+    [totalPages]
+  );
 
   // 选择模版（灵感创意的模版都是 agent 类型）
-  const handleSelectTemplate = useCallback((template: InspirationTemplate) => {
-    onSelectPrompt({
-      prompt: template.prompt,
-      modelType: 'agent',
-      skillId: template.skillId,
-    });
-  }, [onSelectPrompt]);
+  const handleSelectTemplate = useCallback(
+    (template: InspirationTemplate) => {
+      setSelectedTemplate(template);
+      setViewMode('guide');
+      onSelectPrompt({
+        prompt: template.prompt,
+        modelType: 'agent',
+        skillId: template.skillId,
+        templateId: template.id,
+        title: template.title,
+        category: template.category,
+      });
+    },
+    [onSelectPrompt]
+  );
+
+  const handleBackToBoard = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setViewMode('board');
+  }, []);
 
   // 处理"不再提示"按钮点击
   const handleHide = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setViewMode('board');
+    setSelectedTemplate(null);
     setIsHidden(true);
     localStorage.setItem(HIDE_INSPIRATION_KEY, 'true');
+  }, []);
+
+  const handleGuidePreviewClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    MessagePlugin.info('请点击右下角真正的发送按钮开始生成');
   }, []);
 
   // 不显示的条件：画板不为空 或 外部控制隐藏 或 用户选择不再提示
@@ -78,41 +116,68 @@ export const InspirationBoard: React.FC<InspirationBoardProps> = ({
     return null;
   }
 
+  const isGuideView = viewMode === 'guide' && selectedTemplate;
+  const selectedTemplateColors = selectedTemplate
+    ? CATEGORY_COLORS[selectedTemplate.category]
+    : null;
+
   return (
     <div
-      className={`inspiration-board ${className}`}
+      className={`inspiration-board ${
+        isGuideView ? 'inspiration-board--guide' : ''
+      } ${className}`}
+      data-testid="inspiration-board"
     >
       {/* 头部：标题 + 提示词按钮 + 切换按钮 */}
       <div className="inspiration-board__header">
-        <h3 className="inspiration-board__title">灵感创意</h3>
-
-        {/* 不再提示按钮 */}
-        <button
-          className="inspiration-board__hide-btn"
-          onClick={handleHide}
-          onMouseDown={(e) => e.preventDefault()}
-          title="不再提示"
-          data-track="inspiration_click_hide"
-        >
-          <X size={14} />
-          <span>不再提示</span>
-        </button>
-
-        {/* 提示词工具按钮 */}
-        {onOpenPromptTool && (
-          <button
-            className="inspiration-board__prompt-btn"
-            onClick={onOpenPromptTool}
-            onMouseDown={(e) => e.preventDefault()}
-            title="提示词工具"
-            data-track="inspiration_click_prompt_tool"
-          >
-            <Lightbulb size={14} />
-            <span>提示词</span>
-          </button>
+        {isGuideView ? (
+          <div className="inspiration-board__guide-title-group">
+            <button
+              className="inspiration-board__back-btn"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleBackToBoard}
+              aria-label="返回灵感创意"
+              data-testid="inspiration-guide-back"
+              data-track="inspiration_click_guide_back"
+            >
+              <ArrowLeft size={15} />
+              <span>返回</span>
+            </button>
+            <h3 className="inspiration-board__title">确认后发送</h3>
+          </div>
+        ) : (
+          <h3 className="inspiration-board__title">灵感创意</h3>
         )}
 
-        {hasMultiplePages && (
+        {/* 不再提示按钮 */}
+        <HoverTip content="不再提示" showArrow={false}>
+          <button
+            className="inspiration-board__hide-btn"
+            onClick={handleHide}
+            onMouseDown={(e) => e.preventDefault()}
+            data-track="inspiration_click_hide"
+          >
+            <X size={14} />
+            <span>不再提示</span>
+          </button>
+        </HoverTip>
+
+        {/* 提示词工具按钮 */}
+        {!isGuideView && onOpenPromptTool && (
+          <HoverTip content="提示词工具" showArrow={false}>
+            <button
+              className="inspiration-board__prompt-btn"
+              onClick={onOpenPromptTool}
+              onMouseDown={(e) => e.preventDefault()}
+              data-track="inspiration_click_prompt_tool"
+            >
+              <Lightbulb size={14} />
+              <span>提示词</span>
+            </button>
+          </HoverTip>
+        )}
+
+        {!isGuideView && hasMultiplePages && (
           <div className="inspiration-board__pagination">
             <span className="inspiration-board__page-indicator">
               {currentPage + 1} / {totalPages}
@@ -141,22 +206,89 @@ export const InspirationBoard: React.FC<InspirationBoardProps> = ({
         )}
       </div>
 
-      {/* 模版卡片网格 */}
-      <div className="inspiration-board__grid">
-        {currentTemplates.map((template) => (
-          <InspirationCard
-            key={template.id}
-            template={template}
-            onClick={() => handleSelectTemplate(template)}
-          />
-        ))}
+      {isGuideView ? (
+        <div
+          className="inspiration-board__guide"
+          data-testid="inspiration-send-guide"
+        >
+          <div className="inspiration-board__guide-main">
+            <div className="inspiration-board__guide-summary">
+              <img
+                src={selectedTemplate.imageUrl}
+                alt={selectedTemplate.title}
+                className="inspiration-board__guide-image"
+                loading="lazy"
+              />
+              <div className="inspiration-board__guide-content">
+                {selectedTemplateColors && (
+                  <span
+                    className="inspiration-board__guide-badge"
+                    style={{
+                      backgroundColor: selectedTemplateColors.bg,
+                      color: selectedTemplateColors.text,
+                    }}
+                  >
+                    {selectedTemplate.category}
+                  </span>
+                )}
+                <h4 className="inspiration-board__guide-name">
+                  {selectedTemplate.title}
+                </h4>
+                <p className="inspiration-board__guide-description">
+                  {selectedTemplate.description}
+                </p>
+              </div>
+            </div>
 
-        {/* 占位元素，保持网格对齐 */}
-        {currentTemplates.length < ITEMS_PER_PAGE &&
-          Array.from({ length: ITEMS_PER_PAGE - currentTemplates.length }).map((_, i) => (
-            <div key={`placeholder-${i}`} className="inspiration-card inspiration-card--placeholder" />
+            <div className="inspiration-board__guide-action">
+              <div className="inspiration-board__guide-cue">
+                <MousePointerClick
+                  className="inspiration-board__guide-pointer"
+                  size={26}
+                  aria-hidden="true"
+                />
+                <HoverTip content="请点击右下角真正的发送按钮" showArrow={false}>
+                  <button
+                    type="button"
+                    className="inspiration-board__guide-send-preview"
+                    onClick={handleGuidePreviewClick}
+                    onMouseDown={(e) => e.preventDefault()}
+                    aria-label="示意发送按钮"
+                  >
+                    <Send size={17} />
+                  </button>
+                </HoverTip>
+              </div>
+
+              <div className="inspiration-board__guide-tip">
+                <Send size={16} />
+                <span>下一步：点击发送按钮开始生成</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="inspiration-board__grid">
+          {currentTemplates.map((template) => (
+            <InspirationCard
+              key={template.id}
+              template={template}
+              onClick={() => handleSelectTemplate(template)}
+            />
           ))}
-      </div>
+
+          {/* 占位元素，保持网格对齐 */}
+          {currentTemplates.length < ITEMS_PER_PAGE &&
+            Array.from({
+              length: ITEMS_PER_PAGE - currentTemplates.length,
+            }).map((_, i) => (
+              <div
+                key={`placeholder-${i}`}
+                className="inspiration-card inspiration-card--placeholder"
+              />
+            ))}
+        </div>
+      )}
     </div>
   );
 };

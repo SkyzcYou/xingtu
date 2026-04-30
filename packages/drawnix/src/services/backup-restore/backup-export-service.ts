@@ -13,7 +13,6 @@ import {
   getImagePromptHistory,
 } from '../prompt-storage-service';
 import { taskStorageReader } from '../task-storage-reader';
-import { TaskStatus } from '../../types/task.types';
 import { LS_KEYS_TO_MIGRATE } from '../../constants/storage-keys';
 import { DrawnixExportedType } from '../../data/types';
 import { collectEmbeddedMediaFromElements } from '../../data/json';
@@ -23,7 +22,12 @@ import { ASSET_CONSTANTS } from '../../constants/ASSET_CONSTANTS';
 import { unifiedCacheService } from '../unified-cache-service';
 import { analytics } from '../../utils/posthog-analytics';
 import { exportAllData as exportKnowledgeBaseData } from '../kb-import-export-service';
+import { APP_DB_NAME, APP_DB_STORES } from '../app-database';
 import { BackupPartManager } from './backup-part-manager';
+import { encryptBackupJson } from './backup-crypto';
+import { checksumJson } from './backup-checksum';
+import { exportEnvironmentData } from './environment-backup-service';
+import { readStoreRecords } from './idb-store-backup';
 import {
   BACKUP_VERSION,
   BACKUP_SIGNATURE,
@@ -45,7 +49,6 @@ import {
   buildAssetExportBaseName,
   buildFolderPathMap,
   mergePromptData,
-  filterCompletedMediaTasks,
   sanitizeFileName,
 } from './backup-utils';
 
@@ -87,11 +90,25 @@ class BackupExportService {
     onProgress?: ProgressCallback
   ): Promise<ExportResult> {
     const startTime = Date.now();
+    const mode = options.mode || 'incremental';
+    const includeEnvironment = options.includeEnvironment || mode === 'complete';
+    const includeTasks = true;
+    const warnings: string[] = [];
+
+    if (options.includeSecrets && !includeEnvironment) {
+      throw new Error('包含敏感配置时必须同时包含环境数据');
+    }
+    if (options.includeSecrets && !options.encryptionPassword?.trim()) {
+      throw new Error('包含敏感配置时必须输入备份密码');
+    }
 
     analytics.track('backup_export_start', {
+      mode,
       includePrompts: options.includePrompts,
       includeProjects: options.includeProjects,
       includeAssets: options.includeAssets,
+      includeEnvironment,
+      includeSecrets: !!options.includeSecrets,
     });
 
     onProgress?.(5, '正在准备数据...');
@@ -116,30 +133,74 @@ class BackupExportService {
     const manifest: BackupManifest = {
       signature: BACKUP_SIGNATURE,
       version: BACKUP_VERSION,
+      schemaVersion: BACKUP_VERSION,
+      backupMode: mode,
       createdAt: Date.now(),
       includes: {
         prompts: options.includePrompts,
         projects: options.includeProjects,
         assets: options.includeAssets,
-        tasks: options.includeAssets,
+        tasks: includeTasks,
         knowledgeBase: options.includeKnowledgeBase,
+        environment: includeEnvironment,
+      },
+      encryption: {
+        enabled: !!options.includeSecrets,
+        algorithm: options.includeSecrets ? 'AES-GCM' : undefined,
+        kdf: options.includeSecrets ? 'PBKDF2-SHA256' : undefined,
+        secretsFile: options.includeSecrets ? 'environment/secrets.enc.json' : undefined,
       },
       stats: {
         promptCount: 0, videoPromptCount: 0, imagePromptCount: 0,
         folderCount: 0, boardCount: 0, assetCount: 0, taskCount: 0, kbNoteCount: 0,
       },
+      domainStats: {},
       workspaceState,
     };
+
+    const allTasksForBackup = includeTasks || options.includePrompts
+      ? await this.collectTasksForBackup()
+      : [];
 
     // 导出提示词（非素材，放入 Part1）
     if (options.includePrompts) {
       onProgress?.(10, '正在导出提示词...');
-      const promptsData = await this.collectPromptData();
+      const promptsData = await this.collectPromptData(allTasksForBackup);
       partManager.addFile('prompts.json', promptsData);
       manifest.stats.promptCount = promptsData.promptHistory.length;
       manifest.stats.videoPromptCount = promptsData.videoPromptHistory.length;
       manifest.stats.imagePromptCount = promptsData.imagePromptHistory.length;
+      manifest.domainStats!.prompts = {
+        count:
+          promptsData.promptHistory.length +
+          promptsData.videoPromptHistory.length +
+          promptsData.imagePromptHistory.length,
+        checksum: await checksumJson(promptsData),
+      };
     }
+
+    if (includeEnvironment) {
+      onProgress?.(20, '正在导出环境配置...');
+      const envResult = await exportEnvironmentData(!!options.includeSecrets);
+      partManager.addFile('environment/data.json', envResult.data);
+      if (envResult.secrets) {
+        const encryptedSecrets = await encryptBackupJson(
+          envResult.secrets,
+          options.encryptionPassword || ''
+        );
+        partManager.addFile('environment/secrets.enc.json', encryptedSecrets);
+      }
+      manifest.stats.workflowCount = envResult.data.appDb.workflows.length;
+      manifest.stats.environmentItemCount = envResult.stats.count;
+      manifest.stats.chatSessionCount =
+        envResult.data.localForage.chatSessions.length;
+      manifest.stats.audioPlaylistCount =
+        envResult.data.localForage.audioPlaylists.length;
+      manifest.stats.characterCount =
+        envResult.data.localForage.characters.length;
+      manifest.domainStats!.environment = envResult.stats;
+    }
+
     // 导出知识库（非素材，放入 Part1）
     if (options.includeKnowledgeBase) {
       onProgress?.(30, '正在导出知识库...');
@@ -147,8 +208,13 @@ class BackupExportService {
         const kbData = await exportKnowledgeBaseData();
         partManager.addFile('knowledge-base.json', kbData);
         manifest.stats.kbNoteCount = kbData.notes.length;
+        manifest.domainStats!.knowledgeBase = {
+          count: kbData.notes.length,
+          checksum: await checksumJson(kbData),
+        };
       } catch (error) {
         console.error('Failed to export knowledge base:', error);
+        warnings.push('知识库导出失败，已跳过');
       }
     }
 
@@ -162,6 +228,18 @@ class BackupExportService {
     if (options.includeAssets) {
       onProgress?.(50, '正在导出素材...');
       await this.exportAssets(partManager, manifest, options, onProgress);
+    }
+
+    if (includeTasks) {
+      onProgress?.(84, '正在导出任务数据...');
+      if (allTasksForBackup.length > 0) {
+        partManager.addFile('tasks.json', allTasksForBackup);
+        manifest.stats.taskCount = allTasksForBackup.length;
+        manifest.domainStats!.tasks = {
+          count: allTasksForBackup.length,
+          checksum: await checksumJson(allTasksForBackup),
+        };
+      }
     }
 
     onProgress?.(85, '正在压缩文件...');
@@ -180,7 +258,11 @@ class BackupExportService {
       taskCount: manifest.stats.taskCount,
     });
 
-    return result;
+    return {
+      ...result,
+      domainStats: manifest.domainStats,
+      warnings,
+    };
   }
 
   /**
@@ -204,26 +286,55 @@ class BackupExportService {
   /**
    * 收集提示词数据
    */
-  private async collectPromptData(): Promise<PromptsData> {
+  private async collectPromptData(allTasks: unknown[] = []): Promise<PromptsData> {
     await initPromptStorageCache();
 
     const promptHistory = getPromptHistory();
     const videoPromptHistory = getVideoPromptHistory();
     const imagePromptHistory = getImagePromptHistory();
 
-    const completedTasks = await taskStorageReader.getAllTasks({ status: TaskStatus.COMPLETED });
-
     const presetSettings = await kvStorageService.get<PresetStorageData>(
       LS_KEYS_TO_MIGRATE.PRESET_SETTINGS
     );
+    const deletedPromptContents = await kvStorageService.get<string[]>(
+      LS_KEYS_TO_MIGRATE.PROMPT_DELETED_CONTENTS
+    );
+    const promptHistoryOverrides = await kvStorageService.get<
+      PromptsData['promptHistoryOverrides']
+    >(LS_KEYS_TO_MIGRATE.PROMPT_HISTORY_OVERRIDES);
 
     return mergePromptData({
       promptHistory,
       videoPromptHistory,
       imagePromptHistory,
       presetSettings: presetSettings || undefined,
-      allTasks: completedTasks,
+      deletedPromptContents: deletedPromptContents || [],
+      promptHistoryOverrides: promptHistoryOverrides || [],
+      allTasks,
     });
+  }
+
+  private async collectTasksForBackup(): Promise<unknown[]> {
+    try {
+      const records = await readStoreRecords<Record<string, unknown>>(
+        APP_DB_NAME,
+        APP_DB_STORES.TASKS
+      );
+      return records
+        .map(record => this.sanitizeTaskForBackup(record.value))
+        .filter((task): task is Record<string, unknown> => !!task);
+    } catch (error) {
+      console.warn('[BackupRestore] Failed to collect tasks:', error);
+      return [];
+    }
+  }
+
+  private sanitizeTaskForBackup(task: Record<string, unknown> | null): Record<string, unknown> | null {
+    if (!task || typeof task !== 'object' || typeof task.id !== 'string') {
+      return null;
+    }
+    const { config, ...rest } = task;
+    return rest;
   }
   /**
    * 导出项目数据（写入 partManager）
@@ -328,17 +439,9 @@ class BackupExportService {
     options: BackupOptions,
     onProgress?: ProgressCallback
   ): Promise<void> {
-    type PendingAssetExport = {
-      baseName: string;
-      blobData: Blob;
-      metaData: string | object;
-      createdAt?: number;
-    };
-
     const exportedUrls = new Set<string>();
     const usedBaseNames = new Set<string>();
     let exportedCount = 0;
-    const pendingExports: PendingAssetExport[] = [];
 
     // 1. 导出本地素材库
     const store = localforage.createInstance({
@@ -359,12 +462,13 @@ class BackupExportService {
               this.buildAssetExportBaseName(stored.id, stored.createdAt),
               stored.url
             );
-            pendingExports.push({
+            await this.addAssetToPart(partManager, usedBaseNames, {
               baseName,
               blobData,
-              metaData: stored,
+              metaData: stored as unknown as Record<string, unknown>,
               createdAt: stored.createdAt,
             });
+            exportedCount++;
             exportedUrls.add(stored.url);
           }
         }
@@ -412,12 +516,13 @@ class BackupExportService {
             this.buildAssetExportBaseName(itemId, exportCreatedAt),
             item.url
           );
-          pendingExports.push({
+          await this.addAssetToPart(partManager, usedBaseNames, {
             baseName,
             blobData,
             metaData,
             createdAt: exportCreatedAt,
           });
+          exportedCount++;
           exportedUrls.add(item.url);
         }
       } catch (error) {
@@ -430,48 +535,34 @@ class BackupExportService {
       }
     }
 
-    pendingExports.sort((a, b) => {
-      const timeA = a.createdAt ?? 0;
-      const timeB = b.createdAt ?? 0;
-      if (timeA !== timeB) {
-        return timeA - timeB;
-      }
-      return a.baseName.localeCompare(b.baseName);
-    });
-
-    for (let i = 0; i < pendingExports.length; i++) {
-      const asset = pendingExports[i];
-      const meta = typeof asset.metaData === 'string' ? JSON.parse(asset.metaData) : asset.metaData;
-      const mimeType = typeof meta?.mimeType === 'string' ? meta.mimeType : asset.blobData.type;
-      const ext = getExtensionFromMimeType(mimeType);
-      const uniqueBaseName = ensureUniqueBackupName(asset.baseName, usedBaseNames);
-
-      await partManager.addAssetBlob(
-        `${uniqueBaseName}${ext}`,
-        asset.blobData,
-        `${uniqueBaseName}.meta.json`,
-        asset.metaData,
-        asset.createdAt
-      );
-      exportedCount++;
-
-      if (onProgress && pendingExports.length > 0) {
-        const progress = 75 + Math.round(((i + 1) / pendingExports.length) * 10);
-        onProgress(progress, `正在写入素材 (${i + 1}/${pendingExports.length})...`);
-      }
-    }
-
     manifest.stats.assetCount = exportedCount;
+    manifest.domainStats!.assets = { count: exportedCount };
+  }
 
-    // 3. 导出任务数据
-    onProgress?.(85, '正在导出任务数据...');
-    const allTasks = await taskStorageReader.getAllTasks();
-    const completedMediaTasks = filterCompletedMediaTasks(allTasks);
-
-    if (completedMediaTasks.length > 0) {
-      partManager.addFile('tasks.json', completedMediaTasks);
-      manifest.stats.taskCount = completedMediaTasks.length;
+  private async addAssetToPart(
+    partManager: BackupPartManager,
+    usedBaseNames: Set<string>,
+    asset: {
+      baseName: string;
+      blobData: Blob;
+      metaData: Record<string, unknown>;
+      createdAt?: number;
     }
+  ): Promise<void> {
+    const mimeType =
+      typeof asset.metaData?.mimeType === 'string'
+        ? asset.metaData.mimeType
+        : asset.blobData.type;
+    const ext = getExtensionFromMimeType(mimeType);
+    const uniqueBaseName = ensureUniqueBackupName(asset.baseName, usedBaseNames);
+
+    await partManager.addAssetBlob(
+      `${uniqueBaseName}${ext}`,
+      asset.blobData,
+      `${uniqueBaseName}.meta.json`,
+      asset.metaData,
+      asset.createdAt
+    );
   }
 }
 

@@ -1,5 +1,6 @@
 export const BACKUP_SIGNATURE: string;
 export const BACKUP_VERSION: number;
+export const MIN_SUPPORTED_BACKUP_VERSION: number;
 
 export type PromptHistoryItem = {
   id: string;
@@ -14,7 +15,14 @@ export type PromptData = {
   presetSettings: {
     image: { pinnedPrompts: string[]; deletedPrompts: string[] };
     video: { pinnedPrompts: string[]; deletedPrompts: string[] };
+    audio: { pinnedPrompts: string[]; deletedPrompts: string[] };
+    text: { pinnedPrompts: string[]; deletedPrompts: string[] };
+    agent: { pinnedPrompts: string[]; deletedPrompts: string[] };
+    'ppt-common': { pinnedPrompts: string[]; deletedPrompts: string[] };
+    'ppt-slide': { pinnedPrompts: string[]; deletedPrompts: string[] };
   };
+  deletedPromptContents?: string[];
+  promptHistoryOverrides?: any[];
 };
 
 export function getExtensionFromMimeType(mimeType: string): string;
@@ -37,9 +45,15 @@ export function mergePromptData(input: {
   videoPromptHistory?: PromptHistoryItem[];
   imagePromptHistory?: PromptHistoryItem[];
   presetSettings?: PromptData['presetSettings'];
+  deletedPromptContents?: string[];
+  promptHistoryOverrides?: any[];
   allTasks?: Array<any>;
 }): PromptData;
 export function filterCompletedMediaTasks<T = any>(allTasks?: T[]): T[];
+export function validateBackupManifest<T = any>(
+  manifest: T,
+  options?: { minVersion?: number; maxVersion?: number }
+): T;
 export function buildFolderPathMap<T extends { id: string; name: string; parentId?: string | null }>(folders?: T[]): Map<string, string>;
 export function collectFolderPathsFromBoardPaths(boardPaths?: string[]): string[];
 export function getFolderDepth<T extends { parentId?: string | null }>(folder: T, folderMap: Map<string, T>): number;

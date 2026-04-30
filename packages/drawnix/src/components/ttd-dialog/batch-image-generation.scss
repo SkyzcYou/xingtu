@@ -55,7 +55,7 @@
   }
 
   .batch-generate-btn {
-    background: linear-gradient(135deg, #F39C12 0%, #E67E22 100%) !important;
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%) !important;
     border: none !important;
     font-weight: 600 !important;
     padding: 0 20px !important;
@@ -72,7 +72,7 @@
   .batch-delete-btn {
     color: #888 !important;
     font-weight: 400 !important;
-    
+
     &:hover {
       color: #ff4d4f !important;
       background: #f5f5f5 !important;
@@ -90,11 +90,11 @@
     border: 1px solid #eee;
     border-radius: 8px;
     background: #fff;
-    
+
     &.is-filling {
       cursor: crosshair;
     }
-    
+
     &.is-selecting {
       cursor: cell;
     }
@@ -107,7 +107,8 @@
     border-spacing: 0;
     table-layout: fixed;
 
-    th, td {
+    th,
+    td {
       border: 1px solid #f0f0f0;
       padding: 0;
       vertical-align: top;
@@ -162,20 +163,20 @@
         // 覆盖 TDesign Checkbox 的默认样式以符合素雅风格
         :global(.t-checkbox) {
           margin-right: 0;
-          
+
           .t-checkbox__input {
             border-radius: 4px;
             transition: all 0.2s;
           }
 
           &.t-is-checked .t-checkbox__input {
-            background-color: #F39C12;
-            border-color: #F39C12;
+            background-color: #f39c12;
+            border-color: #f39c12;
           }
 
           // 减弱黑色的感觉，使用更柔和的阴影或边框
           &:hover .t-checkbox__input {
-            border-color: #F39C12;
+            border-color: #f39c12;
           }
         }
       }
@@ -184,11 +185,26 @@
     td.row-number {
       vertical-align: middle;
     }
-    .col-prompt { width: 40%; min-width: 250px; }
-    .col-size { width: 90px; min-width: 90px; }
-    .col-images { width: 160px; min-width: 160px; }
-    .col-count { width: 70px; min-width: 70px; }
-    .col-preview { width: 180px; min-width: 180px; }
+    .col-prompt {
+      width: 40%;
+      min-width: 250px;
+    }
+    .col-params {
+      width: 190px;
+      min-width: 170px;
+    }
+    .col-images {
+      width: 160px;
+      min-width: 160px;
+    }
+    .col-count {
+      width: 70px;
+      min-width: 70px;
+    }
+    .col-preview {
+      width: 180px;
+      min-width: 180px;
+    }
 
     tr.row-selected td {
       background: #fff9f0 !important;
@@ -202,8 +218,8 @@
 
       &.row-drag-over td {
         background: rgba(243, 156, 18, 0.1) !important;
-        border-top: 2px solid #F39C12 !important;
-        border-bottom: 2px solid #F39C12 !important;
+        border-top: 2px solid #f39c12 !important;
+        border-bottom: 2px solid #f39c12 !important;
       }
 
       // 填充预览时，整行的高亮效果
@@ -232,7 +248,7 @@
       margin-left: 6px; // 稍微减小间距，因为有了 Tooltip 包装
       opacity: 0.6;
       transition: all 0.2s;
-      color: #999 !important; 
+      color: #999 !important;
       background: #f5f5f5 !important;
       border: 1px solid #e0e0e0 !important;
       width: 18px !important;
@@ -245,11 +261,11 @@
       border-radius: 4px !important;
       flex-shrink: 0;
       cursor: pointer;
-      
+
       &:hover {
         opacity: 1;
-        color: #F39C12 !important;
-        border-color: #F39C12 !important;
+        color: #f39c12 !important;
+        border-color: #f39c12 !important;
         background: white !important;
         transform: scale(1.1);
       }
@@ -291,25 +307,25 @@
 
     &.active {
       background: white !important;
-      box-shadow: inset 0 0 0 2px #F39C12;
+      box-shadow: inset 0 0 0 2px #f39c12;
       z-index: 2;
     }
 
     &.selected:not(.active) {
       background: #fff9f0 !important;
-      box-shadow: inset 0 0 0 1px #F39C12;
+      box-shadow: inset 0 0 0 1px #f39c12;
       z-index: 1;
-      
+
       .is-selecting & {
         background: rgba(243, 156, 18, 0.15) !important;
-        box-shadow: inset 0 0 0 1px #F39C12, 0 0 4px rgba(243, 156, 18, 0.2);
+        box-shadow: inset 0 0 0 1px #f39c12, 0 0 4px rgba(243, 156, 18, 0.2);
       }
     }
 
     &.filling {
       background: rgba(243, 156, 18, 0.1) !important;
       z-index: 5;
-      
+
       &::after {
         content: '';
         position: absolute;
@@ -317,7 +333,7 @@
         left: 0;
         right: 0;
         bottom: 0;
-        border: 1px dashed #F39C12;
+        border: 1px dashed #f39c12;
         pointer-events: none;
       }
     }
@@ -346,7 +362,7 @@
     .cell-textarea {
       overflow: hidden;
       cursor: text;
-      
+
       &:focus {
         box-shadow: none !important;
       }
@@ -358,7 +374,7 @@
     }
 
     // 针对数量列的数字输入框
-    input[type="number"] {
+    input[type='number'] {
       width: 100%;
       height: 32px;
       border: none !important;
@@ -366,7 +382,7 @@
       border-radius: 6px;
       text-align: center;
       font-weight: 600;
-      color: #F39C12;
+      color: #f39c12;
       font-family: inherit;
       font-size: 13px;
       outline: none !important;
@@ -391,80 +407,46 @@
       appearance: textfield;
     }
 
-    // 自定义尺寸下拉组件
-    .custom-size-dropdown {
-      position: relative;
+    &.cell-params {
+      padding: 6px 8px;
+      overflow: visible;
+    }
+
+    .batch-params-cell-control {
       width: 100%;
 
-      .dropdown-trigger {
+      .parameters-dropdown {
         display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        height: 32px;
-        background: #f5f5f5;
-        border-radius: 6px;
-        padding: 0 8px;
-        font-weight: 600;
-        color: #F39C12;
-        font-size: 13px;
-        cursor: pointer;
-        transition: all 0.2s;
+        width: 100%;
+      }
 
-        &:hover {
+      .parameters-dropdown__trigger {
+        width: 100%;
+        max-width: none;
+        height: 32px;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 0 10px;
+        background: #f5f5f5;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        color: #444;
+
+        &:hover:not(:disabled) {
           background: #fff;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+          border-color: rgba(243, 156, 18, 0.35);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
 
-        svg {
-          color: #F39C12;
-          flex-shrink: 0;
+        &--open {
+          background: #fff8f0;
+          border-color: #f39c12;
         }
       }
 
-      .dropdown-menu {
-        position: absolute;
-        top: calc(100% + 4px);
-        left: 50%;
-        transform: translateX(-50%);
-        min-width: 100px;
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
-        z-index: 1000;
-        padding: 4px;
-        max-height: 280px;
-        overflow-y: auto;
-
-        .dropdown-item {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 8px 12px;
-          font-size: 13px;
-          color: #333;
-          border-radius: 6px;
-          cursor: pointer;
-          transition: all 0.15s;
-          white-space: nowrap;
-
-          &:hover {
-            background: #fff8f0;
-            color: #F39C12;
-          }
-
-          &.selected {
-            background: linear-gradient(135deg, #FFF8F0 0%, #FFF3E0 100%);
-            color: #E67E22;
-            font-weight: 600;
-          }
-
-          .check-icon {
-            color: #F39C12;
-            font-size: 12px;
-            font-weight: bold;
-          }
-        }
+      .parameters-dropdown__label {
+        min-width: 0;
+        color: #444;
       }
     }
 
@@ -474,16 +456,20 @@
       right: -3px;
       width: 7px;
       height: 7px;
-      background: #F39C12;
+      background: #f39c12;
       border: 1.5px solid white;
       cursor: crosshair;
       z-index: 100;
       display: none;
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-      &:hover { transform: scale(1.4); }
+      &:hover {
+        transform: scale(1.4);
+      }
     }
 
-    &.active .fill-handle { display: block; }
+    &.active .fill-handle {
+      display: block;
+    }
   }
 
   // 图片单元格
@@ -509,8 +495,12 @@
     position: relative;
     border: 1px solid #eee;
     flex-shrink: 0;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    img { width: 100%; height: 100%; object-fit: contain; }
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
     .remove-btn {
       position: absolute;
       top: -2px;
@@ -526,9 +516,15 @@
       display: none;
       padding: 0;
       z-index: 5;
-      &:hover { background: #ff4d4f; }
+      &:hover {
+        background: #ff4d4f;
+      }
     }
-    &:hover .remove-btn { display: flex; align-items: center; justify-content: center; }
+    &:hover .remove-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
   }
 
   .add-image-btn {
@@ -540,8 +536,8 @@
     padding: 0 !important;
     &:hover {
       background: #fff !important;
-      color: #F39C12 !important;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+      color: #f39c12 !important;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     }
   }
 
@@ -561,7 +557,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
     flex-shrink: 0;
 
     &.hidden {
@@ -575,10 +571,18 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      h3 { font-size: 14px; font-weight: 600; margin: 0; color: #333; }
+      h3 {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0;
+        color: #333;
+      }
       .close-btn {
         color: #999 !important;
-        &:hover { color: #F39C12 !important; background: #f5f5f5 !important; }
+        &:hover {
+          color: #f39c12 !important;
+          background: #f5f5f5 !important;
+        }
       }
     }
 
@@ -623,11 +627,15 @@
       transition: all 0.2s;
       background: #f9f9f9;
       &:hover {
-        border-color: #F39C12;
+        border-color: #f39c12;
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
       }
-      img { width: 100%; height: 100%; object-fit: contain; }
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
     }
   }
 
@@ -635,24 +643,38 @@
   .preview-cell {
     min-height: 50px;
     padding: 4px 8px !important;
-    &.preview-idle .preview-idle { color: #ccc; font-size: 14px; }
+    &.preview-idle .preview-idle {
+      color: #ccc;
+      font-size: 14px;
+    }
     &.preview-generating {
       background: #fff9f0;
       .preview-generating {
         display: flex;
         align-items: center;
         gap: 6px;
-        color: #F39C12;
+        color: #f39c12;
         font-size: 12px;
         font-weight: 500;
       }
     }
-    &.preview-completed { background: #f6ffed; }
-    &.preview-failed { background: #fff1f0; }
-    &.preview-partial { background: #fffbe6; }
+    &.preview-completed {
+      background: #f6ffed;
+    }
+    &.preview-failed {
+      background: #fff1f0;
+    }
+    &.preview-partial {
+      background: #fffbe6;
+    }
   }
 
-  .preview-images { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .preview-images {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
   .preview-thumb {
     width: 36px;
     height: 36px;
@@ -661,8 +683,12 @@
     border: 1px solid #eee;
     flex-shrink: 0;
     background: #fff;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    img { width: 100%; height: 100%; object-fit: contain; }
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
     &.clickable {
       cursor: pointer;
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -670,7 +696,7 @@
         transform: scale(1.1);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         z-index: 10;
-        border-color: #F39C12;
+        border-color: #f39c12;
       }
     }
   }
@@ -682,7 +708,10 @@
     background: #f0f0f0;
     border-radius: 4px;
     font-weight: 600;
-    &.clickable:hover { background: #F39C12; color: white; }
+    &.clickable:hover {
+      background: #f39c12;
+      color: white;
+    }
   }
 
   .preview-generating-inline {
@@ -690,13 +719,18 @@
     align-items: center;
     gap: 4px;
     font-size: 11px;
-    color: #F39C12;
+    color: #f39c12;
     padding: 2px 6px;
     background: #fff9f0;
     border-radius: 4px;
     white-space: nowrap;
     font-weight: 600;
-    .loading-spinner { width: 10px; height: 10px; border: 1.5px solid #F39C12; border-top-color: transparent; }
+    .loading-spinner {
+      width: 10px;
+      height: 10px;
+      border: 1.5px solid #f39c12;
+      border-top-color: transparent;
+    }
   }
 
   .preview-error {
@@ -705,28 +739,62 @@
     gap: 4px;
     font-size: 11px;
     line-height: 1.2;
-    .preview-error-message { color: #ff4d4f; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .preview-error-details-link { color: #1890ff; cursor: pointer; font-weight: 500; &:hover { text-decoration: underline; } }
+    .preview-error-message {
+      color: #ff4d4f;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .preview-error-details-link {
+      color: #1890ff;
+      cursor: pointer;
+      font-weight: 500;
+      &:hover {
+        text-decoration: underline;
+      }
+    }
   }
 
-  .preview-partial-info { font-size: 10px; color: #faad14; font-weight: 600; margin-top: 2px; }
+  .preview-partial-info {
+    font-size: 10px;
+    color: #faad14;
+    font-weight: 600;
+    margin-top: 2px;
+  }
 
   .loading-spinner {
     width: 14px;
     height: 14px;
     border: 2px solid #eee;
-    border-top: 2px solid #F39C12;
+    border-top: 2px solid #f39c12;
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
 
-  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
 }
 
 // 外部弹窗覆盖样式
 .image-preview-dialog {
-  &.t-dialog { position: fixed !important; top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; }
-  .t-dialog__body { padding: 16px; max-height: 80vh; overflow: auto; }
+  &.t-dialog {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+  }
+  .t-dialog__body {
+    padding: 16px;
+    max-height: 80vh;
+    overflow: auto;
+  }
 }
 
 .add-rows-section {
@@ -741,11 +809,13 @@
 
 .model-selector-wrapper {
   min-width: 180px;
-  .t-select { width: 100%; }
+  .t-select {
+    width: 100%;
+  }
 }
 
 .library-toggle-active {
-  color: #F39C12 !important;
+  color: #f39c12 !important;
   background: rgba(243, 156, 18, 0.1) !important;
   border-color: rgba(243, 156, 18, 0.3) !important;
 }
@@ -793,7 +863,8 @@
     }
 
     .excel-table {
-      th, td {
+      th,
+      td {
         font-size: 11px;
       }
 
@@ -814,11 +885,26 @@
       }
 
       // 移动端列宽调整
-      .col-prompt { width: 150px; min-width: 150px; }
-      .col-size { width: 70px; min-width: 70px; }
-      .col-images { width: 100px; min-width: 100px; }
-      .col-count { width: 50px; min-width: 50px; }
-      .col-preview { width: 100px; min-width: 100px; }
+      .col-prompt {
+        width: 150px;
+        min-width: 150px;
+      }
+      .col-params {
+        width: 150px;
+        min-width: 150px;
+      }
+      .col-images {
+        width: 100px;
+        min-width: 100px;
+      }
+      .col-count {
+        width: 50px;
+        min-width: 50px;
+      }
+      .col-preview {
+        width: 100px;
+        min-width: 100px;
+      }
 
       .th-content {
         padding: 0 4px;
@@ -846,17 +932,15 @@
         }
       }
 
-      input[type="number"] {
+      input[type='number'] {
         height: 28px;
         font-size: 12px;
       }
 
-      .custom-size-dropdown {
-        .dropdown-trigger {
-          height: 28px;
-          font-size: 11px;
-          padding: 0 6px;
-        }
+      .batch-params-cell-control .parameters-dropdown__trigger {
+        height: 28px;
+        font-size: 11px;
+        padding: 0 6px;
       }
     }
 
@@ -944,11 +1028,26 @@
         min-width: 28px;
       }
 
-      .col-prompt { width: 120px; min-width: 120px; }
-      .col-size { width: 60px; min-width: 60px; }
-      .col-images { width: 80px; min-width: 80px; }
-      .col-count { width: 40px; min-width: 40px; }
-      .col-preview { width: 80px; min-width: 80px; }
+      .col-prompt {
+        width: 120px;
+        min-width: 120px;
+      }
+      .col-params {
+        width: 130px;
+        min-width: 130px;
+      }
+      .col-images {
+        width: 80px;
+        min-width: 80px;
+      }
+      .col-count {
+        width: 40px;
+        min-width: 40px;
+      }
+      .col-preview {
+        width: 80px;
+        min-width: 80px;
+      }
     }
 
     .cell-image-thumb,

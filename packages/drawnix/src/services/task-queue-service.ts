@@ -87,6 +87,7 @@ const STRIPPED_TASK_PARAM_KEYS = [
   'uploadedImages',
   'videoData',
   'audioData',
+  'pdfData',
 ] as const;
 
 type InsertionSource = 'manual' | 'auto_insert';
@@ -427,6 +428,53 @@ class TaskQueueService {
     if (task?.status === TaskStatus.CANCELLED) {
       this.persistTask(task);
     }
+  }
+
+  private async buildChatInlineDataParts(
+    task: Task
+  ): Promise<GeminiMessage['content']> {
+    const params = task.params as {
+      pdfCacheUrl?: unknown;
+      pdfData?: unknown;
+      pdfMimeType?: unknown;
+      pdfName?: unknown;
+    };
+    const parts: GeminiMessage['content'] = [];
+    const mimeType =
+      typeof params.pdfMimeType === 'string' && params.pdfMimeType.trim()
+        ? params.pdfMimeType.trim()
+        : 'application/pdf';
+
+    if (typeof params.pdfData === 'string' && params.pdfData.trim()) {
+      parts.push({
+        type: 'inline_data',
+        mimeType,
+        data: params.pdfData.replace(/^data:application\/pdf;base64,/i, ''),
+      });
+    }
+
+    if (typeof params.pdfCacheUrl === 'string' && params.pdfCacheUrl.trim()) {
+      const blob = await unifiedCacheService.getCachedBlob(
+        params.pdfCacheUrl.trim()
+      );
+      if (!blob) {
+        throw new Error('无法读取已上传的 PDF 文件');
+      }
+
+      const file = new File(
+        [blob],
+        typeof params.pdfName === 'string' && params.pdfName.trim()
+          ? params.pdfName.trim()
+          : 'comic-source.pdf',
+        { type: blob.type || mimeType }
+      );
+      const part = await buildInlineDataPart(file);
+      if (part.type === 'inline_data') {
+        parts.push(part);
+      }
+    }
+
+    return parts;
   }
 
   /**
@@ -909,6 +957,7 @@ class TaskQueueService {
               referenceImages: task.params.referenceImages as
                 | string[]
                 | undefined,
+              inlineDataParts: await this.buildChatInlineDataParts(task),
               params: (task.params as any).params,
             },
             executionOptions

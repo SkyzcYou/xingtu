@@ -30,6 +30,7 @@ import {
   updateViewBox,
   FLUSHING,
   BoardTransforms,
+  clearSelectedElement,
 } from '@plait/core';
 import { BoardChangeData } from './plugins/board';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -226,6 +227,8 @@ export const Wrapper: React.FC<WrapperProps> = ({
     if (value !== context.board.children && !FLUSHING.get(board)) {
       board.children = value;
       resetBoardHistory(board);
+      clearSelectedElement(board);
+      board.selection = null;
       listRender.update(board.children, {
         board: board,
         parent: board,

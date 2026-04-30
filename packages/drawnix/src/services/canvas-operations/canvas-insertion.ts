@@ -4,13 +4,11 @@
  * 将AI生成的内容（文本、图片、视频）插入到画布中
  */
 
-import { PlaitBoard, Point, getRectangleByElements } from '@plait/core';
+import { PlaitBoard, Point } from '@plait/core';
 import { DrawTransforms } from '@plait/draw';
 import { insertImageFromUrl } from '../../data/image';
 import { insertVideoFromUrl } from '../../data/video';
 import {
-  AUDIO_CARD_DEFAULT_HEIGHT,
-  AUDIO_CARD_DEFAULT_WIDTH,
   insertAudioFromUrl,
   resolveAudioCardDimensions,
   type AudioCardMetadata,
@@ -22,6 +20,18 @@ import type { MCPResult } from '../../mcp/types';
 import { parseSizeToPixels } from '../../utils/size-ratio';
 import { insertMediaIntoSelectedFrame } from '../../utils/frame-insertion-utils';
 import { getCanvasBoard as readCanvasBoard } from './canvas-board-ref';
+import {
+  CANVAS_INSERTION_LAYOUT as LAYOUT_CONSTANTS,
+  estimateCanvasTextSize,
+  getBottomMostInsertionPoint,
+  getInsertionPointFromSavedSelection,
+  groupInsertionItems,
+} from '../../utils/canvas-insertion-layout';
+import {
+  normalizeSvg,
+  parseSvgDimensions,
+  svgToDataUrl,
+} from '../../utils/svg-utils';
 
 export { setCanvasBoard, getCanvasBoard } from './canvas-board-ref';
 
@@ -86,121 +96,6 @@ export interface CanvasInsertionResultData {
 }
 
 /**
- * 布局常量
- */
-const LAYOUT_CONSTANTS = {
-  DEFAULT_VERTICAL_GAP: 50,
-  DEFAULT_HORIZONTAL_GAP: 20,
-  TEXT_DEFAULT_WIDTH: 300,
-  TEXT_LINE_HEIGHT: 24,
-  MEDIA_DEFAULT_SIZE: 400,
-  MEDIA_MAX_SIZE: 600,
-};
-
-/**
- * 从保存的选中元素IDs获取起始插入位置（左对齐）
- */
-function getStartPointFromSelection(board: PlaitBoard): Point | undefined {
-  const appState = (board as any).appState;
-  const savedElementIds = appState?.lastSelectedElementIds || [];
-
-  if (savedElementIds.length === 0) {
-    return undefined;
-  }
-
-  const elements = savedElementIds
-    .map((id: string) => board.children.find((el: any) => el.id === id))
-    .filter(Boolean);
-
-  if (elements.length === 0) {
-    return undefined;
-  }
-
-  try {
-    const boundingRect = getRectangleByElements(board, elements, false);
-    const leftX = boundingRect.x;
-    const insertionY = boundingRect.y + boundingRect.height + LAYOUT_CONSTANTS.DEFAULT_VERTICAL_GAP;
-    return [leftX, insertionY] as Point;
-  } catch (error) {
-    console.warn('[CanvasInsertion] Error calculating start point:', error);
-    return undefined;
-  }
-}
-
-/**
- * 获取画布底部最后一个元素的位置（左对齐）
- */
-function getBottomMostPoint(board: PlaitBoard): Point {
-  if (!board.children || board.children.length === 0) {
-    return [100, 100] as Point;
-  }
-
-  let maxY = 0;
-  let maxYLeftX = 100;
-
-  for (const element of board.children) {
-    try {
-      const rect = getRectangleByElements(board, [element], false);
-      const elementBottom = rect.y + rect.height;
-      if (elementBottom > maxY) {
-        maxY = elementBottom;
-        maxYLeftX = rect.x;
-      }
-    } catch {
-      // 忽略无法计算矩形的元素
-    }
-  }
-
-  return [maxYLeftX, maxY + LAYOUT_CONSTANTS.DEFAULT_VERTICAL_GAP] as Point;
-}
-
-/**
- * 估算文本内容的尺寸
- */
-function estimateTextSize(text: string): { width: number; height: number } {
-  const lines = text.split('\n');
-  const maxLineLength = Math.max(...lines.map(l => l.length));
-  const width = Math.min(maxLineLength * 8, LAYOUT_CONSTANTS.TEXT_DEFAULT_WIDTH);
-  const height = lines.length * LAYOUT_CONSTANTS.TEXT_LINE_HEIGHT;
-  return { width, height };
-}
-
-/**
- * 按组分组内容项
- */
-function groupItems(items: InsertionItem[]): InsertionItem[][] {
-  const groups: Map<string, InsertionItem[]> = new Map();
-
-  for (const item of items) {
-    if (item.groupId) {
-      const group = groups.get(item.groupId) || [];
-      group.push(item);
-      groups.set(item.groupId, group);
-    }
-  }
-
-  const result: InsertionItem[][] = [];
-  let currentGroupId: string | null = null;
-
-  for (const item of items) {
-    if (item.groupId) {
-      if (currentGroupId !== item.groupId) {
-        currentGroupId = item.groupId;
-        const group = groups.get(item.groupId);
-        if (group) {
-          result.push(group);
-        }
-      }
-    } else {
-      result.push([item]);
-      currentGroupId = null;
-    }
-  }
-
-  return result;
-}
-
-/**
  * 插入单个文本项到画布
  * - 有 title 时 → 直接以 Card 方式插入
  * - 包含 Markdown 特征 → 解析为 Card 插入
@@ -234,7 +129,7 @@ async function insertTextToCanvas(
 
   // 普通文本 → 直接插入
   DrawTransforms.insertText(board, point, text);
-  return estimateTextSize(text);
+  return estimateCanvasTextSize(text);
 }
 
 /**
@@ -302,46 +197,6 @@ async function insertAudioToCanvas(
     true
   );
   return size;
-}
-
-/**
- * 将SVG代码转换为Data URL
- */
-function svgToDataUrl(svg: string): string {
-  const encoded = encodeURIComponent(svg)
-    .replace(/'/g, '%27')
-    .replace(/"/g, '%22');
-  return `data:image/svg+xml,${encoded}`;
-}
-
-/**
- * 规范化SVG代码
- */
-function normalizeSvg(svg: string): string {
-  let normalized = svg.trim();
-  if (!normalized.includes('xmlns=')) {
-    normalized = normalized.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-  }
-  return normalized;
-}
-
-/**
- * 解析SVG尺寸
- */
-function parseSvgDimensions(svg: string): { width: number; height: number } {
-  const viewBoxMatch = svg.match(/viewBox=["']([^"']+)["']/i);
-  if (viewBoxMatch) {
-    const parts = viewBoxMatch[1].split(/\s+/).map(Number);
-    if (parts.length >= 4 && parts[2] && parts[3]) {
-      return { width: parts[2], height: parts[3] };
-    }
-  }
-  const widthMatch = svg.match(/width=["'](\d+)(?:px)?["']/i);
-  const heightMatch = svg.match(/height=["'](\d+)(?:px)?["']/i);
-  if (widthMatch && heightMatch) {
-    return { width: parseInt(widthMatch[1]), height: parseInt(heightMatch[1]) };
-  }
-  return { width: 400, height: 400 };
 }
 
 /**
@@ -429,13 +284,20 @@ export async function executeCanvasInsertion(params: CanvasInsertionParams): Pro
 
     let startPoint = params.startPoint;
     if (!startPoint) {
-      startPoint = getStartPointFromSelection(board);
+      startPoint = getInsertionPointFromSavedSelection(board, {
+        verticalGap,
+        logPrefix: 'CanvasInsertion',
+      });
     }
     if (!startPoint) {
-      startPoint = getBottomMostPoint(board);
+      startPoint =
+        getBottomMostInsertionPoint(board, {
+          verticalGap,
+          emptyPoint: LAYOUT_CONSTANTS.DEFAULT_POINT,
+        }) || LAYOUT_CONSTANTS.DEFAULT_POINT;
     }
 
-    const groupedItems = groupItems(items);
+    const groupedItems = groupInsertionItems(items);
 
     let currentY = startPoint[1];
     const leftX = startPoint[0];

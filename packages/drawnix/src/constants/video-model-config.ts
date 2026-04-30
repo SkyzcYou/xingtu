@@ -31,6 +31,32 @@ const SEEDANCE_SIZE_OPTIONS: SizeOption[] = SEEDANCE_RESOLUTION_OPTIONS.flatMap(
     }))
 );
 
+const HAPPYHORSE_RESOLUTION_OPTIONS = ['1080P', '720P'] as const;
+
+const HAPPYHORSE_SIZE_OPTIONS: SizeOption[] = HAPPYHORSE_RESOLUTION_OPTIONS.map(
+  (resolution) => ({
+    label: resolution,
+    value: resolution,
+    aspectRatio: 'resolution',
+  })
+);
+
+const HAPPYHORSE_DURATION_OPTIONS: DurationOption[] = [
+  { label: '3秒', value: '3' },
+  { label: '4秒', value: '4' },
+  { label: '5秒', value: '5' },
+  { label: '6秒', value: '6' },
+  { label: '7秒', value: '7' },
+  { label: '8秒', value: '8' },
+  { label: '9秒', value: '9' },
+  { label: '10秒', value: '10' },
+  { label: '11秒', value: '11' },
+  { label: '12秒', value: '12' },
+  { label: '13秒', value: '13' },
+  { label: '14秒', value: '14' },
+  { label: '15秒', value: '15' },
+];
+
 /**
  * Video model configurations
  * Each model has specific duration, size, and image upload options
@@ -299,6 +325,80 @@ export const VIDEO_MODEL_CONFIGS: Record<string, VideoModelConfig> = {
       labels: ['首帧', '尾帧', '参考图1', '参考图2'],
     },
   },
+
+  // HappyHorse models
+  'happyhorse-1.0-t2v': {
+    id: 'happyhorse-1.0-t2v',
+    label: 'HappyHorse 1.0 T2V',
+    provider: 'happyhorse',
+    description: 'HappyHorse 文生视频，支持分辨率、比例和 3-15 秒整数时长',
+    durationOptions: HAPPYHORSE_DURATION_OPTIONS,
+    defaultDuration: '5',
+    sizeOptions: HAPPYHORSE_SIZE_OPTIONS,
+    defaultSize: '1080P',
+    imageUpload: {
+      maxCount: 0,
+      mode: 'reference',
+      labels: [],
+    },
+  },
+  'happyhorse-1.0-i2v': {
+    id: 'happyhorse-1.0-i2v',
+    label: 'HappyHorse 1.0 I2V',
+    provider: 'happyhorse',
+    description: 'HappyHorse 首帧图生视频，输出比例跟随首帧',
+    durationOptions: HAPPYHORSE_DURATION_OPTIONS,
+    defaultDuration: '5',
+    sizeOptions: HAPPYHORSE_SIZE_OPTIONS,
+    defaultSize: '1080P',
+    imageUpload: {
+      maxCount: 1,
+      mode: 'reference',
+      labels: ['首帧'],
+      required: true,
+    },
+  },
+  'happyhorse-1.0-r2v': {
+    id: 'happyhorse-1.0-r2v',
+    label: 'HappyHorse 1.0 R2V',
+    provider: 'happyhorse',
+    description: 'HappyHorse 多参考图生视频，支持 1-9 张参考图和比例控制',
+    durationOptions: HAPPYHORSE_DURATION_OPTIONS,
+    defaultDuration: '5',
+    sizeOptions: HAPPYHORSE_SIZE_OPTIONS,
+    defaultSize: '1080P',
+    imageUpload: {
+      maxCount: 9,
+      mode: 'reference',
+      required: true,
+      labels: [
+        '参考图1',
+        '参考图2',
+        '参考图3',
+        '参考图4',
+        '参考图5',
+        '参考图6',
+        '参考图7',
+        '参考图8',
+        '参考图9',
+      ],
+    },
+  },
+  'happyhorse-1.0-video-edit': {
+    id: 'happyhorse-1.0-video-edit',
+    label: 'HappyHorse 1.0 Video Edit',
+    provider: 'happyhorse',
+    description: 'HappyHorse 视频参考生成视频，时长跟随输入视频，支持保留原音频',
+    durationOptions: [{ label: '跟随原视频', value: '5' }],
+    defaultDuration: '5',
+    sizeOptions: HAPPYHORSE_SIZE_OPTIONS,
+    defaultSize: '1080P',
+    imageUpload: {
+      maxCount: 1,
+      mode: 'reference',
+      labels: ['参考图'],
+    },
+  },
   'veo3-fast': {
     id: 'veo3-fast',
     label: 'Veo 3 Fast',
@@ -406,10 +506,14 @@ function buildStandardKlingVideoConfig(
   return {
     ...capabilityConfig,
     id: modelId,
-    label: runtimeConfig?.shortLabel || runtimeConfig?.label || capabilityConfig.label,
+    label:
+      runtimeConfig?.shortLabel ||
+      runtimeConfig?.label ||
+      capabilityConfig.label,
     description: isCapabilityModel
       ? runtimeConfig?.description || capabilityConfig.description
-      : runtimeConfig?.description || 'Kling 标准视频版本，支持文生视频和图生视频',
+      : runtimeConfig?.description ||
+        'Kling 标准视频版本，支持文生视频和图生视频',
   };
 }
 
@@ -426,37 +530,57 @@ function getConfigOrDefault(model?: string | null): VideoModelConfig {
   }
 
   const defaultSize = runtimeConfig?.videoDefaults?.size || '1280x720';
-  const defaultAspectRatio = runtimeConfig?.videoDefaults?.aspectRatio || '16:9';
+  const defaultAspectRatio =
+    runtimeConfig?.videoDefaults?.aspectRatio || '16:9';
   const defaultDuration = runtimeConfig?.videoDefaults?.duration || '8';
   const lowerId = normalized.toLowerCase();
 
   const sizeOptions: SizeOption[] = [
-    { label: defaultAspectRatio, value: defaultSize, aspectRatio: defaultAspectRatio },
+    {
+      label: defaultAspectRatio,
+      value: defaultSize,
+      aspectRatio: defaultAspectRatio,
+    },
   ];
 
   if (defaultSize !== '1280x720') {
-    sizeOptions.push({ label: '横屏 16:9', value: '1280x720', aspectRatio: '16:9' });
+    sizeOptions.push({
+      label: '横屏 16:9',
+      value: '1280x720',
+      aspectRatio: '16:9',
+    });
   }
   if (defaultSize !== '720x1280') {
-    sizeOptions.push({ label: '竖屏 9:16', value: '720x1280', aspectRatio: '9:16' });
+    sizeOptions.push({
+      label: '竖屏 9:16',
+      value: '720x1280',
+      aspectRatio: '9:16',
+    });
   }
 
-  const durationOptions: DurationOption[] = [{ label: `${defaultDuration}秒`, value: defaultDuration }];
-  const imageUpload: ImageUploadConfig =
-    lowerId.includes('components')
-      ? { maxCount: 3, mode: 'components', labels: ['参考图1', '参考图2', '参考图3'] }
-      : lowerId.includes('frame')
-        ? { maxCount: 2, mode: 'frames', labels: ['首帧', '尾帧'] }
-        : { maxCount: 1, mode: 'reference', labels: ['参考图'] };
+  const durationOptions: DurationOption[] = [
+    { label: `${defaultDuration}秒`, value: defaultDuration },
+  ];
+  const imageUpload: ImageUploadConfig = lowerId.includes('components')
+    ? {
+        maxCount: 3,
+        mode: 'components',
+        labels: ['参考图1', '参考图2', '参考图3'],
+      }
+    : lowerId.includes('frame')
+    ? { maxCount: 2, mode: 'frames', labels: ['首帧', '尾帧'] }
+    : { maxCount: 1, mode: 'reference', labels: ['参考图'] };
 
   const provider =
     runtimeConfig?.vendor === ModelVendor.SORA
       ? 'sora'
       : runtimeConfig?.vendor === ModelVendor.KLING
-        ? 'kling'
-        : lowerId.includes('seedance')
-          ? 'seedance'
-          : 'veo';
+      ? 'kling'
+      : lowerId.includes('seedance')
+      ? 'seedance'
+      : lowerId.includes('happyhorse')
+      ? 'happyhorse'
+      : 'veo';
 
   return {
     id: normalized,
@@ -502,7 +626,9 @@ export function getDefaultModelParams(model: VideoModel): {
   };
 }
 
-function normalizeVideoAspectRatio(aspectRatio?: string | null): string | undefined {
+function normalizeVideoAspectRatio(
+  aspectRatio?: string | null
+): string | undefined {
   const normalized = aspectRatio?.trim().replace(/[xX]/g, ':');
   return normalized && /^\d+:\d+$/.test(normalized) ? normalized : undefined;
 }
@@ -517,17 +643,18 @@ export function getValidVideoSize(
   aspectRatio?: string | null
 ): string {
   const config = getConfigOrDefault(model);
-  if (size && config.sizeOptions.some(option => option.value === size)) {
+  if (size && config.sizeOptions.some((option) => option.value === size)) {
     return size;
   }
   const normalizedAspectRatio = normalizeVideoAspectRatio(aspectRatio);
   const legacyResolution = size && /^\d+p$/.test(size) ? size : undefined;
 
   if (legacyResolution) {
-    const resolutionMatch = config.sizeOptions.find((option) => (
-      option.value.startsWith(`${legacyResolution}@`) &&
-      (!normalizedAspectRatio || option.aspectRatio === normalizedAspectRatio)
-    ));
+    const resolutionMatch = config.sizeOptions.find(
+      (option) =>
+        option.value.startsWith(`${legacyResolution}@`) &&
+        (!normalizedAspectRatio || option.aspectRatio === normalizedAspectRatio)
+    );
     if (resolutionMatch) {
       return resolutionMatch.value;
     }
@@ -574,9 +701,11 @@ export function supportsStoryboardMode(model: VideoModel): boolean {
  */
 export function getStoryboardModeConfig(model: VideoModel) {
   const config = getConfigOrDefault(model);
-  return config.storyboardMode ?? {
-    supported: false,
-    maxScenes: 15,
-    minSceneDuration: 0.1,
-  };
+  return (
+    config.storyboardMode ?? {
+      supported: false,
+      maxScenes: 15,
+      minSceneDuration: 0.1,
+    }
+  );
 }

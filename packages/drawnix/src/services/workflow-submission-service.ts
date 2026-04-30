@@ -449,7 +449,21 @@ class WorkflowSubmissionService {
       args.count = parsedInput.count;
     if (parsedInput.duration) args.seconds = parsedInput.duration;
     if (referenceImages.length > 0) args.referenceImages = referenceImages;
-    if (parsedInput.extraParams) args.params = parsedInput.extraParams;
+    const extraParams = parsedInput.extraParams
+      ? { ...parsedInput.extraParams }
+      : undefined;
+    if (
+      parsedInput.modelId === 'happyhorse-1.0-video-edit' &&
+      parsedInput.selection?.videos?.[0]
+    ) {
+      args.params = {
+        ...(extraParams || {}),
+        input_video:
+          extraParams?.input_video || parsedInput.selection.videos[0],
+      };
+    } else if (extraParams) {
+      args.params = extraParams;
+    }
 
     // Create steps based on count
     const steps: WorkflowStep[] = [];

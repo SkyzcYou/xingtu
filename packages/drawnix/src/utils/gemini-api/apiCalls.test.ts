@@ -124,6 +124,49 @@ describe('callGoogleGenerateContentRaw', () => {
     );
   });
 
+  it('serializes inline data with google contents parts and mime_type', async () => {
+    await callGoogleGenerateContentRaw(
+      {
+        apiKey: 'secret',
+        baseUrl: 'https://api.example.com/v1',
+        modelName: 'gemini-3.1-pro-preview-thinking',
+        protocol: 'google.generateContent',
+        authType: 'bearer',
+      },
+      [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: '分析视频中的具体应用场景.' },
+            { type: 'inline_data', mimeType: 'video/mp4', data: 'VIDEO_B64' },
+          ],
+        },
+      ],
+      { stream: false }
+    );
+
+    const [, request] = sendMock.mock.calls[0];
+    const body = JSON.parse(String((request as { body: string }).body));
+
+    expect(body).toMatchObject({
+      contents: [
+        {
+          parts: [
+            { text: '分析视频中的具体应用场景.' },
+            {
+              inline_data: {
+                mime_type: 'video/mp4',
+                data: 'VIDEO_B64',
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(JSON.stringify(body)).not.toContain('mimeType');
+    expect(body).not.toHaveProperty('messages');
+  });
+
   it('normalizes legacy generateContent paths missing the models segment', async () => {
     await callGoogleGenerateContentRaw(
       {

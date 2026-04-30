@@ -1,57 +1,10 @@
 import {
   PlaitBoard,
   Point,
-  getRectangleByElements,
 } from '@plait/core';
 import { getInsertionPointForSelectedElements, getInsertionPointBelowBottommostElement, scrollToPointIfNeeded } from '../utils/selection-utils';
 import { analytics } from '../utils/posthog-analytics';
-
-/**
- * 从保存的选中元素IDs计算插入点
- * @param board - PlaitBoard实例
- * @param videoWidth - 视频宽度,用于调整X坐标使视频居中
- * @returns 插入点坐标,如果没有保存的选中元素则返回undefined
- */
-const getInsertionPointFromSavedSelection = (
-  board: PlaitBoard,
-  videoWidth: number
-): Point | undefined => {
-  const appState = (board as any).appState;
-  const savedElementIds = appState?.lastSelectedElementIds || [];
-
-  if (savedElementIds.length === 0) {
-    return undefined;
-  }
-
-  // 查找对应的元素
-  const elements = savedElementIds
-    .map((id: string) => board.children.find((el: any) => el.id === id))
-    .filter(Boolean);
-
-  if (elements.length === 0) {
-    console.warn('getInsertionPointFromSavedSelection (video): No elements found for saved IDs:', savedElementIds);
-    return undefined;
-  }
-
-  try {
-    const boundingRect = getRectangleByElements(board, elements, false);
-    const centerX = boundingRect.x + boundingRect.width / 2;
-    const insertionY = boundingRect.y + boundingRect.height + 50;
-
-    // console.log('getInsertionPointFromSavedSelection (video): Calculated insertion point:', {
-    //   centerX,
-    //   insertionY,
-    //   boundingRect,
-    //   videoWidth
-    // });
-
-    // 将X坐标向左偏移视频宽度的一半，让视频以中心点对齐
-    return [centerX - videoWidth / 2, insertionY] as Point;
-  } catch (error) {
-    console.warn('getInsertionPointFromSavedSelection (video): Error calculating insertion point:', error);
-    return undefined;
-  }
-};
+import { getInsertionPointFromSavedSelection } from '../utils/canvas-insertion-layout';
 
 /**
  * 获取视频真实尺寸的接口
@@ -297,7 +250,11 @@ export const insertVideoFromUrl = async (
       // console.log('insertVideoFromUrl: Adjusted insertion point for video centering:', insertionPoint);
     } else if (!startPoint && !isDrop) {
       // 没有提供起始点时,优先使用保存的选中元素IDs计算插入位置
-      insertionPoint = getInsertionPointFromSavedSelection(board, displayDimensions.width);
+      insertionPoint = getInsertionPointFromSavedSelection(board, {
+        align: 'center',
+        targetWidth: displayDimensions.width,
+        logPrefix: 'video',
+      });
 
       // 如果没有保存的选中元素,回退到使用当前选中元素(向后兼容)
       if (!insertionPoint) {

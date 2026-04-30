@@ -4,7 +4,8 @@
  */
 
 export const BACKUP_SIGNATURE = 'aitu-backup';
-export const BACKUP_VERSION = 3;
+export const BACKUP_VERSION = 4;
+export const MIN_SUPPORTED_BACKUP_VERSION = 2;
 
 export function getExtensionFromMimeType(mimeType) {
   const mimeToExt = {
@@ -151,6 +152,8 @@ export function mergePromptData({
   videoPromptHistory = [],
   imagePromptHistory = [],
   presetSettings,
+  deletedPromptContents = [],
+  promptHistoryOverrides = [],
   allTasks = [],
 }) {
   const completedTasks = allTasks.filter((task) => task?.status === 'completed');
@@ -192,14 +195,34 @@ export function mergePromptData({
     }
   }
 
+  const createPresetSettings = () => ({
+    pinnedPrompts: [],
+    deletedPrompts: [],
+  });
+  const normalizedPresetSettings = {};
+  for (const type of ['image', 'video', 'audio', 'text', 'agent', 'ppt-common', 'ppt-slide']) {
+    const settings = presetSettings?.[type] || {};
+    normalizedPresetSettings[type] = {
+      pinnedPrompts: Array.isArray(settings.pinnedPrompts) ? settings.pinnedPrompts : [],
+      deletedPrompts: Array.isArray(settings.deletedPrompts) ? settings.deletedPrompts : [],
+    };
+  }
+
   return {
     promptHistory,
     videoPromptHistory: mergedVideoPromptHistory,
     imagePromptHistory: mergedImagePromptHistory,
-    presetSettings: presetSettings || {
-      image: { pinnedPrompts: [], deletedPrompts: [] },
-      video: { pinnedPrompts: [], deletedPrompts: [] },
+    presetSettings: presetSettings ? normalizedPresetSettings : {
+      image: createPresetSettings(),
+      video: createPresetSettings(),
+      audio: createPresetSettings(),
+      text: createPresetSettings(),
+      agent: createPresetSettings(),
+      'ppt-common': createPresetSettings(),
+      'ppt-slide': createPresetSettings(),
     },
+    deletedPromptContents: Array.isArray(deletedPromptContents) ? deletedPromptContents : [],
+    promptHistoryOverrides: Array.isArray(promptHistoryOverrides) ? promptHistoryOverrides : [],
   };
 }
 
@@ -210,6 +233,27 @@ export function filterCompletedMediaTasks(allTasks = []) {
       (task?.type === 'image' || task?.type === 'video' || task?.type === 'audio') &&
       hasExportableTaskMedia(task?.result)
   );
+}
+
+export function validateBackupManifest(manifest, options = {}) {
+  const maxVersion = options.maxVersion || BACKUP_VERSION;
+  const minVersion = options.minVersion || MIN_SUPPORTED_BACKUP_VERSION;
+
+  if (!manifest || typeof manifest !== 'object') {
+    throw new Error('无效的备份文件：manifest 格式错误');
+  }
+  if (manifest.signature !== BACKUP_SIGNATURE) {
+    throw new Error('无效的备份文件：签名不匹配');
+  }
+  if (
+    typeof manifest.version !== 'number' ||
+    manifest.version < minVersion ||
+    manifest.version > maxVersion
+  ) {
+    throw new Error(`不支持的备份版本: ${manifest.version}`);
+  }
+
+  return manifest;
 }
 
 export function buildFolderPathMap(folders = []) {

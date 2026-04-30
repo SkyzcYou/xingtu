@@ -425,7 +425,7 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
   }, [effectiveHistoryType, effectiveType, mode, optimizedDraft]);
 
   const handleApplyPrompt = useCallback(() => {
-    const promptToApply = optimizedDraft.trim();
+    const promptToApply = (optimizedDraft || currentPrompt).trim();
     if (!promptToApply) {
       MessagePlugin.warning(
         language === 'zh'
@@ -443,7 +443,16 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
     });
     onApply(promptToApply);
     handleClose();
-  }, [handleClose, effectiveHistoryType, effectiveType, language, mode, onApply, optimizedDraft]);
+  }, [
+    currentPrompt,
+    effectiveHistoryType,
+    effectiveType,
+    handleClose,
+    language,
+    mode,
+    onApply,
+    optimizedDraft,
+  ]);
 
   useEffect(() => {
     if (!open) {
@@ -502,7 +511,9 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
       ? 'For example: emphasize timeline structure, split regions and counts, preserve titles and legends, output JSON only...'
       : 'For example: make it more cinematic, add camera language, reduce redundancy, emphasize subject and lighting...';
   const canOptimize = currentPrompt.trim().length > 0;
-  const canApply = optimizedDraft.trim().length > 0;
+  const canApply =
+    (optimizedDraft.length > 0 ? optimizedDraft : currentPrompt).trim().length >
+    0;
   const hasOptimizedDraft = optimizedDraft.length > 0;
   const currentPromptHistoryItems = useMemo<PromptItem[]>(
     () =>
@@ -894,6 +905,14 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
                   ? 'Generate Structured Prompt'
                   : 'Optimize'}
               </button>
+              <button
+                type="button"
+                className="prompt-optimize-dialog__footer-btn prompt-optimize-dialog__footer-btn--apply"
+                onClick={handleApplyPrompt}
+                disabled={isOptimizing || !canApply}
+              >
+                {language === 'zh' ? '回填' : 'Apply'}
+              </button>
             </div>
           </div>
           {hasOptimizedDraft && (
@@ -907,14 +926,6 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
                 {language === 'zh'
                   ? '用结果继续优化'
                   : 'Use Draft to Refine'}
-              </button>
-              <button
-                type="button"
-                className="prompt-optimize-dialog__footer-btn prompt-optimize-dialog__footer-btn--apply"
-                onClick={handleApplyPrompt}
-                disabled={isOptimizing || !canApply}
-              >
-                {language === 'zh' ? '回填' : 'Apply'}
               </button>
             </div>
           )}

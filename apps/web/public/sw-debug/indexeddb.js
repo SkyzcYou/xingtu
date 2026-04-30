@@ -53,6 +53,8 @@ export const KV_KEYS = {
   VIDEO_PROMPT_HISTORY: 'aitu_video_prompt_history',
   IMAGE_PROMPT_HISTORY: 'aitu_image_prompt_history',
   PRESET_SETTINGS: 'aitu-prompt-preset-settings',
+  PROMPT_DELETED_CONTENTS: 'aitu_prompt_deleted_contents',
+  PROMPT_HISTORY_OVERRIDES: 'aitu_prompt_history_overrides',
 };
 
 /**

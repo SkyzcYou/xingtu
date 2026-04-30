@@ -13,6 +13,7 @@ import React, { useState, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { Video, Play, Type, X } from 'lucide-react';
 import type { SelectedContentItem } from '../../types/chat.types';
+import { HoverTip } from './hover';
 import './selected-content-preview.scss';
 
 export interface SelectedContentPreviewProps {
@@ -171,17 +172,21 @@ export const SelectedContentPreview: React.FC<SelectedContentPreviewProps> = ({
 
               {/* 删除按钮（仅上传内容显示） */}
               {canRemove && (
-                <button
-                  className="selected-content-preview__remove-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemove(index);
-                  }}
-                  onMouseDown={(e) => e.preventDefault()}
-                  title={language === 'zh' ? '移除' : 'Remove'}
+                <HoverTip
+                  content={language === 'zh' ? '移除' : 'Remove'}
+                  showArrow={false}
                 >
-                  <X size={12} />
-                </button>
+                  <button
+                    className="selected-content-preview__remove-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemove(index);
+                    }}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    <X size={12} />
+                  </button>
+                </HoverTip>
               )}
             </div>
           );

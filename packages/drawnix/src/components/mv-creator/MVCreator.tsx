@@ -4,15 +4,13 @@
  * 工作流：创意+音乐 → AI分镜 → 批量视频生成
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import type { MVRecord, PageId } from './types';
 import { loadRecords } from './storage';
-import { StepBar } from './components/StepBar';
 import { AnalyzePage } from './pages/AnalyzePage';
 import { ScriptPage } from './pages/ScriptPage';
 import { GeneratePage } from './pages/GeneratePage';
 import { HistoryPage } from './pages/HistoryPage';
-import { taskQueueService } from '../../services/task-queue';
 import {
   isMVCreatorTask,
   syncMVStoryboardTask,
@@ -20,89 +18,82 @@ import {
   getMVMusicRecordId,
   syncMVMusicTask,
 } from './task-sync';
+import type { Task } from '../../types/task.types';
+import {
+  WorkflowNavBar,
+  useWorkflowNavigation,
+  useWorkflowRecords,
+  type WorkflowStepConfig,
+} from '../shared/workflow';
+import { useWorkflowTaskSync } from '../shared/workflow/useWorkflowTaskSync';
 import '../video-analyzer/VideoAnalyzer.scss';
 import '../music-analyzer/MusicAnalyzer.scss';
 import './MVCreator.scss';
 
+type WorkflowPageId = Exclude<PageId, 'history'>;
+
+const MV_STEPS: Array<Omit<WorkflowStepConfig<WorkflowPageId>, 'disabled'>> = [
+  { id: 'analyze', label: '分析' },
+  { id: 'script', label: '脚本' },
+  { id: 'generate', label: '生成' },
+];
+
 const MVCreator: React.FC = () => {
-  const [page, setPage] = useState<PageId>('analyze');
-  const [currentRecord, setCurrentRecord] = useState<MVRecord | null>(null);
-  const [records, setRecords] = useState<MVRecord[]>([]);
-  const [showStarred, setShowStarred] = useState(false);
+  const {
+    records,
+    setRecords,
+    currentRecord,
+    showStarred,
+    setShowStarred,
+    starredCount,
+    selectRecord,
+    updateCurrentRecord,
+    restart,
+    applySyncedRecord,
+  } = useWorkflowRecords<MVRecord>({
+    loadRecords,
+    logPrefix: '[MVCreator]',
+  });
+  const {
+    page,
+    setPage,
+    navigateToStep,
+    goToDefaultPage,
+    openHistory,
+    openStarred,
+    toggleStarred,
+  } = useWorkflowNavigation<PageId, WorkflowPageId>({
+    initialPage: 'analyze',
+    defaultPage: 'analyze',
+    historyPage: 'history',
+    setShowStarred,
+  });
 
-  useEffect(() => {
-    loadRecords().then(setRecords);
+  const syncTask = useCallback(async (task: Task) => {
+    if (isMVCreatorTask(task)) {
+      return (await syncMVStoryboardTask(task)) || syncMVRewriteTask(task);
+    }
+
+    const recordId = getMVMusicRecordId(task);
+    if (recordId) {
+      return syncMVMusicTask(task, recordId);
+    }
+
+    return null;
   }, []);
 
-  // 同步分镜规划 + 音乐生成任务
-  useEffect(() => {
-    let disposed = false;
-    const syncingTaskIds = new Set<string>();
-
-    const syncTask = async (task: Parameters<typeof syncMVStoryboardTask>[0]) => {
-      if (syncingTaskIds.has(task.id)) return;
-
-      // 分镜规划 / 脚本改编任务
-      if (isMVCreatorTask(task)) {
-        syncingTaskIds.add(task.id);
-        try {
-          const synced = await syncMVStoryboardTask(task) || await syncMVRewriteTask(task);
-          if (!synced || disposed) return;
-          setRecords(synced.records);
-          setCurrentRecord(prev => {
-            if (prev?.id === synced.record.id) return synced.record;
-            return prev;
-          });
-        } catch (error) {
-          console.error('[MVCreator] Failed to sync storyboard task:', error);
-        } finally {
-          syncingTaskIds.delete(task.id);
-        }
-        return;
-      }
-
-      // 音乐生成任务
-      const recordId = getMVMusicRecordId(task);
-      if (recordId) {
-        syncingTaskIds.add(task.id);
-        try {
-          const synced = await syncMVMusicTask(task, recordId);
-          if (!synced || disposed) return;
-          setRecords(synced.records);
-          setCurrentRecord(prev => {
-            if (prev?.id === synced.record.id) return synced.record;
-            return prev;
-          });
-        } catch (error) {
-          console.error('[MVCreator] Failed to sync music task:', error);
-        } finally {
-          syncingTaskIds.delete(task.id);
-        }
-      }
-    };
-
-    taskQueueService.getAllTasks().forEach(task => {
-      if (task.status === 'completed') void syncTask(task);
-    });
-
-    const subscription = taskQueueService.observeTaskUpdates().subscribe(event => {
-      if (event.task.status === 'completed') {
-        void syncTask(event.task);
-      }
-    });
-
-    return () => {
-      disposed = true;
-      subscription.unsubscribe();
-    };
-  }, []);
+  useWorkflowTaskSync<MVRecord>({
+    syncTask,
+    applySyncedRecord,
+    logPrefix: '[MVCreator]',
+  });
 
   const handleComplete = useCallback((record: MVRecord) => {
-    setCurrentRecord(record);
-  }, []);
+    updateCurrentRecord(record);
+  }, [updateCurrentRecord]);
 
   const handleHistorySelect = useCallback((record: MVRecord) => {
-    setCurrentRecord(record);
+    selectRecord(record);
     if (record.editedShots && record.editedShots.length > 0) {
       setPage('generate');
     } else if (record.selectedClipId) {
@@ -110,60 +101,42 @@ const MVCreator: React.FC = () => {
     } else {
       setPage('analyze');
     }
-  }, []);
+  }, [selectRecord, setPage]);
 
   const handleRecordUpdate = useCallback((record: MVRecord) => {
-    setCurrentRecord(record);
-  }, []);
+    updateCurrentRecord(record);
+  }, [updateCurrentRecord]);
 
   const handleRestart = useCallback(() => {
-    setCurrentRecord(null);
-    setPage('analyze');
-  }, []);
-
-  const handleNavigate = useCallback((target: Exclude<PageId, 'history'>) => {
-    setPage(target);
-  }, []);
+    restart();
+    goToDefaultPage();
+  }, [goToDefaultPage, restart]);
 
   const hasShots = !!(currentRecord?.editedShots && currentRecord.editedShots.length > 0);
+  const steps = useMemo<WorkflowStepConfig<WorkflowPageId>[]>(
+    () =>
+      MV_STEPS.map((step, index) => ({
+        ...step,
+        disabled: (!currentRecord && index > 0) || ((step.id === 'script' || step.id === 'generate') && !hasShots),
+      })),
+    [currentRecord, hasShots]
+  );
 
   return (
     <div className="video-analyzer music-analyzer mv-creator">
-      <div className="va-nav">
-        {page === 'history' ? (
-          <>
-            <button className="va-nav-back" onClick={() => setPage('analyze')}>←</button>
-            <span className="va-nav-title">{showStarred ? '收藏' : '历史记录'}</span>
-            <button
-              className={`va-nav-btn ${showStarred ? 'active' : ''}`}
-              onClick={() => setShowStarred(s => !s)}
-            >
-              {showStarred ? '★ 收藏' : '☆ 全部'}
-            </button>
-          </>
-        ) : (
-          <>
-            <StepBar
-              current={page}
-              onNavigate={handleNavigate}
-              hasRecord={!!currentRecord}
-              hasShots={hasShots}
-            />
-            <div className="va-nav-actions">
-              <button className="va-nav-btn" onClick={() => { setShowStarred(false); setPage('history'); }}>
-                <span role="img" aria-label="history">📋</span>
-                {records.length > 0 && <span className="va-nav-count">{records.length}</span>}
-              </button>
-              <button className="va-nav-btn" onClick={() => { setShowStarred(true); setPage('history'); }}>
-                <span role="img" aria-label="starred">⭐</span>
-                {records.filter(r => r.starred).length > 0 && (
-                  <span className="va-nav-count">{records.filter(r => r.starred).length}</span>
-                )}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+      <WorkflowNavBar
+        isHistoryPage={page === 'history'}
+        showStarred={showStarred}
+        recordsCount={records.length}
+        starredCount={starredCount}
+        currentStep={page}
+        steps={steps}
+        onStepNavigate={navigateToStep}
+        onBackFromHistory={goToDefaultPage}
+        onOpenHistory={openHistory}
+        onOpenStarred={openStarred}
+        onToggleStarred={toggleStarred}
+      />
 
       {page === 'analyze' && (
         <AnalyzePage

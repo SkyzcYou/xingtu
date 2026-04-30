@@ -309,9 +309,11 @@ export const UnifiedMediaViewer: React.FC<UnifiedMediaViewerProps> = ({
     if (!containerRef.current) return;
 
     if (!isFullscreen) {
-      containerRef.current.requestFullscreen?.();
+      const request = containerRef.current.requestFullscreen?.();
+      request?.catch(() => undefined);
     } else {
-      document.exitFullscreen?.();
+      const request = document.exitFullscreen?.();
+      request?.catch(() => undefined);
     }
   }, [isFullscreen]);
 
@@ -577,7 +579,7 @@ export const UnifiedMediaViewer: React.FC<UnifiedMediaViewerProps> = ({
           panOffset={panOffset}
           videoAutoPlay={videoAutoPlay}
           videoLoop={videoLoop}
-          onZoomChange={(z) => actions.zoom(z - zoomLevel)}
+          onZoomChange={actions.setZoomLevel}
           onPanChange={() => {
             // 单图模式暂不同步 pan
           }}
@@ -629,7 +631,7 @@ export const UnifiedMediaViewer: React.FC<UnifiedMediaViewerProps> = ({
               videoAutoPlay={videoAutoPlay}
               videoLoop={videoLoop}
               onZoomChange={
-                syncMode ? (z) => actions.zoom(z - zoomLevel) : undefined
+                syncMode ? actions.setZoomLevel : undefined
               }
               onPanChange={syncMode ? actions.setPan : undefined}
               isCompareMode={true}

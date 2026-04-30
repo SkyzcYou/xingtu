@@ -753,18 +753,21 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
               </span>
             </HoverTip>
 
-            <button
-              className={`kb-extraction-chat__send-btn ${
-                input.trim() || isLoading
-                  ? 'kb-extraction-chat__send-btn--active'
-                  : ''
-              }`}
-              onClick={isLoading ? stopGeneration : handleSendMessage}
-              disabled={!input.trim() && !isLoading}
-              title={isLoading ? '停止生成' : '发送'}
-            >
-              {isLoading ? <StopCircle size={18} /> : <Send size={18} />}
-            </button>
+            <HoverTip content={isLoading ? '停止生成' : '发送'} showArrow={false}>
+              <span>
+                <button
+                  className={`kb-extraction-chat__send-btn ${
+                    input.trim() || isLoading
+                      ? 'kb-extraction-chat__send-btn--active'
+                      : ''
+                  }`}
+                  onClick={isLoading ? stopGeneration : handleSendMessage}
+                  disabled={!input.trim() && !isLoading}
+                >
+                  {isLoading ? <StopCircle size={18} /> : <Send size={18} />}
+                </button>
+              </span>
+            </HoverTip>
           </div>
         </div>
       </div>

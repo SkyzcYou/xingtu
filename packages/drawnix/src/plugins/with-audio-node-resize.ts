@@ -7,72 +7,18 @@ import {
   Transforms,
 } from '@plait/core';
 import {
-  getRectangleResizeHandleRefs,
-  getRotatedResizeCursorClassByAngle,
-  RESIZE_HANDLE_DIAMETER,
   ResizeRef,
   ResizeState,
   withResize,
 } from '@plait/common';
 import { isAudioNodeElement, type PlaitAudioNode } from '../types/audio-node.types';
-import { type ResizeHandle } from '../utils/resize-utils';
+import {
+  getHitRectangleResizeHandleRef,
+  type ResizeHandle,
+} from '../utils/resize-utils';
 
 const AUDIO_NODE_MIN_WIDTH = 240;
 const AUDIO_NODE_EDGE_HANDLES = new Set(['5', '7']);
-
-function rotatePoint(point: Point, center: Point, angle: number): Point {
-  const rad = (angle * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const dx = point[0] - center[0];
-  const dy = point[1] - center[1];
-
-  return [
-    center[0] + dx * cos - dy * sin,
-    center[1] + dx * sin + dy * cos,
-  ];
-}
-
-function getHitRectangleResizeHandleRef(
-  rectangle: RectangleClient,
-  point: Point,
-  angle = 0
-) {
-  const centerPoint = RectangleClient.getCenterPoint(rectangle);
-  const resizeHandleRefs = getRectangleResizeHandleRefs(
-    rectangle,
-    RESIZE_HANDLE_DIAMETER
-  );
-  const filteredHandleRefs = resizeHandleRefs.filter((resizeHandleRef) =>
-    AUDIO_NODE_EDGE_HANDLES.has(String(resizeHandleRef.handle))
-  );
-
-  if (angle) {
-    const rotatedPoint = rotatePoint(point, centerPoint, -angle);
-    const result = filteredHandleRefs.find((resizeHandleRef) => {
-      return RectangleClient.isHit(
-        RectangleClient.getRectangleByPoints([rotatedPoint, rotatedPoint]),
-        resizeHandleRef.rectangle
-      );
-    });
-
-    if (result) {
-      result.cursorClass = getRotatedResizeCursorClassByAngle(
-        result.cursorClass,
-        angle
-      );
-    }
-
-    return result;
-  }
-
-  return filteredHandleRefs.find((resizeHandleRef) => {
-    return RectangleClient.isHit(
-      RectangleClient.getRectangleByPoints([point, point]),
-      resizeHandleRef.rectangle
-    );
-  });
-}
 
 function canResize(board: PlaitBoard): boolean {
   const selectedElements = getSelectedElements(board);
@@ -88,7 +34,12 @@ function hitTest(board: PlaitBoard, point: Point) {
 
   const audioNode = selectedElements[0] as PlaitAudioNode;
   const rectangle = RectangleClient.getRectangleByPoints(audioNode.points);
-  const handleRef = getHitRectangleResizeHandleRef(rectangle, point, 0);
+  const handleRef = getHitRectangleResizeHandleRef(
+    rectangle,
+    point,
+    0,
+    AUDIO_NODE_EDGE_HANDLES
+  );
 
   if (!handleRef) {
     return null;

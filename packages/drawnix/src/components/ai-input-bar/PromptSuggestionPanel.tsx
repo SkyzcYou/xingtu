@@ -10,6 +10,7 @@
 import React, { useMemo, useCallback, useRef, useEffect, useState } from 'react';
 import { History, Lightbulb, X } from 'lucide-react';
 import { useConfirmDialog } from '../dialog/ConfirmDialog';
+import { HoverTip } from '../shared/hover';
 
 export interface PromptItem {
   id: string;
@@ -202,7 +203,7 @@ export const PromptSuggestionPanel: React.FC<PromptSuggestionPanelProps> = ({
   }, [confirm, language, onDeleteHistory]);
 
   // 截断显示文本
-  const truncateText = (text: string, maxLength: number = 80) => {
+  const truncateText = (text: string, maxLength = 80) => {
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + '...';
   };
@@ -251,13 +252,17 @@ export const PromptSuggestionPanel: React.FC<PromptSuggestionPanelProps> = ({
                         {truncateText(prompt.content)}
                       </span>
                       {onDeleteHistory && (
-                        <button
-                          className="prompt-suggestion-panel__item-delete"
-                          onClick={(e) => handleDeleteHistory(e, prompt.id)}
-                          title={language === 'zh' ? '删除' : 'Delete'}
+                        <HoverTip
+                          content={language === 'zh' ? '删除' : 'Delete'}
+                          showArrow={false}
                         >
-                          <X size={12} />
-                        </button>
+                          <button
+                            className="prompt-suggestion-panel__item-delete"
+                            onClick={(e) => handleDeleteHistory(e, prompt.id)}
+                          >
+                            <X size={12} />
+                          </button>
+                        </HoverTip>
                       )}
                     </div>
                   ))}

@@ -5,7 +5,12 @@
  * 包括 Shift 键状态跟踪和比例锁定计算
  */
 
-import { RectangleClient } from '@plait/core';
+import { Point, RectangleClient } from '@plait/core';
+import {
+  getRectangleResizeHandleRefs,
+  getRotatedResizeCursorClassByAngle,
+  RESIZE_HANDLE_DIAMETER,
+} from '@plait/common';
 
 // Shift 键状态跟踪
 let isShiftPressed = false;
@@ -35,6 +40,65 @@ if (typeof window !== 'undefined') {
  */
 export function getShiftKeyState(): boolean {
   return isShiftPressed;
+}
+
+/**
+ * Rotate a point around a center point by degrees.
+ */
+export function rotatePoint(
+  point: Point,
+  center: Point,
+  angle: number
+): Point {
+  const rad = (angle * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const dx = point[0] - center[0];
+  const dy = point[1] - center[1];
+
+  return [
+    center[0] + dx * cos - dy * sin,
+    center[1] + dx * sin + dy * cos,
+  ];
+}
+
+/**
+ * Hit test a point against rectangle resize handles, including rotated elements.
+ */
+export function getHitRectangleResizeHandleRef(
+  rectangle: RectangleClient,
+  point: Point,
+  angle = 0,
+  allowedHandles?: ReadonlySet<string>
+) {
+  const centerPoint = RectangleClient.getCenterPoint(rectangle);
+  let resizeHandleRefs = getRectangleResizeHandleRefs(
+    rectangle,
+    RESIZE_HANDLE_DIAMETER
+  );
+
+  if (allowedHandles) {
+    resizeHandleRefs = resizeHandleRefs.filter((resizeHandleRef) =>
+      allowedHandles.has(String(resizeHandleRef.handle))
+    );
+  }
+
+  const hitPoint = angle ? rotatePoint(point, centerPoint, -angle) : point;
+  const result = resizeHandleRefs.find((resizeHandleRef) => {
+    return RectangleClient.isHit(
+      RectangleClient.getRectangleByPoints([hitPoint, hitPoint]),
+      resizeHandleRef.rectangle
+    );
+  });
+
+  if (result && angle) {
+    result.cursorClass = getRotatedResizeCursorClassByAngle(
+      result.cursorClass,
+      angle
+    );
+  }
+
+  return result;
 }
 
 // ResizeHandle 枚举值

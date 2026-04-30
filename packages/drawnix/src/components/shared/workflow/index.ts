@@ -11,6 +11,24 @@ export {
   type CharacterDescriptionListProps,
 } from './CharacterDescriptionList';
 export { ShotCard, type ShotCardProps } from './ShotCard';
+export {
+  WorkflowStepBar,
+  type WorkflowStepBarProps,
+  type WorkflowStepConfig,
+} from './WorkflowStepBar';
+export { WorkflowNavBar, type WorkflowNavBarProps } from './WorkflowNavBar';
+export {
+  useWorkflowRecords,
+  type UseWorkflowRecordsOptions,
+  type UseWorkflowRecordsResult,
+  type WorkflowRecordBase,
+  type WorkflowSyncRecordResult,
+} from './useWorkflowRecords';
+export {
+  useWorkflowNavigation,
+  type UseWorkflowNavigationOptions,
+  type UseWorkflowNavigationResult,
+} from './useWorkflowNavigation';
 export { buildVideoPrompt, buildFramePrompt } from './prompt-builders';
 export {
   useWorkflowAssetActions,

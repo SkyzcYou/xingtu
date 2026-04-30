@@ -25,6 +25,7 @@ import {
   DEFAULT_TOOL_CONFIG,
   TOOL_CATEGORY_LABELS,
   isBuiltInToolId,
+  sortToolCategories,
 } from '../../constants/built-in-tools';
 import { ToolList } from './ToolList';
 import { CustomToolDialog } from '../custom-tool-dialog/CustomToolDialog';
@@ -327,7 +328,7 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
         cats.add(tool.category);
       }
     });
-    return Array.from(cats);
+    return sortToolCategories(Array.from(cats));
   }, [refreshKey]);
 
   /**
@@ -351,13 +352,6 @@ export const ToolboxDrawer: React.FC<ToolboxDrawerProps> = ({
 
     return categorized;
   }, [filteredTools, searchQuery, selectedCategory]);
-
-  /**
-   * 获取分类列表
-   */
-  const categories = useMemo(() => {
-    return Object.keys(toolsByCategory);
-  }, [toolsByCategory]);
 
   const handleSearchBlur = useCallback(() => {
     const query = searchQuery.trim();

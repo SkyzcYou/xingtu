@@ -1381,13 +1381,14 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
                     maxLength={50}
                   />
                 ) : (
-                  <h2
-                    className="chat-drawer__title chat-drawer__title--editable"
-                    onClick={handleStartEditTitle}
-                    title="点击编辑标题"
-                  >
-                    {title}
-                  </h2>
+                  <HoverTip content="点击编辑标题" showArrow={false}>
+                    <h2
+                      className="chat-drawer__title chat-drawer__title--editable"
+                      onClick={handleStartEditTitle}
+                    >
+                      {title}
+                    </h2>
+                  </HoverTip>
                 )}
               </div>
               <div className="chat-drawer__header-bottom">

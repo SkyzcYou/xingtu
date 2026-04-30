@@ -26,7 +26,9 @@ const MenuItem = ({
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onSelect'>) => {
   const [isOpen, setIsOpen] = useState(false);
   const closeTimeoutRef = useRef<number>();
-  const handleClick = useHandleMenuItemClick(rest.onClick, onSelect);
+  const { title, ...buttonProps } = rest;
+  const ariaLabel = buttonProps['aria-label'] ?? title;
+  const handleClick = useHandleMenuItemClick(buttonProps.onClick, onSelect);
   
   const menuItemContent = (
     <MenuItemContent icon={icon} shortcut={shortcut}>
@@ -56,10 +58,10 @@ const MenuItem = ({
       >
         <PopoverTrigger asChild>
           <button
-            {...rest}
+            {...buttonProps}
             type="button"
             className={getMenuItemClassName(className, selected || isOpen)}
-            title={rest.title ?? rest['aria-label']}
+            aria-label={ariaLabel}
             onClick={handleClick}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
@@ -79,11 +81,11 @@ const MenuItem = ({
 
   return (
     <button
-      {...rest}
+      {...buttonProps}
       onClick={handleClick}
       type="button"
       className={getMenuItemClassName(className, selected)}
-      title={rest.title ?? rest['aria-label']}
+      aria-label={ariaLabel}
       role="menuitem"
     >
       {menuItemContent}

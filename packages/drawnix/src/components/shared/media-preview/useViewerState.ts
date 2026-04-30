@@ -11,6 +11,12 @@ import type {
   MediaItem,
 } from './types';
 
+const MIN_ZOOM_LEVEL = 0.1;
+const MAX_ZOOM_LEVEL = 5;
+
+const clampZoomLevel = (zoom: number) =>
+  Math.max(MIN_ZOOM_LEVEL, Math.min(MAX_ZOOM_LEVEL, zoom));
+
 interface UseViewerStateOptions {
   items: MediaItem[];
   initialMode?: ViewerMode;
@@ -241,11 +247,15 @@ export function useViewerState(
     (delta: number) => {
       setZoomLevel((prev) => {
         const newZoom = prev + delta;
-        return Math.max(0.1, Math.min(5, newZoom));
+        return clampZoomLevel(newZoom);
       });
     },
     []
   );
+
+  const setZoom = useCallback((zoomLevel: number) => {
+    setZoomLevel(clampZoomLevel(zoomLevel));
+  }, []);
 
   const resetView = useCallback(() => {
     setZoomLevel(1);
@@ -298,6 +308,7 @@ export function useViewerState(
       setCompareLayout: setLayout,
       toggleSyncMode,
       zoom,
+      setZoomLevel: setZoom,
       setPan,
       resetView,
       setFocusedSlot,
@@ -314,6 +325,7 @@ export function useViewerState(
       setLayout,
       toggleSyncMode,
       zoom,
+      setZoom,
       setPan,
       resetView,
       setFocusedSlot,

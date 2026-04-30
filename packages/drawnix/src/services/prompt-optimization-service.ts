@@ -1,4 +1,5 @@
 import type { PromptType } from './prompt-storage-service';
+import { buildVisualStructuredPromptSchemaInstruction } from '../utils/visual-structured-prompt-schema';
 import {
   createDirectory,
   createNote,
@@ -145,6 +146,11 @@ const FALLBACK_SCENARIO_BY_TYPE: Record<PromptOptimizeType, PromptOptimizationSc
   text: 'ai-input.text',
   agent: 'ai-input.agent',
 };
+const VISUAL_STRUCTURED_PROMPT_SCENARIOS = new Set<PromptOptimizationScenarioId>([
+  'ai-input.image',
+  'tool.image',
+  'ppt.slide',
+]);
 
 function getSourceUrl(scenarioId: PromptOptimizationScenarioId): string {
   return `${SOURCE_URL_PREFIX}${scenarioId}`;
@@ -160,6 +166,34 @@ export function getPromptOptimizationScenario(
 
 export function listPromptOptimizationScenarios(): PromptOptimizationScenario[] {
   return Object.values(SCENARIOS);
+}
+
+function shouldUseVisualStructuredPromptSchema(
+  scenario: PromptOptimizationScenario,
+  mode: PromptOptimizeMode
+): boolean {
+  return mode === 'structured' && VISUAL_STRUCTURED_PROMPT_SCENARIOS.has(scenario.id);
+}
+
+function buildVisualStructuredRuntimeInstruction(
+  scenario: PromptOptimizationScenario,
+  mode: PromptOptimizeMode,
+  language: 'zh' | 'en'
+): string {
+  if (!shouldUseVisualStructuredPromptSchema(scenario, mode)) {
+    return '';
+  }
+
+  return [
+    '',
+    language === 'zh'
+      ? '【视觉结构化 JSON 强制要求】'
+      : '[Required Visual Structured JSON]',
+    buildVisualStructuredPromptSchemaInstruction(language),
+    language === 'zh'
+      ? '最终输出必须是单个合法 JSON 对象，不要 Markdown，不要代码块，不要解释。'
+      : 'The final output must be one valid JSON object. No Markdown, no code fence, no explanation.',
+  ].join('\n');
 }
 
 function buildDefaultTemplate(scenario: PromptOptimizationScenario): string {
@@ -277,6 +311,11 @@ export async function buildOptimizationPrompt({
     mode: effectiveMode,
     scenarioName: scenario.name,
   });
+  const visualStructuredInstruction = buildVisualStructuredRuntimeInstruction(
+    scenario,
+    effectiveMode,
+    language
+  );
 
   const inputBlock =
     language === 'zh'
@@ -290,9 +329,12 @@ export async function buildOptimizationPrompt({
           '',
           '【补充要求】',
           trimmedRequirements || '无，做通顺、准确、可执行的轻量优化。',
+          visualStructuredInstruction,
           '',
           '【输出要求】',
-          '只输出最终优化后的提示词，不要解释、不要标题、不要 Markdown 代码块。',
+          visualStructuredInstruction
+            ? '只输出符合视觉结构化 schema 的合法 JSON 对象，不要解释、不要标题、不要 Markdown 代码块。'
+            : '只输出最终优化后的提示词，不要解释、不要标题、不要 Markdown 代码块。',
         ]
       : [
           '',
@@ -305,9 +347,12 @@ export async function buildOptimizationPrompt({
           '[Refinement Requirements]',
           trimmedRequirements ||
             'None. Apply light polishing for clarity and execution quality.',
+          visualStructuredInstruction,
           '',
           '[Output Requirement]',
-          'Output only the final optimized prompt. No explanation, no title, no Markdown code block.',
+          visualStructuredInstruction
+            ? 'Output only a valid JSON object following the visual structured schema. No explanation, no title, no Markdown code block.'
+            : 'Output only the final optimized prompt. No explanation, no title, no Markdown code block.',
         ];
 
   return `${rendered.trim()}\n${inputBlock.join('\n')}`;

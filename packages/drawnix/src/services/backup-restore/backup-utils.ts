@@ -25,6 +25,7 @@ export {
   sortFoldersByDepth,
   getFolderKey,
   findBinaryFile,
+  validateBackupManifest,
   exportKnowledgeBaseData,
   importKnowledgeBaseData,
   BACKUP_SIGNATURE,

@@ -57,6 +57,7 @@ import {
 import { MediaLibraryModal } from '../media-library/MediaLibraryModal';
 import { ModelDropdown } from './ModelDropdown';
 import { ModelHealthBadge } from '../shared/ModelHealthBadge';
+import { HoverTip } from '../shared/hover';
 import { ParametersDropdown } from './ParametersDropdown';
 import { PromptHistoryPopover } from './PromptHistoryPopover';
 import { usePromptHistory } from '../../hooks/usePromptHistory';
@@ -921,6 +922,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
     // State
     const [prompt, setPrompt] = useState('');
+    const [isInspirationSendGuideActive, setIsInspirationSendGuideActive] =
+      useState(false);
     const [isPromptOptimizeOpen, setIsPromptOptimizeOpen] = useState(false);
     const [selectedContent, setSelectedContent] = useState<SelectedContent[]>(
       []
@@ -1784,8 +1787,16 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
     // 处理灵感模版选择：将提示词替换到输入框并切换到 Agent 模式
     const handleSelectInspirationPrompt = useCallback(
-      (info: { prompt: string; modelType: 'agent'; skillId?: string }) => {
+      (info: {
+        prompt: string;
+        modelType: 'agent';
+        skillId?: string;
+        templateId?: string;
+        title?: string;
+        category?: string;
+      }) => {
         setPrompt(info.prompt);
+        setIsInspirationSendGuideActive(true);
         setGenerationType('agent');
         if (info.skillId) {
           setSelectedSkillId(info.skillId);
@@ -1801,6 +1812,9 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           promptLength: info.prompt.length,
           modelType: info.modelType,
           skillId: info.skillId,
+          templateId: info.templateId,
+          title: info.title,
+          category: info.category,
         });
       },
       []
@@ -1810,6 +1824,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const handleSelectHistoryPrompt = useCallback(
       (info: { content: string; modelType?: PromptType }) => {
         setPrompt(info.content);
+        setIsInspirationSendGuideActive(false);
 
         // 根据 modelType 自动切换生成类型
         if (info.modelType) {
@@ -2495,6 +2510,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       if (isSubmitting) {
         return; // 仅防止快速重复点击
       }
+      setIsInspirationSendGuideActive(false);
       onEnableRuntime?.();
 
       const submitStartTime = Date.now();
@@ -4019,6 +4035,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         const newValue = e.target.value;
         const cursorPos = e.target.selectionStart || newValue.length;
         setPrompt(newValue);
+        setIsInspirationSendGuideActive(false);
 
         // 检测光标前最后一个字符
         if (cursorPos > 0) {
@@ -4058,6 +4075,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       ]
     );
     const canGenerate = prompt.trim().length > 0 || allContent.length > 0;
+    const shouldHighlightInspirationSend =
+      isInspirationSendGuideActive && canGenerate && !isSubmitting;
     const showInspirationBoard = isCanvasEmpty === true;
     const hasSelectedTextContent = selectedContent.some(
       (item) => item.type === 'text' && item.text?.trim()
@@ -4112,31 +4131,39 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
               style={{ display: 'none' }}
             />
 
-            <button
-              className="ai-input-bar__upload-btn"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              onClick={handleUploadClick}
-              title={language === 'zh' ? '上传图片' : 'Upload images'}
-              data-track="ai_input_click_upload"
+            <HoverTip
+              content={language === 'zh' ? '上传图片' : 'Upload images'}
+              showArrow={false}
             >
-              <ImageUploadIcon size={18} />
-            </button>
+              <button
+                className="ai-input-bar__upload-btn"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onClick={handleUploadClick}
+                data-track="ai_input_click_upload"
+              >
+                <ImageUploadIcon size={18} />
+              </button>
+            </HoverTip>
 
-            <button
-              className="ai-input-bar__library-btn"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              onClick={() => setShowMediaLibrary(true)}
-              title={language === 'zh' ? '从素材库选择' : 'Select from library'}
-              data-track="ai_input_click_library"
+            <HoverTip
+              content={language === 'zh' ? '从素材库选择' : 'Select from library'}
+              showArrow={false}
             >
-              <MediaLibraryIcon size={18} />
-            </button>
+              <button
+                className="ai-input-bar__library-btn"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onClick={() => setShowMediaLibrary(true)}
+                data-track="ai_input_click_library"
+              >
+                <MediaLibraryIcon size={18} />
+              </button>
+            </HoverTip>
 
             <GenerationTypeDropdown
               value={generationType}
@@ -4282,9 +4309,11 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             <div className="ai-input-bar__bottom-spacer" />
 
             <button
-              className={`ai-input-bar__send-btn ${
-                canGenerate ? 'active' : ''
-              } ${isSubmitting ? 'loading' : ''}`}
+              className={classNames('ai-input-bar__send-btn', {
+                active: canGenerate,
+                loading: isSubmitting,
+                'ai-input-bar__send-btn--guide': shouldHighlightInspirationSend,
+              })}
               onMouseDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();

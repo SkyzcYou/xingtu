@@ -351,12 +351,14 @@ const AIVideoGeneration = ({
     return {
       maxCount: modelConfig.imageUpload.maxCount,
       mode: modelConfig.imageUpload.mode,
+      required: modelConfig.imageUpload.required,
       labels: stableImageUploadLabels,
       labelsSignature: imageUploadLabelsSignature,
     };
   }, [
     modelConfig.imageUpload.maxCount,
     modelConfig.imageUpload.mode,
+    modelConfig.imageUpload.required,
     stableImageUploadLabels,
     imageUploadLabelsSignature,
   ]);
@@ -1031,6 +1033,18 @@ const AIVideoGeneration = ({
         }
       }
 
+      if (
+        imageUploadConfig.required &&
+        !uploadedImages.some((image) => image.url || image.file)
+      ) {
+        setError(
+          language === 'zh'
+            ? '请上传模型所需的参考图片'
+            : 'Please upload the required reference image'
+        );
+        return;
+      }
+
       try {
         // Convert uploaded images to serializable format
         const convertedImages: UploadedVideoImage[] = [];
@@ -1304,28 +1318,34 @@ const AIVideoGeneration = ({
             )}
 
             {/* Multi-image upload based on model config */}
-            <ReferenceImageUpload
-              images={uploadedImagesToReferenceImages(uploadedImages)}
-              onImagesChange={handleImagesChange}
-              language={language}
-              disabled={isGenerating}
-              multiple={imageUploadConfig.maxCount > 1}
-              maxCount={imageUploadConfig.maxCount}
-              slotLabels={
-                imageUploadConfig.mode === 'frames'
-                  ? imageUploadConfig.labels
-                  : undefined
-              }
-              label={
-                imageUploadConfig.mode === 'frames'
-                  ? language === 'zh'
-                    ? '首尾帧图片 (可选)'
-                    : 'Start/End Frames (Optional)'
-                  : language === 'zh'
-                  ? '参考图片 (可选)'
-                  : 'Reference Images (Optional)'
-              }
-            />
+            {imageUploadConfig.maxCount > 0 && (
+              <ReferenceImageUpload
+                images={uploadedImagesToReferenceImages(uploadedImages)}
+                onImagesChange={handleImagesChange}
+                language={language}
+                disabled={isGenerating}
+                multiple={imageUploadConfig.maxCount > 1}
+                maxCount={imageUploadConfig.maxCount}
+                slotLabels={
+                  imageUploadConfig.mode === 'frames'
+                    ? imageUploadConfig.labels
+                    : undefined
+                }
+                label={
+                  imageUploadConfig.mode === 'frames'
+                    ? language === 'zh'
+                      ? '首尾帧图片 (可选)'
+                      : 'Start/End Frames (Optional)'
+                    : imageUploadConfig.required
+                    ? language === 'zh'
+                      ? '参考图片'
+                      : 'Reference Images'
+                    : language === 'zh'
+                    ? '参考图片 (可选)'
+                    : 'Reference Images (Optional)'
+                }
+              />
+            )}
 
             {/* Storyboard mode editor (only for supported models) */}
             {modelSupportsStoryboard && (

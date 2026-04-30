@@ -12,6 +12,15 @@ import {
 } from '@plait/core';
 import { useEventListener } from './use-event-listener';
 
+const hasEditableTarget = (target: EventTarget | null) => {
+  if (hasInputOrTextareaTarget(target)) {
+    return true;
+  }
+  return (
+    target instanceof Element && !!target.closest('[contenteditable="true"]')
+  );
+};
+
 const useBoardPluginEvent = (
   board: PlaitBoard,
   viewportContainerRef: React.RefObject<HTMLDivElement>,
@@ -88,7 +97,11 @@ const useBoardPluginEvent = (
   });
 
   useEventListener('copy', (event) => {
-    if (PlaitBoard.isFocus(board) && !PlaitBoard.hasBeenTextEditing(board)) {
+    if (
+      PlaitBoard.isFocus(board) &&
+      !PlaitBoard.hasBeenTextEditing(board) &&
+      !hasEditableTarget(event.target)
+    ) {
       event.preventDefault();
       setFragment(
         board,
@@ -102,7 +115,8 @@ const useBoardPluginEvent = (
     if (
       PlaitBoard.isFocus(board) &&
       !PlaitBoard.isReadonly(board) &&
-      !PlaitBoard.hasBeenTextEditing(board)
+      !PlaitBoard.hasBeenTextEditing(board) &&
+      !hasEditableTarget(clipboardEvent.target)
     ) {
       const mousePoint = PlaitBoard.getMovingPointInBoard(board);
       if (mousePoint) {
@@ -126,7 +140,8 @@ const useBoardPluginEvent = (
     if (
       PlaitBoard.isFocus(board) &&
       !PlaitBoard.isReadonly(board) &&
-      !PlaitBoard.hasBeenTextEditing(board)
+      !PlaitBoard.hasBeenTextEditing(board) &&
+      !hasEditableTarget(event.target)
     ) {
       event.preventDefault();
       setFragment(

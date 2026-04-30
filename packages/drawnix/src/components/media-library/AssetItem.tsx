@@ -20,6 +20,7 @@ import { LazyImage } from '../lazy-image';
 import { useThumbnailUrl } from '../../hooks/useThumbnailUrl';
 import { useUnifiedCache } from '../../hooks/useUnifiedCache';
 import { VideoPosterPreview } from '../shared/VideoPosterPreview';
+import { HoverTip } from '../shared/hover';
 import type { Asset, ViewMode } from '../../types/asset.types';
 import './AssetItem.scss';
 
@@ -212,17 +213,18 @@ export const AssetItem = memo<AssetItemProps>(
                 <div className="asset-item__ai-badge">AI</div>
               )}
               {isSynced && (
-                <div className="asset-item__synced-badge" title="已同步到云端">
-                  <Cloud size={10} />
-                </div>
+                <HoverTip content="已同步到云端" showArrow={false}>
+                  <div className="asset-item__synced-badge">
+                    <Cloud size={10} />
+                  </div>
+                </HoverTip>
               )}
               {cacheWarning && (
-                <div
-                  className="asset-item__cache-warning-badge"
-                  title={cacheWarningTip}
-                >
-                  需下载
-                </div>
+                <HoverTip content={cacheWarningTip} showArrow={false}>
+                  <div className="asset-item__cache-warning-badge">
+                    需下载
+                  </div>
+                </HoverTip>
               )}
             </div>
           )}
@@ -256,25 +258,28 @@ export const AssetItem = memo<AssetItemProps>(
 
           {/* 插入按钮 - 统一渲染，显示由 CSS 控制 */}
           {!isListMode && !isInSelectionMode && onDoubleClick && (
-            <button
-              type="button"
-              className="asset-item__preview-btn"
-              onClick={handleInsertClick}
-              aria-label="插入到画布"
-              title="插入到画布"
-              data-track="asset_item_insert"
-            >
-              <Plus size={16} />
-            </button>
+            <HoverTip content="插入到画布" showArrow={false}>
+              <button
+                type="button"
+                className="asset-item__preview-btn"
+                onClick={handleInsertClick}
+                aria-label="插入到画布"
+                data-track="asset_item_insert"
+              >
+                <Plus size={16} />
+              </button>
+            </HoverTip>
           )}
 
           {/* 网格模式：渐变遮罩和名称 */}
           {!isListMode && !isCompactMode && (
             <>
               <div className="asset-item__overlay" />
-              <div className="asset-item__name-overlay" title={asset.name}>
-                {asset.name}
-              </div>
+              <HoverTip content={asset.name} showArrow={false}>
+                <div className="asset-item__name-overlay">
+                  {asset.name}
+                </div>
+              </HoverTip>
             </>
           )}
         </div>
@@ -282,9 +287,11 @@ export const AssetItem = memo<AssetItemProps>(
         {/* 列表模式：信息区域 */}
         {isListMode && (
           <div className="asset-item__info">
-            <div className="asset-item__name" title={asset.name}>
-              {asset.name}
-            </div>
+            <HoverTip content={asset.name} showArrow={false}>
+              <div className="asset-item__name">
+                {asset.name}
+              </div>
+            </HoverTip>
             <div className="asset-item__meta">
               <span className="asset-item__type">
                 {asset.type === 'IMAGE' ? (
@@ -328,35 +335,34 @@ export const AssetItem = memo<AssetItemProps>(
 
         {/* 列表模式：已同步标识 */}
         {isListMode && isSynced && (
-          <div
-            className="asset-item__synced-badge asset-item__synced-badge--list"
-            title="已同步到云端"
-          >
-            <Cloud size={12} />
-          </div>
+          <HoverTip content="已同步到云端" showArrow={false}>
+            <div className="asset-item__synced-badge asset-item__synced-badge--list">
+              <Cloud size={12} />
+            </div>
+          </HoverTip>
         )}
 
         {isListMode && cacheWarning && (
-          <div
-            className="asset-item__cache-warning-badge asset-item__cache-warning-badge--list"
-            title={cacheWarningTip}
-          >
-            需下载
-          </div>
+          <HoverTip content={cacheWarningTip} showArrow={false}>
+            <div className="asset-item__cache-warning-badge asset-item__cache-warning-badge--list">
+              需下载
+            </div>
+          </HoverTip>
         )}
 
         {/* 列表模式：插入按钮 */}
         {isListMode && !isInSelectionMode && onDoubleClick && (
-          <button
-            type="button"
-            className="asset-item__preview-btn"
-            onClick={handleInsertClick}
-            aria-label="插入到画布"
-            title="插入到画布"
-            data-track="asset_item_insert"
-          >
-            <Plus size={16} />
-          </button>
+          <HoverTip content="插入到画布" showArrow={false}>
+            <button
+              type="button"
+              className="asset-item__preview-btn"
+              onClick={handleInsertClick}
+              aria-label="插入到画布"
+              data-track="asset_item_insert"
+            >
+              <Plus size={16} />
+            </button>
+          </HoverTip>
         )}
       </div>
     );

@@ -3,9 +3,11 @@
  * 二维选择面板，X轴为饱和度，Y轴为明度
  */
 
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback } from 'react';
 import type { HSPanelProps } from './types';
 import { hsvToHex } from './utils';
+import { useDocumentDrag } from './use-document-drag';
+import type { DragPoint } from './use-document-drag';
 
 export const HSPanel: React.FC<HSPanelProps> = ({
   hue,
@@ -15,7 +17,6 @@ export const HSPanel: React.FC<HSPanelProps> = ({
   disabled = false,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
 
   // 计算指示器位置
   const indicatorStyle = {
@@ -40,66 +41,22 @@ export const HSPanel: React.FC<HSPanelProps> = ({
     onChange(newSaturation, newValue);
   }, [onChange]);
 
-  // 鼠标按下
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (disabled) return;
-    e.preventDefault();
-    setIsDragging(true);
-    calculateSV(e.clientX, e.clientY);
-  }, [disabled, calculateSV]);
+  const handleDrag = useCallback(({ clientX, clientY }: DragPoint) => {
+    calculateSV(clientX, clientY);
+  }, [calculateSV]);
 
-  // 触摸开始
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (disabled) return;
-    e.preventDefault();
-    setIsDragging(true);
-    const touch = e.touches[0];
-    calculateSV(touch.clientX, touch.clientY);
-  }, [disabled, calculateSV]);
-
-  // 全局鼠标移动和释放
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      e.preventDefault();
-      calculateSV(e.clientX, e.clientY);
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      calculateSV(touch.clientX, touch.clientY);
-    };
-
-    const handleTouchEnd = () => {
-      setIsDragging(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', handleTouchEnd);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [isDragging, calculateSV]);
+  const dragHandlers = useDocumentDrag({
+    disabled,
+    onDrag: handleDrag,
+  });
 
   return (
     <div
       ref={panelRef}
       className="ucp-hs-panel"
       style={{ backgroundColor: panelBackground }}
-      onMouseDown={handleMouseDown}
-      onTouchStart={handleTouchStart}
+      onMouseDown={dragHandlers.onMouseDown}
+      onTouchStart={dragHandlers.onTouchStart}
     >
       {/* 白色渐变层（从左到右） */}
       <div className="ucp-hs-panel__white-gradient" />

@@ -129,6 +129,19 @@ function getVideoAnalyzerTypeTag(task: Task): string | null {
   return null;
 }
 
+function getTaskBatchDisplayIndex(task: Task): number | null {
+  const rawIndex = task.params.batchIndex;
+  if (typeof rawIndex !== 'number' || !Number.isFinite(rawIndex)) {
+    return null;
+  }
+
+  if (task.type === TaskType.AUDIO) {
+    return rawIndex + 1;
+  }
+
+  return rawIndex >= 1 ? rawIndex : rawIndex + 1;
+}
+
 export interface TaskItemProps {
   /** The task to display */
   task: Task;
@@ -281,6 +294,7 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
     const videoAnalyzerAction = getVideoAnalyzerAction(task);
     const videoAnalyzerSubtitle = getVideoAnalyzerSubtitle(task);
     const videoAnalyzerTypeTag = getVideoAnalyzerTypeTag(task);
+    const batchDisplayIndex = getTaskBatchDisplayIndex(task);
     const displayPrompt = isCharacterTask
       ? isCompleted && task.result?.characterUsername
         ? `@${task.result.characterUsername}`
@@ -443,11 +457,11 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
             </div>
           )}
           {task.params.batchId &&
-            typeof task.params.batchIndex === 'number' &&
+            batchDisplayIndex !== null &&
             typeof task.params.batchTotal === 'number' && (
               <div>
                 <strong>批量：</strong>
-                {task.params.batchIndex + 1}/{task.params.batchTotal}
+                {batchDisplayIndex}/{task.params.batchTotal}
               </div>
             )}
           <div>
@@ -747,11 +761,10 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
                     <Tag variant="outline">{lyricsTags[0]}</Tag>
                   )}
                   {task.params.batchId &&
-                    typeof task.params.batchIndex === 'number' &&
+                    batchDisplayIndex !== null &&
                     typeof task.params.batchTotal === 'number' && (
                       <Tag variant="outline">
-                        批量 {task.params.batchIndex + 1}/
-                        {task.params.batchTotal}
+                        批量 {batchDisplayIndex}/{task.params.batchTotal}
                       </Tag>
                     )}
                 </div>

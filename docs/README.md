@@ -1,142 +1,58 @@
 # Opentu 开发文档
 
-本目录包含项目的所有开发相关文档，包括最新的平台品牌升级方案。
+本目录只保留当前仍有维护价值的开发文档。产品介绍、安装和常用命令见 [项目 README](../README.md)。
 
-## 📚 文档索引
+## 必读入口
 
-### 🎨 品牌设计文档 (NEW)
-- **[BRAND_DESIGN.md](./BRAND_DESIGN.md)** - Opentu 品牌设计完整方案和思考过程
-- **[BRAND_GUIDELINES.md](./BRAND_GUIDELINES.md)** - 品牌规范开发者速查手册
-- **[LOGO_CONCEPTS.md](./LOGO_CONCEPTS.md)** - Logo 设计概念与平台视觉方向
+- [编码规则](./CODING_RULES.md)：项目级经验、踩坑记录和高风险改动规则。
+- [编码标准](./CODING_STANDARDS.md)：TypeScript、React、样式与测试约定。
+- [功能流](./FEATURE_FLOWS.md)：核心用户路径和主要功能流转。
+- [概念说明](./CONCEPTS.md)：领域概念与画布工作区说明。
+- [Service Worker 架构](./SW_ARCHITECTURE.md)：SW、缓存、后台任务与调试入口。
 
-### 📋 项目开发文档
-- **[VERSION_CONTROL.md](./VERSION_CONTROL.md)** - 版本控制和缓存管理文档
-- **[POSTHOG_MONITORING.md](./POSTHOG_MONITORING.md)** - PostHog 监控说明与 AI 生成埋点改造复盘
-- **[POSTHOG_PPT_PROMPT_ANALYTICS.md](./POSTHOG_PPT_PROMPT_ANALYTICS.md)** - PPT 与提示词能力 PostHog 报表配置和优化方向
-- **[POSTHOG_SEO_LESSONS.md](./POSTHOG_SEO_LESSONS.md)** - 埋点观测与 SEO 优化方法论总结
-- **[POSTHOG_ERROR_TRACKING_LESSONS.md](./POSTHOG_ERROR_TRACKING_LESSONS.md)** - Error tracking 修复、降噪与关单标准复盘
-- **[PPT_STYLE_CONSISTENCY_LESSONS.md](./PPT_STYLE_CONSISTENCY_LESSONS.md)** - PPT 整页生图风格一致性与重生成经验总结
-- **[PPT_MEDIA_EXPORT_LESSONS.md](./PPT_MEDIA_EXPORT_LESSONS.md)** - PPT 视频/音频嵌入、封面与降级策略复盘
-- **[PPT_DECK_TITLE_FILENAME_LESSONS.md](./PPT_DECK_TITLE_FILENAME_LESSONS.md)** - PPT 总标题、导出文件名与元数据同步复盘
+## 部署与发布
 
-### 🚀 部署相关文档  
-- **[CFPAGE-DEPLOY.md](./CFPAGE-DEPLOY.md)** - Cloudflare Pages 部署指南
-- **[SMART_CDN_LOADING_LESSONS.md](./SMART_CDN_LOADING_LESSONS.md)** - 多 CDN、发布门禁、熔断退避与首屏稳定性复盘
+- [版本控制](./VERSION_CONTROL.md)：版本号、发布流程和缓存策略。
+- [版本更新策略](./VERSION_UPDATE_STRATEGY.md)：版本文件、changelog 与发布验证。
+- [NPM CDN 部署](./NPM_CDN_DEPLOY.md)：npm 包与 CDN 发布链路。
+- [CDN 部署](./CDN_DEPLOYMENT.md)：混合部署、CDN 回退与线上排查。
+- [Cloudflare Pages 部署](./CFPAGE-DEPLOY.md)：静态托管配置。
 
-### 📱 PWA 相关文档
-- **[PWA_ICONS.md](./PWA_ICONS.md)** - PWA 图标生成指南
+## UI 与品牌
 
-## 🎯 品牌转型概述
+- [品牌规范](./BRAND_GUIDELINES.md)：Logo、色彩和品牌用法。
+- [品牌设计](./BRAND_DESIGN.md)：品牌方向与设计方案。
+- [PWA 图标](./PWA_ICONS.md)：图标生成和 manifest 相关配置。
+- [Z-Index 指南](./Z_INDEX_GUIDE.md)：弹层层级和遮挡问题处理。
+- [TDesign 主题接入](./TDESIGN_THEME_INTEGRATION.md)：组件主题集成经验。
 
-**品牌名称**: Opentu（中文别名：开图）- AI应用平台
-**项目仓库**: https://github.com/ljquan/aitu
+## 关键能力
 
-### 核心变化
-- **定位转变**: 从白板工具 → 以画布为工作区底座的 AI应用平台
-- **目标用户**: 数字创作者、设计师、内容创作者、AI 产品团队
-- **核心价值**: “AI让创意在单一工作区中持续执行”
+- [统一缓存设计](./UNIFIED_CACHE_DESIGN.md)：缓存模型、存储和清理策略。
+- [统一缓存实现总结](./UNIFIED_CACHE_IMPLEMENTATION_SUMMARY.md)：落地细节和验证要点。
+- [素材库插入经验](./MEDIA_LIBRARY_INSERTION_LESSONS.md)：素材插入、选择和画布联动。
+- [素材库渲染性能经验](./MEDIA_LIBRARY_RENDER_PERFORMANCE_LESSONS.md)：列表、预览和性能优化。
+- [PPT 能力规划](./PPT_CAPABILITY_PLAN.md)：PPT 生成、编辑和导出路线。
+- [PPT Prompt](./PPT_Prompt.md)：PPT 相关提示词资产。
 
-### 品牌亮点
-- **品牌名**: Opentu
-- **主色调**: 智慧紫渐变 (#6C5CE7 → #FD79A8)  
-- **Logo理念**: 开放工作区 + 平台入口 + 节点流转
-- **愿景**: 让 AI 应用与生成结果在同一画布工作区中持续协作
+## 复盘文档
 
-## 🚀 快速开始
+`*_LESSONS.md` 文档用于保留仍会影响实现决策的复盘经验。新增复盘前优先检查是否能合并进现有主题文档，避免继续膨胀。
 
-### 开发环境
+常用主题：
+
+- AI 生成参数、提示词历史、模型选择和任务队列。
+- PPT 生成、媒体导出、Frame 操作和样式一致性。
+- Service Worker、CDN、缓存、启动性能和发布稳定性。
+- PostHog 埋点、错误追踪、SEO 和观测方法。
+
+## 本地命令
+
 ```bash
-npm install       # 安装依赖
-npm start         # 启动开发服务器 (localhost:7201)
-npm run build     # 构建项目
-npm test          # 运行测试
+corepack enable pnpm
+pnpm install
+pnpm start          # http://localhost:7200
+pnpm check
+pnpm test
+pnpm check:cycles
 ```
-
-### 版本发布
-```bash
-npm run release         # 发布补丁版本 (自动打包)
-npm run release:minor   # 发布次版本  
-npm run release:major   # 发布主版本
-npm run package         # 仅创建发布包
-```
-
-### 品牌资源应用
-参考 [品牌规范文档](./BRAND_GUIDELINES.md) 获取：
-- CSS 色彩变量和组件样式
-- Logo 使用规范和文件
-- 字体和排版规范
-- 动效和交互指南
-
-## 📁 项目结构
-```
-opentu/ (项目根目录)
-├── apps/web/              # 主 Web 应用
-├── packages/drawnix/      # 画布工作区核心库
-├── packages/react-board/  # React 画布组件
-├── packages/react-text/   # React 文本组件
-├── scripts/              # 构建和发布脚本
-└── docs/                 # 开发文档（本目录）
-```
-
-## 🔗 相关链接
-
-- [项目主 README](../README.md) - 项目介绍和快速开始
-- [英文 README](../README_en.md) - English documentation
-- [GitHub 仓库](https://github.com/ljquan/aitu) - 源代码仓库
-- [在线应用](https://opentu.ai) - 当前版本入口
-
-## 🛠️ 开发规范
-
-### 代码规范
-- 遵循现有的 ESLint 和 Prettier 配置
-- 使用 TypeScript 进行类型安全开发
-- 组件命名采用 PascalCase
-- 文件命名采用 kebab-case
-
-### Git 规范
-- 提交信息格式: `type: description`
-- 主要类型: `feat`, `fix`, `docs`, `style`, `refactor`
-- 分支命名: `feature/xxx`, `fix/xxx`, `docs/xxx`
-
-### 版本管理
-- 遵循语义化版本控制 (Semantic Versioning)
-- 自动版本升级和 git tag 创建
-- 构建完成后自动创建发布包
-
----
-
-## 📝 更新日志
-
-### 2025-09-05
-- ✨ 完成品牌重塑设计方案
-- 📚 新增品牌设计文档系列
-- 🎨 设计 Opentu 品牌形象和 Logo 概念
-- 🔧 整理开发文档结构
-
-### 2026-04-12
-- 🔄 文档品牌主名统一为 Opentu
-- 🧭 一级定位升级为 AI应用平台
-- 🧩 画布角色重定义为平台工作区底座
-
-### 2026-04-21
-- 📊 补充 PostHog AI 生成埋点改造复盘
-- 🧪 记录业务转化看板与当前数据结论
-- 🗂️ 更新文档索引，纳入 PostHog 监控文档
-
-### 2026-04-22
-- 📝 新增埋点观测与 SEO 优化经验总结
-- 🚨 新增 PostHog error tracking 修复与降噪复盘
-- 🔗 补充 docs 索引，便于后续复用
-- 🌐 补充 CDN 加载与发布稳定性经验总结，沉淀多 CDN 熔断和保守切分原则
-
-### 2026-04-26
-- 🧩 新增 PPT 风格一致性经验总结，沉淀 deck 级 styleSpec、单页重生成和参考图策略
-
-### 2026-04-27
-- 🎬 新增 PPT 媒体导出经验总结，沉淀视频/音频嵌入、封面生成和超限降级策略
-- 🏷️ 新增 PPT 标题与导出文件名经验总结，沉淀 deckTitle 元数据同步策略
-
----
-
-*📖 文档持续更新中... 如有问题请提交 Issue*  
-*最后更新: 2026-04-27*

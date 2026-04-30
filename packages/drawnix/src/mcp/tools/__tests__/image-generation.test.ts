@@ -212,6 +212,37 @@ describe('image-generation MCP tool', () => {
     });
   });
 
+  it('does not pass top-level count as adapter n in queue task params', async () => {
+    mocks.createQueueTask.mockReturnValue({
+      success: true,
+      type: 'image',
+      taskId: 'task-1',
+    });
+
+    await imageGenerationTool.execute(
+      {
+        prompt: 'Queue two image tasks',
+        model: 'gpt-image-2',
+        count: 2,
+        params: {
+          foo: 'bar',
+        },
+      },
+      { mode: 'queue' }
+    );
+
+    const queueConfig = mocks.createQueueTask.mock.calls[0]?.[2];
+
+    expect(queueConfig.buildTaskPayload()).toMatchObject({
+      prompt: 'Queue two image tasks',
+      params: {
+        foo: 'bar',
+      },
+    });
+    expect(queueConfig.buildTaskPayload().params).not.toHaveProperty('n');
+    expect(queueConfig.buildTaskPayload().params).not.toHaveProperty('count');
+  });
+
   it('passes PPT slide replacement metadata into queue task params', async () => {
     mocks.createQueueTask.mockReturnValue({
       success: true,

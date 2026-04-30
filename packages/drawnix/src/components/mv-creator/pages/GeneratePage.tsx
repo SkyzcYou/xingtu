@@ -9,7 +9,18 @@ import { MessagePlugin } from '../../../utils/message-plugin';
 import type { MVRecord, VideoShot, VideoCharacter } from '../types';
 import { updateRecord } from '../storage';
 import { formatMVShotsMarkdown, updateActiveShotsInRecord } from '../utils';
-import { getValidVideoSize, getVideoModelConfig } from '../../../constants/video-model-config';
+import { getValidVideoSize } from '../../../constants/video-model-config';
+import { getCompatibleParams, type ParamConfig } from '../../../constants/model-config';
+import {
+  getEffectiveVideoCompatibleParams,
+  getEffectiveVideoModelConfigForSelection,
+} from '../../../services/video-binding-utils';
+import {
+  loadScopedAIImageToolPreferences,
+  loadScopedAIVideoToolPreferences,
+  saveAIImageToolPreferences,
+  saveAIVideoToolPreferences,
+} from '../../../services/ai-generation-preferences-service';
 import { mcpRegistry } from '../../../mcp/registry';
 import { quickInsert, setCanvasBoard } from '../../../mcp/tools/canvas-insertion';
 import {
@@ -24,9 +35,11 @@ import { ReferenceImageUpload } from '../../ttd-dialog/shared';
 import { extractFrameFromUrl } from '../../../utils/video-frame-cache';
 import type { ReferenceImage } from '../../ttd-dialog/shared';
 import { ModelDropdown } from '../../ai-input-bar/ModelDropdown';
+import { ParametersDropdown } from '../../ai-input-bar/ParametersDropdown';
 import { useSelectableModels } from '../../../hooks/use-runtime-models';
 import { getSelectionKey } from '../../../utils/model-selection';
 import type { ModelRef } from '../../../utils/settings-manager';
+import type { VideoModel } from '../../../types/video.types';
 import { useDrawnix, DialogType } from '../../../hooks/use-drawnix';
 import { useSharedTaskState } from '../../../hooks/useTaskQueue';
 import { TaskStatus } from '../../../types/task.types';
@@ -46,6 +59,79 @@ import { analytics } from '../../../utils/posthog-analytics';
 
 const STORAGE_KEY_IMAGE_MODEL = 'mv-creator:image-model';
 const STORAGE_KEY_VIDEO_MODEL = 'mv-creator:gen-video-model';
+
+function areStringMapsEqual(
+  left: Record<string, string>,
+  right: Record<string, string>
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key) => left[key] === right[key]);
+}
+
+function normalizeParamsForConfigs(
+  params: Record<string, string>,
+  compatibleParams: ParamConfig[]
+): Record<string, string> {
+  return compatibleParams.reduce<Record<string, string>>((acc, param) => {
+    const value = params[param.id];
+    const isValidValue =
+      param.valueType === 'enum'
+        ? param.options?.some((option) => option.value === value)
+        : typeof value === 'string' && value.trim() !== '';
+
+    if (isValidValue && value) {
+      acc[param.id] = value;
+      return acc;
+    }
+
+    if (param.defaultValue) {
+      acc[param.id] = param.defaultValue;
+    }
+    return acc;
+  }, {});
+}
+
+function mergeVideoWorkflowParams(
+  extraParams: Record<string, string>,
+  duration?: string | number | null,
+  size?: string | null
+): Record<string, string> {
+  return {
+    ...extraParams,
+    ...(duration !== undefined && duration !== null
+      ? { duration: String(duration) }
+      : {}),
+    ...(size ? { size } : {}),
+  };
+}
+
+function splitVideoWorkflowParams(
+  params: Record<string, string>,
+  fallbackDuration: string,
+  fallbackSize: string
+): {
+  extraParams: Record<string, string>;
+  duration: string;
+  size: string;
+} {
+  const { duration, size, ...extraParams } = params;
+  return {
+    extraParams,
+    duration: duration || fallbackDuration,
+    size: size || fallbackSize,
+  };
+}
+
+function getAspectRatioFromImageSizeParam(size?: string): string | undefined {
+  if (!size || size === 'auto') {
+    return undefined;
+  }
+
+  const normalized = size.trim().replace(/[xX]/g, ':');
+  return /^\d+:\d+$/.test(normalized) ? normalized : undefined;
+}
 
 const MediaLibraryGridIcon = ({ size = 14 }: { size?: number }) => (
   <svg
@@ -103,22 +189,47 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const [imageModelRef, setImageModelRef] = useState<ModelRef | null>(
     () => readStoredModelSelection(STORAGE_KEY_IMAGE_MODEL, '').modelRef
   );
+  const [imageSelectedParams, setImageSelectedParams] = useState<
+    Record<string, string>
+  >(() => {
+    const stored = readStoredModelSelection(STORAGE_KEY_IMAGE_MODEL, '');
+    if (!stored.modelId) {
+      return {};
+    }
+    return loadScopedAIImageToolPreferences(
+      stored.modelId,
+      getSelectionKey(stored.modelId, stored.modelRef)
+    ).extraParams;
+  });
   const [videoModel, setVideoModelState] = useState(
     () => record.videoModel || readStoredModelSelection(STORAGE_KEY_VIDEO_MODEL, 'veo3').modelId
   );
   const [videoModelRef, setVideoModelRef] = useState<ModelRef | null>(
     () => record.videoModelRef || readStoredModelSelection(STORAGE_KEY_VIDEO_MODEL, 'veo3').modelRef
   );
-  const [videoSize, setVideoSizeState] = useState<string>(
-    () => getValidVideoSize(
-      record.videoModel || readStoredModelSelection(STORAGE_KEY_VIDEO_MODEL, 'veo3').modelId,
-      record.videoSize,
-      aspectRatio
-    )
-  );
-  const [segmentDuration, setSegmentDuration] = useState<number>(
-    () => record.segmentDuration || parseInt(getVideoModelConfig(record.videoModel || 'veo3').defaultDuration, 10) || 8
-  );
+  const [videoSelectedParams, setVideoSelectedParams] = useState<
+    Record<string, string>
+  >(() => {
+    const stored = readStoredModelSelection(
+      STORAGE_KEY_VIDEO_MODEL,
+      record.videoModel || 'veo3'
+    );
+    const initialModel = record.videoModel || stored.modelId;
+    const initialModelRef = record.videoModelRef || stored.modelRef;
+    const scopedPreferences = loadScopedAIVideoToolPreferences(
+      initialModel as VideoModel,
+      getSelectionKey(initialModel, initialModelRef)
+    );
+    return mergeVideoWorkflowParams(
+      scopedPreferences.extraParams,
+      record.segmentDuration || scopedPreferences.duration,
+      getValidVideoSize(
+        initialModel,
+        record.videoSize || scopedPreferences.size,
+        aspectRatio
+      )
+    );
+  });
   const [batchVideoState, setBatchVideoState] = useState({
     running: false,
     stopping: false,
@@ -127,9 +238,51 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   });
   const [insertGeneratedVideosToCanvas, setInsertGeneratedVideosToCanvas] = useState(false);
 
-  const videoModelConfig = useMemo(() => getVideoModelConfig(videoModel), [videoModel]);
-  const durationOptions = useMemo(() => videoModelConfig.durationOptions, [videoModelConfig]);
+  const compatibleImageParams = useMemo(
+    () => getCompatibleParams(imageModel),
+    [imageModel]
+  );
+  const compatibleVideoParams = useMemo(
+    () =>
+      getEffectiveVideoCompatibleParams(
+        videoModel,
+        videoModelRef || videoModel,
+        videoSelectedParams
+      ),
+    [videoModel, videoModelRef, videoSelectedParams]
+  );
+  const videoModelConfig = useMemo(
+    () =>
+      getEffectiveVideoModelConfigForSelection(
+        videoModel,
+        videoModelRef || videoModel,
+        videoSelectedParams
+      ),
+    [videoModel, videoModelRef, videoSelectedParams]
+  );
   const sizeOptions = useMemo(() => videoModelConfig.sizeOptions, [videoModelConfig]);
+  const splitVideoParams = useMemo(
+    () =>
+      splitVideoWorkflowParams(
+        videoSelectedParams,
+        videoModelConfig.defaultDuration,
+        videoModelConfig.defaultSize
+      ),
+    [
+      videoModelConfig.defaultDuration,
+      videoModelConfig.defaultSize,
+      videoSelectedParams,
+    ]
+  );
+  const videoSize = splitVideoParams.size;
+  const segmentDuration = Number.parseFloat(splitVideoParams.duration) || 8;
+  const imageGenerationExtraParams = useMemo(
+    () =>
+      Object.keys(imageSelectedParams).length > 0
+        ? imageSelectedParams
+        : undefined,
+    [imageSelectedParams]
+  );
 
   useEffect(() => {
     latestRecordRef.current = record;
@@ -161,38 +314,107 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   }, [applyRecordPatch]);
 
   const setImageModel = useCallback((model: string, ref?: ModelRef | null) => {
+    const nextModelRef = ref || null;
     setImageModelState(model);
-    setImageModelRef(ref || null);
+    setImageModelRef(nextModelRef);
+    setImageSelectedParams(
+      loadScopedAIImageToolPreferences(
+        model,
+        getSelectionKey(model, nextModelRef)
+      ).extraParams
+    );
     writeStoredModelSelection(STORAGE_KEY_IMAGE_MODEL, model, ref);
   }, []);
 
   const setVideoModel = useCallback((model: string, ref?: ModelRef | null) => {
+    const nextModelRef = ref || null;
     setVideoModelState(model);
-    setVideoModelRef(ref || null);
+    setVideoModelRef(nextModelRef);
     writeStoredModelSelection(STORAGE_KEY_VIDEO_MODEL, model, ref);
-    const cfg = getVideoModelConfig(model);
-    const nextSegmentDuration = parseInt(cfg.defaultDuration, 10) || 8;
-    const nextVideoSize = getValidVideoSize(model, videoSize, aspectRatio);
-    setSegmentDuration(nextSegmentDuration);
-    setVideoSizeState(nextVideoSize);
-    void applyRecordPatch({
-      videoModel: model,
-      videoModelRef: ref || null,
-      segmentDuration: nextSegmentDuration,
-      videoSize: nextVideoSize,
+    const scopedPreferences = loadScopedAIVideoToolPreferences(
+      model as VideoModel,
+      getSelectionKey(model, nextModelRef)
+    );
+    setVideoSelectedParams(
+      mergeVideoWorkflowParams(
+        scopedPreferences.extraParams,
+        scopedPreferences.duration,
+        getValidVideoSize(model, scopedPreferences.size, aspectRatio)
+      )
+    );
+  }, [aspectRatio]);
+
+  const handleImageParamChange = useCallback((paramId: string, value: string) => {
+    setImageSelectedParams((prev) => {
+      const next = { ...prev };
+      if (!value || value === 'default') {
+        delete next[paramId];
+      } else {
+        next[paramId] = value;
+      }
+      return next;
     });
-  }, [applyRecordPatch, aspectRatio, videoSize]);
+  }, []);
 
-  const handleSegmentDurationChange = useCallback((value: number) => {
-    setSegmentDuration(value);
-    void applyRecordPatch({ segmentDuration: value });
-  }, [applyRecordPatch]);
+  const handleVideoParamChange = useCallback((paramId: string, value: string) => {
+    setVideoSelectedParams((prev) => {
+      const next = { ...prev };
+      if (!value || value === 'default') {
+        delete next[paramId];
+      } else {
+        next[paramId] = value;
+      }
+      return next;
+    });
+  }, []);
 
-  const handleVideoSizeChange = useCallback((value: string) => {
-    const nextVideoSize = getValidVideoSize(videoModel, value, aspectRatio);
-    setVideoSizeState(nextVideoSize);
-    void applyRecordPatch({ videoSize: nextVideoSize });
-  }, [applyRecordPatch, aspectRatio, videoModel]);
+  useEffect(() => {
+    const normalizedParams = normalizeParamsForConfigs(
+      imageSelectedParams,
+      compatibleImageParams
+    );
+    if (!areStringMapsEqual(imageSelectedParams, normalizedParams)) {
+      setImageSelectedParams(normalizedParams);
+    }
+  }, [compatibleImageParams, imageSelectedParams]);
+
+  useEffect(() => {
+    const normalizedParams = normalizeParamsForConfigs(
+      videoSelectedParams,
+      compatibleVideoParams
+    );
+    if (!areStringMapsEqual(videoSelectedParams, normalizedParams)) {
+      setVideoSelectedParams(normalizedParams);
+    }
+  }, [compatibleVideoParams, videoSelectedParams]);
+
+  useEffect(() => {
+    const splitParams = splitVideoWorkflowParams(
+      videoSelectedParams,
+      videoModelConfig.defaultDuration,
+      videoModelConfig.defaultSize
+    );
+    saveAIVideoToolPreferences({
+      currentModel: videoModel as VideoModel,
+      currentSelectionKey: getSelectionKey(videoModel, videoModelRef),
+      extraParams: splitParams.extraParams,
+      duration: splitParams.duration,
+      size: splitParams.size,
+    });
+    void applyRecordPatch({
+      videoModel,
+      videoModelRef: videoModelRef || null,
+      segmentDuration: Number.parseFloat(splitParams.duration) || 8,
+      videoSize: splitParams.size,
+    });
+  }, [
+    applyRecordPatch,
+    videoModel,
+    videoModelConfig.defaultDuration,
+    videoModelConfig.defaultSize,
+    videoModelRef,
+    videoSelectedParams,
+  ]);
 
   const refImageUrls = useMemo(() => refImages.map(img => img.url).filter(Boolean), [refImages]);
   const exportableAssets = useMemo(() => collectWorkflowExportAssets(shots), [shots]);
@@ -505,6 +727,29 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     return aspectRatio.replace('x', ':');
   }, [aspectRatio, sizeOptions, videoSize]);
   const imageAspectRatio = selectedVideoAspectRatio;
+  const selectedImageAspectRatio = getAspectRatioFromImageSizeParam(
+    imageSelectedParams.size
+  );
+  const imageGenerationSize = imageSelectedParams.size || imageAspectRatio;
+
+  useEffect(() => {
+    if (!imageModel) {
+      return;
+    }
+    saveAIImageToolPreferences({
+      currentModel: imageModel,
+      currentSelectionKey: getSelectionKey(imageModel, imageModelRef),
+      extraParams: imageSelectedParams,
+      aspectRatio: selectedImageAspectRatio || imageAspectRatio,
+    });
+  }, [
+    imageAspectRatio,
+    imageModel,
+    imageModelRef,
+    imageSelectedParams,
+    selectedImageAspectRatio,
+  ]);
+
   const toDraftImages = useCallback((images: Array<{ url: string; name: string }>) => {
     return images.map((image) => ({
       url: image.url,
@@ -639,7 +884,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     openDialog(DialogType.aiImageGeneration, {
       initialPrompt: draft?.prompt || prompt,
       batchId: shotBatchId,
-      initialAspectRatio: draft?.aspectRatio ?? imageAspectRatio,
+      initialAspectRatio: draft?.aspectRatio ?? selectedImageAspectRatio,
       initialModel: imageModel || undefined,
       initialModelRef: imageModelRef,
       autoInsertToCanvas: false,
@@ -654,7 +899,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
         aspectRatio?: string;
       }) => saveShotDraft(shot.id, 'first', nextDraft),
     });
-  }, [record.id, pseudoAnalysis, pseudoProductInfo, openDialog, imageAspectRatio, imageModel, imageModelRef, saveShotDraft, toDraftImages]);
+  }, [record.id, pseudoAnalysis, pseudoProductInfo, openDialog, imageModel, imageModelRef, saveShotDraft, selectedImageAspectRatio, toDraftImages]);
 
   const getLastFrameUrl = useCallback((shot: VideoShot, index: number) => {
     if (shot.generated_last_frame_url) return shot.generated_last_frame_url;
@@ -678,7 +923,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     openDialog(DialogType.aiImageGeneration, {
       initialPrompt: draft?.prompt || prompt,
       batchId: shotBatchId,
-      initialAspectRatio: draft?.aspectRatio ?? imageAspectRatio,
+      initialAspectRatio: draft?.aspectRatio ?? selectedImageAspectRatio,
       initialModel: imageModel || undefined,
       initialModelRef: imageModelRef,
       autoInsertToCanvas: false,
@@ -693,7 +938,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
         aspectRatio?: string;
       }) => saveShotDraft(shot.id, 'last', nextDraft),
     });
-  }, [record.id, pseudoAnalysis, pseudoProductInfo, openDialog, getLastFrameUrl, imageAspectRatio, imageModel, imageModelRef, saveShotDraft, toDraftImages]);
+  }, [record.id, pseudoAnalysis, pseudoProductInfo, openDialog, getLastFrameUrl, imageModel, imageModelRef, saveShotDraft, selectedImageAspectRatio, toDraftImages]);
 
   const handleShotGenerateVideo = useCallback(async (shot: VideoShot, index: number) => {
     const prompt = buildVideoPrompt(shot, pseudoAnalysis, pseudoProductInfo);
@@ -722,12 +967,11 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
         ? initialImages
         : undefined;
 
-    const targetModelConfig = getVideoModelConfig(videoModel);
     const durationStr = String(draft?.duration ?? segmentDuration);
-    const validDuration = targetModelConfig.durationOptions.some(o => o.value === durationStr)
+    const validDuration = videoModelConfig.durationOptions.some(o => o.value === durationStr)
       ? (draft?.duration ?? segmentDuration)
       : undefined;
-    const validSize = targetModelConfig.sizeOptions.some(o => o.value === (draft?.size ?? videoSize))
+    const validSize = videoModelConfig.sizeOptions.some(o => o.value === (draft?.size ?? videoSize))
       ? (draft?.size ?? videoSize)
       : undefined;
 
@@ -747,7 +991,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
         size?: string;
       }) => saveShotDraft(shot.id, 'video', nextDraft),
     });
-  }, [record.id, pseudoAnalysis, pseudoProductInfo, segmentDuration, videoSize, videoModel, videoModelRef, openDialog, getLastFrameUrl, saveShotDraft, toDraftImages]);
+  }, [record.id, pseudoAnalysis, pseudoProductInfo, segmentDuration, videoSize, videoModel, videoModelConfig, videoModelRef, openDialog, getLastFrameUrl, saveShotDraft, toDraftImages]);
 
   const handleDeleteFrame = useCallback((shotId: string, frameType: 'first' | 'last' | 'video') => {
     const field = frameType === 'first' ? 'generated_first_frame_url'
@@ -852,11 +1096,12 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     const shotBatchId = `mv_${record.id}_shot${shot.id}_first`;
     const result = await mcpRegistry.executeTool(
       { name: 'generate_image', arguments: {
-        prompt: prompt.trim(), count: 1, size: imageAspectRatio,
+        prompt: prompt.trim(), count: 1, size: imageGenerationSize,
         referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
         batchId: shotBatchId,
         autoInsertToCanvas: false,
         ...(imageModel ? { model: imageModel, modelRef: imageModelRef } : {}),
+        ...(imageGenerationExtraParams ? { params: imageGenerationExtraParams } : {}),
       }},
       { mode: 'queue' }
     );
@@ -870,7 +1115,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
 
     const task = waitResult.task || taskQueueService.getTask(taskId);
     return task?.result?.url || null;
-  }, [record.id, pseudoAnalysis, pseudoProductInfo, imageAspectRatio, imageModel, imageModelRef]);
+  }, [record.id, pseudoAnalysis, pseudoProductInfo, imageGenerationExtraParams, imageGenerationSize, imageModel, imageModelRef]);
 
   const createBatchVideoTask = useCallback(async (
     shot: VideoShot,
@@ -882,7 +1127,10 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       return null;
     }
 
-    const firstFrameUrl = index === 0 ? refImageUrls[0] : shot.generated_first_frame_url;
+    const firstFrameUrl =
+      index === 0
+        ? refImageUrls[0] || shot.generated_first_frame_url
+        : shot.generated_first_frame_url;
     const lastFrameUrl = shot.generated_last_frame_url || currentShots[index + 1]?.generated_first_frame_url;
     const { referenceImages } = buildBatchVideoReferenceImages({
       model: videoModel,
@@ -892,23 +1140,27 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     });
 
     const shotBatchId = `mv_${record.id}_shot${shot.id}_video`;
+    const videoExtraParams = {
+      ...splitVideoParams.extraParams,
+      ...(videoModelConfig.provider === 'seedance'
+        ? { aspect_ratio: selectedVideoAspectRatio }
+        : {}),
+    };
 
     const result = await mcpRegistry.executeTool(
       {
         name: 'generate_video',
         arguments: {
           prompt,
-          size: videoSize,
-          seconds: String(segmentDuration),
+          size: splitVideoParams.size,
+          seconds: splitVideoParams.duration,
           count: 1,
           batchId: shotBatchId,
           model: videoModel,
           modelRef: videoModelRef,
           referenceImages,
           autoInsertToCanvas: false,
-          params: videoModelConfig.provider === 'seedance'
-            ? { aspect_ratio: selectedVideoAspectRatio }
-            : undefined,
+          params: Object.keys(videoExtraParams).length > 0 ? videoExtraParams : undefined,
         },
       },
       { mode: 'queue' }
@@ -927,11 +1179,10 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     pseudoProductInfo,
     refImageUrls,
     record.id,
-    segmentDuration,
+    splitVideoParams,
     videoModel,
     videoModelConfig.provider,
     videoModelRef,
-    videoSize,
     selectedVideoAspectRatio,
   ]);
 
@@ -999,10 +1250,11 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
             { name: 'generate_image', arguments: {
               prompt: `${stylePrefix}${char.description}`,
               count: 1,
-              size: '1:1',
+              size: imageGenerationSize,
               batchId: charBatchId,
               autoInsertToCanvas: false,
               ...(imageModel ? { model: imageModel, modelRef: imageModelRef } : {}),
+              ...(imageGenerationExtraParams ? { params: imageGenerationExtraParams } : {}),
             }},
             { mode: 'queue' }
           );
@@ -1168,6 +1420,8 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     applyRecordPatch,
     record.id,
     imageModel,
+    imageGenerationExtraParams,
+    imageGenerationSize,
     imageModelRef,
     insertGeneratedVideoToCanvas,
     insertGeneratedVideosToCanvas,
@@ -1176,10 +1430,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   ]);
 
   const handleResetAllGenerated = useCallback(async () => {
-    const resetResult = buildMVResetPayload(record, shots);
+    const resetResult = buildMVResetPayload(
+      latestRecordRef.current,
+      latestShotsRef.current
+    );
     await applyUpdatedShots(resetResult.shots);
     await applyRecordPatch({ characters: resetResult.characters });
-  }, [shots, record.characters, applyUpdatedShots, applyRecordPatch]);
+  }, [applyUpdatedShots, applyRecordPatch]);
 
   const thumbStyle = useMemo(() => {
     const [w, h] = selectedVideoAspectRatio.split(':').map(Number);
@@ -1224,35 +1481,30 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
             <ModelDropdown variant="form" selectedModel={imageModel}
               selectedSelectionKey={getSelectionKey(imageModel, imageModelRef)}
               onSelect={setImageModel} models={imageModels} placement="down" placeholder="选择图片模型" />
+            {compatibleImageParams.length > 0 && (
+              <ParametersDropdown
+                selectedParams={imageSelectedParams}
+                onParamChange={handleImageParamChange}
+                compatibleParams={compatibleImageParams}
+                modelId={imageModel}
+                placement="down"
+              />
+            )}
           </div>
           <div className="va-model-select">
             <label className="va-model-label">视频模型</label>
             <ModelDropdown variant="form" selectedModel={videoModel}
               selectedSelectionKey={getSelectionKey(videoModel, videoModelRef)}
               onSelect={setVideoModel} models={videoModels} placement="down" placeholder="选择视频模型" />
-            <div className="va-segment-duration-select">
-              <label className="va-model-label">单段</label>
-              <select className="va-form-select" value={String(segmentDuration)}
-                onChange={e => handleSegmentDurationChange(parseInt(e.target.value, 10))}
-                disabled={durationOptions.length <= 1}>
-                {durationOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="va-segment-duration-select">
-              <label className="va-model-label">尺寸</label>
-              <select
-                className="va-form-select"
-                value={videoSize}
-                onChange={e => handleVideoSizeChange(e.target.value)}
-                disabled={sizeOptions.length <= 1}
-              >
-                {sizeOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
+            {compatibleVideoParams.length > 0 && (
+              <ParametersDropdown
+                selectedParams={videoSelectedParams}
+                onParamChange={handleVideoParamChange}
+                compatibleParams={compatibleVideoParams}
+                modelId={videoModel}
+                placement="down"
+              />
+            )}
           </div>
         </div>
         {batchVideoState.running && (

@@ -374,9 +374,7 @@ async function mergeVideosWithMediaRecorder(
 class VideoMergeWebCodecsService {
   private static instance: VideoMergeWebCodecsService;
 
-  private constructor() {
-    checkWebCodecsSupport();
-  }
+  private constructor() {}
 
   static getInstance(): VideoMergeWebCodecsService {
     if (!VideoMergeWebCodecsService.instance) {
@@ -408,6 +406,8 @@ class VideoMergeWebCodecsService {
         duration: 0,
       };
     }
+
+    checkWebCodecsSupport();
 
     try {
       // 下载所有视频

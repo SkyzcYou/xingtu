@@ -145,10 +145,7 @@ describe('provider routing', () => {
         profileId: 'provider-a',
         modelId: 'gpt-image-2',
       },
-      preferredRequestSchema: [
-        'missing.schema',
-        'openai.image.gpt-edit-form',
-      ],
+      preferredRequestSchema: ['missing.schema', 'openai.image.gpt-edit-form'],
     });
     const fallbackPlan = planner.plan({
       operation: 'image',
@@ -628,6 +625,34 @@ describe('provider routing', () => {
     ]);
   });
 
+  it('infers HappyHorse video JSON bindings before generic video routing', () => {
+    const bindings = inferBindingsForProviderModel(
+      {
+        id: 'provider-happyhorse',
+        name: 'HappyHorse Provider',
+        providerType: 'openai-compatible',
+        baseUrl: 'https://vexrouter.com/v1',
+        apiKey: 'key-a',
+        authType: 'bearer',
+      },
+      {
+        id: 'happyhorse-1.0-r2v',
+        label: 'HappyHorse R2V',
+        type: 'video',
+        vendor: ModelVendor.OTHER,
+      }
+    );
+
+    expect(bindings.map((binding) => binding.protocol)).toEqual([
+      'happyhorse.video',
+      'openai.async.video',
+    ]);
+    expect(bindings[0]?.requestSchema).toBe('happyhorse.video.json');
+    expect(bindings[0]?.metadata?.video?.downloadPathTemplate).toBe(
+      '/videos/{taskId}/content'
+    );
+  });
+
   it('infers trim-v1 transport for suno audio bindings', () => {
     const [binding] = inferBindingsForProviderModel(
       {
@@ -760,6 +785,34 @@ describe('provider routing', () => {
     expect(binding?.protocol).toBe('google.generateContent');
     expect(supportsTextBindingImageInput(binding)).toBe(true);
     expect(getTextBindingMaxImageCount(binding)).toBe(6);
+  });
+
+  it('routes tuzi gemini text models through google generateContent', () => {
+    const bindings = inferBindingsForProviderModel(
+      {
+        id: 'provider-tuzi',
+        name: 'Tuzi Provider',
+        providerType: 'openai-compatible',
+        baseUrl: 'https://api.tu-zi.com/v1',
+        apiKey: 'key',
+        authType: 'bearer',
+      },
+      {
+        id: 'gemini-3.1-pro-preview-thinking',
+        label: 'Gemini 3.1 Pro Preview Thinking',
+        type: 'text',
+        vendor: ModelVendor.GOOGLE,
+      }
+    );
+
+    expect(bindings[0]?.protocol).toBe('google.generateContent');
+    expect(bindings[0]?.requestSchema).toBe(
+      'google.generate-content.chat-basic'
+    );
+    expect(bindings[0]?.baseUrlStrategy).toBe('trim-v1');
+    expect(
+      bindings.some((binding) => binding.protocol === 'openai.chat.completions')
+    ).toBe(true);
   });
 
   it('defaults openai chat bindings to image-capable input mode', () => {

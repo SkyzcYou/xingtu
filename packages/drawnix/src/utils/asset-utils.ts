@@ -9,8 +9,11 @@ import type {
   AssetType,
   FilterState,
   FilteredAssetsResult,
-  AssetSource,
 } from '../types/asset.types';
+
+type SearchableAsset = Asset & {
+  title?: string;
+};
 
 /**
  * Validate Asset Name
@@ -64,6 +67,36 @@ export function getAssetType(mimeType: string): AssetType | null {
   return null;
 }
 
+function normalizeSearchText(value: string | undefined): string {
+  return value?.trim().toLowerCase() || '';
+}
+
+/**
+ * Match Asset Search Query
+ * 按标题/提示词模糊匹配素材搜索关键词
+ */
+export function matchesAssetSearchQuery(
+  asset: Asset,
+  searchQuery: string | undefined,
+): boolean {
+  const tokens = normalizeSearchText(searchQuery).split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return true;
+  }
+
+  const searchableAsset = asset as SearchableAsset;
+  const searchableText = [
+    searchableAsset.name,
+    searchableAsset.title,
+    searchableAsset.prompt,
+  ]
+    .map(normalizeSearchText)
+    .filter(Boolean)
+    .join(' ');
+
+  return tokens.every((token) => searchableText.includes(token));
+}
+
 /**
  * Filter Assets
  * 筛选和排序素材
@@ -87,9 +120,7 @@ export function filterAssets(
         asset.source === (filters.activeSource as any);
 
       // Search filter
-      const matchesSearch =
-        !filters.searchQuery ||
-        asset.name.toLowerCase().includes(filters.searchQuery.toLowerCase());
+      const matchesSearch = matchesAssetSearchQuery(asset, filters.searchQuery);
 
       return matchesType && matchesSource && matchesSearch;
     })

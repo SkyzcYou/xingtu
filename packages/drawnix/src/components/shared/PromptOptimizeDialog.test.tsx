@@ -316,7 +316,28 @@ describe('PromptOptimizeDialog', () => {
 
     expect(getByLabelText('当前提示词').value).toBe('');
     expect(getOptimizeButton().disabled).toBe(true);
-    expect(queryButton('回填')).toBeNull();
+    expect(queryButton('回填')).not.toBeNull();
+    expect(getButton('回填').disabled).toBe(true);
+    expect(mocks.generateText).not.toHaveBeenCalled();
+  });
+
+  it('fills back the current prompt before an optimized draft exists', () => {
+    const { onApply, onOpenChange } = renderDialog();
+
+    expect(() => getByLabelText('优化结果草稿')).toThrow();
+    expect(getButton('回填').disabled).toBe(false);
+
+    act(() => {
+      changeTextarea(getByLabelText('当前提示词'), '人工修改后的提示词');
+    });
+
+    act(() => {
+      getButton('回填').click();
+    });
+
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply).toHaveBeenCalledWith('人工修改后的提示词');
+    expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(mocks.generateText).not.toHaveBeenCalled();
   });
 

@@ -1,6 +1,7 @@
 import { cleanup, render, waitFor } from '@testing-library/react';
 import {
   PlaitElement,
+  clearSelectedElement,
   getSelectedElements,
   initializeViewBox,
   initializeViewportContainer,
@@ -34,6 +35,7 @@ vi.mock('@plait/core', async () => {
       getElementRef: vi.fn(actual.PlaitElement.getElementRef),
     },
     getSelectedElements: vi.fn(actual.getSelectedElements),
+    clearSelectedElement: vi.fn(actual.clearSelectedElement),
     initializeViewportContainer: vi.fn(),
     initializeViewBox: vi.fn(),
     initializeViewportOffset: vi.fn(),
@@ -65,6 +67,7 @@ const mockedInitializeViewportContainer = vi.mocked(
 const mockedInitializeViewBox = vi.mocked(initializeViewBox);
 const mockedUpdateViewportOffset = vi.mocked(updateViewportOffset);
 const mockedGetSelectedElements = vi.mocked(getSelectedElements);
+const mockedClearSelectedElement = vi.mocked(clearSelectedElement);
 const mockedGetElementRef = vi.mocked(PlaitElement.getElementRef);
 
 const renderBoard = (
@@ -123,9 +126,9 @@ describe('ReactBoard', () => {
     expect(
       mockedInitializeViewportContainer.mock.invocationCallOrder[0]
     ).toBeLessThan(mockedInitializeViewBox.mock.invocationCallOrder[0]);
-    expect(
-      mockedInitializeViewBox.mock.invocationCallOrder[0]
-    ).toBeLessThan(mockedUpdateViewportOffset.mock.invocationCallOrder[0]);
+    expect(mockedInitializeViewBox.mock.invocationCallOrder[0]).toBeLessThan(
+      mockedUpdateViewportOffset.mock.invocationCallOrder[0]
+    );
   });
 
   it('clears stale history after replacing value props', async () => {
@@ -165,6 +168,35 @@ describe('ReactBoard', () => {
     });
     expect(board!.history.redos).toHaveLength(0);
     expect(() => board!.undo()).not.toThrow();
+  });
+
+  it('clears stale selection state after replacing value props', async () => {
+    const initialValue: PlaitElement[] = [];
+    const restoredValue: PlaitElement[] = [];
+    let board: PlaitBoard | null = null;
+
+    const { rerender } = render(
+      renderBoard(initialValue, undefined, (initializedBoard) => {
+        board = initializedBoard;
+      })
+    );
+
+    await waitFor(() => {
+      expect(board).not.toBeNull();
+    });
+
+    board!.selection = {
+      anchor: [0, 0],
+      focus: [10, 10],
+    };
+
+    vi.clearAllMocks();
+    rerender(renderBoard(restoredValue));
+
+    await waitFor(() => {
+      expect(mockedClearSelectedElement).toHaveBeenCalledWith(board);
+    });
+    expect(board!.selection).toBeNull();
   });
 
   it('syncs the viewport container when only the viewport prop changes', async () => {
@@ -267,5 +299,46 @@ describe('ReactBoard', () => {
       expect(mockedInitializeViewportContainer).toHaveBeenCalledTimes(1);
     });
     expect(mockedGetElementRef).not.toHaveBeenCalled();
+  });
+
+  it('ignores paste events from editable targets', async () => {
+    const value: PlaitElement[] = [];
+    let board: PlaitBoard | null = null;
+    const insertFragment = vi.fn();
+    const textarea = document.createElement('textarea');
+    document.body.appendChild(textarea);
+
+    render(
+      renderBoard(value, undefined, (initializedBoard) => {
+        board = initializedBoard;
+      })
+    );
+
+    await waitFor(() => {
+      expect(board).not.toBeNull();
+    });
+    if (!board) {
+      throw new Error('Board was not initialized');
+    }
+
+    board.selection = {
+      anchor: [0, 0],
+      focus: [0, 0],
+    };
+    board.insertFragment = insertFragment;
+
+    const pasteEvent = new Event('paste', {
+      bubbles: true,
+      cancelable: true,
+    }) as ClipboardEvent;
+    Object.defineProperty(pasteEvent, 'clipboardData', {
+      value: { getData: vi.fn().mockReturnValue('pasted prompt') },
+    });
+
+    textarea.dispatchEvent(pasteEvent);
+    await Promise.resolve();
+
+    expect(insertFragment).not.toHaveBeenCalled();
+    textarea.remove();
   });
 });

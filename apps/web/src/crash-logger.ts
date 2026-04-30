@@ -178,6 +178,13 @@ function isExpectedBrowserCapabilityError(
   }
 
   if (
+    message.includes('WebCodecs API') &&
+    (message.includes('Chrome 94+') || message.includes('Edge 94+'))
+  ) {
+    return true;
+  }
+
+  if (
     isAbortError &&
     (message.includes('The user aborted a request') ||
       message.includes("Failed to execute 'showOpenFilePicker'") ||

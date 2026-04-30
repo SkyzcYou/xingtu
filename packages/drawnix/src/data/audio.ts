@@ -1,7 +1,6 @@
 import {
   PlaitBoard,
   Point,
-  getRectangleByElements,
 } from '@plait/core';
 import { getFileExtension } from '@aitu/utils';
 import type { DataURL } from '../types';
@@ -14,6 +13,8 @@ import { analytics } from '../utils/posthog-analytics';
 import { cacheRemoteUrl } from '../services/media-executor/fallback-utils';
 import { isVirtualMediaUrl } from '../utils/virtual-media-url';
 import { createHash, getAudioCacheKeySeed } from './audio-cache-key';
+import { getInsertionPointFromSavedSelection } from '../utils/canvas-insertion-layout';
+import { svgToDataUrl } from '../utils/svg-utils';
 import {
   AUDIO_NODE_DEFAULT_HEIGHT,
   AUDIO_NODE_DEFAULT_WIDTH,
@@ -125,36 +126,6 @@ interface AudioImageElement {
   audioProviderTaskId?: string;
   audioClipId?: string;
   audioClipIds?: string[];
-}
-
-function getInsertionPointFromSavedSelection(
-  board: PlaitBoard,
-  cardWidth: number
-): Point | undefined {
-  const appState = (board as any).appState;
-  const savedElementIds = appState?.lastSelectedElementIds || [];
-
-  if (savedElementIds.length === 0) {
-    return undefined;
-  }
-
-  const elements = savedElementIds
-    .map((id: string) => board.children.find((el: any) => el.id === id))
-    .filter(Boolean);
-
-  if (elements.length === 0) {
-    return undefined;
-  }
-
-  try {
-    const boundingRect = getRectangleByElements(board, elements, false);
-    const centerX = boundingRect.x + boundingRect.width / 2;
-    const insertionY = boundingRect.y + boundingRect.height + 50;
-    return [centerX - cardWidth / 2, insertionY] as Point;
-  } catch (error) {
-    console.warn('[audio] Failed to calculate insertion point from saved selection:', error);
-    return undefined;
-  }
 }
 
 function blobToDataUrl(blob: Blob): Promise<DataURL> {
@@ -353,13 +324,6 @@ function buildAudioCardSvg(
   `.trim();
 }
 
-function svgToDataUrl(svg: string): DataURL {
-  const encoded = encodeURIComponent(svg)
-    .replace(/'/g, '%27')
-    .replace(/"/g, '%22');
-  return `data:image/svg+xml,${encoded}` as DataURL;
-}
-
 function isLegacyAudioImageElement(element: any): element is AudioImageElement {
   if (!element) {
     return false;
@@ -429,7 +393,7 @@ export async function buildAudioImageElement(
   const svg = buildAudioCardSvg({ ...metadata, width, height }, artworkDataUrl);
 
   return {
-    url: svgToDataUrl(svg),
+    url: svgToDataUrl(svg) as DataURL,
     width,
     height,
     isAudio: true,
@@ -482,7 +446,11 @@ export async function insertAudioFromUrl(
   let insertionPoint = startPoint;
 
   if (!startPoint && !isDrop) {
-    insertionPoint = getInsertionPointFromSavedSelection(board, width);
+    insertionPoint = getInsertionPointFromSavedSelection(board, {
+      align: 'center',
+      targetWidth: width,
+      logPrefix: 'audio',
+    });
 
     if (!insertionPoint) {
       const calculatedPoint = getInsertionPointForSelectedElements(board);

@@ -13,6 +13,7 @@ import { useConfirmDialog } from '../dialog/ConfirmDialog';
 import {
   backupRestoreService,
   BackupOptions,
+  ImportOptions,
   ImportResult,
   BackupWorkspaceState,
   ExportResult,
@@ -63,8 +64,15 @@ export const BackupRestoreDialog = ({
     includeProjects: true,
     includeAssets: true,
     includeKnowledgeBase: true,
+    includeEnvironment: true,
+    includeSecrets: false,
+    encryptionPassword: '',
     timeRangeStart: null,
     timeRangeEnd: null,
+  });
+  const [importOptions, setImportOptions] = useState<ImportOptions>({
+    mode: 'merge',
+    encryptionPassword: '',
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -142,8 +150,9 @@ export const BackupRestoreDialog = ({
       // 如果有导入结果且导入了任务数据，刷新页面以确保任务队列生效
       if (
         importResult &&
-        importResult.tasks &&
-        importResult.tasks.imported > 0
+        ((importResult.tasks && importResult.tasks.imported > 0) ||
+          importResult.mode === 'replace' ||
+          (importResult.environment?.imported || 0) > 0)
       ) {
         void safeReload();
         return;
@@ -169,9 +178,14 @@ export const BackupRestoreDialog = ({
       !backupOptions.includePrompts &&
       !backupOptions.includeProjects &&
       !backupOptions.includeAssets &&
-      !backupOptions.includeKnowledgeBase
+      !backupOptions.includeKnowledgeBase &&
+      !backupOptions.includeEnvironment
     ) {
       MessagePlugin.warning('请至少选择一项要备份的内容');
+      return;
+    }
+    if (backupOptions.includeSecrets && !backupOptions.encryptionPassword?.trim()) {
+      MessagePlugin.warning('包含敏感配置时需要输入备份密码');
       return;
     }
     if (
@@ -186,10 +200,22 @@ export const BackupRestoreDialog = ({
     setIsProcessing(true);
     setProgress(0);
     setProgressMessage('正在准备...');
+    const isCompleteSelection =
+      backupOptions.includePrompts &&
+      backupOptions.includeProjects &&
+      backupOptions.includeAssets &&
+      backupOptions.includeKnowledgeBase &&
+      !!backupOptions.includeEnvironment &&
+      !backupOptions.timeRangeStart &&
+      !backupOptions.timeRangeEnd;
+    const exportOptions: BackupOptions = {
+      ...backupOptions,
+      mode: isCompleteSelection ? 'complete' : 'incremental',
+    };
 
     try {
       const result: ExportResult = await backupRestoreService.exportToZip(
-        backupOptions,
+        exportOptions,
         (p, msg) => {
           setProgress(p);
           setProgressMessage(msg);
@@ -223,6 +249,18 @@ export const BackupRestoreDialog = ({
         return;
       }
 
+      if (importOptions.mode === 'replace') {
+        const confirmed = await confirm({
+          title: '覆盖恢复',
+          description: '覆盖恢复会先清空备份中包含的数据域，再写入备份内容。',
+          confirmText: '覆盖恢复',
+          cancelText: '取消',
+        });
+        if (!confirmed) {
+          return;
+        }
+      }
+
       setIsProcessing(true);
       setProgress(0);
       setProgressMessage('正在保存当前画板...');
@@ -240,7 +278,8 @@ export const BackupRestoreDialog = ({
           (p, msg) => {
             setProgress(p);
             setProgressMessage(msg);
-          }
+          },
+          importOptions
         );
 
         setImportResult(result);
@@ -266,12 +305,27 @@ export const BackupRestoreDialog = ({
         }
       }
     },
-    [onBeforeImport]
+    [confirm, importOptions, onBeforeImport]
   );
 
   const handleOptionChange = useCallback(
     (key: keyof BackupOptions, checked: boolean) => {
-      setBackupOptions((prev) => ({ ...prev, [key]: checked }));
+      setBackupOptions((prev) => {
+        const next = {
+          ...prev,
+          [key]: checked,
+        };
+
+        if (key === 'includeSecrets' && checked) {
+          next.includeEnvironment = true;
+        }
+
+        if (key === 'includeEnvironment' && !checked) {
+          next.includeSecrets = false;
+        }
+
+        return next;
+      });
     },
     []
   );
@@ -312,124 +366,180 @@ export const BackupRestoreDialog = ({
         {/* 备份面板 */}
         {activeTab === 'backup' && (
           <div className="backup-restore-dialog__panel">
-            <p className="backup-restore-dialog__description">
-              选择要备份的内容，将导出为 ZIP 压缩包：
-            </p>
+            <div className="backup-restore-dialog__body">
+              <p className="backup-restore-dialog__description">
+                选择要备份的内容，将导出为 ZIP 压缩包：
+              </p>
 
-            <div className="backup-restore-dialog__options">
-              <Checkbox
-                checked={backupOptions.includePrompts}
-                onChange={(checked) =>
-                  handleOptionChange('includePrompts', checked as boolean)
-                }
-                disabled={isProcessing}
-              >
-                <div className="backup-restore-dialog__option-content">
-                  <span className="backup-restore-dialog__option-title">
-                    提示词
-                  </span>
-                  <span className="backup-restore-dialog__option-desc">
-                    包含图片和视频生成的历史提示词
-                  </span>
-                </div>
-              </Checkbox>
+              <div className="backup-restore-dialog__options">
+                <Checkbox
+                  checked={backupOptions.includePrompts}
+                  onChange={(checked) =>
+                    handleOptionChange('includePrompts', checked as boolean)
+                  }
+                  disabled={isProcessing}
+                >
+                  <div className="backup-restore-dialog__option-content">
+                    <span className="backup-restore-dialog__option-title">
+                      提示词
+                    </span>
+                    <span className="backup-restore-dialog__option-desc">
+                      包含图片和视频生成的历史提示词
+                    </span>
+                  </div>
+                </Checkbox>
 
-              <Checkbox
-                checked={backupOptions.includeProjects}
-                onChange={(checked) =>
-                  handleOptionChange('includeProjects', checked as boolean)
-                }
-                disabled={isProcessing}
-              >
-                <div className="backup-restore-dialog__option-content">
-                  <span className="backup-restore-dialog__option-title">
-                    项目
-                  </span>
-                  <span className="backup-restore-dialog__option-desc">
-                    包含所有文件夹和画板
-                  </span>
-                </div>
-              </Checkbox>
+                <Checkbox
+                  checked={backupOptions.includeProjects}
+                  onChange={(checked) =>
+                    handleOptionChange('includeProjects', checked as boolean)
+                  }
+                  disabled={isProcessing}
+                >
+                  <div className="backup-restore-dialog__option-content">
+                    <span className="backup-restore-dialog__option-title">
+                      项目
+                    </span>
+                    <span className="backup-restore-dialog__option-desc">
+                      包含所有文件夹和画板
+                    </span>
+                  </div>
+                </Checkbox>
 
-              <Checkbox
-                checked={backupOptions.includeAssets}
-                onChange={(checked) =>
-                  handleOptionChange('includeAssets', checked as boolean)
-                }
-                disabled={isProcessing}
-              >
-                <div className="backup-restore-dialog__option-content">
-                  <span className="backup-restore-dialog__option-title">
-                    素材库
-                  </span>
-                  <span className="backup-restore-dialog__option-desc">
-                    包含所有本地上传的图片、视频和音频
-                  </span>
-                </div>
-              </Checkbox>
+                <Checkbox
+                  checked={backupOptions.includeAssets}
+                  onChange={(checked) =>
+                    handleOptionChange('includeAssets', checked as boolean)
+                  }
+                  disabled={isProcessing}
+                >
+                  <div className="backup-restore-dialog__option-content">
+                    <span className="backup-restore-dialog__option-title">
+                      素材库
+                    </span>
+                    <span className="backup-restore-dialog__option-desc">
+                      包含所有本地上传的图片、视频和音频
+                    </span>
+                  </div>
+                </Checkbox>
 
-              <Checkbox
-                checked={backupOptions.includeKnowledgeBase}
-                onChange={(checked) =>
-                  handleOptionChange('includeKnowledgeBase', checked as boolean)
-                }
-                disabled={isProcessing}
-              >
-                <div className="backup-restore-dialog__option-content">
-                  <span className="backup-restore-dialog__option-title">
-                    知识库
-                  </span>
-                  <span className="backup-restore-dialog__option-desc">
-                    包含所有目录、笔记和标签
-                  </span>
-                </div>
-              </Checkbox>
-            </div>
+                <Checkbox
+                  checked={backupOptions.includeKnowledgeBase}
+                  onChange={(checked) =>
+                    handleOptionChange(
+                      'includeKnowledgeBase',
+                      checked as boolean
+                    )
+                  }
+                  disabled={isProcessing}
+                >
+                  <div className="backup-restore-dialog__option-content">
+                    <span className="backup-restore-dialog__option-title">
+                      知识库
+                    </span>
+                    <span className="backup-restore-dialog__option-desc">
+                      包含所有目录、笔记和标签
+                    </span>
+                  </div>
+                </Checkbox>
 
-            <div className="backup-restore-dialog__time-range">
-              <div className="backup-restore-dialog__time-range-title">
-                素材导出时间范围（可选）
+                <Checkbox
+                  checked={!!backupOptions.includeEnvironment}
+                  onChange={(checked) =>
+                    handleOptionChange('includeEnvironment', checked as boolean)
+                  }
+                  disabled={isProcessing}
+                >
+                  <div className="backup-restore-dialog__option-content">
+                    <span className="backup-restore-dialog__option-title">
+                      环境
+                    </span>
+                    <span className="backup-restore-dialog__option-desc">
+                      包含聊天、歌单、角色、工作流、偏好和外部 Skill
+                    </span>
+                  </div>
+                </Checkbox>
+
+                <Checkbox
+                  checked={!!backupOptions.includeSecrets}
+                  onChange={(checked) =>
+                    handleOptionChange('includeSecrets', checked as boolean)
+                  }
+                  disabled={isProcessing}
+                >
+                  <div className="backup-restore-dialog__option-content">
+                    <span className="backup-restore-dialog__option-title">
+                      敏感配置
+                    </span>
+                    <span className="backup-restore-dialog__option-desc">
+                      加密导出 API Key、Provider Profile 和同步凭据
+                    </span>
+                  </div>
+                </Checkbox>
               </div>
-              <div className="backup-restore-dialog__time-range-row">
-                <label className="backup-restore-dialog__time-range-field">
-                  <span>开始时间</span>
+
+              {backupOptions.includeSecrets && (
+                <label className="backup-restore-dialog__password-field">
+                  <span>备份密码</span>
                   <input
-                    type="datetime-local"
-                    value={toInputDateTime(backupOptions.timeRangeStart)}
+                    type="password"
+                    value={backupOptions.encryptionPassword || ''}
                     disabled={isProcessing}
                     onChange={(e) =>
                       setBackupOptions((prev) => ({
                         ...prev,
-                        timeRangeStart: fromInputDateTime(e.target.value),
+                        encryptionPassword: e.target.value,
                       }))
                     }
                   />
                 </label>
-                <label className="backup-restore-dialog__time-range-field">
-                  <span>结束时间</span>
-                  <input
-                    type="datetime-local"
-                    value={toInputDateTime(backupOptions.timeRangeEnd)}
-                    disabled={isProcessing}
-                    onChange={(e) =>
-                      setBackupOptions((prev) => ({
-                        ...prev,
-                        timeRangeEnd: fromInputDateTime(e.target.value),
-                      }))
-                    }
-                  />
-                </label>
-              </div>
-            </div>
+              )}
 
-            {isProcessing && (
-              <div className="backup-restore-dialog__progress">
-                <Progress percentage={progress} theme="line" />
-                <span className="backup-restore-dialog__progress-text">
-                  {progressMessage}
-                </span>
+              <div className="backup-restore-dialog__time-range">
+                <div className="backup-restore-dialog__time-range-title">
+                  素材导出时间范围（可选）
+                </div>
+                <div className="backup-restore-dialog__time-range-row">
+                  <label className="backup-restore-dialog__time-range-field">
+                    <span>开始时间</span>
+                    <input
+                      type="datetime-local"
+                      value={toInputDateTime(backupOptions.timeRangeStart)}
+                      disabled={isProcessing}
+                      onChange={(e) =>
+                        setBackupOptions((prev) => ({
+                          ...prev,
+                          timeRangeStart: fromInputDateTime(e.target.value),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="backup-restore-dialog__time-range-field">
+                    <span>结束时间</span>
+                    <input
+                      type="datetime-local"
+                      value={toInputDateTime(backupOptions.timeRangeEnd)}
+                      disabled={isProcessing}
+                      onChange={(e) =>
+                        setBackupOptions((prev) => ({
+                          ...prev,
+                          timeRangeEnd: fromInputDateTime(e.target.value),
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
               </div>
-            )}
+
+              {isProcessing && (
+                <div className="backup-restore-dialog__progress">
+                  <Progress percentage={progress} theme="line" />
+                  <span className="backup-restore-dialog__progress-text">
+                    {progressMessage}
+                  </span>
+                </div>
+              )}
+            </div>
 
             <div className="backup-restore-dialog__actions">
               <button
@@ -453,96 +563,174 @@ export const BackupRestoreDialog = ({
         {/* 恢复面板 */}
         {activeTab === 'restore' && (
           <div className="backup-restore-dialog__panel">
-            <p className="backup-restore-dialog__description">
-              选择备份文件进行恢复，数据将增量导入（不会覆盖现有内容）：
-            </p>
+            <div className="backup-restore-dialog__body">
+              <p className="backup-restore-dialog__description">
+                选择恢复方式，再选择备份文件：
+              </p>
 
-            <div
-              className="backup-restore-dialog__dropzone"
-              onClick={handleFileSelect}
-            >
-              <UploadIcon className="backup-restore-dialog__dropzone-icon" />
-              <span className="backup-restore-dialog__dropzone-text">
-                点击选择备份文件 (.zip)
-              </span>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".zip"
-                onChange={handleFileChange}
-                style={{ display: 'none' }}
-              />
-            </div>
+              <div className="backup-restore-dialog__mode-group">
+                <button
+                  type="button"
+                  className={`backup-restore-dialog__mode ${
+                    importOptions.mode === 'merge'
+                      ? 'backup-restore-dialog__mode--active'
+                      : ''
+                  }`}
+                  aria-pressed={importOptions.mode === 'merge'}
+                  onClick={() =>
+                    setImportOptions((prev) => ({ ...prev, mode: 'merge' }))
+                  }
+                  disabled={isProcessing}
+                >
+                  <span className="backup-restore-dialog__mode-title">
+                    合并恢复
+                  </span>
+                  <span className="backup-restore-dialog__mode-desc">
+                    合并到当前环境，不清空现有数据
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`backup-restore-dialog__mode ${
+                    importOptions.mode === 'replace'
+                      ? 'backup-restore-dialog__mode--active'
+                      : ''
+                  }`}
+                  aria-pressed={importOptions.mode === 'replace'}
+                  onClick={() =>
+                    setImportOptions((prev) => ({ ...prev, mode: 'replace' }))
+                  }
+                  disabled={isProcessing}
+                >
+                  <span className="backup-restore-dialog__mode-title">
+                    覆盖恢复
+                  </span>
+                  <span className="backup-restore-dialog__mode-desc">
+                    先清空备份域，再按备份一比一还原
+                  </span>
+                </button>
+              </div>
 
-            {isProcessing && (
-              <div className="backup-restore-dialog__progress">
-                <Progress percentage={progress} theme="line" />
-                <span className="backup-restore-dialog__progress-text">
-                  {progressMessage}
+              <label className="backup-restore-dialog__password-field">
+                <span>备份密码</span>
+                <input
+                  type="password"
+                  value={importOptions.encryptionPassword || ''}
+                  disabled={isProcessing}
+                  onChange={(e) =>
+                    setImportOptions((prev) => ({
+                      ...prev,
+                      encryptionPassword: e.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <div
+                className="backup-restore-dialog__dropzone"
+                onClick={handleFileSelect}
+              >
+                <UploadIcon className="backup-restore-dialog__dropzone-icon" />
+                <span className="backup-restore-dialog__dropzone-text">
+                  点击选择备份文件 (.zip)
                 </span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".zip"
+                  onChange={handleFileChange}
+                  style={{ display: 'none' }}
+                />
               </div>
-            )}
 
-            {importResult && (
-              <div className="backup-restore-dialog__result">
-                <h4 className="backup-restore-dialog__result-title">
-                  {importResult.success ? '导入完成' : '导入完成（有错误）'}
-                </h4>
-                <ul className="backup-restore-dialog__result-list">
-                  {(importResult.prompts.imported > 0 ||
-                    importResult.prompts.skipped > 0) && (
-                    <li>
-                      提示词：导入 {importResult.prompts.imported} 条，跳过{' '}
-                      {importResult.prompts.skipped} 条
-                    </li>
-                  )}
-                  {(importResult.projects.folders > 0 ||
-                    importResult.projects.boards > 0 ||
-                    importResult.projects.merged > 0) && (
-                    <li>
-                      项目：导入 {importResult.projects.folders} 个文件夹，
-                      {importResult.projects.boards} 个画板
-                      {importResult.projects.merged > 0 &&
-                        `，合并 ${importResult.projects.merged} 个画板`}
-                    </li>
-                  )}
-                  {(importResult.assets.imported > 0 ||
-                    importResult.assets.skipped > 0) && (
-                    <li>
-                      素材：导入 {importResult.assets.imported} 个，跳过{' '}
-                      {importResult.assets.skipped} 个
-                    </li>
-                  )}
-                  {importResult.knowledgeBase &&
-                    (importResult.knowledgeBase.notes > 0 ||
-                      importResult.knowledgeBase.directories > 0) && (
+              {isProcessing && (
+                <div className="backup-restore-dialog__progress">
+                  <Progress percentage={progress} theme="line" />
+                  <span className="backup-restore-dialog__progress-text">
+                    {progressMessage}
+                  </span>
+                </div>
+              )}
+
+              {importResult && (
+                <div className="backup-restore-dialog__result">
+                  <h4 className="backup-restore-dialog__result-title">
+                    {importResult.success ? '导入完成' : '导入完成（有错误）'}
+                  </h4>
+                  <ul className="backup-restore-dialog__result-list">
+                    {(importResult.prompts.imported > 0 ||
+                      importResult.prompts.skipped > 0) && (
                       <li>
-                        知识库：导入 {importResult.knowledgeBase.directories}{' '}
-                        个目录，{importResult.knowledgeBase.notes} 篇笔记，
-                        {importResult.knowledgeBase.tags} 个标签
+                        提示词：导入 {importResult.prompts.imported} 条，跳过{' '}
+                        {importResult.prompts.skipped} 条
                       </li>
                     )}
-                  {importResult.tasks &&
-                    (importResult.tasks.imported > 0 ||
-                      importResult.tasks.skipped > 0) && (
+                    {(importResult.projects.folders > 0 ||
+                      importResult.projects.boards > 0 ||
+                      importResult.projects.merged > 0) && (
                       <li>
-                        任务：导入 {importResult.tasks.imported} 个，跳过{' '}
-                        {importResult.tasks.skipped} 个
+                        项目：导入 {importResult.projects.folders} 个文件夹，
+                        {importResult.projects.boards} 个画板
+                        {importResult.projects.merged > 0 &&
+                          `，合并 ${importResult.projects.merged} 个画板`}
                       </li>
                     )}
-                </ul>
-                {importResult.errors.length > 0 && (
-                  <div className="backup-restore-dialog__result-errors">
-                    <strong>错误信息：</strong>
-                    <ul>
-                      {importResult.errors.map((err, i) => (
-                        <li key={i}>{err}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
+                    {(importResult.assets.imported > 0 ||
+                      importResult.assets.skipped > 0) && (
+                      <li>
+                        素材：导入 {importResult.assets.imported} 个，跳过{' '}
+                        {importResult.assets.skipped} 个
+                      </li>
+                    )}
+                    {importResult.knowledgeBase &&
+                      (importResult.knowledgeBase.notes > 0 ||
+                        importResult.knowledgeBase.directories > 0) && (
+                        <li>
+                          知识库：导入 {importResult.knowledgeBase.directories}{' '}
+                          个目录，{importResult.knowledgeBase.notes} 篇笔记，
+                          {importResult.knowledgeBase.tags} 个标签
+                        </li>
+                      )}
+                    {importResult.tasks &&
+                      (importResult.tasks.imported > 0 ||
+                        importResult.tasks.skipped > 0) && (
+                        <li>
+                          任务：导入 {importResult.tasks.imported} 个，跳过{' '}
+                          {importResult.tasks.skipped} 个
+                        </li>
+                      )}
+                    {importResult.environment &&
+                      (importResult.environment.imported > 0 ||
+                        importResult.environment.skipped > 0) && (
+                        <li>
+                          环境：恢复 {importResult.environment.imported}{' '}
+                          项，跳过 {importResult.environment.skipped} 项
+                        </li>
+                      )}
+                  </ul>
+                  {importResult.warnings.length > 0 && (
+                    <div className="backup-restore-dialog__result-warnings">
+                      <strong>提醒：</strong>
+                      <ul>
+                        {importResult.warnings.map((warning, i) => (
+                          <li key={i}>{warning}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {importResult.errors.length > 0 && (
+                    <div className="backup-restore-dialog__result-errors">
+                      <strong>错误信息：</strong>
+                      <ul>
+                        {importResult.errors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="backup-restore-dialog__actions">
               <button
@@ -551,7 +739,9 @@ export const BackupRestoreDialog = ({
                 disabled={isProcessing}
               >
                 {importResult
-                  ? importResult.tasks?.imported > 0
+                  ? importResult.tasks?.imported > 0 ||
+                    importResult.mode === 'replace' ||
+                    (importResult.environment?.imported || 0) > 0
                     ? '完成并刷新'
                     : '完成'
                   : '取消'}

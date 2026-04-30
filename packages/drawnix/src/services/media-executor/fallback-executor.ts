@@ -898,6 +898,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       model,
       modelRef,
       referenceImages,
+      inlineDataParts,
       params: extraParams,
     } = params;
     const startTime = Date.now();
@@ -913,6 +914,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
           ...(normalizedPrompt
             ? [{ type: 'text' as const, text: normalizedPrompt }]
             : []),
+          ...((inlineDataParts || []).map((part) => part) || []),
           ...((referenceImages || []).map((url) => ({
             type: 'image_url' as const,
             image_url: { url },

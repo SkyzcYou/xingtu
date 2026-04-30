@@ -3,9 +3,11 @@
  * 支持 0-100% 透明度调节，显示棋盘格背景
  */
 
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback } from 'react';
 import type { AlphaSliderProps } from './types';
 import { removeAlphaFromHex } from './utils';
+import { useDocumentDrag } from './use-document-drag';
+import type { DragPoint } from './use-document-drag';
 
 export const AlphaSlider: React.FC<AlphaSliderProps> = ({
   alpha,
@@ -14,7 +16,6 @@ export const AlphaSlider: React.FC<AlphaSliderProps> = ({
   disabled = false,
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
 
   // 计算指示器位置
   const indicatorPosition = alpha;
@@ -38,65 +39,21 @@ export const AlphaSlider: React.FC<AlphaSliderProps> = ({
     onChange(newAlpha);
   }, [onChange]);
 
-  // 鼠标按下
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (disabled) return;
-    e.preventDefault();
-    setIsDragging(true);
-    calculateAlpha(e.clientX);
-  }, [disabled, calculateAlpha]);
+  const handleDrag = useCallback(({ clientX }: DragPoint) => {
+    calculateAlpha(clientX);
+  }, [calculateAlpha]);
 
-  // 触摸开始
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (disabled) return;
-    e.preventDefault();
-    setIsDragging(true);
-    const touch = e.touches[0];
-    calculateAlpha(touch.clientX);
-  }, [disabled, calculateAlpha]);
-
-  // 全局鼠标移动和释放
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      e.preventDefault();
-      calculateAlpha(e.clientX);
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      calculateAlpha(touch.clientX);
-    };
-
-    const handleTouchEnd = () => {
-      setIsDragging(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', handleTouchEnd);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [isDragging, calculateAlpha]);
+  const dragHandlers = useDocumentDrag({
+    disabled,
+    onDrag: handleDrag,
+  });
 
   return (
     <div
       ref={sliderRef}
       className="ucp-alpha-slider"
-      onMouseDown={handleMouseDown}
-      onTouchStart={handleTouchStart}
+      onMouseDown={dragHandlers.onMouseDown}
+      onTouchStart={dragHandlers.onTouchStart}
     >
       {/* 棋盘格背景 */}
       <div className="ucp-alpha-slider__checkerboard" />

@@ -24,7 +24,7 @@ import {
 import { Z_INDEX } from '../../constants/z-index';
 import type { KBDirectory, KBNoteMeta, KBTag } from '../../types/knowledge-base.types';
 import { SYSTEM_SKILLS, EXTERNAL_SKILL_NOTE_PREFIX, getExternalSkills } from '../../constants/skills';
-import { HoverTip } from '../shared';
+import { HoverTip } from '../shared/hover';
 
 /** 系统内置 Skill 虚拟笔记的 ID 前缀 */
 export const SYSTEM_SKILL_NOTE_PREFIX = '__system_skill__';
@@ -603,12 +603,13 @@ const NoteRow: React.FC<NoteRowProps> = ({
         )}
       </div>
     </div>
-    <button
-      className="kb-tree__note-delete"
-      onClick={(e) => { e.stopPropagation(); onDelete(); }}
-      title="删除笔记"
-    >
-      <Trash2 size={12} />
-    </button>
+    <HoverTip content="删除笔记" showArrow={false}>
+      <button
+        className="kb-tree__note-delete"
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+      >
+        <Trash2 size={12} />
+      </button>
+    </HoverTip>
   </div>
 );

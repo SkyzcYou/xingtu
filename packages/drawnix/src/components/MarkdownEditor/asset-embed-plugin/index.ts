@@ -15,7 +15,7 @@ import { assetEmbedView } from './view';
 
 export const assetEmbedPlugins: MilkdownPlugin[] = [
   remarkAssetEmbed,
-  assetEmbedSchema.node,
   assetEmbedSchema.ctx,
+  assetEmbedSchema.node,
   assetEmbedView,
 ].flat();

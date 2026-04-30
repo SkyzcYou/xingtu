@@ -23,6 +23,7 @@ import {
 import { ChevronRightIcon } from 'tdesign-icons-react';
 import { Z_INDEX } from '../../constants/z-index';
 import { analytics } from '../../utils/posthog-analytics';
+import { HoverTip } from '../shared/hover';
 import './minimap.scss';
 
 type ViewportSnapshot = {
@@ -898,14 +899,18 @@ export const Minimap: React.FC<MinimapProps> = ({
       )}
 
       {config.collapsible && (
-        <button
-          className={`minimap__toggle ${state.expanded ? 'minimap__toggle--expanded' : ''}`}
-          onClick={toggleExpanded}
-          title={state.expanded ? '折叠小地图' : '展开小地图'}
-          data-track="minimap_click_toggle"
+        <HoverTip
+          content={state.expanded ? '折叠小地图' : '展开小地图'}
+          showArrow={false}
         >
-          <ChevronRightIcon />
-        </button>
+          <button
+            className={`minimap__toggle ${state.expanded ? 'minimap__toggle--expanded' : ''}`}
+            onClick={toggleExpanded}
+            data-track="minimap_click_toggle"
+          >
+            <ChevronRightIcon />
+          </button>
+        </HoverTip>
       )}
     </div>
   );

@@ -27,6 +27,7 @@ import { ModelHealthBadge } from '../shared/ModelHealthBadge';
 import { VendorTabPanel, type VendorTab } from '../shared/VendorTabPanel';
 import { ModelVendorMark } from '../shared/ModelVendorBrand';
 import { ModelSourceIcon } from '../shared/ModelSourceIcon';
+import { HoverTip } from '../shared/hover';
 import { useProviderProfiles } from '../../hooks/use-provider-profiles';
 import { groupModelsByProvider } from '../../utils/model-grouping';
 import { sortModelsByDisplayPriority } from '../../utils/model-sort';
@@ -449,44 +450,48 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               displayName !== model.id && !displayName.includes(model.id);
 
             return (
-              <div
+              <HoverTip
                 key={model.selectionKey || model.id}
-                className={`ai-model-selector__item ${
-                  isSelected ? 'ai-model-selector__item--selected' : ''
-                } ${
-                  highlightedIndex === index
-                    ? 'ai-model-selector__item--highlighted'
-                    : ''
-                }`}
-                onClick={() => handleSelect(model.id)}
-                role="option"
-                aria-selected={isSelected}
-                title={showIdTooltip ? model.id : undefined}
+                content={model.id}
+                disabled={!showIdTooltip}
+                showArrow={false}
               >
-                <div className="ai-model-selector__item-content">
-                  <div className="ai-model-selector__item-name">
-                    <span className="ai-model-selector__item-source-icon">
-                      <ModelVendorMark vendor={model.vendor} size={14} />
-                    </span>
-                    <span
-                      className={`ai-model-selector__item-id ai-model-selector__item-id--${model.type}`}
-                    >
-                      #{model.id}
-                    </span>
-                    <span className="ai-model-selector__item-label">
-                      {model.shortLabel || model.label}
-                    </span>
-                    <span
-                      className={`ai-model-selector__item-type ai-model-selector__item-type--${model.type}`}
-                    >
-                      <TypeIcon type={model.type} />
-                      {getTypeLabel(model.type)}
-                    </span>
-                    <ModelHealthBadge
-                      modelId={model.id}
-                      profileId={model.sourceProfileId || null}
-                    />
-                  </div>
+                <div
+                  className={`ai-model-selector__item ${
+                    isSelected ? 'ai-model-selector__item--selected' : ''
+                  } ${
+                    highlightedIndex === index
+                      ? 'ai-model-selector__item--highlighted'
+                      : ''
+                  }`}
+                  onClick={() => handleSelect(model.id)}
+                  role="option"
+                  aria-selected={isSelected}
+                >
+                  <div className="ai-model-selector__item-content">
+                    <div className="ai-model-selector__item-name">
+                      <span className="ai-model-selector__item-source-icon">
+                        <ModelVendorMark vendor={model.vendor} size={14} />
+                      </span>
+                      <span
+                        className={`ai-model-selector__item-id ai-model-selector__item-id--${model.type}`}
+                      >
+                        #{model.id}
+                      </span>
+                      <span className="ai-model-selector__item-label">
+                        {model.shortLabel || model.label}
+                      </span>
+                      <span
+                        className={`ai-model-selector__item-type ai-model-selector__item-type--${model.type}`}
+                      >
+                        <TypeIcon type={model.type} />
+                        {getTypeLabel(model.type)}
+                      </span>
+                      <ModelHealthBadge
+                        modelId={model.id}
+                        profileId={model.sourceProfileId || null}
+                      />
+                    </div>
                   <div className="ai-model-selector__item-desc">
                     {model.description}
                   </div>
@@ -495,6 +500,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   <Check size={16} className="ai-model-selector__item-check" />
                 )}
               </div>
+              </HoverTip>
             );
           })}
         </div>

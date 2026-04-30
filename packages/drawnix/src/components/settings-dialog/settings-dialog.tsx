@@ -91,7 +91,7 @@ import {
   getProviderEndpointAnalytics,
 } from '../../utils/posthog-analytics';
 import { modelBenchmarkService } from '../../services/model-benchmark-service';
-import { HoverTip } from '../shared';
+import { HoverTip } from '../shared/hover';
 import { createProviderProfileDraft } from './provider-profile-draft';
 
 export { IMAGE_MODEL_GROUPED_SELECT_OPTIONS as IMAGE_MODEL_GROUPED_OPTIONS } from '../../constants/model-config';
@@ -2299,18 +2299,22 @@ export const SettingsDialog = ({
                     }
                     autoComplete="off"
                   />
-                  <button
-                    type="button"
-                    className="settings-dialog__secret-toggle"
-                    aria-label={
-                      isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'
-                    }
-                    title={isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => setIsApiKeyVisible((visible) => !visible)}
+                  <HoverTip
+                    content={isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'}
+                    showArrow={false}
                   >
-                    {isApiKeyVisible ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                    <button
+                      type="button"
+                      className="settings-dialog__secret-toggle"
+                      aria-label={
+                        isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'
+                      }
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => setIsApiKeyVisible((visible) => !visible)}
+                    >
+                      {isApiKeyVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </HoverTip>
                 </div>
                 <button
                   type="button"
@@ -2520,27 +2524,31 @@ export const SettingsDialog = ({
                         {models.length}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      className="settings-dialog__model-group-test"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (!selectedProfile) return;
-                        handleLaunchModelBenchmark({
-                          profileId: selectedProfile.id,
-                          modality: type,
-                          compareMode: 'cross-model',
-                        });
-                      }}
-                      disabled={!canLaunchBenchmark}
-                      title={
+                    <HoverTip
+                      content={
                         canLaunchBenchmark
                           ? '测试当前供应商这一组模型'
                           : '请先保存供应商配置并确保 API Key 可用'
                       }
+                      showArrow={false}
                     >
-                      测试本组
-                    </button>
+                      <button
+                        type="button"
+                        className="settings-dialog__model-group-test"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (!selectedProfile) return;
+                          handleLaunchModelBenchmark({
+                            profileId: selectedProfile.id,
+                            modality: type,
+                            compareMode: 'cross-model',
+                          });
+                        }}
+                        disabled={!canLaunchBenchmark}
+                      >
+                        测试本组
+                      </button>
+                    </HoverTip>
                   </div>
                   {!isCollapsed && (
                     <div className="settings-dialog__model-type-list">

@@ -3,7 +3,7 @@
  * 复用于单图模式和对比模式的每个槽位
  */
 
-import React, { useRef, useState, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useRef, useState, useCallback, useEffect, useLayoutEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   ZoomIn,
   ZoomOut,
@@ -26,6 +26,51 @@ import './MediaViewport.scss';
 
 // 稳定的默认值
 const DEFAULT_PAN = { x: 0, y: 0 };
+const MIN_ZOOM_LEVEL = 0.1;
+const MAX_ZOOM_LEVEL = 5;
+const ZOOM_EPSILON = 0.001;
+const TOOLBAR_ZOOM_STEP = 0.25;
+const WHEEL_ZOOM_SENSITIVITY = 0.0025;
+const MAX_WHEEL_ZOOM_DELTA = 0.08;
+const WHEEL_DELTA_MODE_LINE = 1;
+const WHEEL_DELTA_MODE_PAGE = 2;
+const WHEEL_LINE_HEIGHT = 16;
+const WHEEL_PAGE_HEIGHT = 800;
+const VIEWPORT_HORIZONTAL_PADDING = 32;
+const IMAGE_VERTICAL_RESERVE = 88;
+const VIDEO_VERTICAL_RESERVE = 140;
+
+const clampZoomLevel = (zoom: number) =>
+  Math.max(MIN_ZOOM_LEVEL, Math.min(MAX_ZOOM_LEVEL, zoom));
+
+const normalizeWheelDeltaY = (event: React.WheelEvent) => {
+  if (event.deltaMode === WHEEL_DELTA_MODE_LINE) {
+    return event.deltaY * WHEEL_LINE_HEIGHT;
+  }
+  if (event.deltaMode === WHEEL_DELTA_MODE_PAGE) {
+    return event.deltaY * WHEEL_PAGE_HEIGHT;
+  }
+  return event.deltaY;
+};
+
+const clampWheelZoomDelta = (delta: number) =>
+  Math.max(-MAX_WHEEL_ZOOM_DELTA, Math.min(MAX_WHEEL_ZOOM_DELTA, delta));
+
+const getBaseRenderedSize = (element: HTMLElement, currentZoom: number) => {
+  if (element.offsetWidth > 0 && element.offsetHeight > 0) {
+    return {
+      width: element.offsetWidth,
+      height: element.offsetHeight,
+    };
+  }
+
+  const rect = element.getBoundingClientRect();
+  const safeZoom = Math.max(Math.abs(currentZoom), ZOOM_EPSILON);
+  return {
+    width: rect.width / safeZoom,
+    height: rect.height / safeZoom,
+  };
+};
 
 // 工具栏方向类型
 type ToolbarOrientation = 'horizontal' | 'vertical';
@@ -84,10 +129,12 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
   const videoRef = useRef<HTMLVideoElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const [isAutoFitReady, setIsAutoFitReady] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [localPan, setLocalPan] = useState(panOffset ?? DEFAULT_PAN);
   const [localZoom, setLocalZoom] = useState(zoomLevel);
+  const localZoomRef = useRef(zoomLevel);
   const [rotation, setRotation] = useState(0); // 旋转角度
   const [flipH, setFlipH] = useState(false); // 水平翻转
   const [flipV, setFlipV] = useState(false); // 垂直翻转
@@ -95,7 +142,9 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
   const [isPromptHovered, setIsPromptHovered] = useState(false);
   const [isToolbarHovered, setIsToolbarHovered] = useState(false);
   const promptHideTimerRef = useRef<number | null>(null);
-  const autoFitFrameRef = useRef<number | null>(null);
+  const hasManualViewChangeRef = useRef(false);
+  const latestZoomLevelRef = useRef(zoomLevel);
+  const latestPanOffsetRef = useRef(panOffset);
 
   // 暴露视频控制方法给父组件
   useImperativeHandle(ref, () => ({
@@ -166,6 +215,7 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
     : '';
   const posterUrl = item?.posterUrl ? normalizeImageDataUrl(item.posterUrl) : '';
   const mediaIdentity = item ? `${item.type}:${item.id || item.url}` : 'empty';
+  const needsAutoFitGate = Boolean(item?.url && !isAudio && !isCompareMode && !imageLoadFailed);
 
   const clearPromptHideTimer = useCallback(() => {
     if (promptHideTimerRef.current !== null) {
@@ -197,27 +247,23 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
     setIsPromptHovered(false);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setImageLoadFailed(false);
+    setIsAutoFitReady(!item?.url || isAudio || isCompareMode);
     setIsDragging(false);
-    setLocalPan(panOffset ?? DEFAULT_PAN);
-    setLocalZoom(zoomLevel);
+    const nextPan = latestPanOffsetRef.current ?? DEFAULT_PAN;
+    const nextZoom = latestZoomLevelRef.current;
+    setLocalPan(nextPan);
+    localZoomRef.current = nextZoom;
+    setLocalZoom(nextZoom);
     setRotation(0);
     setFlipH(false);
     setFlipV(false);
-
-    if (autoFitFrameRef.current !== null) {
-      window.cancelAnimationFrame(autoFitFrameRef.current);
-      autoFitFrameRef.current = null;
-    }
-  }, [mediaIdentity]);
+    hasManualViewChangeRef.current = false;
+  }, [mediaIdentity, item?.url, isAudio, isCompareMode]);
 
   useEffect(() => () => {
     clearPromptHideTimer();
-    if (autoFitFrameRef.current !== null) {
-      window.cancelAnimationFrame(autoFitFrameRef.current);
-      autoFitFrameRef.current = null;
-    }
   }, [clearPromptHideTimer]);
 
   // 保存工具栏状态到缓存 - 仅单图模式
@@ -228,81 +274,116 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
   }, [toolbarOrientation, toolbarPosition, isCompareMode]);
 
   // 同步外部 props - 只在值真正变化时更新
-  useEffect(() => {
+  useLayoutEffect(() => {
     const newPan = panOffset ?? DEFAULT_PAN;
+    latestPanOffsetRef.current = panOffset;
     setLocalPan((prev) => {
       if (prev.x === newPan.x && prev.y === newPan.y) return prev;
       return newPan;
     });
   }, [panOffset]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    latestZoomLevelRef.current = zoomLevel;
+    localZoomRef.current = zoomLevel;
     setLocalZoom((prev) => (prev === zoomLevel ? prev : zoomLevel));
   }, [zoomLevel]);
+
+  const applyZoom = useCallback(
+    (nextZoom: number, source: 'auto' | 'manual' = 'manual') => {
+      const clampedZoom = clampZoomLevel(nextZoom);
+      if (source === 'manual') {
+        hasManualViewChangeRef.current = true;
+      }
+      if (Math.abs(localZoomRef.current - clampedZoom) <= ZOOM_EPSILON) {
+        return;
+      }
+      localZoomRef.current = clampedZoom;
+      setLocalZoom((prev) =>
+        Math.abs(prev - clampedZoom) <= ZOOM_EPSILON ? prev : clampedZoom
+      );
+      onZoomChange?.(clampedZoom);
+    },
+    [onZoomChange]
+  );
+
+  const applyAutoPan = useCallback(
+    (nextPan: { x: number; y: number }) => {
+      const currentPan = latestPanOffsetRef.current ?? DEFAULT_PAN;
+      if (
+        Math.abs(currentPan.x - nextPan.x) <= ZOOM_EPSILON &&
+        Math.abs(currentPan.y - nextPan.y) <= ZOOM_EPSILON
+      ) {
+        return;
+      }
+      latestPanOffsetRef.current = nextPan;
+      setLocalPan(nextPan);
+      onPanChange?.(nextPan);
+    },
+    [onPanChange]
+  );
 
   const scheduleAutoFit = useCallback(() => {
     if (
       isCompareMode ||
       isAudio ||
-      !containerRef.current ||
-      (Math.abs(zoomLevel - 1) > 0.001) ||
-      Math.abs((panOffset?.x ?? 0)) > 0.5 ||
-      Math.abs((panOffset?.y ?? 0)) > 0.5
+      !containerRef.current
     ) {
       return;
     }
 
-    if (autoFitFrameRef.current !== null) {
-      window.cancelAnimationFrame(autoFitFrameRef.current);
+    if (hasManualViewChangeRef.current) {
+      setIsAutoFitReady(true);
+      return;
     }
 
-    autoFitFrameRef.current = window.requestAnimationFrame(() => {
-      autoFitFrameRef.current = null;
+    const mediaElement = isVideo ? videoRef.current : imageRef.current;
+    if (!mediaElement || !containerRef.current) {
+      return;
+    }
 
-      const mediaElement = isVideo ? videoRef.current : imageRef.current;
-      if (!mediaElement || !containerRef.current) {
-        return;
-      }
+    const containerRect = containerRef.current.getBoundingClientRect();
+    if (containerRect.width <= 0 || containerRect.height <= 0) {
+      return;
+    }
 
-      const containerRect = containerRef.current.getBoundingClientRect();
-      if (containerRect.width <= 0 || containerRect.height <= 0) {
-        return;
-      }
+    const intrinsicWidth = isVideo
+      ? (mediaElement as HTMLVideoElement).videoWidth
+      : (mediaElement as HTMLImageElement).naturalWidth;
+    const intrinsicHeight = isVideo
+      ? (mediaElement as HTMLVideoElement).videoHeight
+      : (mediaElement as HTMLImageElement).naturalHeight;
+    if (intrinsicWidth <= 0 || intrinsicHeight <= 0) {
+      return;
+    }
 
-      const intrinsicWidth = isVideo
-        ? (mediaElement as HTMLVideoElement).videoWidth
-        : (mediaElement as HTMLImageElement).naturalWidth;
-      const intrinsicHeight = isVideo
-        ? (mediaElement as HTMLVideoElement).videoHeight
-        : (mediaElement as HTMLImageElement).naturalHeight;
-      if (intrinsicWidth <= 0 || intrinsicHeight <= 0) {
-        return;
-      }
+    const renderedSize = getBaseRenderedSize(mediaElement, localZoomRef.current);
+    if (renderedSize.width <= 0 || renderedSize.height <= 0) {
+      return;
+    }
 
-      const horizontalPadding = 32;
-      const verticalReserve = isVideo ? 140 : 88;
-      const availableWidth = Math.max(containerRect.width - horizontalPadding, 0);
-      const availableHeight = Math.max(containerRect.height - verticalReserve, 0);
-      if (availableWidth <= 0 || availableHeight <= 0) {
-        return;
-      }
+    const verticalReserve = isVideo ? VIDEO_VERTICAL_RESERVE : IMAGE_VERTICAL_RESERVE;
+    const availableWidth = Math.max(containerRect.width - VIEWPORT_HORIZONTAL_PADDING, 0);
+    const availableHeight = Math.max(containerRect.height - verticalReserve, 0);
+    if (availableWidth <= 0 || availableHeight <= 0) {
+      return;
+    }
 
-      const fittedZoom = Math.min(
-        1,
-        availableWidth / intrinsicWidth,
-        availableHeight / intrinsicHeight
-      );
+    const fittedZoom = Math.min(
+      availableWidth / renderedSize.width,
+      availableHeight / renderedSize.height
+    );
 
-      if (!Number.isFinite(fittedZoom) || fittedZoom <= 0 || fittedZoom >= 0.995) {
-        return;
-      }
+    if (!Number.isFinite(fittedZoom) || fittedZoom <= 0) {
+      return;
+    }
 
-      setLocalZoom((prev) => (Math.abs(prev - fittedZoom) <= 0.01 ? prev : fittedZoom));
-      onZoomChange?.(fittedZoom);
-    });
-  }, [isCompareMode, isAudio, isVideo, zoomLevel, panOffset?.x, panOffset?.y, onZoomChange]);
+    applyAutoPan({ x: 0, y: -verticalReserve / 2 });
+    applyZoom(fittedZoom, 'auto');
+    setIsAutoFitReady(true);
+  }, [isCompareMode, isAudio, isVideo, applyAutoPan, applyZoom]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!item?.url || isAudio || isCompareMode) {
       return;
     }
@@ -326,6 +407,27 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
     }
   }, [item, isAudio, isCompareMode, isVideo, scheduleAutoFit]);
 
+  useEffect(() => {
+    if (
+      !item?.url ||
+      isAudio ||
+      isCompareMode ||
+      typeof ResizeObserver === 'undefined' ||
+      !containerRef.current
+    ) {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      scheduleAutoFit();
+    });
+    observer.observe(containerRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [item?.url, isAudio, isCompareMode, scheduleAutoFit]);
+
   // 鼠标拖拽
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -340,10 +442,12 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
       if (!isDragging) return;
+      hasManualViewChangeRef.current = true;
       const newPan = {
         x: e.clientX - dragStart.x,
         y: e.clientY - dragStart.y,
       };
+      latestPanOffsetRef.current = newPan;
       setLocalPan(newPan);
       onPanChange?.(newPan);
     },
@@ -358,26 +462,26 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      const newZoom = Math.max(0.1, Math.min(5, localZoom + delta));
-      setLocalZoom(newZoom);
-      onZoomChange?.(newZoom);
+      const normalizedDeltaY = normalizeWheelDeltaY(e);
+      if (!Number.isFinite(normalizedDeltaY) || normalizedDeltaY === 0) {
+        return;
+      }
+      const zoomDelta = clampWheelZoomDelta(
+        -normalizedDeltaY * WHEEL_ZOOM_SENSITIVITY
+      );
+      applyZoom(localZoomRef.current + zoomDelta);
     },
-    [localZoom, onZoomChange]
+    [applyZoom]
   );
 
   // 缩放控制
   const handleZoomIn = useCallback(() => {
-    const newZoom = Math.min(5, localZoom + 0.25);
-    setLocalZoom(newZoom);
-    onZoomChange?.(newZoom);
-  }, [localZoom, onZoomChange]);
+    applyZoom(localZoomRef.current + TOOLBAR_ZOOM_STEP);
+  }, [applyZoom]);
 
   const handleZoomOut = useCallback(() => {
-    const newZoom = Math.max(0.1, localZoom - 0.25);
-    setLocalZoom(newZoom);
-    onZoomChange?.(newZoom);
-  }, [localZoom, onZoomChange]);
+    applyZoom(localZoomRef.current - TOOLBAR_ZOOM_STEP);
+  }, [applyZoom]);
 
   // 旋转控制
   const handleRotateLeft = useCallback(() => {
@@ -528,6 +632,7 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
   const transformStyle = {
     transform: `translate(${localPan.x}px, ${localPan.y}px) scale(${scaleX}, ${scaleY}) rotate(${rotation}deg)`,
   };
+  const shouldHideUntilAutoFit = needsAutoFitGate && !isAutoFitReady;
 
   return (
     <div
@@ -551,7 +656,7 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
     >
       {/* 媒体内容 */}
       <div
-        className="media-viewport__content"
+        className={`media-viewport__content ${shouldHideUntilAutoFit ? 'media-viewport__content--auto-fitting' : ''}`}
         style={isAudio ? undefined : transformStyle}
       >
         {isVideo ? (
@@ -640,7 +745,10 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
               draggable={false}
               referrerPolicy="no-referrer"
               onLoad={scheduleAutoFit}
-              onError={() => setImageLoadFailed(true)}
+              onError={() => {
+                setImageLoadFailed(true);
+                setIsAutoFitReady(true);
+              }}
             />
           </div>
         )}

@@ -1,6 +1,6 @@
 /**
  * Backup Import Service
- * 从 ZIP 文件导入数据（增量去重），兼容 v2/v3 manifest
+ * 从 ZIP 文件导入数据，兼容 v2/v3/v4 manifest
  */
 
 import type JSZip from 'jszip';
@@ -14,7 +14,6 @@ import {
   getVideoPromptHistory,
   getImagePromptHistory,
 } from '../prompt-storage-service';
-import { taskStorageReader } from '../task-storage-reader';
 import { taskQueueService } from '../task-queue';
 import { Task } from '../../types/task.types';
 import type { Folder, Board } from '../../types/workspace.types';
@@ -22,15 +21,24 @@ import { LS_KEYS_TO_MIGRATE } from '../../constants/storage-keys';
 import localforage from 'localforage';
 import { ASSET_CONSTANTS } from '../../constants/ASSET_CONSTANTS';
 import { unifiedCacheService } from '../unified-cache-service';
+import { assetStorageService } from '../asset-storage-service';
 import { analytics } from '../../utils/posthog-analytics';
 import { importAllData as importKnowledgeBaseData } from '../kb-import-export-service';
+import { _getStoreInstances } from '../knowledge-base-service';
+import { taskStorageWriter, type SWTask } from '../media-executor/task-storage-writer';
+import { decryptBackupJson } from './backup-crypto';
 import {
-  BACKUP_SIGNATURE,
+  EnvironmentBackupData,
+  EnvironmentSecretsData,
+  importEnvironmentData,
+} from './environment-backup-service';
+import {
   BackupManifest,
   BackupProjectFoldersData,
   PromptsData,
   PresetStorageData,
   DrawnixFileData,
+  ImportOptions,
   ImportResult,
   ProgressCallback,
   ensureElementIds,
@@ -44,26 +52,35 @@ import {
   collectFolderPathsFromBoardPaths,
   getFolderDepth,
   getFolderKey,
+  validateBackupManifest,
 } from './backup-utils';
+import { PROMPT_TYPES, type PromptHistoryOverride, type PromptType } from '../prompt-storage-service';
 
 class BackupImportService {
   async importFromZip(
     file: File,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    options: ImportOptions = {}
   ): Promise<ImportResult> {
     const startTime = Date.now();
+    const importMode = options.mode || 'merge';
 
     analytics.track('backup_import_start', {
       fileSize: file.size,
       fileName: file.name,
+      mode: importMode,
     });
     const result: ImportResult = {
       success: false,
+      mode: importMode,
       prompts: { imported: 0, skipped: 0 },
       projects: { folders: 0, boards: 0, merged: 0, skipped: 0 },
       assets: { imported: 0, skipped: 0 },
       tasks: { imported: 0, skipped: 0 },
       knowledgeBase: { directories: 0, notes: 0, tags: 0, skipped: 0 },
+      environment: { imported: 0, skipped: 0 },
+      domains: {},
+      warnings: [],
       errors: [],
     };
 
@@ -79,45 +96,105 @@ class BackupImportService {
       }
 
       const manifestContent = await manifestFile.async('string');
-      const manifest: BackupManifest = JSON.parse(manifestContent);
+      const manifest = validateBackupManifest(
+        JSON.parse(manifestContent)
+      ) as BackupManifest;
 
-      if (manifest.signature !== BACKUP_SIGNATURE) {
-        throw new Error('无效的备份文件：签名不匹配');
+      const shouldImport = (domain: string) =>
+        !options.selectedDomains?.length || options.selectedDomains.includes(domain);
+
+      let environmentSecrets: EnvironmentSecretsData | null = null;
+      if (manifest.includes.environment && shouldImport('environment')) {
+        onProgress?.(15, '正在导入环境配置...');
+        const envFile = zip.file('environment/data.json');
+        const envData = envFile
+          ? (JSON.parse(await envFile.async('string')) as EnvironmentBackupData)
+          : null;
+        const secretsFile = zip.file('environment/secrets.enc.json');
+        if (secretsFile) {
+          if (options.encryptionPassword?.trim()) {
+            const encrypted = JSON.parse(await secretsFile.async('string'));
+            environmentSecrets = await decryptBackupJson<EnvironmentSecretsData>(
+              encrypted,
+              options.encryptionPassword
+            );
+          } else {
+            result.warnings.push('备份包含敏感配置，但未输入密码，敏感配置已跳过');
+          }
+        } else if (manifest.encryption?.enabled) {
+          result.warnings.push('manifest 标记包含敏感配置，但未找到敏感配置文件');
+        }
+
+        const envResult = await importEnvironmentData(envData, {
+          mode: importMode,
+          secrets: environmentSecrets,
+        });
+        result.environment = {
+          imported: envResult.imported,
+          skipped: envResult.skipped,
+        };
+        result.warnings.push(...envResult.warnings);
+        result.domains!.environment = result.environment;
       }
-      // v2 和 v3 manifest 都支持，v3 有分片字段但导入逻辑不变（每个分片独立导入）
 
-      if (manifest.includes.prompts) {
+      if (manifest.includes.prompts && shouldImport('prompts')) {
         onProgress?.(20, '正在导入提示词...');
         const promptsFile = zip.file('prompts.json');
         if (promptsFile) {
           const promptsContent = await promptsFile.async('string');
           const promptsData: PromptsData = JSON.parse(promptsContent);
-          result.prompts = await this.importPromptData(promptsData);
+          if (importMode === 'replace') {
+            await this.clearPromptData();
+          }
+          result.prompts = await this.importPromptData(promptsData, importMode);
+          result.domains!.prompts = result.prompts;
         }
       }
 
-      if (manifest.includes.knowledgeBase) {
-        onProgress?.(30, '正在导入知识库...');
+      if (manifest.includes.assets && shouldImport('assets')) {
+        onProgress?.(35, '正在导入素材...');
+        if (importMode === 'replace') {
+          await this.clearAssets();
+        }
+        result.assets = await this.importAssets(zip, onProgress, 35, 20);
+        result.domains!.assets = result.assets;
+      }
+
+      if (manifest.includes.projects && shouldImport('projects')) {
+        onProgress?.(60, '正在导入项目...');
+        if (importMode === 'replace') {
+          await workspaceStorageService.clearAll();
+        }
+        result.projects = await this.importProjects(zip, onProgress, importMode, 60, 10);
+        result.domains!.projects = {
+          imported: result.projects.folders + result.projects.boards + result.projects.merged,
+          skipped: result.projects.skipped,
+        };
+      }
+
+      if (manifest.includes.knowledgeBase && shouldImport('knowledgeBase')) {
+        onProgress?.(70, '正在导入知识库...');
+        if (importMode === 'replace') {
+          await this.clearKnowledgeBase();
+        }
         const kbResult = await this.importKnowledgeBase(zip);
         result.knowledgeBase = kbResult;
+        result.domains!.knowledgeBase = {
+          imported: kbResult.directories + kbResult.notes + kbResult.tags,
+          skipped: kbResult.skipped,
+        };
         if (kbResult.errors && kbResult.errors.length > 0) {
           result.errors.push(...kbResult.errors);
         }
       }
 
-      if (manifest.includes.projects) {
-        onProgress?.(40, '正在导入项目...');
-        result.projects = await this.importProjects(zip, onProgress);
-      }
-
-      if (manifest.includes.assets) {
-        onProgress?.(60, '正在导入素材...');
-        result.assets = await this.importAssets(zip, onProgress);
-      }
-
-      if (manifest.includes.tasks ?? manifest.includes.assets) {
+      if ((manifest.includes.tasks ?? manifest.includes.assets) && shouldImport('tasks')) {
         onProgress?.(85, '正在导入任务数据...');
-        result.tasks = await this.importTasks(zip);
+        if (importMode === 'replace') {
+          await taskStorageWriter.clearAllTasks();
+        }
+        result.tasks = await this.importTasks(zip, importMode);
+        result.domains!.tasks = result.tasks;
       }
 
       if (result.projects.folders > 0 || result.projects.boards > 0 || result.projects.merged > 0) {
@@ -133,6 +210,7 @@ class BackupImportService {
 
       analytics.track('backup_import_success', {
         duration: Date.now() - startTime,
+        mode: importMode,
         promptCount: result.prompts.imported,
         projectCount: result.projects.boards,
         assetCount: result.assets.imported,
@@ -141,6 +219,7 @@ class BackupImportService {
         skippedCount:
           result.prompts.skipped + result.projects.skipped +
           result.assets.skipped + result.tasks.skipped + result.knowledgeBase.skipped,
+        warningCount: result.warnings.length,
       });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -174,15 +253,88 @@ class BackupImportService {
     }
   }
 
-  private async importPromptData(data: PromptsData): Promise<{ imported: number; skipped: number }> {
+  private async clearPromptData(): Promise<void> {
+    await Promise.all([
+      kvStorageService.set(LS_KEYS_TO_MIGRATE.PROMPT_HISTORY, []),
+      kvStorageService.set(LS_KEYS_TO_MIGRATE.VIDEO_PROMPT_HISTORY, []),
+      kvStorageService.set(LS_KEYS_TO_MIGRATE.IMAGE_PROMPT_HISTORY, []),
+      kvStorageService.set(
+        LS_KEYS_TO_MIGRATE.PRESET_SETTINGS,
+        createEmptyPresetStorageData()
+      ),
+      kvStorageService.set(LS_KEYS_TO_MIGRATE.PROMPT_DELETED_CONTENTS, []),
+      kvStorageService.set(LS_KEYS_TO_MIGRATE.PROMPT_HISTORY_OVERRIDES, []),
+    ]);
+    await resetPromptStorageCache();
+  }
+
+  private async clearAssets(): Promise<void> {
+    try {
+      await assetStorageService.initialize();
+      await assetStorageService.clearAll();
+    } catch (error) {
+      console.warn('[BackupRestore] Failed to clear asset library:', error);
+    }
+    await unifiedCacheService.clearAllCache();
+  }
+
+  private async clearKnowledgeBase(): Promise<void> {
+    const stores = _getStoreInstances();
+    await Promise.all([
+      stores.directoriesStore.clear(),
+      stores.notesStore.clear(),
+      stores.tagsStore.clear(),
+      stores.noteTagsStore.clear(),
+      stores.noteContentsStore.clear(),
+      stores.noteImagesStore.clear(),
+    ]);
+  }
+
+  private async importPromptData(
+    data: PromptsData,
+    mode: 'merge' | 'replace'
+  ): Promise<{ imported: number; skipped: number }> {
     let imported = 0;
     let skipped = 0;
 
     const inputPromptHistory = data.promptHistory || [];
     const inputVideoPromptHistory = data.videoPromptHistory || [];
     const inputImagePromptHistory = data.imagePromptHistory || [];
+    const inputDeletedContents = Array.isArray(data.deletedPromptContents)
+      ? data.deletedPromptContents
+      : [];
+    const inputOverrides = Array.isArray(data.promptHistoryOverrides)
+      ? data.promptHistoryOverrides
+      : [];
 
     await initPromptStorageCache();
+
+    if (mode === 'replace') {
+      await kvStorageService.set(LS_KEYS_TO_MIGRATE.PROMPT_HISTORY, inputPromptHistory);
+      await kvStorageService.set(LS_KEYS_TO_MIGRATE.VIDEO_PROMPT_HISTORY, inputVideoPromptHistory);
+      await kvStorageService.set(LS_KEYS_TO_MIGRATE.IMAGE_PROMPT_HISTORY, inputImagePromptHistory);
+      await kvStorageService.set(
+        LS_KEYS_TO_MIGRATE.PRESET_SETTINGS,
+        normalizePresetStorageData(data.presetSettings)
+      );
+      await kvStorageService.set(
+        LS_KEYS_TO_MIGRATE.PROMPT_DELETED_CONTENTS,
+        normalizeStringArray(inputDeletedContents)
+      );
+      await kvStorageService.set(
+        LS_KEYS_TO_MIGRATE.PROMPT_HISTORY_OVERRIDES,
+        mergePromptHistoryOverrides([], inputOverrides)
+      );
+      await resetPromptStorageCache();
+      return {
+        imported:
+          inputPromptHistory.length +
+          inputVideoPromptHistory.length +
+          inputImagePromptHistory.length,
+        skipped: 0,
+      };
+    }
+
     const existingPrompts = getPromptHistory();
     const existingVideoPrompts = getVideoPromptHistory();
     const existingImagePrompts = getImagePromptHistory();
@@ -215,28 +367,34 @@ class BackupImportService {
     await kvStorageService.set(LS_KEYS_TO_MIGRATE.IMAGE_PROMPT_HISTORY, [...existingImagePrompts, ...newImagePrompts]);
 
     const existingPreset = await kvStorageService.get<PresetStorageData>(LS_KEYS_TO_MIGRATE.PRESET_SETTINGS);
-    if (existingPreset && data.presetSettings) {
-      const mergedPreset: PresetStorageData = {
-        image: {
-          pinnedPrompts: [...new Set([...existingPreset.image.pinnedPrompts, ...data.presetSettings.image.pinnedPrompts])],
-          deletedPrompts: [...new Set([...existingPreset.image.deletedPrompts, ...data.presetSettings.image.deletedPrompts])],
-        },
-        video: {
-          pinnedPrompts: [...new Set([...existingPreset.video.pinnedPrompts, ...data.presetSettings.video.pinnedPrompts])],
-          deletedPrompts: [...new Set([...existingPreset.video.deletedPrompts, ...data.presetSettings.video.deletedPrompts])],
-        },
-      };
-      await kvStorageService.set(LS_KEYS_TO_MIGRATE.PRESET_SETTINGS, mergedPreset);
-    } else if (data.presetSettings) {
-      await kvStorageService.set(LS_KEYS_TO_MIGRATE.PRESET_SETTINGS, data.presetSettings);
-    }
+    const mergedPreset = mergePresetStorageData(existingPreset, data.presetSettings);
+    await kvStorageService.set(LS_KEYS_TO_MIGRATE.PRESET_SETTINGS, mergedPreset);
+
+    const existingDeleted = await kvStorageService.get<string[]>(
+      LS_KEYS_TO_MIGRATE.PROMPT_DELETED_CONTENTS
+    );
+    await kvStorageService.set(
+      LS_KEYS_TO_MIGRATE.PROMPT_DELETED_CONTENTS,
+      [...new Set([...normalizeStringArray(existingDeleted), ...normalizeStringArray(inputDeletedContents)])]
+    );
+
+    const existingOverrides = await kvStorageService.get<PromptHistoryOverride[]>(
+      LS_KEYS_TO_MIGRATE.PROMPT_HISTORY_OVERRIDES
+    );
+    await kvStorageService.set(
+      LS_KEYS_TO_MIGRATE.PROMPT_HISTORY_OVERRIDES,
+      mergePromptHistoryOverrides(existingOverrides, inputOverrides)
+    );
 
     await resetPromptStorageCache();
     return { imported, skipped };
   }
   private async importProjects(
     zip: JSZip,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    mode: 'merge' | 'replace' = 'merge',
+    progressStart = 40,
+    progressSpan = 15
   ): Promise<{ folders: number; boards: number; merged: number; skipped: number }> {
     let foldersImported = 0;
     let boardsImported = 0;
@@ -280,7 +438,7 @@ class BackupImportService {
           const fileName = parts[parts.length - 1] || 'unnamed.drawnix';
           const boardName = boardMeta?.name || fileName.replace('.drawnix', '');
 
-          if (boardMeta?.id && existingBoardIds.has(boardMeta.id)) {
+          if (mode === 'merge' && boardMeta?.id && existingBoardIds.has(boardMeta.id)) {
             const existingBoard = existingBoards.find(b => b.id === boardMeta.id);
             if (existingBoard) {
               const existingElementIds = new Set(
@@ -318,7 +476,7 @@ class BackupImportService {
       }
 
       if (onProgress && drawnixFiles.length > 0) {
-        const progress = 40 + Math.round(((i + 1) / drawnixFiles.length) * 15);
+        const progress = progressStart + Math.round(((i + 1) / drawnixFiles.length) * progressSpan);
         onProgress(progress, `正在导入画板 (${i + 1}/${drawnixFiles.length})...`);
       }
     }
@@ -327,7 +485,9 @@ class BackupImportService {
   }
   private async importAssets(
     zip: JSZip,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    progressStart = 60,
+    progressSpan = 35
   ): Promise<{ imported: number; skipped: number }> {
     let imported = 0;
     let skipped = 0;
@@ -402,7 +562,7 @@ class BackupImportService {
       }
 
       if (onProgress && metaFiles.length > 0) {
-        const progress = 60 + Math.round(((i + 1) / metaFiles.length) * 35);
+        const progress = progressStart + Math.round(((i + 1) / metaFiles.length) * progressSpan);
         onProgress(progress, `正在导入素材 (${i + 1}/${metaFiles.length})...`);
       }
     }
@@ -506,7 +666,10 @@ class BackupImportService {
     return { pathToId, importedToLocalId, created, skipped };
   }
 
-  private async importTasks(zip: JSZip): Promise<{ imported: number; skipped: number }> {
+  private async importTasks(
+    zip: JSZip,
+    mode: 'merge' | 'replace'
+  ): Promise<{ imported: number; skipped: number }> {
     let imported = 0;
     let skipped = 0;
 
@@ -515,20 +678,28 @@ class BackupImportService {
 
     try {
       const tasksContent = await tasksFile.async('string');
-      const tasks: Task[] = JSON.parse(tasksContent);
-      if (!Array.isArray(tasks) || tasks.length === 0) return { imported: 0, skipped: 0 };
+      const parsed: unknown = JSON.parse(tasksContent);
+      const tasks = Array.isArray(parsed)
+        ? parsed.map(item => normalizeTaskRecord(item)).filter((item): item is Task => !!item)
+        : [];
+      if (tasks.length === 0) return { imported: 0, skipped: Array.isArray(parsed) ? parsed.length : 0 };
 
-      const existingTasks = await taskStorageReader.getAllTasks();
-      const existingTaskIds = new Set(existingTasks.map(t => t.id));
+      if (mode === 'replace') {
+        const writeResult = await taskStorageWriter.importTasks(
+          tasks as unknown as SWTask[],
+          { replaceExisting: true }
+        );
+        taskQueueService.restoreTasks(tasks);
+        return writeResult;
+      }
 
-      const tasksToImport = tasks.filter(task => {
-        if (existingTaskIds.has(task.id)) { skipped++; return false; }
-        return true;
-      });
-
-      if (tasksToImport.length > 0) {
-        await taskQueueService.restoreTasks(tasksToImport);
-        imported = tasksToImport.length;
+      const writeResult = await taskStorageWriter.importTasks(
+        tasks as unknown as SWTask[]
+      );
+      imported = writeResult.imported;
+      skipped += writeResult.skipped;
+      if (imported > 0) {
+        taskQueueService.restoreTasks(tasks);
       }
     } catch (error) {
       console.warn('[BackupRestore] Failed to import tasks:', error);
@@ -539,3 +710,96 @@ class BackupImportService {
 }
 
 export const backupImportService = new BackupImportService();
+
+function createEmptyPresetStorageData(): PresetStorageData {
+  return Object.fromEntries(
+    PROMPT_TYPES.map(type => [type, { pinnedPrompts: [], deletedPrompts: [] }])
+  ) as unknown as PresetStorageData;
+}
+
+function normalizePresetStorageData(
+  input?: Partial<Record<PromptType, { pinnedPrompts?: unknown; deletedPrompts?: unknown }>> | null
+): PresetStorageData {
+  const normalized = createEmptyPresetStorageData();
+  if (!input || typeof input !== 'object') {
+    return normalized;
+  }
+  for (const type of PROMPT_TYPES) {
+    const settings = input[type];
+    normalized[type] = {
+      pinnedPrompts: normalizeStringArray(settings?.pinnedPrompts),
+      deletedPrompts: normalizeStringArray(settings?.deletedPrompts),
+    };
+  }
+  return normalized;
+}
+
+function mergePresetStorageData(
+  existing?: Partial<Record<PromptType, { pinnedPrompts?: unknown; deletedPrompts?: unknown }>> | null,
+  incoming?: Partial<Record<PromptType, { pinnedPrompts?: unknown; deletedPrompts?: unknown }>> | null
+): PresetStorageData {
+  const left = normalizePresetStorageData(existing);
+  const right = normalizePresetStorageData(incoming);
+  const merged = createEmptyPresetStorageData();
+  for (const type of PROMPT_TYPES) {
+    merged[type] = {
+      pinnedPrompts: [...new Set([...left[type].pinnedPrompts, ...right[type].pinnedPrompts])],
+      deletedPrompts: [...new Set([...left[type].deletedPrompts, ...right[type].deletedPrompts])],
+    };
+  }
+  return merged;
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function mergePromptHistoryOverrides(
+  existing?: PromptHistoryOverride[] | null,
+  incoming?: PromptHistoryOverride[] | null
+): PromptHistoryOverride[] {
+  const map = new Map<string, PromptHistoryOverride>();
+  for (const override of [...(existing || []), ...(incoming || [])]) {
+    if (!override || typeof override.sourceContent !== 'string') {
+      continue;
+    }
+    const key = override.sourceContent.trim();
+    if (!key) {
+      continue;
+    }
+    const current = map.get(key);
+    if (!current || (override.updatedAt || 0) >= (current.updatedAt || 0)) {
+      map.set(key, override);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+
+function normalizeTaskRecord(value: unknown): Task | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const task = value as Partial<Task>;
+  if (
+    typeof task.id !== 'string' ||
+    typeof task.type !== 'string' ||
+    typeof task.status !== 'string' ||
+    typeof task.createdAt !== 'number' ||
+    typeof task.updatedAt !== 'number'
+  ) {
+    return null;
+  }
+  return {
+    ...task,
+    params:
+      task.params && typeof task.params === 'object'
+        ? task.params
+        : ({ prompt: '' } as Task['params']),
+  } as Task;
+}

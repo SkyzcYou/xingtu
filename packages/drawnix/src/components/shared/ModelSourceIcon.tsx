@@ -5,6 +5,7 @@ import {
   getModelVendorPalette,
   ModelVendorMark,
 } from './ModelVendorBrand';
+import { HoverTip } from './hover';
 import './model-source-icon.scss';
 
 function normalizeIconUrl(iconUrl?: string | null): string | null {
@@ -62,7 +63,7 @@ export const ModelSourceIcon: React.FC<ModelSourceIconProps> = ({
     '--model-source-icon-border': palette.border,
   } as CSSProperties;
 
-  return (
+  const icon = (
     <span
       className={`model-source-icon ${
         shouldUseAvatar
@@ -71,7 +72,6 @@ export const ModelSourceIcon: React.FC<ModelSourceIconProps> = ({
       } ${className || ''}`.trim()}
       style={iconStyle}
       aria-hidden="true"
-      title={displayName}
     >
       {shouldUseAvatar ? (
         imageUrl ? (
@@ -91,5 +91,11 @@ export const ModelSourceIcon: React.FC<ModelSourceIconProps> = ({
         <ModelVendorMark vendor={vendor} size={Math.max(size - 2, 12)} />
       )}
     </span>
+  );
+
+  return (
+    <HoverTip content={displayName} showArrow={false}>
+      {icon}
+    </HoverTip>
   );
 };

@@ -66,4 +66,59 @@ describe('model-config image size options', () => {
       '4k',
     ]);
   });
+
+  it('按模型暴露 HappyHorse 参数控制', () => {
+    const t2vParams = getCompatibleParams('happyhorse-1.0-t2v');
+    const i2vParams = getCompatibleParams('happyhorse-1.0-i2v');
+    const r2vParams = getCompatibleParams('happyhorse-1.0-r2v');
+    const editParams = getCompatibleParams('happyhorse-1.0-video-edit');
+
+    expect(getSizeOptionsForModel('happyhorse-1.0-r2v')[0]?.value).toBe(
+      '1080P'
+    );
+    expect(
+      r2vParams
+        .find((param) => param.id === 'duration')
+        ?.options?.map((option) => option.value)
+    ).toEqual([
+      '3',
+      '4',
+      '5',
+      '6',
+      '7',
+      '8',
+      '9',
+      '10',
+      '11',
+      '12',
+      '13',
+      '14',
+      '15',
+    ]);
+    expect(
+      r2vParams
+        .find((param) => param.id === 'ratio')
+        ?.options?.map((option) => option.value)
+    ).toEqual(['16:9', '9:16', '1:1', '4:3', '3:4']);
+    expect(i2vParams.some((param) => param.id === 'ratio')).toBe(false);
+    expect(editParams.some((param) => param.id === 'duration')).toBe(false);
+    expect(editParams.some((param) => param.id === 'ratio')).toBe(false);
+    expect(editParams.some((param) => param.id === 'audio_setting')).toBe(true);
+    expect(t2vParams.some((param) => param.id === 'ratio')).toBe(true);
+    expect(r2vParams.find((param) => param.id === 'seed')).toMatchObject({
+      valueType: 'number',
+      min: 0,
+      max: 2147483647,
+    });
+    expect(
+      r2vParams
+        .find((param) => param.id === 'watermark')
+        ?.options?.map((option) => option.value)
+    ).toEqual(['true', 'false']);
+    expect(
+      r2vParams.find((param) => param.id === 'watermark')?.defaultValue
+    ).toBe(
+      'false'
+    );
+  });
 });

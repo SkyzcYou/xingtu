@@ -53,6 +53,10 @@ export async function recoverExpiredVideoUrls(board: PlaitBoard | null): Promise
 
           // 使用 Transforms.setNode 更新元素（Plait 元素是只读的）
           const elementIndex = board.children.indexOf(element);
+          if (elementIndex === -1) {
+            URL.revokeObjectURL(newBlobUrl);
+            continue;
+          }
           Transforms.setNode(board, { url: newUrl } as any, [elementIndex]);
           recoveredCount++;
 

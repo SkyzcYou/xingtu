@@ -20,16 +20,18 @@ const MenuItemLink = ({
   selected?: boolean;
   onSelect?: (event: Event) => void;
 } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => {
-  const handleClick = useHandleMenuItemClick(rest.onClick, onSelect);
+  const { title, ...anchorProps } = rest;
+  const ariaLabel = anchorProps['aria-label'] ?? title;
+  const handleClick = useHandleMenuItemClick(anchorProps.onClick, onSelect);
 
   return (
     <a
-      {...rest}
+      {...anchorProps}
       href={href}
       target="_blank"
       rel="noreferrer"
       className={getMenuItemClassName(className, selected)}
-      title={rest.title ?? rest['aria-label']}
+      aria-label={ariaLabel}
       onClick={handleClick}
     >
       <MenuItemContent icon={icon} shortcut={shortcut}>

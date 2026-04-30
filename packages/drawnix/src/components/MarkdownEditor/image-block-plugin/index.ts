@@ -6,7 +6,7 @@ export { markdownImageBlockSchema } from './schema';
 export { markdownImageBlockView } from './view';
 
 export const markdownImageBlockPlugins: MilkdownPlugin[] = [
-  markdownImageBlockSchema.node,
   markdownImageBlockSchema.ctx,
+  markdownImageBlockSchema.node,
   markdownImageBlockView,
 ].flat();

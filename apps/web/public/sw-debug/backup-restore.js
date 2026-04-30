@@ -17,11 +17,11 @@ import {
   writeBatchToIDB,
 } from './indexeddb.js';
 import {
-  BACKUP_SIGNATURE,
   waitForJSZip,
   normalizeCacheMediaType,
 } from './backup.js';
 import {
+  validateBackupManifest,
   findBinaryFile,
   importKnowledgeBaseData,
   buildFolderPathMap,
@@ -77,14 +77,7 @@ async function performRestore(file) {
     const manifestFile = zip.file('manifest.json');
     if (!manifestFile) throw new Error('无效的备份文件：缺少 manifest.json');
 
-    const manifest = JSON.parse(await manifestFile.async('string'));
-    if (manifest.signature !== BACKUP_SIGNATURE) {
-      throw new Error('无效的备份文件：签名不匹配');
-    }
-    // 兼容 v2（无分片字段）和 v3
-    if (manifest.version < 2 || manifest.version > 3) {
-      throw new Error(`不支持的备份版本: ${manifest.version}`);
-    }
+    const manifest = validateBackupManifest(JSON.parse(await manifestFile.async('string')));
 
     const stats = {
       prompts: 0,
@@ -172,15 +165,59 @@ async function restorePrompts(zip) {
     data.imagePromptHistory
   );
 
-  // 恢复预设设置（如果本地没有则写入）
+  // 恢复预设设置（全类型合并）
   if (data.presetSettings) {
-    const existing = await readKVItem(KV_KEYS.PRESET_SETTINGS);
-    if (!existing) {
-      await writeKVItem(KV_KEYS.PRESET_SETTINGS, data.presetSettings);
-    }
+    const existing = (await readKVItem(KV_KEYS.PRESET_SETTINGS)) || {};
+    await writeKVItem(KV_KEYS.PRESET_SETTINGS, mergePresetSettings(existing, data.presetSettings));
+  }
+
+  if (Array.isArray(data.deletedPromptContents)) {
+    const existing = (await readKVItem(KV_KEYS.PROMPT_DELETED_CONTENTS)) || [];
+    await writeKVItem(
+      KV_KEYS.PROMPT_DELETED_CONTENTS,
+      Array.from(new Set([...existing, ...data.deletedPromptContents].filter(Boolean)))
+    );
+  }
+
+  if (Array.isArray(data.promptHistoryOverrides)) {
+    const existing = (await readKVItem(KV_KEYS.PROMPT_HISTORY_OVERRIDES)) || [];
+    await writeKVItem(
+      KV_KEYS.PROMPT_HISTORY_OVERRIDES,
+      mergePromptOverrides(existing, data.promptHistoryOverrides)
+    );
   }
 
   return count;
+}
+
+function mergePresetSettings(existing, incoming) {
+  const result = {};
+  for (const type of ['image', 'video', 'audio', 'text', 'agent', 'ppt-common', 'ppt-slide']) {
+    result[type] = {
+      pinnedPrompts: Array.from(new Set([
+        ...(existing?.[type]?.pinnedPrompts || []),
+        ...(incoming?.[type]?.pinnedPrompts || []),
+      ])),
+      deletedPrompts: Array.from(new Set([
+        ...(existing?.[type]?.deletedPrompts || []),
+        ...(incoming?.[type]?.deletedPrompts || []),
+      ])),
+    };
+  }
+  return result;
+}
+
+function mergePromptOverrides(existing, incoming) {
+  const map = new Map();
+  for (const item of [...existing, ...incoming]) {
+    const key = item?.sourceContent || item?.sourceSentPrompt;
+    if (!key) continue;
+    const current = map.get(key);
+    if (!current || (item.updatedAt || 0) >= (current.updatedAt || 0)) {
+      map.set(key, item);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
 
 /**

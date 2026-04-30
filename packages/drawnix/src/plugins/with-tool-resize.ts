@@ -13,81 +13,15 @@ import {
   getSelectedElements,
   Transforms,
 } from '@plait/core';
-import {
-  withResize,
-  ResizeRef,
-  ResizeState,
-  getRectangleResizeHandleRefs,
-  getRotatedResizeCursorClassByAngle,
-  RESIZE_HANDLE_DIAMETER,
-} from '@plait/common';
+import { withResize, ResizeRef, ResizeState } from '@plait/common';
 import { PlaitTool } from '../types/toolbox.types';
 import { isToolElement } from './with-tool';
 import {
   ResizeHandle,
   calculateResizedRect,
+  getHitRectangleResizeHandleRef,
   getShiftKeyState,
 } from '../utils/resize-utils';
-
-/**
- * 命中测试辅助函数 - 检测点是否在缩放手柄上
- * 参考 @plait/draw 的 getHitRectangleResizeHandleRef 实现
- */
-function getHitRectangleResizeHandleRef(
-  board: PlaitBoard,
-  rectangle: RectangleClient,
-  point: Point,
-  angle: number = 0
-) {
-  const centerPoint = RectangleClient.getCenterPoint(rectangle);
-  const resizeHandleRefs = getRectangleResizeHandleRefs(
-    rectangle,
-    RESIZE_HANDLE_DIAMETER
-  );
-
-  if (angle) {
-    // 如果有旋转角度,需要将点旋转回去再进行碰撞检测
-    const rotatedPoint = rotatePoint(point, centerPoint, -angle);
-    let result = resizeHandleRefs.find((resizeHandleRef) => {
-      return RectangleClient.isHit(
-        RectangleClient.getRectangleByPoints([rotatedPoint, rotatedPoint]),
-        resizeHandleRef.rectangle
-      );
-    });
-    if (result) {
-      // 根据旋转角度调整光标样式
-      result.cursorClass = getRotatedResizeCursorClassByAngle(
-        result.cursorClass,
-        angle
-      );
-    }
-    return result;
-  } else {
-    return resizeHandleRefs.find((resizeHandleRef) => {
-      return RectangleClient.isHit(
-        RectangleClient.getRectangleByPoints([point, point]),
-        resizeHandleRef.rectangle
-      );
-    });
-  }
-}
-
-/**
- * 旋转点 - 简化版实现
- */
-function rotatePoint(point: Point, center: Point, angle: number): Point {
-  const rad = (angle * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-
-  const dx = point[0] - center[0];
-  const dy = point[1] - center[1];
-
-  return [
-    center[0] + dx * cos - dy * sin,
-    center[1] + dx * sin + dy * cos,
-  ];
-}
 
 /**
  * 判断当前选中的元素是否可以缩放
@@ -118,7 +52,7 @@ function hitTest(board: PlaitBoard, point: Point) {
   const angle = toolElement.angle || 0;
 
   // 检测是否点击到缩放手柄
-  const handleRef = getHitRectangleResizeHandleRef(board, rectangle, point, angle);
+  const handleRef = getHitRectangleResizeHandleRef(rectangle, point, angle);
 
   if (handleRef) {
     return {

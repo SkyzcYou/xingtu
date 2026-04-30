@@ -1,8 +1,19 @@
 import React from 'react';
-import { DiscAlbum, Film, Music4, Clapperboard, History } from 'lucide-react';
+import {
+  DiscAlbum,
+  Film,
+  Images,
+  Music4,
+  Clapperboard,
+  History,
+} from 'lucide-react';
 import { BatchIcon, BookOpenIcon, MessageIcon } from '../components/icons';
 import { ToolCategory, type ToolDefinition } from '../types/toolbox.types';
-import { MODEL_BENCHMARK_TOOL_ID, MUSIC_PLAYER_TOOL_ID } from './tool-ids';
+import {
+  COMIC_CREATOR_TOOL_ID,
+  MODEL_BENCHMARK_TOOL_ID,
+  MUSIC_PLAYER_TOOL_ID,
+} from './tool-ids';
 
 const DEFAULT_TOOL_PERMISSIONS = [
   'allow-scripts',
@@ -14,36 +25,19 @@ const DEFAULT_TOOL_PERMISSIONS = [
 
 export const BUILT_IN_TOOL_MANIFESTS: ToolDefinition[] = [
   {
-    id: 'prompt-history',
-    name: '我的提示词',
-    description: '按任务分类管理初始提示词、发送提示词和生成结果预览',
-    icon: <History size={18} strokeWidth={1.75} />,
-    category: ToolCategory.CONTENT_TOOLS,
-    component: 'prompt-history',
-    defaultWidth: 1120,
-    defaultHeight: 680,
-  },
-  {
-    id: 'banana-prompt',
-    name: '香蕉提示词',
-    description: '查看和复制优质 AI 提示词',
-    icon: '🍌',
-    category: ToolCategory.CONTENT_TOOLS,
-    url: 'https://www.aiwind.org',
-    defaultWidth: 800,
-    defaultHeight: 600,
-    permissions: [...DEFAULT_TOOL_PERMISSIONS],
-  },
-  {
-    id: 'pose-library',
-    name: '动作场景库',
-    description: '专业人体姿态参考素材库，提供多角度动作姿势',
-    icon: '🧘',
-    category: ToolCategory.CONTENT_TOOLS,
-    url: 'https://www.posemaniacs.com/zh-Hans/poses',
-    defaultWidth: 900,
-    defaultHeight: 700,
-    permissions: [...DEFAULT_TOOL_PERMISSIONS],
+    id: COMIC_CREATOR_TOOL_ID,
+    name: '多图生成',
+    description:
+      '适合故事分镜、教程步骤、产品手册、营销图文等多页图片，一键规划提示词、批量出图并导出 ZIP/PPTX/PDF',
+    icon: <Images size={18} strokeWidth={1.75} />,
+    category: ToolCategory.AI_TOOLS,
+    component: COMIC_CREATOR_TOOL_ID,
+    supportsMultipleWindows: true,
+    defaultWindowBehavior: {
+      autoPinOnOpen: true,
+    },
+    defaultWidth: 720,
+    defaultHeight: 760,
   },
   {
     id: 'video-analyzer',
@@ -84,26 +78,6 @@ export const BUILT_IN_TOOL_MANIFESTS: ToolDefinition[] = [
     defaultHeight: 800,
   },
   {
-    id: 'knowledge-base',
-    name: '知识库',
-    description: '个人知识管理工具，支持目录分类、标签管理和 Markdown 编辑',
-    icon: React.createElement(BookOpenIcon),
-    category: ToolCategory.UTILITIES,
-    component: 'knowledge-base',
-    defaultWidth: 900,
-    defaultHeight: 700,
-  },
-  {
-    id: MUSIC_PLAYER_TOOL_ID,
-    name: '音乐播放器',
-    description: '从素材库选择音频并后台播放，可与画布播放控件联动',
-    icon: <Music4 size={18} strokeWidth={1.75} />,
-    category: ToolCategory.UTILITIES,
-    component: MUSIC_PLAYER_TOOL_ID,
-    defaultWidth: 520,
-    defaultHeight: 640,
-  },
-  {
     id: 'music-analyzer',
     name: '爆款音乐生成',
     description: '分析音频、改写歌词，并一键送入 Suno 生成音乐',
@@ -137,5 +111,57 @@ export const BUILT_IN_TOOL_MANIFESTS: ToolDefinition[] = [
     component: MODEL_BENCHMARK_TOOL_ID,
     defaultWidth: 1280,
     defaultHeight: 860,
+  },
+  {
+    id: 'prompt-history',
+    name: '我的提示词',
+    description: '按任务分类管理初始提示词、发送提示词和生成结果预览',
+    icon: <History size={18} strokeWidth={1.75} />,
+    category: ToolCategory.CONTENT_TOOLS,
+    component: 'prompt-history',
+    defaultWidth: 1120,
+    defaultHeight: 680,
+  },
+  {
+    id: 'banana-prompt',
+    name: '香蕉提示词',
+    description: '查看和复制优质 AI 提示词',
+    icon: '🍌',
+    category: ToolCategory.CONTENT_TOOLS,
+    url: 'https://www.aiwind.org',
+    defaultWidth: 800,
+    defaultHeight: 600,
+    permissions: [...DEFAULT_TOOL_PERMISSIONS],
+  },
+  {
+    id: 'pose-library',
+    name: '动作场景库',
+    description: '专业人体姿态参考素材库，提供多角度动作姿势',
+    icon: '🧘',
+    category: ToolCategory.CONTENT_TOOLS,
+    url: 'https://www.posemaniacs.com/zh-Hans/poses',
+    defaultWidth: 900,
+    defaultHeight: 700,
+    permissions: [...DEFAULT_TOOL_PERMISSIONS],
+  },
+  {
+    id: 'knowledge-base',
+    name: '知识库',
+    description: '个人知识管理工具，支持目录分类、标签管理和 Markdown 编辑',
+    icon: React.createElement(BookOpenIcon),
+    category: ToolCategory.UTILITIES,
+    component: 'knowledge-base',
+    defaultWidth: 900,
+    defaultHeight: 700,
+  },
+  {
+    id: MUSIC_PLAYER_TOOL_ID,
+    name: '音乐播放器',
+    description: '从素材库选择音频并后台播放，可与画布播放控件联动',
+    icon: <Music4 size={18} strokeWidth={1.75} />,
+    category: ToolCategory.UTILITIES,
+    component: MUSIC_PLAYER_TOOL_ID,
+    defaultWidth: 520,
+    defaultHeight: 640,
   },
 ];

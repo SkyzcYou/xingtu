@@ -212,6 +212,59 @@ describe('prompt-optimization-service', () => {
     expect(content).toContain('【补充要求】\n增强镜头运动');
   });
 
+  it('adds visual layout/style schema for image structured optimization', async () => {
+    const content = await buildOptimizationPrompt({
+      scenarioId: 'ai-input.image',
+      originalPrompt: '潮汕旅行封面海报',
+      optimizationRequirements: '做成高级画册风格',
+      language: 'zh',
+      mode: 'structured',
+    });
+
+    expect(content).toContain('【视觉结构化 JSON 强制要求】');
+    expect(content).toContain('layout.header');
+    expect(content).toContain('content_blocks');
+    expect(content).toContain('style.background');
+    expect(content).toContain('style.colors');
+    expect(content).toContain('style.fonts');
+    expect(content).toContain('只输出符合视觉结构化 schema 的合法 JSON 对象');
+  });
+
+  it('adds visual layout/style schema for ppt slide structured optimization', async () => {
+    const content = await buildOptimizationPrompt({
+      scenarioId: 'ppt.slide',
+      originalPrompt: '产品核心卖点页',
+      optimizationRequirements: '',
+      language: 'zh',
+      mode: 'structured',
+    });
+
+    expect(content).toContain('layout.header');
+    expect(content).toContain('style.background');
+  });
+
+  it('does not add visual schema for polish mode or video structured optimization', async () => {
+    const imagePolish = await buildOptimizationPrompt({
+      scenarioId: 'tool.image',
+      originalPrompt: '产品海报',
+      optimizationRequirements: '',
+      language: 'zh',
+      mode: 'polish',
+    });
+    const videoStructured = await buildOptimizationPrompt({
+      scenarioId: 'tool.video',
+      originalPrompt: '城市夜景延时摄影',
+      optimizationRequirements: '',
+      language: 'zh',
+      mode: 'structured',
+    });
+
+    expect(imagePolish).not.toContain('【视觉结构化 JSON 强制要求】');
+    expect(imagePolish).not.toContain('layout.header');
+    expect(videoStructured).not.toContain('【视觉结构化 JSON 强制要求】');
+    expect(videoStructured).not.toContain('layout.header');
+  });
+
   it('falls back from broad type to the matching AI input scenario', () => {
     expect(getPromptOptimizationScenario(undefined, 'agent')).toMatchObject({
       id: 'ai-input.agent',

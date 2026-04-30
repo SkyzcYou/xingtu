@@ -12,78 +12,15 @@ import {
   getSelectedElements,
   Transforms,
 } from '@plait/core';
-import {
-  withResize,
-  ResizeRef,
-  ResizeState,
-  getRectangleResizeHandleRefs,
-  getRotatedResizeCursorClassByAngle,
-  RESIZE_HANDLE_DIAMETER,
-} from '@plait/common';
+import { withResize, ResizeRef, ResizeState } from '@plait/common';
 import { Freehand } from './type';
 import { getFreehandRectangle } from './utils';
 import {
   ResizeHandle,
   calculateResizedRect,
+  getHitRectangleResizeHandleRef,
   getShiftKeyState,
 } from '../../utils/resize-utils';
-
-/**
- * 命中测试辅助函数 - 检测点是否在缩放手柄上
- */
-function getHitRectangleResizeHandleRef(
-  board: PlaitBoard,
-  rectangle: RectangleClient,
-  point: Point,
-  angle: number = 0
-) {
-  const centerPoint = RectangleClient.getCenterPoint(rectangle);
-  const resizeHandleRefs = getRectangleResizeHandleRefs(
-    rectangle,
-    RESIZE_HANDLE_DIAMETER
-  );
-
-  if (angle) {
-    const rotatedPoint = rotatePoint(point, centerPoint, -angle);
-    let result = resizeHandleRefs.find((resizeHandleRef) => {
-      return RectangleClient.isHit(
-        RectangleClient.getRectangleByPoints([rotatedPoint, rotatedPoint]),
-        resizeHandleRef.rectangle
-      );
-    });
-    if (result) {
-      result.cursorClass = getRotatedResizeCursorClassByAngle(
-        result.cursorClass,
-        angle
-      );
-    }
-    return result;
-  } else {
-    return resizeHandleRefs.find((resizeHandleRef) => {
-      return RectangleClient.isHit(
-        RectangleClient.getRectangleByPoints([point, point]),
-        resizeHandleRef.rectangle
-      );
-    });
-  }
-}
-
-/**
- * 旋转点
- */
-function rotatePoint(point: Point, center: Point, angle: number): Point {
-  const rad = (angle * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-
-  const dx = point[0] - center[0];
-  const dy = point[1] - center[1];
-
-  return [
-    center[0] + dx * cos - dy * sin,
-    center[1] + dx * sin + dy * cos,
-  ];
-}
 
 /**
  * 获取选中的单个 Freehand 元素
@@ -115,7 +52,7 @@ function hitTest(board: PlaitBoard, point: Point) {
   const rectangle = getFreehandRectangle(freehand);
   const angle = freehand.angle || 0;
 
-  const handleRef = getHitRectangleResizeHandleRef(board, rectangle, point, angle);
+  const handleRef = getHitRectangleResizeHandleRef(rectangle, point, angle);
 
   if (handleRef) {
     return {

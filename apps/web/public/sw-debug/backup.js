@@ -26,7 +26,6 @@ import {
   ensureUniqueBackupName,
   buildAssetExportBaseName,
   mergePromptData,
-  filterCompletedMediaTasks,
   buildFolderPathMap,
   exportKnowledgeBaseData,
 } from './shared/backup-core.js';
@@ -99,14 +98,25 @@ export async function performBackup() {
     const manifest = {
       signature: BACKUP_SIGNATURE,
       version: BACKUP_VERSION,
+      schemaVersion: BACKUP_VERSION,
+      backupMode: 'complete',
       createdAt: Date.now(),
       source: 'sw-debug-panel',
       backupId,
-      includes: { prompts: true, projects: true, tasks: true, assets: true, knowledgeBase: true },
+      includes: {
+        prompts: true,
+        projects: true,
+        tasks: true,
+        assets: true,
+        knowledgeBase: true,
+        environment: false,
+      },
+      encryption: { enabled: false },
       stats: {
         promptCount: 0, videoPromptCount: 0, imagePromptCount: 0,
         folderCount: 0, boardCount: 0, assetCount: 0, taskCount: 0, kbNoteCount: 0,
       },
+      domainStats: {},
     };
 
     // 0. 任务数据
@@ -129,10 +139,10 @@ export async function performBackup() {
 
     // 3. 任务数据（非素材，放 Part1）
     updateProgress(30, '正在导出任务数据...');
-    const completedMediaTasks = filterCompletedMediaTasks(allTasks);
-    if (completedMediaTasks.length > 0) {
-      partManager.addFile('tasks.json', completedMediaTasks);
-      manifest.stats.taskCount = completedMediaTasks.length;
+    const backupTasks = allTasks.map(sanitizeTaskForBackup).filter(Boolean);
+    if (backupTasks.length > 0) {
+      partManager.addFile('tasks.json', backupTasks);
+      manifest.stats.taskCount = backupTasks.length;
     }
 
     // 3.5 知识库
@@ -196,11 +206,20 @@ async function collectTasksData() {
  * 收集提示词数据
  */
 async function collectPromptsData(allTasks = []) {
-  const [promptHistory, videoPromptHistory, imagePromptHistory, presetSettings] = await Promise.all([
+  const [
+    promptHistory,
+    videoPromptHistory,
+    imagePromptHistory,
+    presetSettings,
+    deletedPromptContents,
+    promptHistoryOverrides,
+  ] = await Promise.all([
     readKVItem(KV_KEYS.PROMPT_HISTORY),
     readKVItem(KV_KEYS.VIDEO_PROMPT_HISTORY),
     readKVItem(KV_KEYS.IMAGE_PROMPT_HISTORY),
     readKVItem(KV_KEYS.PRESET_SETTINGS),
+    readKVItem(KV_KEYS.PROMPT_DELETED_CONTENTS),
+    readKVItem(KV_KEYS.PROMPT_HISTORY_OVERRIDES),
   ]);
 
   return mergePromptData({
@@ -208,8 +227,18 @@ async function collectPromptsData(allTasks = []) {
     videoPromptHistory: videoPromptHistory || [],
     imagePromptHistory: imagePromptHistory || [],
     presetSettings: presetSettings || undefined,
+    deletedPromptContents: deletedPromptContents || [],
+    promptHistoryOverrides: promptHistoryOverrides || [],
     allTasks,
   });
+}
+
+function sanitizeTaskForBackup(task) {
+  if (!task || typeof task !== 'object' || typeof task.id !== 'string') {
+    return null;
+  }
+  const { config, ...rest } = task;
+  return rest;
 }
 
 /** 收集项目数据 */

@@ -5,9 +5,12 @@ import {
   getCandidateExtensions,
   getExtensionFromMimeType,
   hasExportableTaskMedia,
+  mergePromptData,
   normalizeBackupAssetType,
   normalizeCacheMediaType,
+  validateBackupManifest,
 } from './backup-utils';
+import { BACKUP_SIGNATURE } from './types';
 
 describe('backup-utils', () => {
   it('supports audio mime types and candidate extensions', () => {
@@ -46,5 +49,47 @@ describe('backup-utils', () => {
     expect(hasExportableTaskMedia({ clips: [{ audioUrl: '/clip.mp3' }] })).toBe(true);
     expect(hasExportableTaskMedia({ clips: [{ audioUrl: '' }] })).toBe(false);
     expect(hasExportableTaskMedia({})).toBe(false);
+  });
+
+  it('normalizes v4 prompt metadata for all preset types', () => {
+    const data = mergePromptData({
+      presetSettings: {
+        image: { pinnedPrompts: ['image'], deletedPrompts: [] },
+        'ppt-slide': { pinnedPrompts: ['slide'], deletedPrompts: ['old'] },
+      } as any,
+      deletedPromptContents: ['deleted'],
+      promptHistoryOverrides: [
+        {
+          sourceContent: 'raw',
+          content: 'edited',
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    expect(Object.keys(data.presetSettings)).toEqual([
+      'image',
+      'video',
+      'audio',
+      'text',
+      'agent',
+      'ppt-common',
+      'ppt-slide',
+    ]);
+    expect(data.presetSettings['ppt-slide'].pinnedPrompts).toEqual(['slide']);
+    expect(data.deletedPromptContents).toEqual(['deleted']);
+    expect(data.promptHistoryOverrides?.[0].content).toBe('edited');
+  });
+
+  it('validates v2/v3/v4 manifests and rejects newer versions', () => {
+    for (const version of [2, 3, 4]) {
+      expect(
+        validateBackupManifest({ signature: BACKUP_SIGNATURE, version })
+      ).toMatchObject({ version });
+    }
+
+    expect(() =>
+      validateBackupManifest({ signature: BACKUP_SIGNATURE, version: 5 })
+    ).toThrow('不支持的备份版本');
   });
 });

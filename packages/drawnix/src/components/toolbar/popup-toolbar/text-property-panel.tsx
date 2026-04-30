@@ -14,6 +14,7 @@ import { UnifiedColorPicker } from '../../unified-color-picker';
 import { useConfirmDialog } from '../../dialog/ConfirmDialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../../popover/popover';
 import { Island } from '../../island';
+import { HoverTip } from '../../shared/hover';
 import { GradientEditor, generateGradientCSS as generateFillGradientCSS } from '../../gradient-editor';
 import type { GradientFillConfig } from '../../../types/fill.types';
 import {
@@ -755,33 +756,36 @@ export const TextPropertyPanel: React.FC<TextPropertyPanelProps> = ({
               <div className="inline-control">
                 <label className="inline-control__label">{language === 'zh' ? '对齐' : 'Align'}</label>
                 <div className="align-buttons align-buttons--compact">
-                  <button
-                    className={classNames('align-buttons__btn', { 'is-active': textAlignState === 'left' })}
-                    onClick={() => handleTextAlignChange('left')}
-                    title={language === 'zh' ? '左对齐' : 'Align Left'}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M2 3h12v2H2V3zm0 4h8v2H2V7zm0 4h12v2H2v-2z"/>
-                    </svg>
-                  </button>
-                  <button
-                    className={classNames('align-buttons__btn', { 'is-active': textAlignState === 'center' })}
-                    onClick={() => handleTextAlignChange('center')}
-                    title={language === 'zh' ? '居中对齐' : 'Align Center'}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M2 3h12v2H2V3zm2 4h8v2H4V7zm-2 4h12v2H2v-2z"/>
-                    </svg>
-                  </button>
-                  <button
-                    className={classNames('align-buttons__btn', { 'is-active': textAlignState === 'right' })}
-                    onClick={() => handleTextAlignChange('right')}
-                    title={language === 'zh' ? '右对齐' : 'Align Right'}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M2 3h12v2H2V3zm4 4h8v2H6V7zm-4 4h12v2H2v-2z"/>
-                    </svg>
-                  </button>
+                  <HoverTip content={language === 'zh' ? '左对齐' : 'Align Left'} showArrow={false}>
+                    <button
+                      className={classNames('align-buttons__btn', { 'is-active': textAlignState === 'left' })}
+                      onClick={() => handleTextAlignChange('left')}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M2 3h12v2H2V3zm0 4h8v2H2V7zm0 4h12v2H2v-2z"/>
+                      </svg>
+                    </button>
+                  </HoverTip>
+                  <HoverTip content={language === 'zh' ? '居中对齐' : 'Align Center'} showArrow={false}>
+                    <button
+                      className={classNames('align-buttons__btn', { 'is-active': textAlignState === 'center' })}
+                      onClick={() => handleTextAlignChange('center')}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M2 3h12v2H2V3zm2 4h8v2H4V7zm-2 4h12v2H2v-2z"/>
+                      </svg>
+                    </button>
+                  </HoverTip>
+                  <HoverTip content={language === 'zh' ? '右对齐' : 'Align Right'} showArrow={false}>
+                    <button
+                      className={classNames('align-buttons__btn', { 'is-active': textAlignState === 'right' })}
+                      onClick={() => handleTextAlignChange('right')}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M2 3h12v2H2V3zm4 4h8v2H6V7zm-4 4h12v2H2v-2z"/>
+                      </svg>
+                    </button>
+                  </HoverTip>
                 </div>
               </div>
 
@@ -789,48 +793,54 @@ export const TextPropertyPanel: React.FC<TextPropertyPanelProps> = ({
               <div className="inline-control">
                 <label className="inline-control__label">{language === 'zh' ? '样式' : 'Style'}</label>
                 <div className="style-buttons">
-                  <button
-                    className={classNames('style-buttons__btn', { 'is-active': isBold })}
-                    onClick={handleBoldToggle}
-                    title={language === 'zh' ? '加粗' : 'Bold'}
-                  >
-                    <span className="style-buttons__icon style-buttons__icon--bold">B</span>
-                  </button>
-                  <button
-                    className={classNames('style-buttons__btn', { 'is-active': isItalic })}
-                    onClick={handleItalicToggle}
-                    title={language === 'zh' ? '斜体' : 'Italic'}
-                  >
-                    <span className="style-buttons__icon style-buttons__icon--italic">I</span>
-                  </button>
-                  <button
-                    className={classNames('style-buttons__btn', { 'is-active': isUnderline })}
-                    onClick={handleUnderlineToggle}
-                    title={language === 'zh' ? '下划线' : 'Underline'}
-                  >
-                    <span className="style-buttons__icon style-buttons__icon--underline">U</span>
-                  </button>
-                  <button
-                    className={classNames('style-buttons__btn', { 'is-active': isStrikethrough })}
-                    onClick={handleStrikethroughToggle}
-                    title={language === 'zh' ? '删除线' : 'Strikethrough'}
-                  >
-                    <span className="style-buttons__icon style-buttons__icon--strikethrough">S</span>
-                  </button>
-                  <button
-                    className={classNames('style-buttons__btn', { 'is-active': isSuperscript })}
-                    onClick={handleSuperscriptToggle}
-                    title={language === 'zh' ? '上标' : 'Superscript'}
-                  >
-                    <span className="style-buttons__icon style-buttons__icon--superscript">X<sup>2</sup></span>
-                  </button>
-                  <button
-                    className={classNames('style-buttons__btn', { 'is-active': isSubscript })}
-                    onClick={handleSubscriptToggle}
-                    title={language === 'zh' ? '下标' : 'Subscript'}
-                  >
-                    <span className="style-buttons__icon style-buttons__icon--subscript">X<sub>2</sub></span>
-                  </button>
+                  <HoverTip content={language === 'zh' ? '加粗' : 'Bold'} showArrow={false}>
+                    <button
+                      className={classNames('style-buttons__btn', { 'is-active': isBold })}
+                      onClick={handleBoldToggle}
+                    >
+                      <span className="style-buttons__icon style-buttons__icon--bold">B</span>
+                    </button>
+                  </HoverTip>
+                  <HoverTip content={language === 'zh' ? '斜体' : 'Italic'} showArrow={false}>
+                    <button
+                      className={classNames('style-buttons__btn', { 'is-active': isItalic })}
+                      onClick={handleItalicToggle}
+                    >
+                      <span className="style-buttons__icon style-buttons__icon--italic">I</span>
+                    </button>
+                  </HoverTip>
+                  <HoverTip content={language === 'zh' ? '下划线' : 'Underline'} showArrow={false}>
+                    <button
+                      className={classNames('style-buttons__btn', { 'is-active': isUnderline })}
+                      onClick={handleUnderlineToggle}
+                    >
+                      <span className="style-buttons__icon style-buttons__icon--underline">U</span>
+                    </button>
+                  </HoverTip>
+                  <HoverTip content={language === 'zh' ? '删除线' : 'Strikethrough'} showArrow={false}>
+                    <button
+                      className={classNames('style-buttons__btn', { 'is-active': isStrikethrough })}
+                      onClick={handleStrikethroughToggle}
+                    >
+                      <span className="style-buttons__icon style-buttons__icon--strikethrough">S</span>
+                    </button>
+                  </HoverTip>
+                  <HoverTip content={language === 'zh' ? '上标' : 'Superscript'} showArrow={false}>
+                    <button
+                      className={classNames('style-buttons__btn', { 'is-active': isSuperscript })}
+                      onClick={handleSuperscriptToggle}
+                    >
+                      <span className="style-buttons__icon style-buttons__icon--superscript">X<sup>2</sup></span>
+                    </button>
+                  </HoverTip>
+                  <HoverTip content={language === 'zh' ? '下标' : 'Subscript'} showArrow={false}>
+                    <button
+                      className={classNames('style-buttons__btn', { 'is-active': isSubscript })}
+                      onClick={handleSubscriptToggle}
+                    >
+                      <span className="style-buttons__icon style-buttons__icon--subscript">X<sub>2</sub></span>
+                    </button>
+                  </HoverTip>
                 </div>
               </div>
 
@@ -838,27 +848,30 @@ export const TextPropertyPanel: React.FC<TextPropertyPanelProps> = ({
               <div className="inline-control">
                 <label className="inline-control__label">{language === 'zh' ? '大小写' : 'Case'}</label>
                 <div className="case-buttons">
-                  <button
-                    className={classNames('case-buttons__btn', { 'is-active': textTransform === 'uppercase' })}
-                    onClick={() => handleTextTransformChange('uppercase')}
-                    title={language === 'zh' ? '全大写' : 'Uppercase'}
-                  >
-                    AA
-                  </button>
-                  <button
-                    className={classNames('case-buttons__btn', { 'is-active': textTransform === 'lowercase' })}
-                    onClick={() => handleTextTransformChange('lowercase')}
-                    title={language === 'zh' ? '全小写' : 'Lowercase'}
-                  >
-                    aa
-                  </button>
-                  <button
-                    className={classNames('case-buttons__btn', { 'is-active': textTransform === 'capitalize' })}
-                    onClick={() => handleTextTransformChange('capitalize')}
-                    title={language === 'zh' ? '首字母大写' : 'Capitalize'}
-                  >
-                    Aa
-                  </button>
+                  <HoverTip content={language === 'zh' ? '全大写' : 'Uppercase'} showArrow={false}>
+                    <button
+                      className={classNames('case-buttons__btn', { 'is-active': textTransform === 'uppercase' })}
+                      onClick={() => handleTextTransformChange('uppercase')}
+                    >
+                      AA
+                    </button>
+                  </HoverTip>
+                  <HoverTip content={language === 'zh' ? '全小写' : 'Lowercase'} showArrow={false}>
+                    <button
+                      className={classNames('case-buttons__btn', { 'is-active': textTransform === 'lowercase' })}
+                      onClick={() => handleTextTransformChange('lowercase')}
+                    >
+                      aa
+                    </button>
+                  </HoverTip>
+                  <HoverTip content={language === 'zh' ? '首字母大写' : 'Capitalize'} showArrow={false}>
+                    <button
+                      className={classNames('case-buttons__btn', { 'is-active': textTransform === 'capitalize' })}
+                      onClick={() => handleTextTransformChange('capitalize')}
+                    >
+                      Aa
+                    </button>
+                  </HoverTip>
                 </div>
               </div>
 
@@ -923,23 +936,24 @@ export const TextPropertyPanel: React.FC<TextPropertyPanelProps> = ({
               <div className="inline-control">
                 <label className="inline-control__label">{language === 'zh' ? '高亮' : 'Highlight'}</label>
                 <div className="highlight-colors">
-                  <button
-                    className={classNames('highlight-colors__btn highlight-colors__btn--none', { 'is-active': !bgColor })}
-                    onClick={() => handleBgColorChange(null)}
-                    title={language === 'zh' ? '无' : 'None'}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 16 16">
-                      <line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" strokeWidth="2"/>
-                    </svg>
-                  </button>
-                  {['#FFEB3B', '#4CAF50', '#2196F3', '#E91E63', '#FF9800', '#9C27B0'].map(color => (
+                  <HoverTip content={language === 'zh' ? '无' : 'None'} showArrow={false}>
                     <button
-                      key={color}
-                      className={classNames('highlight-colors__btn', { 'is-active': bgColor === color })}
-                      style={{ backgroundColor: color }}
-                      onClick={() => handleBgColorChange(color)}
-                      title={color}
-                    />
+                      className={classNames('highlight-colors__btn highlight-colors__btn--none', { 'is-active': !bgColor })}
+                      onClick={() => handleBgColorChange(null)}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 16 16">
+                        <line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" strokeWidth="2"/>
+                      </svg>
+                    </button>
+                  </HoverTip>
+                  {['#FFEB3B', '#4CAF50', '#2196F3', '#E91E63', '#FF9800', '#9C27B0'].map(color => (
+                    <HoverTip key={color} content={color} showArrow={false}>
+                      <button
+                        className={classNames('highlight-colors__btn', { 'is-active': bgColor === color })}
+                        style={{ backgroundColor: color }}
+                        onClick={() => handleBgColorChange(color)}
+                      />
+                    </HoverTip>
                   ))}
                 </div>
               </div>
@@ -976,37 +990,38 @@ export const TextPropertyPanel: React.FC<TextPropertyPanelProps> = ({
                     <label className="inline-control__label">{language === 'zh' ? '线型' : 'Line Style'}</label>
                     <div className="decoration-style-buttons">
                       {(['solid', 'double', 'dotted', 'dashed', 'wavy'] as const).map(style => (
-                        <button
-                          key={style}
-                          className={classNames('decoration-style-buttons__btn', { 'is-active': decorationStyle === style })}
-                          onClick={() => handleDecorationStyleChange(decorationStyle === style ? null : style)}
-                          title={style}
-                        >
-                          <span className={`decoration-preview decoration-preview--${style}`}>Ab</span>
-                        </button>
+                        <HoverTip key={style} content={style} showArrow={false}>
+                          <button
+                            className={classNames('decoration-style-buttons__btn', { 'is-active': decorationStyle === style })}
+                            onClick={() => handleDecorationStyleChange(decorationStyle === style ? null : style)}
+                          >
+                            <span className={`decoration-preview decoration-preview--${style}`}>Ab</span>
+                          </button>
+                        </HoverTip>
                       ))}
                     </div>
                   </div>
                   <div className="inline-control">
                     <label className="inline-control__label">{language === 'zh' ? '线色' : 'Line Color'}</label>
                     <div className="highlight-colors">
-                      <button
-                        className={classNames('highlight-colors__btn highlight-colors__btn--none', { 'is-active': !decorationColor })}
-                        onClick={() => handleDecorationColorChange(null)}
-                        title={language === 'zh' ? '默认' : 'Default'}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 16 16">
-                          <line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" strokeWidth="2"/>
-                        </svg>
-                      </button>
-                      {['#E91E63', '#FF5722', '#4CAF50', '#2196F3', '#9C27B0', '#000000'].map(color => (
+                      <HoverTip content={language === 'zh' ? '默认' : 'Default'} showArrow={false}>
                         <button
-                          key={color}
-                          className={classNames('highlight-colors__btn', { 'is-active': decorationColor === color })}
-                          style={{ backgroundColor: color }}
-                          onClick={() => handleDecorationColorChange(color)}
-                          title={color}
-                        />
+                          className={classNames('highlight-colors__btn highlight-colors__btn--none', { 'is-active': !decorationColor })}
+                          onClick={() => handleDecorationColorChange(null)}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 16 16">
+                            <line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" strokeWidth="2"/>
+                          </svg>
+                        </button>
+                      </HoverTip>
+                      {['#E91E63', '#FF5722', '#4CAF50', '#2196F3', '#9C27B0', '#000000'].map(color => (
+                        <HoverTip key={color} content={color} showArrow={false}>
+                          <button
+                            className={classNames('highlight-colors__btn', { 'is-active': decorationColor === color })}
+                            style={{ backgroundColor: color }}
+                            onClick={() => handleDecorationColorChange(color)}
+                          />
+                        </HoverTip>
                       ))}
                     </div>
                   </div>
@@ -1014,7 +1029,6 @@ export const TextPropertyPanel: React.FC<TextPropertyPanelProps> = ({
               )}
             </div>
           </div>
-
           {/* 阴影效果 */}
           <div className="text-property-panel__section">
             <div className="text-property-panel__section-content">
@@ -1032,16 +1046,16 @@ export const TextPropertyPanel: React.FC<TextPropertyPanelProps> = ({
                   {/* 阴影预设 */}
                   <div className="effect-presets">
                     {Object.entries(SHADOW_PRESETS.textShadow).map(([key, preset]) => (
-                      <div
-                        key={key}
-                        className={classNames('effect-presets__item', {
-                          'is-active': selectedShadowPreset === key,
-                        })}
-                        onClick={() => handleShadowPresetSelect(key, preset)}
-                        title={key}
-                      >
-                        <span style={{ textShadow: generateTextShadowCSS(preset) }}>Aa</span>
-                      </div>
+                      <HoverTip key={key} content={key} showArrow={false}>
+                        <div
+                          className={classNames('effect-presets__item', {
+                            'is-active': selectedShadowPreset === key,
+                          })}
+                          onClick={() => handleShadowPresetSelect(key, preset)}
+                        >
+                          <span style={{ textShadow: generateTextShadowCSS(preset) }}>Aa</span>
+                        </div>
+                      </HoverTip>
                     ))}
                   </div>
                   
@@ -1091,26 +1105,31 @@ export const TextPropertyPanel: React.FC<TextPropertyPanelProps> = ({
                             </Island>
                           </PopoverContent>
                         </Popover>
-                        <input
-                          type="range"
-                          className="inline-control__slider inline-control__slider--short"
-                          value={(() => {
-                            const alphaMatch = shadowConfig.color.match(/[\d.]+\)$/);
-                            return alphaMatch ? parseFloat(alphaMatch[0]) * 100 : 50;
-                          })()}
-                          min={0}
-                          max={100}
-                          step={5}
-                          title={language === 'zh' ? '透明度' : 'Opacity'}
-                          onChange={(e) => {
-                            const alpha = Number(e.target.value) / 100;
-                            const rgbMatch = shadowConfig.color.match(/\d+/g);
-                            if (rgbMatch && rgbMatch.length >= 3) {
-                              const [r, g, b] = rgbMatch.slice(0, 3);
-                              handleShadowConfigChange('color', `rgba(${r}, ${g}, ${b}, ${alpha})`);
-                            }
-                          }}
-                        />
+                        <HoverTip
+                          content={language === 'zh' ? '透明度' : 'Opacity'}
+                          showArrow={false}
+                        >
+                          <input
+                            type="range"
+                            className="inline-control__slider inline-control__slider--short"
+                            value={(() => {
+                              const alphaMatch = shadowConfig.color.match(/[\d.]+\)$/);
+                              return alphaMatch ? parseFloat(alphaMatch[0]) * 100 : 50;
+                            })()}
+                            min={0}
+                            max={100}
+                            step={5}
+                            aria-label={language === 'zh' ? '透明度' : 'Opacity'}
+                            onChange={(e) => {
+                              const alpha = Number(e.target.value) / 100;
+                              const rgbMatch = shadowConfig.color.match(/\d+/g);
+                              if (rgbMatch && rgbMatch.length >= 3) {
+                                const [r, g, b] = rgbMatch.slice(0, 3);
+                                handleShadowConfigChange('color', `rgba(${r}, ${g}, ${b}, ${alpha})`);
+                              }
+                            }}
+                          />
+                        </HoverTip>
                         <span className="inline-control__value inline-control__value--narrow">
                           {(() => {
                             const alphaMatch = shadowConfig.color.match(/[\d.]+\)$/);

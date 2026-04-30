@@ -47,6 +47,7 @@ import { toolWindowService } from '../../../services/tool-window-service';
 import { MUSIC_PLAYER_TOOL_ID } from '../../tool-ids';
 import type { ToolInstanceContextProps } from '../../../types/toolbox.types';
 import { MusicPlayerQueueList } from './MusicPlayerQueueList';
+import { HoverTip } from '../../../components/shared/hover';
 import './music-player-tool.scss';
 
 const DEFAULT_PLAYER_WINDOW_SIZE = { width: 520, height: 640 };
@@ -689,107 +690,120 @@ export const MusicPlayerTool: React.FC<MusicPlayerToolProps> = ({
               </div>
             </div>
             <div className="music-player-tool__now-playing-actions">
-              <button
-                type="button"
-                className="music-player-tool__action-btn"
-                onClick={() => void playback.playPrevious()}
-                disabled={playback.activeQueueIndex <= 0}
-                aria-label="上一首"
-                data-tooltip="上一首"
+              <HoverTip content="上一首" showArrow={false}>
+                <button
+                  type="button"
+                  className="music-player-tool__action-btn"
+                  onClick={() => void playback.playPrevious()}
+                  disabled={playback.activeQueueIndex <= 0}
+                  aria-label="上一首"
+                >
+                  <SkipBack size={16} />
+                </button>
+              </HoverTip>
+              <HoverTip
+                content={playback.playing ? '暂停' : '播放'}
+                showArrow={false}
               >
-                <SkipBack size={16} />
-              </button>
-              <button
-                type="button"
-                className="music-player-tool__action-btn music-player-tool__action-btn--primary"
-                onClick={() => {
-                  if (playback.playing) {
-                    playback.pausePlayback();
-                  } else if (isReadingMode) {
-                    void playback.resumePlayback();
-                  } else if (playback.activeAudioUrl) {
-                    void playback.resumePlayback();
-                  } else if (fallbackTrackItem) {
-                    void handlePlayListItem(fallbackTrackItem);
-                  } else {
-                    return;
+                <button
+                  type="button"
+                  className="music-player-tool__action-btn music-player-tool__action-btn--primary"
+                  onClick={() => {
+                    if (playback.playing) {
+                      playback.pausePlayback();
+                    } else if (isReadingMode) {
+                      void playback.resumePlayback();
+                    } else if (playback.activeAudioUrl) {
+                      void playback.resumePlayback();
+                    } else if (fallbackTrackItem) {
+                      void handlePlayListItem(fallbackTrackItem);
+                    } else {
+                      return;
+                    }
+                  }}
+                  disabled={
+                    isReadingMode
+                      ? !playback.activeReadingSourceId
+                      : !playback.activeAudioUrl && !fallbackTrackItem
                   }
-                }}
-                disabled={
-                  isReadingMode
-                    ? !playback.activeReadingSourceId
-                    : !playback.activeAudioUrl && !fallbackTrackItem
-                }
-                aria-label={playback.playing ? '暂停' : '播放'}
-                data-tooltip={playback.playing ? '暂停' : '播放'}
-              >
-                {playback.playing ? <Pause size={16} /> : <Play size={16} />}
-              </button>
-              <button
-                type="button"
-                className="music-player-tool__action-btn"
-                onClick={() => void playback.playNext()}
-                disabled={
-                  playback.activeQueueIndex < 0 ||
-                  playback.activeQueueIndex >= playback.queue.length - 1
-                }
-                aria-label="下一首"
-                data-tooltip="下一首"
-              >
-                <SkipForward size={16} />
-              </button>
-              <Dropdown
-                options={playbackRateOptions}
-                trigger="click"
-                placement="bottom-right"
-                minColumnWidth={112}
-                onClick={(data) => playback.setPlaybackRate(Number(data.value))}
-              >
+                  aria-label={playback.playing ? '暂停' : '播放'}
+                >
+                  {playback.playing ? <Pause size={16} /> : <Play size={16} />}
+                </button>
+              </HoverTip>
+              <HoverTip content="下一首" showArrow={false}>
                 <button
                   type="button"
                   className="music-player-tool__action-btn"
-                  aria-label={`切换播放速度，当前${playbackRateLabel}`}
-                  data-tooltip={playbackRateTooltip}
+                  onClick={() => void playback.playNext()}
+                  disabled={
+                    playback.activeQueueIndex < 0 ||
+                    playback.activeQueueIndex >= playback.queue.length - 1
+                  }
+                  aria-label="下一首"
                 >
-                  <Gauge size={16} />
+                  <SkipForward size={16} />
                 </button>
-              </Dropdown>
-              <Dropdown
-                options={PLAYBACK_MODE_OPTIONS}
-                trigger="click"
-                placement="bottom-right"
-                minColumnWidth={132}
-                onClick={(data) => playback.setPlaybackMode(data.value as PlaybackMode)}
-              >
+              </HoverTip>
+              <HoverTip content={playbackRateTooltip} showArrow={false}>
+                <span>
+                  <Dropdown
+                    options={playbackRateOptions}
+                    trigger="click"
+                    placement="bottom-right"
+                    minColumnWidth={112}
+                    onClick={(data) => playback.setPlaybackRate(Number(data.value))}
+                  >
+                    <button
+                      type="button"
+                      className="music-player-tool__action-btn"
+                      aria-label={`切换播放速度，当前${playbackRateLabel}`}
+                    >
+                      <Gauge size={16} />
+                    </button>
+                  </Dropdown>
+                </span>
+              </HoverTip>
+              <HoverTip content={playbackModeLabel} showArrow={false}>
+                <span>
+                  <Dropdown
+                    options={PLAYBACK_MODE_OPTIONS}
+                    trigger="click"
+                    placement="bottom-right"
+                    minColumnWidth={132}
+                    onClick={(data) => playback.setPlaybackMode(data.value as PlaybackMode)}
+                  >
+                    <button
+                      type="button"
+                      className="music-player-tool__action-btn"
+                      aria-label={`切换播放模式，当前${playbackModeLabel}`}
+                    >
+                      {playbackModeIcon}
+                    </button>
+                  </Dropdown>
+                </span>
+              </HoverTip>
+              <HoverTip content="切回播放控件" showArrow={false}>
                 <button
                   type="button"
-                  className="music-player-tool__action-btn"
-                  aria-label={`切换播放模式，当前${playbackModeLabel}`}
-                  data-tooltip={playbackModeLabel}
+                  className="music-player-tool__action-btn music-player-tool__action-btn--ghost"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    // 延后一帧最小化，避免底层 popup-toolbar 接到同一次点击造成误暂停。
+                    requestAnimationFrame(() => {
+                      toolWindowService.minimizeTool(windowTargetId);
+                    });
+                  }}
+                  aria-label="切回播放控件"
                 >
-                  {playbackModeIcon}
+                  <Minimize2 size={16} />
                 </button>
-              </Dropdown>
-              <button
-                type="button"
-                className="music-player-tool__action-btn music-player-tool__action-btn--ghost"
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  // 延后一帧最小化，避免底层 popup-toolbar 接到同一次点击造成误暂停。
-                  requestAnimationFrame(() => {
-                    toolWindowService.minimizeTool(windowTargetId);
-                  });
-                }}
-                aria-label="切回播放控件"
-                data-tooltip="切回播放控件"
-              >
-                <Minimize2 size={16} />
-              </button>
+              </HoverTip>
             </div>
           </div>
 

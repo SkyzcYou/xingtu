@@ -1347,16 +1347,30 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
     const text = inlineTextRef.current.innerText || '';
     if (text.trim()) {
       DrawTransforms.insertText(board, inlineTextInput.worldPoint, text);
+      const insertedTextElement = board.children[board.children.length - 1];
+      const insertedTextElementId =
+        insertedTextElement && PlaitDrawElement.isText(insertedTextElement)
+          ? insertedTextElement.id
+          : null;
 
       // 修正可能的 Infinity 高度问题
       requestAnimationFrame(() => {
-        const lastElement = board.children[board.children.length - 1];
-        if (PlaitDrawElement.isText(lastElement)) {
-          const textEl = lastElement as any;
+        if (!insertedTextElementId) {
+          return;
+        }
+        const textElementIndex = board.children.findIndex(
+          (element) => element.id === insertedTextElementId
+        );
+        if (textElementIndex === -1) {
+          return;
+        }
+        const textElement = board.children[textElementIndex];
+        if (PlaitDrawElement.isText(textElement)) {
+          const textEl = textElement as any;
           if (!isFinite(textEl.textHeight)) {
             const rect = RectangleClient.getRectangleByPoints(textEl.points);
             Transforms.setNode(board, { textHeight: rect.height }, [
-              board.children.length - 1,
+              textElementIndex,
             ]);
           }
         }

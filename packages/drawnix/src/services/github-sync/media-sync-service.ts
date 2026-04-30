@@ -21,6 +21,7 @@ import {
   encodeUrlToFilename,
 } from './types';
 import { mediaCollector } from './media-collector';
+import { base64ToBlob, blobToBase64, formatSize } from './blob-utils';
 
 /** 媒体同步状态存储键 */
 const MEDIA_SYNC_STATUS_KEY = 'github_media_sync_status';
@@ -35,48 +36,10 @@ interface MediaSyncStatusCache {
 }
 
 /**
- * 格式化文件大小
- */
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-/**
  * 获取设备 ID
  */
 function getDeviceId(): string {
   return localStorage.getItem(DRAWNIX_DEVICE_ID_KEY) || 'unknown';
-}
-
-/**
- * 将 Blob 转换为 Base64
- */
-async function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result as string;
-      // 移除 data URL 前缀
-      const base64Data = base64.split(',')[1];
-      resolve(base64Data);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-/**
- * 将 Base64 转换为 Blob
- */
-function base64ToBlob(base64: string, mimeType: string): Blob {
-  const binaryString = atob(base64);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return new Blob([bytes], { type: mimeType });
 }
 
 /** 媒体同步完成回调类型 */

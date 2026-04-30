@@ -18,35 +18,14 @@ import {
   ResizeRef,
   ResizeState,
   ResizeHandle,
-  getRectangleResizeHandleRefs,
-  RESIZE_HANDLE_DIAMETER,
 } from '@plait/common';
 import { PlaitFrame, isFrameElement } from '../types/frame.types';
 import {
   calculateResizedRect,
+  getHitRectangleResizeHandleRef,
   getShiftKeyState,
 } from '../utils/resize-utils';
 import { FrameTransforms } from './with-frame';
-
-/**
- * 命中测试辅助函数 - 检测点是否在缩放手柄上
- */
-function getHitRectangleResizeHandleRef(
-  rectangle: RectangleClient,
-  point: Point,
-) {
-  const resizeHandleRefs = getRectangleResizeHandleRefs(
-    rectangle,
-    RESIZE_HANDLE_DIAMETER
-  );
-
-  return resizeHandleRefs.find((resizeHandleRef) => {
-    return RectangleClient.isHit(
-      RectangleClient.getRectangleByPoints([point, point]),
-      resizeHandleRef.rectangle
-    );
-  });
-}
 
 /**
  * 判断当前选中的元素是否为可缩放的 Frame

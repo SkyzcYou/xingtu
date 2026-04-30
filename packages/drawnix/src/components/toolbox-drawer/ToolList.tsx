@@ -6,7 +6,10 @@
 
 import React from 'react';
 import { ToolDefinition } from '../../types/toolbox.types';
-import { TOOL_CATEGORY_LABELS } from '../../constants/built-in-tools';
+import {
+  TOOL_CATEGORY_LABELS,
+  sortToolCategories,
+} from '../../constants/built-in-tools';
 import { ToolItem } from './ToolItem';
 
 export interface ToolListProps {
@@ -29,7 +32,7 @@ export const ToolList: React.FC<ToolListProps> = ({
   onToolOpenWindow,
   onToolDelete,
 }) => {
-  const categories = Object.keys(toolsByCategory);
+  const categories = sortToolCategories(Object.keys(toolsByCategory));
 
   if (categories.length === 0) {
     return (

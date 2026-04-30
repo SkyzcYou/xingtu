@@ -10,21 +10,23 @@
 - [x] 2.2 将现有 `HoverPopover` 收敛为 `HoverCard` 兼容层
 - [x] 2.3 将直接 `Tooltip` 用法批量迁移为 `HoverTip`
 
-## 3. High-Frequency Native Hover Cleanup
+## 3. Application UI Hover Cleanup
 
 - [x] 3.1 收敛画布搜索按钮的原生 `title`
 - [x] 3.2 收敛音频播放器控制按钮的 `data-tooltip`
 - [x] 3.3 收敛提示词列表的原生 `title`
+- [x] 3.4 明确应用 UI 视觉 hover 提示统一使用 `HoverTip` / `HoverCard`
+- [x] 3.5 明确例外：Markdown/用户内容 `title` 与 TDesign 表单 tips
 
 ## 4. Guard Rails
 
-- [x] 4.1 增加组件层 hover 用法检查脚本，禁止继续直接引入 `Tooltip`
+- [x] 4.1 增加组件层 hover 用法检查脚本，禁止继续直接引入 `Tooltip` 或新增非共享视觉 hover 提示
 - [x] 4.2 将检查脚本接入 `drawnix` lint
 
 ## 5. Validation
 
 - [x] 5.1 运行共享 hover 单测
-- [ ] 5.2 运行 `drawnix` typecheck
+- [x] 5.2 运行 `drawnix` typecheck
 - [ ] 5.3 运行 `drawnix` lint
 
-> 说明：`5.2 / 5.3` 当前被仓库既有基线问题阻塞，失败项与本次 hover 改造无直接关联，需在独立修复中处理。
+> 说明：`5.3` 当前被仓库既有 ESLint 基线问题阻塞，失败项与本次 hover 改造无直接关联，需在独立修复中处理。

@@ -13,7 +13,6 @@ import type {
   MCPExecuteOptions,
   MCPTaskResult,
 } from '../types';
-import { getFileExtension, normalizeImageDataUrl } from '@aitu/utils';
 import { TaskType } from '../../types/task.types';
 import {
   getDefaultImageModel,
@@ -110,6 +109,12 @@ export interface ImageGenerationParams {
   autoInsertToCanvas?: boolean;
   /** 提示词历史轻量元数据 */
   promptMeta?: PromptLineageMeta;
+  /** 连环画生成器动作元数据 */
+  comicCreatorAction?: 'page-image';
+  /** 连环画记录 ID */
+  comicCreatorRecordId?: string;
+  /** 连环画页面 ID */
+  comicCreatorPageId?: string;
 }
 
 function shouldUseEditSchema(params: ImageGenerationParams): boolean {
@@ -141,6 +146,14 @@ function buildAdapterParams(
   }
 
   return Object.keys(adapterParams).length > 0 ? adapterParams : undefined;
+}
+
+function buildQueueAdapterParams(
+  params: ImageGenerationParams
+): Record<string, unknown> | undefined {
+  // Queue mode already expands top-level count into multiple tasks.
+  // Do not also send it as adapter n/count, or count=2 becomes 2 tasks * 2 images.
+  return buildAdapterParams({ ...params, count: undefined });
 }
 
 /**
@@ -201,6 +214,9 @@ async function executeAsync(params: ImageGenerationParams): Promise<MCPResult> {
       }
     );
 
+    const { getFileExtension, normalizeImageDataUrl } = await import(
+      '@aitu/utils'
+    );
     const imageUrl = normalizeImageDataUrl(result.url);
     const format = getFileExtension(imageUrl) || result.format || 'png';
 
@@ -230,35 +246,39 @@ function getImageQueueConfig(params: ImageGenerationParams) {
     resultType: 'image' as const,
     getDefaultModel: getCurrentImageModel,
     logPrefix: 'ImageGenerationTool',
-    buildTaskPayload: () => ({
-      prompt: params.prompt,
-      size: params.size || '1x1',
-      uploadedImages:
-        uploadedImages && uploadedImages.length > 0
-          ? uploadedImages
-          : undefined,
-      referenceImages:
-        params.referenceImages && params.referenceImages.length > 0
-          ? params.referenceImages
-          : undefined,
-      generationMode: params.generationMode,
-      maskImage: params.maskImage,
-      inputFidelity: params.inputFidelity,
-      background: params.background,
-      outputFormat: params.outputFormat,
-      outputCompression: params.outputCompression,
-      model: params.model || getCurrentImageModel(),
-      modelRef: params.modelRef || null,
-      targetFrameId: params.targetFrameId,
-      targetFrameDimensions: params.targetFrameDimensions,
-      pptSlideImage: params.pptSlideImage,
-      pptSlidePrompt: params.pptSlidePrompt,
-      pptReplaceElementId: params.pptReplaceElementId,
-      promptMeta: params.promptMeta,
-      ...(buildAdapterParams(params)
-        ? { params: buildAdapterParams(params) }
-        : {}),
-    }),
+    buildTaskPayload: () => {
+      const adapterParams = buildQueueAdapterParams(params);
+      return {
+        prompt: params.prompt,
+        size: params.size || '1x1',
+        uploadedImages:
+          uploadedImages && uploadedImages.length > 0
+            ? uploadedImages
+            : undefined,
+        referenceImages:
+          params.referenceImages && params.referenceImages.length > 0
+            ? params.referenceImages
+            : undefined,
+        generationMode: params.generationMode,
+        maskImage: params.maskImage,
+        inputFidelity: params.inputFidelity,
+        background: params.background,
+        outputFormat: params.outputFormat,
+        outputCompression: params.outputCompression,
+        model: params.model || getCurrentImageModel(),
+        modelRef: params.modelRef || null,
+        targetFrameId: params.targetFrameId,
+        targetFrameDimensions: params.targetFrameDimensions,
+        pptSlideImage: params.pptSlideImage,
+        pptSlidePrompt: params.pptSlidePrompt,
+        pptReplaceElementId: params.pptReplaceElementId,
+        promptMeta: params.promptMeta,
+        comicCreatorAction: params.comicCreatorAction,
+        comicCreatorRecordId: params.comicCreatorRecordId,
+        comicCreatorPageId: params.comicCreatorPageId,
+        ...(adapterParams ? { params: adapterParams } : {}),
+      };
+    },
     buildResultData: () => ({
       size: params.size || '1x1',
     }),

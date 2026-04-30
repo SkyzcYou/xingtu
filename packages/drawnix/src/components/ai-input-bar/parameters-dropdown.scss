@@ -5,12 +5,12 @@
 
 @import '../../styles/common-variables';
 
-$orange-primary: #F59E0B;
-$orange-dark: #D97706;
-$gray-light: #F3F4F6;
-$gray-medium: #9CA3AF;
-$gray-dark: #6B7280;
-$text-dark: #1F2937;
+$orange-primary: #f59e0b;
+$orange-dark: #d97706;
+$gray-light: #f3f4f6;
+$gray-medium: #9ca3af;
+$gray-dark: #6b7280;
+$text-dark: #1f2937;
 
 .parameters-dropdown {
   position: relative;
@@ -85,8 +85,14 @@ $text-dark: #1F2937;
   }
 
   @keyframes paramDropdownFadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   &__header {
@@ -186,6 +192,12 @@ $text-dark: #1F2937;
 
   &__field {
     padding: 0 4px;
+
+    &--with-action {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
   }
 
   &__field-input {
@@ -209,6 +221,33 @@ $text-dark: #1F2937;
       color: var(--color-text-tertiary, #999);
     }
   }
+
+  &__field--with-action &__field-input {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  &__field-action {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 32px;
+    border: 1px solid var(--color-border, #ddd);
+    border-radius: 8px;
+    background: var(--color-surface, #fff);
+    color: $gray-dark;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease,
+      background-color 0.15s ease;
+
+    &:hover {
+      border-color: rgba($orange-primary, 0.8);
+      background: rgba($orange-primary, 0.1);
+      color: $orange-dark;
+    }
+  }
 }
 
 // 暗色主题
@@ -216,8 +255,12 @@ $text-dark: #1F2937;
   .parameters-dropdown {
     &__trigger {
       color: var(--color-gray-20, #ccc);
-      &:hover { background: rgba($orange-primary, 0.15); }
-      &--open { background: rgba($orange-primary, 0.2); }
+      &:hover {
+        background: rgba($orange-primary, 0.15);
+      }
+      &--open {
+        background: rgba($orange-primary, 0.2);
+      }
     }
 
     &__label {
@@ -287,6 +330,18 @@ $text-dark: #1F2937;
 
       &::placeholder {
         color: var(--color-gray-50, #888);
+      }
+    }
+
+    &__field-action {
+      background: var(--color-surface-mid, #333);
+      border-color: var(--color-border, #444);
+      color: var(--color-gray-30, #bbb);
+
+      &:hover {
+        border-color: rgba($orange-primary, 0.8);
+        background: rgba($orange-primary, 0.15);
+        color: $orange-primary;
       }
     }
   }

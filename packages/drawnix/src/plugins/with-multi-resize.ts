@@ -21,8 +21,6 @@ import {
   withResize,
   ResizeRef,
   ResizeState,
-  getRectangleResizeHandleRefs,
-  RESIZE_HANDLE_DIAMETER,
   drawHandle,
 } from '@plait/common';
 import { PlaitDrawElement } from '@plait/draw';
@@ -33,6 +31,7 @@ import { getPenPathRectangle } from './pen/utils';
 import {
   ResizeHandle,
   calculateResizedRect,
+  getHitRectangleResizeHandleRef,
   getShiftKeyState,
 } from '../utils/resize-utils';
 
@@ -64,26 +63,6 @@ function getElementRectangle(board: PlaitBoard, element: PlaitElement): Rectangl
   }
   // 其他 Plait 元素使用 board.getRectangle
   return board.getRectangle(element);
-}
-
-/**
- * 命中测试辅助函数 - 检测点是否在缩放手柄上
- */
-function getHitRectangleResizeHandleRef(
-  rectangle: RectangleClient,
-  point: Point
-) {
-  const resizeHandleRefs = getRectangleResizeHandleRefs(
-    rectangle,
-    RESIZE_HANDLE_DIAMETER
-  );
-
-  return resizeHandleRefs.find((resizeHandleRef) => {
-    return RectangleClient.isHit(
-      RectangleClient.getRectangleByPoints([point, point]),
-      resizeHandleRef.rectangle
-    );
-  });
 }
 
 /**

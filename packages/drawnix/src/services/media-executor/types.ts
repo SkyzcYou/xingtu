@@ -118,6 +118,7 @@ export interface TextGenerationParams {
   model?: string;
   modelRef?: ModelRef | null;
   referenceImages?: string[];
+  inlineDataParts?: GeminiMessagePart[];
   params?: Record<string, unknown>;
 }
 

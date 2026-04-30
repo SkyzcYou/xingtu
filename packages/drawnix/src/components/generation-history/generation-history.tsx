@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { HistoryIcon } from 'tdesign-icons-react';
 import { useI18n } from '../../i18n';
-import { HoverTip } from '../shared';
+import { HoverTip } from '../shared/hover';
 import './generation-history.scss';
 
 // 通用历史记录项接口
@@ -126,14 +126,18 @@ export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
         zIndex: 10
       }}
     >
-      <button
-        className="history-icon-button"
-        onClick={() => setShowHistoryPopover(!showHistoryPopover)}
-        onMouseEnter={() => setShowHistoryPopover(true)}
-        title={language === 'zh' ? '查看生成历史' : 'View generation history'}
+      <HoverTip
+        content={language === 'zh' ? '查看生成历史' : 'View generation history'}
+        showArrow={false}
       >
-        <HistoryIcon />
-      </button>
+        <button
+          className="history-icon-button"
+          onClick={() => setShowHistoryPopover(!showHistoryPopover)}
+          onMouseEnter={() => setShowHistoryPopover(true)}
+        >
+          <HistoryIcon />
+        </button>
+      </HoverTip>
       {showHistoryPopover && (
         <div
           className="history-popover"

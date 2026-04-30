@@ -1147,7 +1147,7 @@ export const PopupToolbar = () => {
                 }
                 visible={true}
                 selected={isCurrentReadingSelection && playback.playing}
-                title={speechActionLabel}
+                tooltip={speechActionLabel}
                 aria-label={speechActionLabel}
                 data-track="toolbar_click_text_to_speech"
                 onPointerUp={() => {
@@ -1190,7 +1190,7 @@ export const PopupToolbar = () => {
                 icon={<PropertySettingsIcon />}
                 visible={true}
                 selected={showPropertyPanel}
-                title={t('propertyPanel.title')}
+                tooltip={t('propertyPanel.title')}
                 aria-label={t('propertyPanel.title')}
                 data-track="toolbar_click_property_settings"
                 onPointerUp={() => {
@@ -1230,7 +1230,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<Presentation size={15} />}
                 visible={true}
-                title={language === 'zh' ? '转换为PPT' : 'Convert to PPT'}
+                tooltip={language === 'zh' ? '转换为PPT' : 'Convert to PPT'}
                 aria-label={language === 'zh' ? '转换为PPT' : 'Convert to PPT'}
                 data-track="toolbar_click_mindmap_to_ppt"
                 onPointerUp={async () => {
@@ -1288,7 +1288,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<Pencil size={15} />}
                 visible={true}
-                title={
+                tooltip={
                   language === 'zh'
                     ? '在知识库中编辑'
                     : 'Edit in Knowledge Base'
@@ -1317,7 +1317,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<SaveFileIcon size={15} />}
                 visible={true}
-                title={
+                tooltip={
                   language === 'zh' ? '保存到知识库' : 'Save to Knowledge Base'
                 }
                 aria-label={
@@ -1350,7 +1350,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<Copy size={15} />}
                 visible={true}
-                title={language === 'zh' ? '复制文本内容' : 'Copy text content'}
+                tooltip={language === 'zh' ? '复制文本内容' : 'Copy text content'}
                 aria-label={
                   language === 'zh' ? '复制文本内容' : 'Copy text content'
                 }
@@ -1370,7 +1370,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<MergeIcon />}
                 visible={true}
-                title={language === 'zh' ? '合并内容' : 'Merge Content'}
+                tooltip={language === 'zh' ? '合并内容' : 'Merge Content'}
                 aria-label={language === 'zh' ? '合并内容' : 'Merge Content'}
                 data-track="toolbar_click_content_merge"
                 onPointerUp={() => {
@@ -1385,7 +1385,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<AIImageIcon />}
                 visible={true}
-                title={language === 'zh' ? 'AI图片生成' : 'AI Image Generation'}
+                tooltip={language === 'zh' ? 'AI图片生成' : 'AI Image Generation'}
                 aria-label={
                   language === 'zh' ? 'AI图片生成' : 'AI Image Generation'
                 }
@@ -1400,7 +1400,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<AIVideoIcon />}
                 visible={true}
-                title={language === 'zh' ? 'AI视频生成' : 'AI Video Generation'}
+                tooltip={language === 'zh' ? 'AI视频生成' : 'AI Video Generation'}
                 aria-label={
                   language === 'zh' ? 'AI视频生成' : 'AI Video Generation'
                 }
@@ -1417,7 +1417,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<VideoFrameIcon />}
                 visible={true}
-                title={
+                tooltip={
                   language === 'zh' ? '视频帧选择' : 'Video Frame Selection'
                 }
                 aria-label={
@@ -1443,7 +1443,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<Scaling size={15} />}
                 visible={true}
-                title={language === 'zh' ? '素材自适应PPT' : 'Fit media to PPT'}
+                tooltip={language === 'zh' ? '素材自适应PPT' : 'Fit media to PPT'}
                 aria-label={
                   language === 'zh' ? '素材自适应PPT' : 'Fit media to PPT'
                 }
@@ -1484,7 +1484,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<SplitImageIcon />}
                 visible={true}
-                title={language === 'zh' ? '智能拆图' : 'Smart Split'}
+                tooltip={language === 'zh' ? '智能拆图' : 'Smart Split'}
                 aria-label={language === 'zh' ? '智能拆图' : 'Smart Split'}
                 data-track="toolbar_click_split_image"
                 onPointerUp={async () => {
@@ -1551,7 +1551,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<Pencil size={15} />}
                 visible={true}
-                title={language === 'zh' ? '编辑图片' : 'Edit Image'}
+                tooltip={language === 'zh' ? '编辑图片' : 'Edit Image'}
                 aria-label={language === 'zh' ? '编辑图片' : 'Edit Image'}
                 data-track="toolbar_click_image_edit"
                 onPointerUp={() => {
@@ -1574,7 +1574,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<DownloadIcon />}
                 visible={true}
-                title={language === 'zh' ? '下载' : 'Download'}
+                tooltip={language === 'zh' ? '下载' : 'Download'}
                 aria-label={language === 'zh' ? '下载' : 'Download'}
                 data-track="toolbar_click_download"
                 onPointerUp={async () => {
@@ -1759,7 +1759,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<MergeIcon />}
                 visible={true}
-                title={language === 'zh' ? '合并为图片' : 'Merge to Image'}
+                tooltip={language === 'zh' ? '合并为图片' : 'Merge to Image'}
                 aria-label={language === 'zh' ? '合并为图片' : 'Merge to Image'}
                 data-track="toolbar_click_merge"
                 onPointerUp={async () => {
@@ -1983,7 +1983,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<VideoMergeIcon />}
                 visible={true}
-                title={language === 'zh' ? '合成视频' : 'Merge Videos'}
+                tooltip={language === 'zh' ? '合成视频' : 'Merge Videos'}
                 aria-label={language === 'zh' ? '合成视频' : 'Merge Videos'}
                 data-track="toolbar_click_video_merge"
                 onPointerUp={async () => {
@@ -2128,7 +2128,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<Play size={15} />}
                 visible={true}
-                title={language === 'zh' ? '播放幻灯片' : 'Play Slideshow'}
+                tooltip={language === 'zh' ? '播放幻灯片' : 'Play Slideshow'}
                 aria-label={language === 'zh' ? '播放幻灯片' : 'Play Slideshow'}
                 data-track="toolbar_click_frame_play"
                 onPointerUp={() => {
@@ -2149,7 +2149,7 @@ export const PopupToolbar = () => {
                 type="icon"
                 icon={<Play size={15} />}
                 visible={true}
-                title={
+                tooltip={
                   language === 'zh'
                     ? '在音乐播放器中播放'
                     : 'Play in Music Player'
@@ -2194,7 +2194,7 @@ export const PopupToolbar = () => {
               type="icon"
               icon={<DuplicateIcon />}
               visible={true}
-              title={t('general.duplicate')}
+              tooltip={t('general.duplicate')}
               aria-label={t('general.duplicate')}
               data-track="toolbar_click_duplicate"
               onPointerUp={() => {
@@ -2227,7 +2227,7 @@ export const PopupToolbar = () => {
               type="icon"
               icon={<TrashIcon />}
               visible={true}
-              title={t('general.delete')}
+              tooltip={t('general.delete')}
               aria-label={t('general.delete')}
               data-track="toolbar_click_delete"
               onPointerUp={() => {

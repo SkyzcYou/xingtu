@@ -28,6 +28,7 @@ import type {
 } from './types';
 import { registerModelAdapter } from './registry';
 import { registerKlingAdapter } from './kling-adapter';
+import { registerHappyHorseAdapter } from './happyhorse-adapter';
 import { registerMJImageAdapter } from './mj-image-adapter';
 import { registerFluxAdapter } from './flux-adapter';
 import { registerSeedreamAdapter } from './seedream-adapter';
@@ -51,7 +52,10 @@ const imageModelIds = [...IMAGE_MODEL_VIP_OPTIONS, ...IMAGE_MODEL_MORE_OPTIONS]
   );
 
 const videoModelIds = VIDEO_MODELS.map((model) => model.id).filter(
-  (modelId) => !modelId.startsWith('kling') && !modelId.startsWith('seedance')
+  (modelId) =>
+    !modelId.startsWith('kling') &&
+    !modelId.startsWith('seedance') &&
+    !modelId.includes('happyhorse')
 );
 
 const audioModelIds = AUDIO_MODELS.map((model) => model.id);
@@ -200,7 +204,11 @@ export const geminiVideoAdapter: VideoModelAdapter = {
       return false;
     }
     const lowerId = modelConfig.id.toLowerCase();
-    return !lowerId.includes('kling') && !lowerId.includes('seedance');
+    return (
+      !lowerId.includes('kling') &&
+      !lowerId.includes('seedance') &&
+      !lowerId.includes('happyhorse')
+    );
   },
   supportedModels: videoModelIds,
   defaultModel: DEFAULT_VIDEO_MODEL_ID,
@@ -308,6 +316,7 @@ export function registerDefaultModelAdapters(): void {
   registerGPTImageAdapter();
   registerTuziGPTImageAdapter();
   registerModelAdapter(geminiImageAdapter);
+  registerHappyHorseAdapter();
   registerModelAdapter(geminiVideoAdapter);
   registerModelAdapter(sunoAudioAdapter);
   registerKlingAdapter();

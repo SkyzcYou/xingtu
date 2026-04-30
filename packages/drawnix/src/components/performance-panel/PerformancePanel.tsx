@@ -350,16 +350,21 @@ export const PerformancePanel: React.FC<PerformancePanelProps> = ({
       style={panelStyle}
     >
       {/* 拖拽手柄 */}
-      <div
-        className="performance-panel__drag-handle"
-        onPointerDown={handleDragStart}
-        onPointerMove={handleDragMove}
-        onPointerUp={handleDragEnd}
-        onPointerCancel={handleDragEnd}
-        title={language === 'zh' ? '拖拽移动' : 'Drag to move'}
+      <HoverTip
+        content={language === 'zh' ? '拖拽移动' : 'Drag to move'}
+        placement="left"
+        showArrow={false}
       >
-        <MoveIcon />
-      </div>
+        <div
+          className="performance-panel__drag-handle"
+          onPointerDown={handleDragStart}
+          onPointerMove={handleDragMove}
+          onPointerUp={handleDragEnd}
+          onPointerCancel={handleDragEnd}
+        >
+          <MoveIcon />
+        </div>
+      </HoverTip>
 
       {/* 内存百分比 */}
       <HoverTip content={tooltipContent} placement="left">
@@ -378,37 +383,43 @@ export const PerformancePanel: React.FC<PerformancePanelProps> = ({
 
       {/* 新建项目按钮 */}
       {onCreateProject && (
-        <button
-          className="performance-panel__btn"
-          onClick={handleCreateProject}
-          disabled={isCreating}
-          title={language === 'zh' ? '新建项目' : 'New project'}
+        <HoverTip
+          content={language === 'zh' ? '新建项目' : 'New project'}
+          placement="left"
+          showArrow={false}
         >
-          <AddIcon />
-        </button>
+          <button
+            className="performance-panel__btn"
+            onClick={handleCreateProject}
+            disabled={isCreating}
+          >
+            <AddIcon />
+          </button>
+        </HoverTip>
       )}
 
       {/* 刷新页面按钮 */}
-      <button
-        className="performance-panel__btn"
-        title={language === 'zh' ? '刷新页面' : 'Refresh page'}
-        onClick={() => {
-          void handleRefreshClick();
-        }}
+      <HoverTip
+        content={language === 'zh' ? '刷新页面' : 'Refresh page'}
+        placement="left"
+        showArrow={false}
       >
-        <RefreshIcon />
-      </button>
+        <button
+          className="performance-panel__btn"
+          onClick={() => {
+            void handleRefreshClick();
+          }}
+        >
+          <RefreshIcon />
+        </button>
+      </HoverTip>
 
       {/* 分隔线 */}
       <div className="performance-panel__divider" />
 
       {/* 固定/关闭按钮 */}
-      <button
-        className={`performance-panel__btn ${
-          persistedSettings.pinned ? 'performance-panel__btn--active' : ''
-        }`}
-        onClick={handleTogglePin}
-        title={
+      <HoverTip
+        content={
           persistedSettings.pinned
             ? language === 'zh'
               ? '取消常驻'
@@ -417,17 +428,28 @@ export const PerformancePanel: React.FC<PerformancePanelProps> = ({
             ? '常驻'
             : 'Pin'
         }
+        placement="left"
+        showArrow={false}
       >
-        {persistedSettings.pinned ? <PinFilledIcon /> : <PinIcon />}
-      </button>
+        <button
+          className={`performance-panel__btn ${
+            persistedSettings.pinned ? 'performance-panel__btn--active' : ''
+          }`}
+          onClick={handleTogglePin}
+        >
+          {persistedSettings.pinned ? <PinFilledIcon /> : <PinIcon />}
+        </button>
+      </HoverTip>
 
-      <button
-        className="performance-panel__btn"
-        onClick={handleClose}
-        title={language === 'zh' ? '关闭' : 'Close'}
+      <HoverTip
+        content={language === 'zh' ? '关闭' : 'Close'}
+        placement="left"
+        showArrow={false}
       >
-        <CloseIcon />
-      </button>
+        <button className="performance-panel__btn" onClick={handleClose}>
+          <CloseIcon />
+        </button>
+      </HoverTip>
       {confirmDialog}
     </div>
   );

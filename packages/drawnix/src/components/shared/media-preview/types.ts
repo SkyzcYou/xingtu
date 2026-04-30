@@ -118,6 +118,8 @@ export interface ViewerActions {
   toggleSyncMode: () => void;
   /** 缩放 */
   zoom: (delta: number) => void;
+  /** 设置缩放级别 */
+  setZoomLevel: (zoom: number) => void;
   /** 设置拖拽偏移 */
   setPan: (offset: { x: number; y: number }) => void;
   /** 重置视图 */

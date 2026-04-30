@@ -45,7 +45,11 @@ import {
 } from '../icons';
 import { useAssets } from '../../contexts/AssetContext';
 import { useConfirmDialog } from '../dialog/ConfirmDialog';
-import { filterAssets, formatFileSize } from '../../utils/asset-utils';
+import {
+  filterAssets,
+  formatFileSize,
+  matchesAssetSearchQuery,
+} from '../../utils/asset-utils';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import { VirtualAssetGrid } from './VirtualAssetGrid';
 import { MediaLibraryEmpty } from './MediaLibraryEmpty';
@@ -239,8 +243,7 @@ function matchesSelectionScope(
   const matchesType = !scope.activeType || asset.type === scope.activeType;
   const matchesSource =
     !scope.activeSource || asset.source === scope.activeSource;
-  const matchesSearch =
-    !scope.searchQuery || asset.name.toLowerCase().includes(scope.searchQuery);
+  const matchesSearch = matchesAssetSearchQuery(asset, scope.searchQuery);
 
   let matchesPlaylist = true;
   if (scope.playlistId) {
@@ -1713,12 +1716,11 @@ export function MediaLibraryGrid({
                     </span>
                   )}
                 </div>
-                <div
-                  className="media-library-grid__mobile-inspector-name"
-                  title={selectedAsset.name}
-                >
-                  {selectedAsset.name}
-                </div>
+                <HoverTip content={selectedAsset.name} showArrow={false}>
+                  <div className="media-library-grid__mobile-inspector-name">
+                    {selectedAsset.name}
+                  </div>
+                </HoverTip>
               </div>
               <div className="media-library-grid__mobile-inspector-actions">
                 <HoverTip content="预览">

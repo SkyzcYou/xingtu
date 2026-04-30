@@ -79,6 +79,11 @@ function isGeminiFamilyModel(model: ModelConfig): boolean {
   ]);
 }
 
+function isTuziProviderProfile(profile: ProviderProfileSnapshot): boolean {
+  const baseUrl = profile.baseUrl.toLowerCase();
+  return baseUrl.includes('api.tu-zi.com');
+}
+
 function isMidjourneyModel(model: ModelConfig): boolean {
   const lowerId = model.id.toLowerCase();
   return (
@@ -159,6 +164,14 @@ function isGptImageModel(model: ModelConfig): boolean {
 
 function isSeedanceModel(model: ModelConfig): boolean {
   return model.id.toLowerCase().includes('seedance');
+}
+
+function isHappyHorseModel(model: ModelConfig): boolean {
+  const lowerId = model.id.toLowerCase();
+  return (
+    lowerId.includes('happyhorse') ||
+    normalizeModelTags(model).includes('happyhorse')
+  );
 }
 
 function isSoraModel(model: ModelConfig): boolean {
@@ -277,8 +290,9 @@ function inferTextBindings(
       : isLikelyVisionCapableTextModel(model);
 
   if (
-    profile.providerType === 'gemini-compatible' &&
-    isGeminiFamilyModel(model)
+    isGeminiFamilyModel(model) &&
+    (profile.providerType === 'gemini-compatible' ||
+      isTuziProviderProfile(profile))
   ) {
     bindings.push(
       buildBinding(profile, model, {
@@ -586,6 +600,46 @@ function inferVideoBindings(
         submitPath: '/videos',
         pollPathTemplate: '/videos/{taskId}',
         priority: 610,
+        confidence: 'high',
+        source: 'template',
+      })
+    );
+  }
+
+  if (isHappyHorseModel(model)) {
+    bindings.push(
+      buildBinding(profile, model, {
+        protocol: 'happyhorse.video',
+        requestSchema: 'happyhorse.video.json',
+        responseSchema: 'happyhorse.video.task',
+        submitPath: '/videos',
+        pollPathTemplate: '/videos/{taskId}',
+        metadata: {
+          video: {
+            allowedDurations: [
+              '3',
+              '4',
+              '5',
+              '6',
+              '7',
+              '8',
+              '9',
+              '10',
+              '11',
+              '12',
+              '13',
+              '14',
+              '15',
+            ],
+            defaultDuration: '5',
+            durationMode: 'request-param',
+            durationField: 'parameters.duration',
+            strictDurationValidation: false,
+            resultMode: 'download-content',
+            downloadPathTemplate: '/videos/{taskId}/content',
+          },
+        },
+        priority: 630,
         confidence: 'high',
         source: 'template',
       })

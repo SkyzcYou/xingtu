@@ -18,6 +18,7 @@ import {
 import { ToolDefinition, ToolCategory } from '../../types/toolbox.types';
 import { toolboxService } from '../../services/toolbox-service';
 import { hasTemplateVariables } from '../../utils/url-template';
+import { HoverTip } from '../shared/hover';
 import './custom-tool-dialog.scss';
 
 const { FormItem } = Form;
@@ -218,17 +219,17 @@ export const CustomToolDialog: React.FC<CustomToolDialogProps> = ({
             </div>
             <div className="custom-tool-dialog__icon-list">
               {EMOJI_PRESETS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  className={`custom-tool-dialog__icon-option ${
-                    formData.icon === emoji ? 'active' : ''
-                  }`}
-                  onClick={() => updateField('icon', emoji)}
-                  title={emoji}
-                >
-                  {emoji}
-                </button>
+                <HoverTip key={emoji} content={emoji} showArrow={false}>
+                  <button
+                    type="button"
+                    className={`custom-tool-dialog__icon-option ${
+                      formData.icon === emoji ? 'active' : ''
+                    }`}
+                    onClick={() => updateField('icon', emoji)}
+                  >
+                    {emoji}
+                  </button>
+                </HoverTip>
               ))}
             </div>
           </div>

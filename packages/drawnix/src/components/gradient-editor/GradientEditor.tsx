@@ -14,6 +14,7 @@ import { useColorHistory } from '../../hooks/useColorHistory';
 import { UnifiedColorPicker } from '../unified-color-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '../popover/popover';
 import { Island } from '../island';
+import { HoverTip } from '../shared/hover';
 import type {
   GradientFillConfig,
   GradientFillStop,
@@ -442,49 +443,57 @@ export const GradientEditor: React.FC<GradientEditorProps> = ({
           {customPresetItems.map((preset, index) => {
             const presetCSS = (preset as GradientFillPreset & { css?: string }).css || generateGradientCSS(preset.config);
             return (
-              <button
+              <HoverTip
                 key={preset.id}
-                className={classNames('ge-quick-preset-item ge-quick-preset-item--custom', {
-                  'ge-quick-preset-item--selected': isPresetSelected(presetCSS),
-                })}
-                onClick={() => applyPreset(preset as any)}
-                title={language === 'zh' ? preset.nameZh : preset.name}
+                content={language === 'zh' ? preset.nameZh : preset.name}
+                showArrow={false}
               >
-                <div
-                  className="ge-quick-preset-preview"
-                  style={{ background: presetCSS }}
-                />
-                {onDeletePreset && (
-                  <button
-                    className="ge-quick-preset-delete"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeletePreset(index);
-                    }}
-                  >
-                    ×
-                  </button>
-                )}
-              </button>
+                <button
+                  className={classNames('ge-quick-preset-item ge-quick-preset-item--custom', {
+                    'ge-quick-preset-item--selected': isPresetSelected(presetCSS),
+                  })}
+                  onClick={() => applyPreset(preset as any)}
+                >
+                  <div
+                    className="ge-quick-preset-preview"
+                    style={{ background: presetCSS }}
+                  />
+                  {onDeletePreset && (
+                    <button
+                      className="ge-quick-preset-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeletePreset(index);
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </button>
+              </HoverTip>
             );
           })}
           {/* 内置预设 */}
           {builtinPresets.map((preset) => {
             const presetCSS = generateGradientCSS(preset.config);
             return (
-              <button
+              <HoverTip
                 key={preset.id}
-                className={classNames('ge-quick-preset-item', {
-                  'ge-quick-preset-item--selected': isPresetSelected(presetCSS),
-                })}
-                onClick={() => applyPreset(preset as any)}
-                title={language === 'zh' ? preset.nameZh : preset.name}
+                content={language === 'zh' ? preset.nameZh : preset.name}
+                showArrow={false}
               >
-                <div
-                  className="ge-quick-preset-preview"
-                  style={{ background: presetCSS }}
-                />
-              </button>
+                <button
+                  className={classNames('ge-quick-preset-item', {
+                    'ge-quick-preset-item--selected': isPresetSelected(presetCSS),
+                  })}
+                  onClick={() => applyPreset(preset as any)}
+                >
+                  <div
+                    className="ge-quick-preset-preview"
+                    style={{ background: presetCSS }}
+                  />
+                </button>
+              </HoverTip>
             );
           })}
         </div>
@@ -520,22 +529,30 @@ export const GradientEditor: React.FC<GradientEditorProps> = ({
             {language === 'zh' ? '颜色' : 'Colors'}
           </span>
           <div className="ge-stop-actions">
-            <button
-              className="ge-action-btn"
-              onClick={addStop}
-              disabled={gradient.stops.length >= 8}
-              title={language === 'zh' ? '添加色标' : 'Add stop'}
+            <HoverTip
+              content={language === 'zh' ? '添加色标' : 'Add stop'}
+              showArrow={false}
             >
-              +
-            </button>
-            <button
-              className="ge-action-btn"
-              onClick={() => removeStop(selectedStopIndex)}
-              disabled={gradient.stops.length <= 2}
-              title={language === 'zh' ? '删除色标' : 'Remove stop'}
+              <button
+                className="ge-action-btn"
+                onClick={addStop}
+                disabled={gradient.stops.length >= 8}
+              >
+                +
+              </button>
+            </HoverTip>
+            <HoverTip
+              content={language === 'zh' ? '删除色标' : 'Remove stop'}
+              showArrow={false}
             >
-              −
-            </button>
+              <button
+                className="ge-action-btn"
+                onClick={() => removeStop(selectedStopIndex)}
+                disabled={gradient.stops.length <= 2}
+              >
+                −
+              </button>
+            </HoverTip>
           </div>
         </div>
 

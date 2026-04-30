@@ -23,6 +23,7 @@ import {
   isValidHex,
   isLightColor,
 } from './utils';
+import { HoverTip } from '../shared/hover';
 import './unified-color-picker.scss';
 
 /** 默认颜色 */
@@ -212,18 +213,23 @@ export const UnifiedColorPicker: React.FC<UnifiedColorPickerProps> = ({
             {initialRecentColors.map((color, index) => {
               const isLight = isLightColor(color);
               return (
-                <button
+                <HoverTip
                   key={`${color}-${index}`}
-                  className={classNames('unified-color-picker__recent-item', {
-                    'unified-color-picker__recent-item--selected':
-                      removeAlphaFromHex(color).toUpperCase() === currentHex.toUpperCase(),
-                    'unified-color-picker__recent-item--light': isLight,
-                  })}
-                  style={{ backgroundColor: color }}
-                  onClick={() => handleRecentSelect(color)}
                   disabled={disabled}
-                  title={color}
-                />
+                  content={color}
+                  showArrow={false}
+                >
+                  <button
+                    className={classNames('unified-color-picker__recent-item', {
+                      'unified-color-picker__recent-item--selected':
+                        removeAlphaFromHex(color).toUpperCase() === currentHex.toUpperCase(),
+                      'unified-color-picker__recent-item--light': isLight,
+                    })}
+                    style={{ backgroundColor: color }}
+                    onClick={() => handleRecentSelect(color)}
+                    disabled={disabled}
+                  />
+                </HoverTip>
               );
             })}
           </div>
