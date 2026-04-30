@@ -17,6 +17,7 @@ interface MessageItem {
 export const MESSAGE_DRAWER_WIDTH_KEY = 'message-drawer-width';
 
 const WECHAT_QR_CODE_URL = './logo/wechat-qr.jpg';
+const RED_QR_CODE_URL = './red-qr.png';
 
 const MESSAGES: MessageItem[] = [
   {
@@ -41,17 +42,6 @@ export const MessageDrawer: React.FC<MessageDrawerProps> = ({
     onOpenChange?.(false);
   }, [onOpenChange]);
 
-  const footerSection = (
-    <div className="message-drawer__feedback">
-      <div className="message-drawer__feedback-title">用户反馈群</div>
-      <img
-        src={WECHAT_QR_CODE_URL}
-        alt="用户反馈群二维码"
-        className="message-drawer__feedback-qrcode"
-      />
-    </div>
-  );
-
   return (
     <BaseDrawer
       isOpen={isOpen}
@@ -62,12 +52,29 @@ export const MessageDrawer: React.FC<MessageDrawerProps> = ({
       defaultWidth={380}
       storageKey={MESSAGE_DRAWER_WIDTH_KEY}
       resizable={true}
-      footer={footerSection}
-      footerClassName="message-drawer__footer"
       className="message-drawer"
       contentClassName="message-drawer__content"
       data-testid="message-drawer"
     >
+      <div className="message-drawer__feedback">
+        <div className="message-drawer__feedback-title">用户反馈群</div>
+        <div className="message-drawer__feedback-qrcodes">
+          <img
+            src={WECHAT_QR_CODE_URL}
+            alt="用户反馈群二维码"
+            className="message-drawer__feedback-qrcode"
+          />
+          <img
+            src={RED_QR_CODE_URL}
+            alt="小红书二维码"
+            className="message-drawer__feedback-qrcode"
+          />
+        </div>
+        <div className="message-drawer__feedback-desc">
+          扫码加入用户反馈群，获取更新通知并反馈建议。
+        </div>
+      </div>
+
       {MESSAGES.length === 0 ? (
         <div className="message-drawer__empty">暂无消息</div>
       ) : (
