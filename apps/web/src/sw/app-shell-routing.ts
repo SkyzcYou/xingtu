@@ -9,6 +9,7 @@ const ORIGIN_FIRST_PRELOAD_SUFFIXES = [
   '/precache-manifest.json',
   '/idle-prefetch-manifest.json',
 ] as const;
+const ORIGIN_FIRST_PRELOAD_PREFIXES = ['/assets/', '/icons/', '/logo/'] as const;
 const LAZY_CHUNK_RETRY_PARAM = '_lazy_chunk_retry';
 const LAZY_CHUNK_RETRY_TS_PARAM = '_t';
 const LAZY_CHUNK_RETRY_MAX_AGE_MS = 10 * 60 * 1000;
@@ -34,8 +35,9 @@ export function shouldUseOriginFirstPreload(pathname: string): boolean {
     return true;
   }
 
-  return ORIGIN_FIRST_PRELOAD_SUFFIXES.some((suffix) =>
-    pathname.endsWith(suffix)
+  return (
+    ORIGIN_FIRST_PRELOAD_SUFFIXES.some((suffix) => pathname.endsWith(suffix)) ||
+    ORIGIN_FIRST_PRELOAD_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   );
 }
 

@@ -680,8 +680,6 @@
         var removeTimer = 0;
         var cdnConfigLoadStarted = false;
         var resolveMainEntryReady = null;
-        var BOOT_CDN_PACKAGE_NAME = 'aitu-app';
-        var BOOT_CDN_BASE_URL = 'https://cdn.jsdelivr.net/npm/';
         var BOOT_LOCAL_RETRY_STORAGE_KEY = '__OPENTU_BOOT_LOCAL_RETRY_AT__';
         var BOOT_IMPORT_RETRY_STORAGE_KEY = '__OPENTU_BOOT_IMPORT_RETRY_AT__';
         var BOOT_LOCAL_RETRY_TTL_MS = 2 * 60 * 1000;
@@ -918,29 +916,7 @@
         }
 
         function toPreferredBootAssetUrl(localPath) {
-          if (!localPath || isBootLocalDevelopment() || forceLocalBootAssets) {
-            return localPath;
-          }
-
-          var normalizedPath = String(localPath).trim();
-
-          if (/^https?:\/\//i.test(normalizedPath)) {
-            return normalizedPath;
-          }
-
-          normalizedPath = normalizedPath
-            .replace(/^\.?\//, '')
-            .replace(/^npm\/aitu-app@[^/]+\//, '')
-            .replace(/^aitu-app@[^/]+\//, '');
-
-          return (
-            BOOT_CDN_BASE_URL +
-            BOOT_CDN_PACKAGE_NAME +
-            '@' +
-            getBootAppVersion() +
-            '/' +
-            normalizedPath
-          );
+          return localPath;
         }
 
         function isManagedBootFallbackTarget(target) {

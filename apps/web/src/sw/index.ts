@@ -1841,20 +1841,12 @@ function shouldKickIdlePrefetchFromFetch(event: FetchEvent, url: URL): boolean {
   return true;
 }
 
-function isOriginFirstStaticPath(pathname: string): boolean {
-  return shouldUseOriginFirstPreload(getScopeRelativePathname(pathname));
-}
-
-function isVersionedStaticResource(request: Request, url: URL): boolean {
-  if (isDevelopment || request.method !== 'GET') {
+function isStaticAssetRequest(request: Request, url: URL): boolean {
+  if (request.method !== 'GET') {
     return false;
   }
 
   if (request.mode === 'navigate' || request.destination === 'document') {
-    return false;
-  }
-
-  if (isOriginFirstStaticPath(url.pathname)) {
     return false;
   }
 
@@ -1867,6 +1859,19 @@ function isVersionedStaticResource(request: Request, url: URL): boolean {
       request.destination === 'image' ||
       request.destination === 'font'
   );
+}
+
+function isVersionedStaticResource(request: Request, url: URL): boolean {
+  if (isDevelopment || !isStaticAssetRequest(request, url)) {
+    return false;
+  }
+
+  const targets = resolveStaticResourceFetchTargets(url.href);
+  if (shouldUseOriginFirstPreload(targets.resourcePath.split(/[?#]/, 1)[0])) {
+    return false;
+  }
+
+  return true;
 }
 
 function normalizeAituPackageResourcePath(pathnameWithSearch: string): string {
@@ -1919,7 +1924,7 @@ function isStaticHtmlFallbackResponse(
   return (
     response.status === 200 &&
     contentType.includes('text/html') &&
-    isVersionedStaticResource(request, url)
+    isStaticAssetRequest(request, url)
   );
 }
 
@@ -3080,6 +3085,40 @@ function getStaticDebugMetadata(response: Response): {
     resourceSource,
     resourceFetchTarget,
   };
+}
+
+function isLegacyCDNEntryAppShellResponse(response: Response): Promise<boolean> {
+  const contentType = response.headers.get('Content-Type') || '';
+  if (!response.ok || !contentType.includes('text/html')) {
+    return Promise.resolve(false);
+  }
+
+  return response
+    .clone()
+    .text()
+    .then((html) =>
+      /cdn\.jsdelivr\.net\/npm\/aitu-app@[^"'\s>]+\/assets\/(?:index|main)-[^"'\s>]+\.(?:js|css)/i.test(
+        html
+      )
+    )
+    .catch(() => false);
+}
+
+async function matchUsableAppShellCachedResponse(
+  cache: Cache,
+  request: RequestInfo | URL
+): Promise<Response | undefined> {
+  const cachedResponse = await cache.match(request);
+  if (!cachedResponse) {
+    return undefined;
+  }
+
+  if (await isLegacyCDNEntryAppShellResponse(cachedResponse)) {
+    await cache.delete(request);
+    return undefined;
+  }
+
+  return cachedResponse;
 }
 
 function isSuspiciousStaticCacheResponse(
@@ -5687,13 +5726,19 @@ async function handleStaticRequest(request: Request): Promise<Response> {
       }
     }
 
-    let cachedResponse = await cache.match(request);
+    let cachedResponse = await matchUsableAppShellCachedResponse(cache, request);
 
     if (!cachedResponse) {
-      cachedResponse = await cache.match(createScopeUrl('/').href);
+      cachedResponse = await matchUsableAppShellCachedResponse(
+        cache,
+        createScopeUrl('/').href
+      );
     }
     if (!cachedResponse) {
-      cachedResponse = await cache.match(createScopeUrl('index.html').href);
+      cachedResponse = await matchUsableAppShellCachedResponse(
+        cache,
+        createScopeUrl('index.html').href
+      );
     }
 
     if (!cachedResponse) {
@@ -5703,9 +5748,15 @@ async function handleStaticRequest(request: Request): Promise<Response> {
           try {
             const oldCache = await caches.open(cacheName);
             cachedResponse =
-              (await oldCache.match(request)) ||
-              (await oldCache.match(createScopeUrl('/').href)) ||
-              (await oldCache.match(createScopeUrl('index.html').href));
+              (await matchUsableAppShellCachedResponse(oldCache, request)) ||
+              (await matchUsableAppShellCachedResponse(
+                oldCache,
+                createScopeUrl('/').href
+              )) ||
+              (await matchUsableAppShellCachedResponse(
+                oldCache,
+                createScopeUrl('index.html').href
+              ));
             if (cachedResponse) {
               break;
             }
@@ -5840,7 +5891,16 @@ async function handleStaticRequest(request: Request): Promise<Response> {
 
   // 入口链路继续保持同源优先
   try {
-    const response = await fetchQuick(request);
+    const shouldFetchFromOrigin = shouldUseOriginFirstPreload(
+      resourcePath.split(/[?#]/, 1)[0]
+    );
+    const originRequest = shouldFetchFromOrigin
+      ? new Request(staticTargets.originFetchUrl, {
+          method: 'GET',
+          credentials: 'same-origin',
+        })
+      : request;
+    const response = await fetchQuick(originRequest);
 
     const isInvalidResponse = isStaticHtmlFallbackResponse(
       request,
@@ -5874,9 +5934,10 @@ async function handleStaticRequest(request: Request): Promise<Response> {
       request.url.startsWith('http') &&
       committedVersion === APP_VERSION
     ) {
-      return await cacheStaticResponse(cache, request, response, {
+      return await cacheStaticResponse(cache, normalizedCacheKey, response, {
         source: 'server',
         revision: 'runtime',
+        fetchTarget: shouldFetchFromOrigin ? staticTargets.originFetchUrl : request.url,
         appVersion: committedVersion,
       });
     }

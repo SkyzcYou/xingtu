@@ -32,7 +32,7 @@ describe('app-shell-routing', () => {
     ).toBe(false);
   });
 
-  it('keeps only root shell and release metadata on origin-first preload', () => {
+  it('keeps app-owned shell and static assets on origin-first preload', () => {
     expect(shouldUseOriginFirstPreload('/')).toBe(true);
     expect(shouldUseOriginFirstPreload('/index.html')).toBe(true);
     expect(shouldUseOriginFirstPreload('/version.json')).toBe(true);
@@ -42,12 +42,17 @@ describe('app-shell-routing', () => {
     expect(shouldUseOriginFirstPreload('/idle-prefetch-manifest.json')).toBe(
       true
     );
+    expect(shouldUseOriginFirstPreload('/assets/index-abc123.js')).toBe(true);
+    expect(shouldUseOriginFirstPreload('/icons/android-chrome-192x192.png')).toBe(
+      true
+    );
+    expect(shouldUseOriginFirstPreload('/logo/wechat-qr.jpg')).toBe(true);
   });
 
-  it('prefers CDN for manifest-known static assets during preload', () => {
-    expect(shouldUseCDNFirstPreload('/assets/index-abc123.js')).toBe(true);
+  it('keeps app-owned static assets off CDN-first preload', () => {
+    expect(shouldUseCDNFirstPreload('/assets/index-abc123.js')).toBe(false);
     expect(shouldUseCDNFirstPreload('/icons/android-chrome-192x192.png')).toBe(
-      true
+      false
     );
     expect(shouldUseCDNFirstPreload('/user-manual/index.html')).toBe(true);
   });

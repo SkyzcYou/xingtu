@@ -77,7 +77,7 @@ describe('cdn-fallback', () => {
     );
   });
 
-  it('normalizes npm-prefixed origin paths before building CDN URLs', () => {
+  it('does not build CDN URLs for npm-prefixed app assets', () => {
     const [jsdelivr] = getAvailableCDNs('3.0.0');
 
     expect(
@@ -86,10 +86,10 @@ describe('cdn-fallback', () => {
         '3.0.0',
         '/npm/aitu-app@3.0.0/assets/tool-drawers.css'
       )
-    ).toBe('https://cdn.jsdelivr.net/npm/aitu-app@3.0.0/assets/tool-drawers.css');
+    ).toBeNull();
   });
 
-  it('normalizes absolute jsdelivr URLs before rebuilding fallback URLs', () => {
+  it('does not rebuild absolute jsdelivr app asset URLs', () => {
     const [jsdelivr] = getAvailableCDNs('3.0.0');
 
     expect(
@@ -98,7 +98,7 @@ describe('cdn-fallback', () => {
         '3.0.0',
         'https://cdn.jsdelivr.net/npm/aitu-app@3.0.0/assets/tool-drawers.css'
       )
-    ).toBe('https://cdn.jsdelivr.net/npm/aitu-app@3.0.0/assets/tool-drawers.css');
+    ).toBeNull();
   });
 
   it('keeps third-party npm package URLs out of the aitu-app version template', () => {
@@ -125,7 +125,7 @@ describe('cdn-fallback', () => {
     ).toBe('https://cdn.jsdelivr.net/npm/winbox@0.2.82/dist/winbox.bundle.min.js');
   });
 
-  it('uses CDN first for same-origin absolute asset URLs', async () => {
+  it('keeps same-origin app asset URLs on the local origin', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockImplementation(async (input: RequestInfo | URL) => {
@@ -156,14 +156,14 @@ describe('cdn-fallback', () => {
       'https://pr.opentu.ai'
     );
 
-    expect(result?.source).toBe('jsdelivr');
+    expect(result?.source).toBe('local');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      'https://cdn.jsdelivr.net/npm/aitu-app@3.0.0/assets/yacas-BJ4BC0dw.js'
+      'https://pr.opentu.ai/assets/yacas-BJ4BC0dw.js'
     );
   });
 
-  it('falls back to jsdelivr after local miss when runtime assets enable local-first', async () => {
+  it('does not fall back to jsdelivr for app assets after local miss', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockImplementation(async (input: RequestInfo | URL) => {
@@ -193,16 +193,14 @@ describe('cdn-fallback', () => {
       { preferLocal: true }
     );
 
-    expect(result?.source).toBe('jsdelivr');
+    expect(result).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toContain(
       'https://origin.example.com/assets/index.css'
     );
-    expect(fetchMock.mock.calls[1]?.[0]).toContain(
-      'https://cdn.jsdelivr.net/npm/aitu-app@3.0.0/assets/index.css'
-    );
   });
 
-  it('prefers jsdelivr before origin by default', async () => {
+  it('prefers local origin for app assets by default', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockImplementation(async (input: RequestInfo | URL) => {
@@ -218,7 +216,13 @@ describe('cdn-fallback', () => {
           });
         }
 
-        return new Response('missing', { status: 404 });
+        return new Response('body { color: black; }', {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/css',
+            'Content-Length': '120',
+          },
+        });
       });
 
     const result = await fetchFromCDNWithFallback(
@@ -227,16 +231,16 @@ describe('cdn-fallback', () => {
       'https://origin.example.com'
     );
 
-    expect(result?.source).toBe('jsdelivr');
+    expect(result?.source).toBe('local');
     expect(fetchMock.mock.calls[0]?.[0]).toContain(
-      'https://cdn.jsdelivr.net/npm/aitu-app@3.0.0/assets/index.css'
+      'https://origin.example.com/assets/index.css'
     );
     expect(fetchMock.mock.calls.some(([input]) =>
-      String(input).startsWith('https://origin.example.com/')
+      String(input).includes('cdn.jsdelivr.net')
     )).toBe(false);
   });
 
-  it('falls back to origin when jsdelivr fails', async () => {
+  it('falls back to origin when third-party package CDN fails', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockImplementation(async (input: RequestInfo | URL) => {
@@ -256,14 +260,17 @@ describe('cdn-fallback', () => {
       });
 
     const result = await fetchFromCDNWithFallback(
-      'assets/index.css',
+      '/npm/winbox@0.2.82/dist/winbox.css',
       '3.0.0',
       'https://origin.example.com'
     );
 
     expect(result?.source).toBe('local');
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(
+      'https://cdn.jsdelivr.net/npm/winbox@0.2.82/dist/winbox.css'
+    );
     expect(fetchMock.mock.calls.at(-1)?.[0]).toContain(
-      'https://origin.example.com/assets/index.css'
+      'https://origin.example.com/npm/winbox@0.2.82/dist/winbox.css'
     );
   });
 
@@ -291,7 +298,7 @@ describe('cdn-fallback', () => {
     ]);
   });
 
-  it('forces a final CDN recovery probe when local origin also misses', async () => {
+  it('forces a final CDN recovery probe for third-party package resources', async () => {
     markCDNFailure('jsdelivr', 'timeout');
     markCDNFailure('jsdelivr', 'timeout');
     markCDNFailure('jsdelivr', 'timeout');
@@ -319,21 +326,21 @@ describe('cdn-fallback', () => {
       });
 
     const result = await fetchFromCDNWithFallback(
-      'assets/tool-windows-pGtQqqCf.js',
+      '/npm/winbox@0.2.82/dist/winbox.bundle.min.js',
       '3.0.0',
       'https://origin.example.com'
     );
 
     expect(result?.source).toBe('jsdelivr');
     expect(fetchMock.mock.calls[0]?.[0]).toContain(
-      'https://origin.example.com/assets/tool-windows-pGtQqqCf.js'
+      'https://origin.example.com/npm/winbox@0.2.82/dist/winbox.bundle.min.js'
     );
     expect(fetchMock.mock.calls[1]?.[0]).toContain(
-      'https://cdn.jsdelivr.net/npm/aitu-app@3.0.0/assets/tool-windows-pGtQqqCf.js'
+      'https://cdn.jsdelivr.net/npm/winbox@0.2.82/dist/winbox.bundle.min.js'
     );
   });
 
-  it('still probes unhealthy CDN first during background prefetch', async () => {
+  it('still probes unhealthy CDN first during third-party background prefetch', async () => {
     markCDNFailure('jsdelivr', 'timeout');
     markCDNFailure('jsdelivr', 'timeout');
     markCDNFailure('jsdelivr', 'timeout');
@@ -363,7 +370,7 @@ describe('cdn-fallback', () => {
       });
 
     const result = await fetchFromCDNWithFallback(
-      'assets/settings-dialog-CCOMaxX1.js',
+      '/npm/winbox@0.2.82/dist/winbox.bundle.min.js',
       '3.0.0',
       'https://origin.example.com',
       {
@@ -373,7 +380,7 @@ describe('cdn-fallback', () => {
 
     expect(result?.source).toBe('jsdelivr');
     expect(fetchMock.mock.calls[0]?.[0]).toContain(
-      'https://cdn.jsdelivr.net/npm/aitu-app@3.0.0/assets/settings-dialog-CCOMaxX1.js'
+      'https://cdn.jsdelivr.net/npm/winbox@0.2.82/dist/winbox.bundle.min.js'
     );
     expect(
       fetchMock.mock.calls.some(([input]) =>

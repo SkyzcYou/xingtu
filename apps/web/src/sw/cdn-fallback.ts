@@ -33,10 +33,7 @@ export interface FetchFallbackOptions {
 // CDN 源配置
 export interface CDNSource {
   name: Exclude<CDNName, 'local'>;
-  // URL 模板，{version} 和 {path} 会被替换
-  urlTemplate: string;
-  // 健康检查路径
-  healthCheckPath: string;
+  healthCheckUrl: string;
   // 是否启用
   enabled: boolean;
   // 优先级（数字越小优先级越高）
@@ -94,8 +91,7 @@ const CDN_DEGRADE_POLICIES: Record<
 const CDN_SOURCES: CDNSource[] = [
   {
     name: 'jsdelivr',
-    urlTemplate: 'https://cdn.jsdelivr.net/npm/aitu-app@{version}/{path}',
-    healthCheckPath: 'version.json',
+    healthCheckUrl: 'https://cdn.jsdelivr.net/npm/winbox@0.2.82/package.json',
     enabled: true,
     priority: 1,
   },
@@ -398,10 +394,7 @@ export function extractVersionFromCDNPath(resourcePath: string): string | null {
   return match ? match[1] : null;
 }
 
-function buildThirdPartyCDNUrl(
-  source: CDNSource,
-  resourcePath: string
-): string | null {
+function getThirdPartyNpmPackagePath(resourcePath: string): string | null {
   const rawPath = String(resourcePath || '').trim();
   if (!rawPath) {
     return null;
@@ -422,7 +415,17 @@ function buildThirdPartyCDNUrl(
     ? normalizedPath
     : `/${normalizedPath}`;
 
-  if (!/^\/npm\/(?!aitu-app@)[^/]+@[^/]+\//.test(packagePath)) {
+  return /^\/npm\/(?!aitu-app@)[^/]+@[^/]+\//.test(packagePath)
+    ? packagePath
+    : null;
+}
+
+function buildThirdPartyCDNUrl(
+  source: CDNSource,
+  resourcePath: string
+): string | null {
+  const packagePath = getThirdPartyNpmPackagePath(resourcePath);
+  if (!packagePath) {
     return null;
   }
 
@@ -439,21 +442,10 @@ function buildThirdPartyCDNUrl(
 
 export function buildCDNUrl(
   source: CDNSource,
-  version: string,
+  _version: string,
   resourcePath: string
-): string {
-  const thirdPartyCDNUrl = buildThirdPartyCDNUrl(source, resourcePath);
-  if (thirdPartyCDNUrl) {
-    return thirdPartyCDNUrl;
-  }
-
-  const cleanPath = cleanResourcePath(resourcePath);
-  return source.urlTemplate
-    .replace('{version}', version)
-    .replace(
-      '{path}',
-      cleanPath.startsWith('/') ? cleanPath.slice(1) : cleanPath
-    );
+): string | null {
+  return buildThirdPartyCDNUrl(source, resourcePath);
 }
 
 async function fetchWithTimeout(
@@ -507,6 +499,9 @@ async function tryFetchFromCDNList(
 ): Promise<{ response: Response; source: string; targetUrl: string } | null> {
   for (const cdn of cdnList) {
     const url = buildCDNUrl(cdn, version, resourcePath);
+    if (!url) {
+      continue;
+    }
 
     try {
       const response = await fetchWithTimeout(url, timeout);
@@ -623,6 +618,11 @@ export async function fetchFromCDNWithFallback(
     localTimeout = CDN_CONFIG.localFetchTimeout,
     requestKind = 'interactive-runtime',
   } = options;
+  const isThirdPartyNpmResource = Boolean(
+    getThirdPartyNpmPackagePath(resourcePath)
+  );
+  const shouldTryCDN = isThirdPartyNpmResource;
+  const effectivePreferLocal = preferLocal || !shouldTryCDN;
   const ignoreCooldown = requestKind === 'background-prefetch';
   const effectiveCDNTimeout =
     options.cdnTimeout ??
@@ -630,7 +630,7 @@ export async function fetchFromCDNWithFallback(
       ? CDN_CONFIG.backgroundFetchTimeout
       : CDN_CONFIG.fetchTimeout);
 
-  if (preferLocal) {
+  if (effectivePreferLocal) {
     const localResult = await tryFetchFromLocalOrigin(
       resourcePath,
       localOrigin,
@@ -644,18 +644,22 @@ export async function fetchFromCDNWithFallback(
     }
   }
 
-  const availableCDNs = getAvailableCDNs(version, { ignoreCooldown });
-  const cdnResult = await tryFetchFromCDNList(
-    availableCDNs,
-    version,
-    resourcePath,
-    effectiveCDNTimeout
-  );
+  const availableCDNs = shouldTryCDN
+    ? getAvailableCDNs(version, { ignoreCooldown })
+    : [];
+  const cdnResult = shouldTryCDN
+    ? await tryFetchFromCDNList(
+        availableCDNs,
+        version,
+        resourcePath,
+        effectiveCDNTimeout
+      )
+    : null;
   if (cdnResult) {
     return cdnResult;
   }
 
-  if (!preferLocal) {
+  if (!effectivePreferLocal) {
     const localResult = await tryFetchFromLocalOrigin(
       resourcePath,
       localOrigin,
@@ -669,11 +673,13 @@ export async function fetchFromCDNWithFallback(
     }
   }
 
-  const recoveryCDNs = CDN_SOURCES.filter(
-    (source) =>
-      source.enabled &&
-      !availableCDNs.some((candidate) => candidate.name === source.name)
-  );
+  const recoveryCDNs = shouldTryCDN
+    ? CDN_SOURCES.filter(
+        (source) =>
+          source.enabled &&
+          !availableCDNs.some((candidate) => candidate.name === source.name)
+      )
+    : [];
   if (recoveryCDNs.length > 0) {
     console.warn(
       `[CDN Fallback] Local origin failed, forcing CDN recovery probe for: ${resourcePath}`
@@ -703,10 +709,8 @@ export async function performHealthCheck(
   for (const source of CDN_SOURCES) {
     if (!source.enabled) continue;
 
-    const url = buildCDNUrl(source, version, source.healthCheckPath);
-
     try {
-      const response = await fetchWithTimeout(url, 5000);
+      const response = await fetchWithTimeout(source.healthCheckUrl, 5000);
       const isHealthy = response.ok;
       results.set(source.name, isHealthy);
 

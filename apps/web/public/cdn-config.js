@@ -71,14 +71,8 @@
     cacheExpiry: 3600000, // 缓存过期时间（1小时）
   };
 
-  // 运行时 CDN 候选：主 CDN 优先，备用 CDN 兜底
-  var CDN_SOURCES = [
-    {
-      name: 'jsdelivr',
-      baseUrl: 'https://cdn.jsdelivr.net/npm/' + CONFIG.packageName,
-      testPath: '/version.json',
-    },
-  ];
+  // 首方应用资源只走当前源站，避免 npm CDN 包缺失时阻塞首屏资源。
+  var CDN_SOURCES = [];
 
   /**
    * 测试单个 CDN 的响应时间
@@ -123,18 +117,7 @@
         localStorage.getItem(CONFIG.storageKey) ||
         localStorage.getItem(LEGACY_STORAGE_KEY);
       if (cached) {
-        var data = JSON.parse(cached);
-        if (
-          Date.now() - data.timestamp < CONFIG.cacheExpiry &&
-          isSupportedCDNName(data.cdn)
-        ) {
-          setCDNPreference(data);
-          return Promise.resolve(data);
-        }
-
-        if (!isSupportedCDNName(data.cdn)) {
-          clearCDNCache();
-        }
+        clearCDNCache();
       }
     } catch (e) {
       // 忽略解析错误
@@ -144,33 +127,15 @@
     var tests = CDN_SOURCES.map(testCDN);
     
     return Promise.all(tests).then(function(results) {
-      // 过滤成功的结果并按延迟排序
-      var successfulResults = results
-        .filter(function(r) { return r.success; })
-        .sort(function(a, b) { return a.latency - b.latency; });
-
-      if (successfulResults.length === 0) {
-        return { cdn: 'local', latency: 0, timestamp: Date.now(), allResults: results };
-      }
-
-      var best = successfulResults[0];
       var preference = {
-        cdn: best.name,
-        latency: best.latency,
+        cdn: 'local',
+        latency: 0,
         timestamp: Date.now(),
         allResults: results,
       };
 
-      // 缓存结果
-      try {
-        localStorage.setItem(CONFIG.storageKey, JSON.stringify(preference));
-      } catch (e) {
-        // 忽略存储错误
-      }
-
-      // 暴露到全局变量供 SW 使用
       setCDNPreference(preference);
-      
+
       return preference;
     });
   }
