@@ -6020,7 +6020,7 @@ function createOfflinePage(): Response {
 </head>
 <body>
   <h1>📡 无法连接到服务器</h1>
-  <p>Xingtu 星图是一个以画布工作区为底座的 AI 应用平台，当前无法访问时请检查网络或稍后再试。</p>
+  <p>星图是一个以画布工作区为底座的 AI 应用平台，当前无法访问时请检查网络或稍后再试。</p>
   <button onclick="location.reload()">重试</button>
 </body>
 </html>`,
