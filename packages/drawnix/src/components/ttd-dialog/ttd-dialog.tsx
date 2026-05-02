@@ -674,6 +674,7 @@ const TTDDialogComponent = ({
       </Dialog>
       {/* AI 图片生成窗口 - 使用 WinBox */}
       <WinBoxWindow
+        key={imageDialogInitialData?.prefillId || 'ai-image-window'}
         id="ai-image-dialog"
         visible={appState.openDialogTypes.has(DialogType.aiImageGeneration)}
         title={
@@ -754,7 +755,11 @@ const TTDDialogComponent = ({
             </Suspense>
           ) : (
             <AIImageGeneration
-              key={imageDialogInitialData?.batchId || 'ai-image-dialog'}
+              key={
+                imageDialogInitialData?.prefillId ||
+                imageDialogInitialData?.batchId ||
+                'ai-image-dialog'
+              }
               initialPrompt={aiImageData.initialPrompt}
               initialImages={aiImageData.initialImages}
               selectedElementIds={aiImageData.selectedElementIds}

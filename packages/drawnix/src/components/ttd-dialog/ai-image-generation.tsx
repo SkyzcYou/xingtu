@@ -46,6 +46,11 @@ import {
 } from '../../services/ai-generation-preferences-service';
 import { promptStorageService } from '../../services/prompt-storage-service';
 import {
+  clearAIImageDraftState,
+  setAIImageDraftState,
+} from '../../utils/ai-image-draft-state';
+import { getImageTaskReferenceImages } from '../../utils/image-task-prefill';
+import {
   geminiSettings,
   hasInvocationRouteCredentials,
   resolveInvocationRoute,
@@ -382,6 +387,15 @@ const AIImageGeneration = ({
 
   const lastDraftRef = useRef('');
   useEffect(() => {
+    setAIImageDraftState({
+      prompt,
+      imageCount: uploadedImages.length,
+    });
+
+    return clearAIImageDraftState;
+  }, [prompt, uploadedImages.length]);
+
+  useEffect(() => {
     if (!onDraftChange) {
       return;
     }
@@ -590,13 +604,7 @@ const AIImageGeneration = ({
     setWidth(task.params.width || 1024);
     setHeight(task.params.height || 1024);
 
-    // 更新上传的图片 - 确保格式正确
-    if (task.params.uploadedImages && task.params.uploadedImages.length > 0) {
-      // console.log('Setting uploadedImages:', task.params.uploadedImages);
-      setUploadedImages(task.params.uploadedImages);
-    } else {
-      setUploadedImages([]);
-    }
+    setUploadedImages(getImageTaskReferenceImages(task));
 
     // 更新模型选择（通过全局设置）
     if (task.params.model) {

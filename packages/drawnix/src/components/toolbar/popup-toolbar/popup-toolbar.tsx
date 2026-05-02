@@ -92,6 +92,7 @@ import {
   Volume2,
   VolumeX,
   Scaling,
+  RefreshCw,
 } from 'lucide-react';
 import { useDrawnix, DialogType } from '../../../hooks/use-drawnix';
 import { useI18n } from '../../../i18n';
@@ -116,6 +117,7 @@ import {
   buildDownloadFilename,
 } from '../../../utils/download-utils';
 import { MessagePlugin } from 'tdesign-react';
+import { taskQueueService } from '../../../services/task-queue';
 import { mergeVideos } from '../../../services/video-merge-webcodecs';
 import { insertImageFromUrl } from '../../../data/image';
 import { calculateEditedImagePoints } from '../../../utils/image';
@@ -148,6 +150,8 @@ import { isAudioNodeElement } from '../../../types/audio-node.types';
 import { getCanvasAudioPlaybackQueue } from '../../../data/audio';
 import { openMusicPlayerToolAndPlay } from '../../../services/tool-launch-service';
 import { useCanvasAudioPlayback } from '../../../hooks/useCanvasAudioPlayback';
+import { buildImageTaskAIInputPrefillData } from '../../../utils/image-task-prefill';
+import { requestAIInputPrefill } from '../../../services/ai-input-ui-events';
 import {
   AUDIO_PLAYLIST_CANVAS_AUDIO_ID,
   AUDIO_PLAYLIST_CANVAS_AUDIO_LABEL,
@@ -338,6 +342,7 @@ export const PopupToolbar = () => {
     hasMergeable?: boolean; // 是否显示合并按钮
     hasVideoMergeable?: boolean; // 是否显示视频合成按钮
     hasImageEdit?: boolean; // 是否显示图片编辑按钮
+    hasRegenerateImage?: boolean; // 是否显示再次生成回填按钮
     hasCornerRadius?: boolean; // 是否显示圆角设置按钮
     cornerRadius?: number; // 当前圆角值
     hasSizeInput?: boolean; // 是否显示宽高输入
@@ -631,6 +636,7 @@ export const PopupToolbar = () => {
       hasVideoFrame,
       hasSplitImage,
       hasImageEdit,
+      hasRegenerateImage: isImageSelected,
       hasDownloadable,
       hasMergeable,
       hasVideoMergeable,
@@ -785,6 +791,44 @@ export const PopupToolbar = () => {
       );
     }
   };
+
+  const prefillSelectedImageTaskToAIInput = useCallback(async () => {
+    const imageElement = selectedElements[0];
+    if (
+      selectedElements.length !== 1 ||
+      !PlaitDrawElement.isDrawElement(imageElement) ||
+      !PlaitDrawElement.isImage(imageElement) ||
+      !imageElement.url
+    ) {
+      return;
+    }
+
+    try {
+      const task = await taskQueueService.findImageTaskByResultUrl(
+        imageElement.url
+      );
+      if (!task) {
+        MessagePlugin.warning(
+          language === 'zh'
+            ? '未找到该图片的历史生成任务'
+            : 'No historical generation task found for this image'
+        );
+        return;
+      }
+
+      requestAIInputPrefill({
+        ...buildImageTaskAIInputPrefillData(task),
+        source: 'canvas-toolbar',
+      });
+    } catch (error) {
+      console.error('[PopupToolbar] Failed to prefill image generation:', error);
+      MessagePlugin.error(
+        language === 'zh'
+          ? '回填失败，请稍后重试'
+          : 'Failed to load generation inputs, please try again'
+      );
+    }
+  }, [language, selectedElements]);
 
   const openAIImageGenerationDialog = useCallback(() => {
     const selectedFrame =
@@ -2221,6 +2265,25 @@ export const PopupToolbar = () => {
                 }
               }}
             />
+            {state.hasRegenerateImage && (
+              <ToolButton
+                className="regenerate-image"
+                key="regenerate-image"
+                type="icon"
+                icon={<RefreshCw size={15} />}
+                visible={true}
+                tooltip={
+                  language === 'zh'
+                    ? '以当前提示词再次生成'
+                    : 'Generate again with the current prompt'
+                }
+                aria-label={language === 'zh' ? '再次生成' : 'Generate again'}
+                data-track="toolbar_click_regenerate_image_prefill"
+                onPointerUp={() => {
+                  void prefillSelectedImageTaskToAIInput();
+                }}
+              />
+            )}
             <ToolButton
               className="trash"
               key={9}

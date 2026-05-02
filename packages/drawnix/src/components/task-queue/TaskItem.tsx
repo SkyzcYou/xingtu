@@ -17,6 +17,7 @@ import {
   PlayCircleIcon,
   CloseCircleIcon,
   CopyIcon,
+  RefreshIcon,
 } from 'tdesign-icons-react';
 import { normalizeImageDataUrl } from '@aitu/utils';
 import { Task, TaskStatus, TaskType } from '../../types/task.types';
@@ -167,6 +168,8 @@ export interface TaskItemProps {
   onPreviewOpen?: () => void;
   /** Callback when edit button is clicked */
   onEdit?: (taskId: string) => void;
+  /** Callback when reusing image task input */
+  onRegenerate?: (taskId: string) => void;
   /** Callback when extract character button is clicked */
   onExtractCharacter?: (taskId: string) => void;
 }
@@ -230,6 +233,7 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
     onCopy,
     onPreviewOpen,
     onEdit,
+    onRegenerate,
     onExtractCharacter,
   }) => {
     const [imageDimensions, setImageDimensions] = useState<{
@@ -280,6 +284,7 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
     const isAudioTask = task.type === TaskType.AUDIO;
     const isChatTask = task.type === TaskType.CHAT;
     const isLyricsTask = isAudioTask && isLyricsResult(task.result);
+    const canRegenerateTask = task.type === TaskType.IMAGE;
     const isPreviewableTask =
       task.type === TaskType.IMAGE ||
       task.type === TaskType.VIDEO ||
@@ -884,6 +889,23 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
                     </HoverTip>
                   )}
 
+                  {canRegenerateTask && (
+                    <HoverTip content="以当前提示词再次生成">
+                      <Button
+                        size="small"
+                        variant="text"
+                        icon={<RefreshIcon />}
+                        aria-label="再次生成"
+                        data-track="task_click_regenerate_prefill"
+                        data-track-params={actionTrackParams}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRegenerate?.(task.id);
+                        }}
+                      />
+                    </HoverTip>
+                  )}
+
                   {canExtractCharacter && (
                     <HoverTip content="角色">
                       <Button
@@ -996,7 +1018,8 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
       prev.task.result === next.task.result &&
       prev.isSelected === next.isSelected &&
       prev.selectionMode === next.selectionMode &&
-      prev.isCompact === next.isCompact
+      prev.isCompact === next.isCompact &&
+      prev.onRegenerate === next.onRegenerate
     );
   }
 );

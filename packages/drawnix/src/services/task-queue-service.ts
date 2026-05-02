@@ -297,6 +297,51 @@ function normalizeImageDataUrl(
   return `data:${fallbackMimeType};base64,${normalized}`;
 }
 
+function normalizeComparableMediaUrl(value: string): string {
+  const normalized = normalizeImageDataUrl(value);
+
+  if (typeof window === 'undefined') {
+    return normalized;
+  }
+
+  try {
+    const parsed = new URL(normalized, window.location.origin);
+    if (parsed.origin !== window.location.origin) {
+      return parsed.toString();
+    }
+
+    parsed.searchParams.delete('_retry');
+    parsed.searchParams.delete('bypass_sw');
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return normalized.trim();
+  }
+}
+
+function getTaskResultUrls(task: Task): string[] {
+  const urls = new Set<string>();
+  if (task.result?.url) {
+    urls.add(task.result.url);
+  }
+  task.result?.urls?.forEach((url) => {
+    if (url) {
+      urls.add(url);
+    }
+  });
+  return Array.from(urls);
+}
+
+function imageTaskMatchesUrl(task: Task, imageUrl: string): boolean {
+  if (task.type !== TaskType.IMAGE) {
+    return false;
+  }
+
+  const targetUrl = normalizeComparableMediaUrl(imageUrl);
+  return getTaskResultUrls(task).some(
+    (url) => normalizeComparableMediaUrl(url) === targetUrl
+  );
+}
+
 function hasAnyPersistedLargeTaskParams(
   params?: Record<string, unknown> | null
 ): boolean {
@@ -1853,6 +1898,32 @@ class TaskQueueService {
    */
   getTask(taskId: string): Task | undefined {
     return this.tasks.get(taskId);
+  }
+
+  async getCompleteTask(taskId: string): Promise<Task | undefined> {
+    const storedTask = await taskStorageReader.getTask(taskId);
+    if (storedTask) {
+      return storedTask;
+    }
+
+    const memoryTask = this.tasks.get(taskId);
+    return memoryTask ? this.restoreStrippedTaskParams(memoryTask) : undefined;
+  }
+
+  async findImageTaskByResultUrl(imageUrl: string): Promise<Task | undefined> {
+    const memoryMatch = this
+      .getAllTasks()
+      .find((task) => imageTaskMatchesUrl(task, imageUrl));
+    if (memoryMatch) {
+      return this.getCompleteTask(memoryMatch.id);
+    }
+
+    const storedTasks = await taskStorageReader.getAllTasks({
+      type: TaskType.IMAGE,
+      includeArchived: true,
+      limit: STORAGE_LIMITS.MAX_RETAINED_TASKS * 10,
+    });
+    return storedTasks.find((task) => imageTaskMatchesUrl(task, imageUrl));
   }
 
   /**

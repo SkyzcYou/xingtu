@@ -1,11 +1,33 @@
 import type { GenerationType } from '../utils/ai-input-parser';
+import type { ModelRef } from '../utils/settings-manager';
 
 export interface AIInputFocusEventDetail {
   generationType?: GenerationType;
   skillId?: string;
 }
 
+export interface AIInputPrefillImage {
+  url: string;
+  name: string;
+  width?: number;
+  height?: number;
+}
+
+export type AIInputPrefillSource = 'canvas-toolbar' | 'task-queue' | 'dialog';
+
+export interface AIInputPrefillEventDetail {
+  generationType: GenerationType;
+  prompt: string;
+  images?: AIInputPrefillImage[];
+  model?: string;
+  modelRef?: ModelRef | null;
+  params?: Record<string, string>;
+  count?: number;
+  source?: AIInputPrefillSource;
+}
+
 export const AI_INPUT_FOCUS_EVENT = 'aitu:ai-input-focus';
+export const AI_INPUT_PREFILL_EVENT = 'aitu:ai-input-prefill';
 
 export function requestAIInputFocus(
   detail: AIInputFocusEventDetail = {}
@@ -15,4 +37,14 @@ export function requestAIInputFocus(
   }
 
   window.dispatchEvent(new CustomEvent(AI_INPUT_FOCUS_EVENT, { detail }));
+}
+
+export function requestAIInputPrefill(
+  detail: AIInputPrefillEventDetail
+): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent(AI_INPUT_PREFILL_EVENT, { detail }));
 }

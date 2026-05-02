@@ -16,12 +16,16 @@ import { insertVideoFromUrl } from '../../data/video';
 import { MessagePlugin, Input, Button } from 'tdesign-react';
 import { SearchIcon, DeleteIcon } from 'tdesign-icons-react';
 import { normalizeImageDataUrl } from '@aitu/utils';
+import { taskQueueService } from '../../services/task-queue';
+import { taskStorageReader } from '../../services/task-storage-reader';
+import { hasAIImageDraftContent } from '../../utils/ai-image-draft-state';
+import { buildImageTaskPrefillInitialData } from '../../utils/image-task-prefill';
 import {
   buildTaskDownloadItems,
   smartDownload,
 } from '../../utils/download-utils';
 import { CharacterCreateDialog } from '../character/CharacterCreateDialog';
-import { ConfirmDialog } from '../dialog/ConfirmDialog';
+import { ConfirmDialog, useConfirmDialog } from '../dialog/ConfirmDialog';
 import {
   UnifiedMediaViewer,
   type MediaItem as UnifiedMediaItem,
@@ -61,6 +65,7 @@ export const DialogTaskList: React.FC<DialogTaskListProps> = ({
   } = useFilteredTaskQueue({ taskType });
 
   const { board, openDialog } = useDrawnix();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
@@ -238,8 +243,50 @@ export const DialogTaskList: React.FC<DialogTaskListProps> = ({
     }
   };
 
-  const handleEdit = (taskId: string) => {
-    const task = tasks.find((t) => t.id === taskId);
+  const confirmOverwriteDraftIfNeeded = useCallback(async () => {
+    if (!hasAIImageDraftContent()) {
+      return true;
+    }
+
+    return confirm({
+      title: '覆盖当前输入？',
+      description: '当前 AI 图片生成窗口已有提示词或参考图，继续会覆盖当前输入。',
+      confirmText: '覆盖当前输入',
+      cancelText: '取消',
+      confirmTheme: 'warning',
+    });
+  }, [confirm]);
+
+  const handleRegenerate = async (taskId: string) => {
+    const task =
+      (await taskStorageReader.getTask(taskId)) ||
+      taskQueueService.getTask(taskId) ||
+      tasks.find((item) => item.id === taskId);
+    if (!task || task.type !== TaskType.IMAGE) {
+      MessagePlugin.warning('未找到可回填的图片任务');
+      return;
+    }
+
+    if (!(await confirmOverwriteDraftIfNeeded())) {
+      return;
+    }
+
+    if (onEditTask) {
+      onEditTask(task);
+    } else {
+      openDialog(
+        DialogType.aiImageGeneration,
+        buildImageTaskPrefillInitialData(task)
+      );
+    }
+    MessagePlugin.success('已回填历史提示词和参考图，请手动发送');
+  };
+
+  const handleEdit = async (taskId: string) => {
+    const task =
+      (await taskStorageReader.getTask(taskId)) ||
+      taskQueueService.getTask(taskId) ||
+      tasks.find((item) => item.id === taskId);
     if (!task) {
       console.warn('Cannot edit: task not found');
       return;
@@ -254,15 +301,10 @@ export const DialogTaskList: React.FC<DialogTaskListProps> = ({
     // 否则打开新的对话框（从任务队列面板调用）
     if (task.type === TaskType.IMAGE) {
       // 准备图片生成初始数据
-      const initialData = {
-        initialPrompt: task.params.prompt,
-        initialWidth: task.params.width,
-        initialHeight: task.params.height,
-        initialImages: task.params.uploadedImages, // 传递上传的参考图片(数组)
-        initialResultUrl: task.result?.url, // 传递结果URL用于预览
-        initialResultUrls: task.result?.urls, // 多图结果
-      };
-      openDialog(DialogType.aiImageGeneration, initialData);
+      openDialog(
+        DialogType.aiImageGeneration,
+        buildImageTaskPrefillInitialData(task)
+      );
     } else if (task.type === TaskType.VIDEO) {
       // 准备视频生成初始数据
       const initialData = {
@@ -451,6 +493,8 @@ export const DialogTaskList: React.FC<DialogTaskListProps> = ({
 
   return (
     <>
+      {confirmDialog}
+
       <div className="dialog-task-list">
         <div className="dialog-task-list__header">
           <div className="dialog-task-list__header-main">
@@ -489,6 +533,7 @@ export const DialogTaskList: React.FC<DialogTaskListProps> = ({
           onDownload={handleDownload}
           onInsert={handleInsert}
           onEdit={handleEdit}
+          onRegenerate={handleRegenerate}
           onPreviewOpen={handlePreviewOpen}
           onExtractCharacter={handleExtractCharacter}
           hasMore={hasMore && !searchText.trim()}

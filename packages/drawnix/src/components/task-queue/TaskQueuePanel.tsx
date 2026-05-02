@@ -63,6 +63,11 @@ import { resolveAudioResultUrls } from '../../services/audio-task-result-utils';
 import { ConfirmDialog } from '../dialog/ConfirmDialog';
 import { analytics } from '../../utils/posthog-analytics';
 import { DRAWER_PIN_KEYS } from '../../utils/drawer-pin';
+import {
+  buildImageTaskAIInputPrefillData,
+  buildImageTaskPrefillInitialData,
+} from '../../utils/image-task-prefill';
+import { requestAIInputPrefill } from '../../services/ai-input-ui-events';
 import './task-queue.scss';
 import { HoverTip } from '../shared';
 
@@ -725,6 +730,23 @@ export const TaskQueuePanel: React.FC<TaskQueuePanelProps> = ({
     }
   };
 
+  const handleRegenerate = async (taskId: string) => {
+    const task =
+      (await taskStorageReader.getTask(taskId)) ||
+      taskQueueService.getTask(taskId) ||
+      tasks.find((item) => item.id === taskId);
+    if (!task || task.type !== TaskType.IMAGE) {
+      MessagePlugin.warning('未找到可回填的图片任务');
+      return;
+    }
+
+    requestAIInputPrefill({
+      ...buildImageTaskAIInputPrefillData(task),
+      source: 'task-queue',
+    });
+    onTaskAction?.('regenerate', taskId);
+  };
+
   const handleEdit = (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) {
@@ -735,15 +757,10 @@ export const TaskQueuePanel: React.FC<TaskQueuePanelProps> = ({
     // 根据任务类型打开对应的对话框
     if (task.type === TaskType.IMAGE) {
       // 准备图片生成初始数据
-      const initialData = {
-        initialPrompt: task.params.prompt,
-        initialWidth: task.params.width,
-        initialHeight: task.params.height,
-        initialImages: task.params.uploadedImages, // 传递上传的参考图片(数组)
-        initialResultUrl: task.result?.url, // 传递结果URL用于预览
-        initialResultUrls: task.result?.urls, // 多图结果
-      };
-      openDialog(DialogType.aiImageGeneration, initialData);
+      openDialog(
+        DialogType.aiImageGeneration,
+        buildImageTaskPrefillInitialData(task)
+      );
     } else if (task.type === TaskType.VIDEO) {
       // 准备视频生成初始数据
       const initialData = {
@@ -1272,6 +1289,7 @@ export const TaskQueuePanel: React.FC<TaskQueuePanelProps> = ({
             onInsert={handleInsert}
             onCopy={handleCopy}
             onEdit={handleEdit}
+            onRegenerate={handleRegenerate}
             onPreviewOpen={handlePreviewOpen}
             onExtractCharacter={handleExtractCharacter}
             hasMore={hasMore}

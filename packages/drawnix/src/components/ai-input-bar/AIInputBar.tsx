@@ -26,6 +26,7 @@ import React, {
 } from 'react';
 import { Send } from 'lucide-react';
 import { MessagePlugin } from 'tdesign-react';
+import { useConfirmDialog } from '../dialog/ConfirmDialog';
 import { ImageUploadIcon, MediaLibraryIcon } from '../icons';
 import { useBoard } from '@plait-board/react-board';
 import { SelectedContentPreview } from '../shared/SelectedContentPreview';
@@ -122,6 +123,7 @@ import {
   analytics,
   type PromptAnalyticsType,
 } from '../../utils/posthog-analytics';
+import { normalizeImageDataUrl } from '@aitu/utils';
 import classNames from 'classnames';
 import { InspirationBoard } from '../inspiration-board';
 import { GenerationTypeDropdown } from './GenerationTypeDropdown';
@@ -163,7 +165,9 @@ import {
 } from '../../utils/ai-model-selection-storage';
 import {
   AI_INPUT_FOCUS_EVENT,
+  AI_INPUT_PREFILL_EVENT,
   type AIInputFocusEventDetail,
+  type AIInputPrefillEventDetail,
 } from '../../services/ai-input-ui-events';
 
 /**
@@ -233,6 +237,18 @@ function getPromptHistoryCategoryForStep(
       workflow.generationType === 'text'
     ? workflow.generationType
     : 'agent';
+}
+
+function normalizeAIInputImageUrl(url: string): string {
+  const normalized = normalizeImageDataUrl(url);
+  try {
+    const parsed = new URL(normalized, window.location.origin);
+    parsed.searchParams.delete('_retry');
+    parsed.searchParams.delete('bypass_sw');
+    return parsed.toString();
+  } catch {
+    return normalized;
+  }
 }
 
 function buildPromptLineageMeta(
@@ -660,6 +676,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       removeHistory: deletePromptHistory,
     } = usePromptHistory();
     const { addAsset } = useAssets();
+    const { confirm, confirmDialog } = useConfirmDialog();
     // 使用 ref 存储，避免依赖变化
     const sendWorkflowMessageRef = useRef(
       chatDrawerControl.sendWorkflowMessage
@@ -1135,9 +1152,22 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         ? 'agent'
         : `${initialGenerationType}:${initialSelectedModelKey}`
     );
+    const promptRef = useRef(prompt);
+    const selectedContentRef = useRef<SelectedContent[]>(selectedContent);
+    const uploadedContentRef = useRef<SelectedContent[]>(uploadedContent);
+    const suppressSelectionContentUrlsRef = useRef<Set<string>>(new Set());
     useEffect(() => {
       selectedParamsRef.current = selectedParams;
     }, [selectedParams]);
+    useEffect(() => {
+      promptRef.current = prompt;
+    }, [prompt]);
+    useEffect(() => {
+      selectedContentRef.current = selectedContent;
+    }, [selectedContent]);
+    useEffect(() => {
+      uploadedContentRef.current = uploadedContent;
+    }, [uploadedContent]);
     // 当前选中的生成数量
     const [selectedCount, setSelectedCount] = useState(
       initialPreferences.selectedCount
@@ -1171,7 +1201,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const allContent = useMemo(() => {
       return [...uploadedContent, ...selectedContent];
     }, [uploadedContent, selectedContent]);
-
     const localImageMessages = useMemo(
       () => ({
         invalidFile:
@@ -1756,6 +1785,41 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       stopPropagation: true,
     });
 
+    const focusInput = useCallback(() => {
+      setIsFocused(true);
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+    }, []);
+
+    const confirmOverwriteInputIfNeeded = useCallback(
+      async (source?: AIInputPrefillEventDetail['source']) => {
+        const hasPrompt = promptRef.current.trim().length > 0;
+        const hasUploadedContent = uploadedContentRef.current.length > 0;
+        const hasSelectedContent = selectedContentRef.current.length > 0;
+        const shouldConfirm =
+          source === 'canvas-toolbar'
+            ? hasPrompt || hasUploadedContent
+            : hasPrompt || hasUploadedContent || hasSelectedContent;
+
+        if (!shouldConfirm) {
+          return true;
+        }
+
+        return confirm({
+          title: language === 'zh' ? '覆盖当前输入？' : 'Overwrite current input?',
+          description:
+            language === 'zh'
+              ? '底部输入框已有提示词或参考图，继续会覆盖当前输入。'
+              : 'The bottom input already has a prompt or reference images. Continuing will overwrite it.',
+          confirmText: language === 'zh' ? '覆盖当前输入' : 'Overwrite input',
+          cancelText: language === 'zh' ? '取消' : 'Cancel',
+          confirmTheme: 'warning',
+        });
+      },
+      [confirm, language]
+    );
+
     useEffect(() => {
       const handleAIInputFocus = (
         event: Event | CustomEvent<AIInputFocusEventDetail>
@@ -1773,17 +1837,123 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           }
         }
 
-        setIsFocused(true);
-        requestAnimationFrame(() => {
-          inputRef.current?.focus();
-        });
+        focusInput();
       };
 
       window.addEventListener(AI_INPUT_FOCUS_EVENT, handleAIInputFocus);
       return () => {
         window.removeEventListener(AI_INPUT_FOCUS_EVENT, handleAIInputFocus);
       };
-    }, []);
+    }, [focusInput]);
+
+    useEffect(() => {
+      const handleAIInputPrefill = async (
+        event: Event | CustomEvent<AIInputPrefillEventDetail>
+      ) => {
+        const detail = (event as CustomEvent<AIInputPrefillEventDetail>).detail;
+        if (!detail || !(await confirmOverwriteInputIfNeeded(detail.source))) {
+          return;
+        }
+
+        const nextGenerationType = detail.generationType;
+        const modelsForType =
+          nextGenerationType === 'video'
+            ? videoModels
+            : nextGenerationType === 'audio'
+            ? audioModels
+            : nextGenerationType === 'text' || nextGenerationType === 'agent'
+            ? textModels
+            : imageModels;
+        const nextModel =
+          findMatchingSelectableModel(
+            modelsForType,
+            detail.model,
+            detail.modelRef || null
+          ) ||
+          findMatchingSelectableModel(modelsForType, detail.model, null) ||
+          resolvePreferredModelSelection(nextGenerationType, modelsForType);
+        const nextModelRef = getModelRefFromConfig(nextModel);
+        const nextModelId = nextModel?.id || detail.model || selectedModel;
+        const nextScopeKey = getSelectionKey(nextModelId, nextModelRef);
+        const nextParams =
+          nextGenerationType === 'agent'
+            ? {}
+            : {
+                ...loadScopedAIInputModelParams(
+                  nextGenerationType,
+                  nextModelId,
+                  nextScopeKey
+                ),
+                ...(detail.params || {}),
+              };
+
+        if (detail.source === 'canvas-toolbar') {
+          const suppressedUrls = selectedContentRef.current
+            .filter(
+              (content): content is SelectedContent & { url: string } =>
+                content.type === 'image' && typeof content.url === 'string'
+            )
+            .map((content) => normalizeAIInputImageUrl(content.url));
+          suppressSelectionContentUrlsRef.current = new Set(suppressedUrls);
+          setSelectedContent((prev) =>
+            prev.filter((item) => {
+              if (item.type !== 'image' || typeof item.url !== 'string') {
+                return true;
+              }
+              return !suppressSelectionContentUrlsRef.current.has(
+                normalizeAIInputImageUrl(item.url)
+              );
+            })
+          );
+        } else {
+          suppressSelectionContentUrlsRef.current = new Set();
+        }
+
+        setGenerationType(nextGenerationType);
+        setPrompt(detail.prompt || '');
+        setUploadedContent(
+          (detail.images || []).map((image, index) => ({
+            type: 'image',
+            url: image.url,
+            name: image.name || `参考图 ${index + 1}`,
+            width: image.width,
+            height: image.height,
+          }))
+        );
+        setSelectedModel(nextModelId);
+        setSelectedModelRef(nextModelRef);
+        setSelectedParams(nextParams);
+        selectedParamsRef.current = nextParams;
+        selectedParamScopeRef.current =
+          nextGenerationType === 'agent'
+            ? 'agent'
+            : `${nextGenerationType}:${nextScopeKey}`;
+        if (typeof detail.count === 'number' && detail.count > 0) {
+          setSelectedCount(detail.count);
+        }
+        MessagePlugin.success(
+          language === 'zh'
+            ? '已回填到底部输入框，请手动发送'
+            : 'Loaded into the bottom input. Send manually when ready.'
+        );
+        focusInput();
+      };
+
+      window.addEventListener(AI_INPUT_PREFILL_EVENT, handleAIInputPrefill);
+      return () => {
+        window.removeEventListener(AI_INPUT_PREFILL_EVENT, handleAIInputPrefill);
+      };
+    }, [
+      audioModels,
+      confirmOverwriteInputIfNeeded,
+      focusInput,
+      imageModels,
+      language,
+      resolvePreferredModelSelection,
+      selectedModel,
+      textModels,
+      videoModels,
+    ]);
 
     // 处理灵感模版选择：将提示词替换到输入框并切换到 Agent 模式
     const handleSelectInspirationPrompt = useCallback(
@@ -2098,7 +2268,33 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
     // 处理选择变化的回调（由 SelectionWatcher 调用）
     const handleSelectionChange = useCallback((content: SelectedContent[]) => {
-      setSelectedContent(content);
+      const suppressedUrls = suppressSelectionContentUrlsRef.current;
+      if (suppressedUrls.size === 0) {
+        setSelectedContent(content);
+        return;
+      }
+
+      const containsSuppressedSelection = content.some((item) => {
+        if (item.type !== 'image' || typeof item.url !== 'string') {
+          return false;
+        }
+        return suppressedUrls.has(normalizeAIInputImageUrl(item.url));
+      });
+
+      if (!containsSuppressedSelection) {
+        suppressSelectionContentUrlsRef.current = new Set();
+        setSelectedContent(content);
+        return;
+      }
+
+      setSelectedContent(
+        content.filter((item) => {
+          if (item.type !== 'image' || typeof item.url !== 'string') {
+            return true;
+          }
+          return !suppressedUrls.has(normalizeAIInputImageUrl(item.url));
+        })
+      );
     }, []);
 
     // 当选中单个 Frame 时，自动切换 size 参数为最接近 Frame 比例的选项
@@ -4089,18 +4285,20 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     }, [shouldKeepExpanded, prompt]);
 
     return (
-      <div
-        ref={containerRef}
-        className={classNames(
-          'ai-input-bar',
-          ATTACHED_ELEMENT_CLASS_NAME,
-          className,
-          {
-            'ai-input-bar--with-inspiration': showInspirationBoard,
-          }
-        )}
-        data-testid="ai-input-bar"
-      >
+      <>
+        {confirmDialog}
+        <div
+          ref={containerRef}
+          className={classNames(
+            'ai-input-bar',
+            ATTACHED_ELEMENT_CLASS_NAME,
+            className,
+            {
+              'ai-input-bar--with-inspiration': showInspirationBoard,
+            }
+          )}
+          data-testid="ai-input-bar"
+        >
         <SelectionWatcher
           language={language}
           onSelectionChange={handleSelectionChange}
@@ -4427,16 +4625,17 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           </div>
         </div>
 
-        {showMediaLibrary && (
-          <MediaLibraryModal
-            isOpen={showMediaLibrary}
-            onClose={() => setShowMediaLibrary(false)}
-            mode={SelectionMode.SELECT}
-            filterType={AssetType.IMAGE}
-            onSelect={handleMediaLibrarySelect}
-          />
-        )}
-      </div>
+          {showMediaLibrary && (
+            <MediaLibraryModal
+              isOpen={showMediaLibrary}
+              onClose={() => setShowMediaLibrary(false)}
+              mode={SelectionMode.SELECT}
+              filterType={AssetType.IMAGE}
+              onSelect={handleMediaLibrarySelect}
+            />
+          )}
+        </div>
+      </>
     );
   }
 );
