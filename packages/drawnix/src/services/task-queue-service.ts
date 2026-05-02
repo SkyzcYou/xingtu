@@ -54,6 +54,7 @@ import {
 import { loadRecords } from '../components/video-analyzer/storage';
 import {
   applyRewriteShotUpdates,
+  parseVideoPromptGenerationResponse,
   parseRewriteShotUpdates,
 } from '../components/video-analyzer/utils';
 import {
@@ -65,6 +66,11 @@ import {
 import { formatMusicAnalysisMarkdown } from '../components/music-analyzer/types';
 import { loadRecords as loadMusicRecords } from '../components/music-analyzer/storage';
 import { parseLyricsRewriteResult } from '../components/music-analyzer/utils';
+import {
+  buildPromptWithKnowledgeContext,
+  normalizeGenerationParamsKnowledgeContext,
+} from './generation-context-service';
+import { MAX_VIDEO_GENERATION_PROMPT_LENGTH } from '../components/shared/workflow/prompt-builders';
 
 const VIDEO_ANALYZER_SIMULATED_DURATION_MS = 10 * 60 * 1000;
 const VIDEO_ANALYZER_SIMULATED_INTERVAL_MS = 5000;
@@ -74,6 +80,10 @@ const VIDEO_REWRITE_SIMULATED_DURATION_MS = 2 * 60 * 1000;
 const VIDEO_REWRITE_SIMULATED_INTERVAL_MS = 2000;
 const VIDEO_REWRITE_SIMULATED_START_PROGRESS = 20;
 const VIDEO_REWRITE_SIMULATED_END_PROGRESS = 95;
+const VIDEO_PROMPT_SIMULATED_DURATION_MS = 2 * 60 * 1000;
+const VIDEO_PROMPT_SIMULATED_INTERVAL_MS = 2000;
+const VIDEO_PROMPT_SIMULATED_START_PROGRESS = 20;
+const VIDEO_PROMPT_SIMULATED_END_PROGRESS = 95;
 const MUSIC_ANALYZER_SIMULATED_DURATION_MS = 4 * 60 * 1000;
 const MUSIC_ANALYZER_SIMULATED_INTERVAL_MS = 3000;
 const MUSIC_ANALYZER_SIMULATED_START_PROGRESS = 12;
@@ -475,6 +485,48 @@ class TaskQueueService {
     }
   }
 
+  private async resolveTaskKnowledgeContext(task: Task): Promise<Task> {
+    const refs = task.params.knowledgeContextRefs;
+    if (!refs?.length) {
+      return task;
+    }
+
+    const specializedPromptKey = [
+      'videoAnalyzerPrompt',
+      'musicAnalyzerPrompt',
+    ].find((key) => {
+      const value = task.params[key];
+      return typeof value === 'string' && value.trim().length > 0;
+    });
+    const basePrompt = specializedPromptKey
+      ? task.params[specializedPromptKey]
+      : task.params.prompt;
+    const result = await buildPromptWithKnowledgeContext(
+      basePrompt,
+      refs,
+      task.type === TaskType.VIDEO
+        ? { maxPromptLength: MAX_VIDEO_GENERATION_PROMPT_LENGTH }
+        : undefined
+    );
+    if (!result.contextBlock) {
+      return task;
+    }
+
+    return {
+      ...task,
+      params: {
+        ...task.params,
+        ...(specializedPromptKey
+          ? { [specializedPromptKey]: result.prompt }
+          : { prompt: result.prompt }),
+        promptMeta: {
+          ...task.params.promptMeta,
+          knowledgeContextRefs: result.includedRefs,
+        },
+      },
+    };
+  }
+
   private async buildChatInlineDataParts(
     task: Task
   ): Promise<GeminiMessage['content']> {
@@ -581,7 +633,9 @@ class TaskQueueService {
         return;
       }
 
-      task = await this.restoreStrippedTaskParams(task);
+      task = await this.resolveTaskKnowledgeContext(
+        await this.restoreStrippedTaskParams(task)
+      );
 
       if (task.type === TaskType.AUDIO) {
         const requestedModel = task.params.model as string | undefined;
@@ -899,6 +953,7 @@ class TaskQueueService {
                 | '4k'
                 | undefined,
               params: extraParams,
+              assetMetadata: task.params.assetMetadata,
             },
             executionOptions
           );
@@ -955,6 +1010,17 @@ class TaskQueueService {
               .videoAnalyzerAction === 'rewrite'
           ) {
             await this.executeVideoAnalyzerRewriteTask(task, executionOptions);
+            break;
+          }
+
+          if (
+            (task.params as { videoAnalyzerAction?: string })
+              .videoAnalyzerAction === 'prompt-generate'
+          ) {
+            await this.executeVideoAnalyzerPromptGenerateTask(
+              task,
+              executionOptions
+            );
             break;
           }
 
@@ -1321,6 +1387,85 @@ class TaskQueueService {
             editedShots,
             rawResponse: text,
           },
+        },
+      });
+    } finally {
+      window.clearInterval(progressTimer);
+    }
+  }
+
+  private async executeVideoAnalyzerPromptGenerateTask(
+    task: Task,
+    options: {
+      onProgress: (progress: { progress: number; phase?: string }) => void;
+    }
+  ): Promise<void> {
+    const params = task.params as {
+      model?: string;
+      modelRef?: Task['params']['modelRef'];
+      videoAnalyzerPrompt?: string;
+      prompt?: string;
+    };
+    const actualPrompt = String(params.videoAnalyzerPrompt || '').trim();
+    if (!actualPrompt) {
+      throw new Error('缺少提示词生成内容');
+    }
+
+    await taskStorageWriter.updateStatus(task.id, 'processing');
+    options.onProgress({
+      progress: VIDEO_PROMPT_SIMULATED_START_PROGRESS,
+      phase: 'submitting',
+    });
+    await taskStorageWriter.updateProgress(
+      task.id,
+      VIDEO_PROMPT_SIMULATED_START_PROGRESS,
+      'submitting'
+    );
+
+    const startedAt = Date.now();
+    const progressTimer = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const ratio = Math.min(elapsed / VIDEO_PROMPT_SIMULATED_DURATION_MS, 1);
+      const nextProgress =
+        VIDEO_PROMPT_SIMULATED_START_PROGRESS +
+        (VIDEO_PROMPT_SIMULATED_END_PROGRESS -
+          VIDEO_PROMPT_SIMULATED_START_PROGRESS) *
+          ratio;
+      this.updateTaskProgress(task.id, Math.floor(nextProgress));
+    }, VIDEO_PROMPT_SIMULATED_INTERVAL_MS);
+
+    try {
+      const messages: GeminiMessage[] = [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: actualPrompt },
+            ...(await this.buildChatInlineDataParts(task)),
+          ],
+        },
+      ];
+      const response = await sendChatWithGemini(
+        messages,
+        undefined,
+        undefined,
+        (params.modelRef as any) || params.model,
+        { taskType: 'video', taskId: task.id, prompt: actualPrompt }
+      );
+      const text = response.choices?.[0]?.message?.content;
+      if (!text) {
+        throw new Error('AI 未返回有效响应');
+      }
+
+      const analysis = parseVideoPromptGenerationResponse(text);
+      const formattedText = formatShotsMarkdown(analysis.shots || [], analysis);
+
+      options.onProgress({ progress: 100 });
+      await this.finalizeChatTask(task, {
+        title: '提示词生成结果',
+        chatResponse: formattedText,
+        format: 'md',
+        resultExtras: {
+          analysisData: analysis,
         },
       });
     } finally {
@@ -1739,7 +1884,9 @@ class TaskQueueService {
     }
 
     // Sanitize parameters
-    const sanitizedParams = sanitizeGenerationParams(params);
+    const sanitizedParams = normalizeGenerationParamsKnowledgeContext(
+      sanitizeGenerationParams(params)
+    );
 
     // Create new task - starts as PROCESSING since it will be executed immediately
     const now = Date.now();

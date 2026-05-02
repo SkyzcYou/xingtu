@@ -42,6 +42,18 @@ function shortTime(ts: number): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+function recordSummary(record: MVRecord): string {
+  const brief = record.creativeBrief;
+  return (
+    brief?.purpose ||
+    brief?.directorStyle ||
+    brief?.narrativeStyle ||
+    record.videoStyle ||
+    record.musicStyleTags?.filter(Boolean).join(' / ') ||
+    '暂无概要'
+  );
+}
+
 interface RelatedTasks {
   storyboard: Task[];
   music: Task[];
@@ -192,7 +204,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                 </div>
                 <div className="ma-history-title">{record.musicTitle || '未命名 MV'}</div>
                 <div className="ma-history-summary">
-                  {record.creationPrompt?.slice(0, 80) || '暂无描述'}
+                  {recordSummary(record).slice(0, 80)}
                 </div>
                 {record.generatedClips && record.generatedClips.length > 0 && (
                   <div className="ma-history-clips-count">

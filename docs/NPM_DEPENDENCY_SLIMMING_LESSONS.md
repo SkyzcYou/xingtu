@@ -95,7 +95,7 @@ Rollup failed to resolve import "@plait/layouts" from "@plait/mind"
 
 处理原则：
 
-- 本地 `localhost`/`127.0.0.1` 默认禁用并清理旧 Service Worker，`?sw=1` 才显式启用。
+- 本地 `localhost`/`127.0.0.1` 默认启用 Service Worker，但默认 dev 命令必须同步 watch 最新 `sw.js`；需要绕过时用 `?sw=0` 显式关闭并清理旧注册。
 - dev server CSP 放行 `http:` 和 `ws:`，生产/preview 保持更严格策略。
 - 修这类问题后用 `curl -I /`、`curl -I /src/main.tsx`、`curl -I /@fs/...` 做轻量验证，不必反复生产构建。
 

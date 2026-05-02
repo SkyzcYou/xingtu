@@ -10,6 +10,7 @@ import { updateRecord } from '../storage';
 import { ShotCard } from '../components/ShotCard';
 import { ComboInput } from '../components/ComboInput';
 import {
+  CreativeBriefEditor,
   VISUAL_STYLE_OPTIONS,
   VISUAL_STYLE_PLACEHOLDER,
 } from '../../shared/workflow';
@@ -126,6 +127,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
   const [error, setError] = useState('');
   const [versionMenuOpen, setVersionMenuOpen] = useState(false);
   const versionMenuRef = useRef<HTMLDivElement>(null);
+  const rewritingRef = useRef(false);
   const [scriptModel, setScriptModelState] = useState(
     () => readStoredModelSelection(STORAGE_KEY_SCRIPT_MODEL, DEFAULT_SCRIPT_MODEL).modelId
   );
@@ -260,6 +262,10 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
       setError('请填写提示词');
       return;
     }
+    if (rewritingRef.current || pendingRewriteTaskId) {
+      return;
+    }
+    rewritingRef.current = true;
     setRewriting(true);
     setError('');
     setRewriteProgress('AI 改编中 0%');
@@ -301,6 +307,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
       onRecordsChange(updated);
       onRecordUpdate({ ...record, pendingRewriteTaskId: task.id });
     } catch (err: any) {
+      rewritingRef.current = false;
       setError(err.message || '改编失败');
     } finally {
       setRewriting(false);
@@ -315,6 +322,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
     scriptModelRef,
     onRecordUpdate,
     onRecordsChange,
+    pendingRewriteTaskId,
   ]);
 
   useEffect(() => {
@@ -333,6 +341,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
       }
 
       if (event.task.status === 'failed') {
+        rewritingRef.current = false;
         setPendingRewriteTaskId(null);
         setRewriteProgress('');
         setError(event.task.error?.message || '改编失败');
@@ -354,6 +363,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
         }).catch((err: any) => {
           setError(err.message || '改编结果同步失败');
         }).finally(() => {
+          rewritingRef.current = false;
           setPendingRewriteTaskId(null);
           setRewriteProgress('');
         });
@@ -413,6 +423,10 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
           value={productInfo.prompt}
           onChange={e => setProductInfo(p => ({ ...p, prompt: e.target.value }))}
           onInput={e => autoResize(e.currentTarget)}
+        />
+        <CreativeBriefEditor
+          value={productInfo.creativeBrief}
+          onChange={creativeBrief => setProductInfo(p => ({ ...p, creativeBrief }))}
         />
         <div className="va-form-row">
           <div className="va-duration-input" style={{ width: 'auto', flex: 1 }}>

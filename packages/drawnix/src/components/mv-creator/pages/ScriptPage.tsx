@@ -9,6 +9,9 @@ import {
   ShotCard,
   ComboInput,
   CharacterDescriptionList,
+  CreativeBriefEditor,
+  normalizeCreativeBrief,
+  type CreativeBrief,
   VISUAL_STYLE_OPTIONS,
   VISUAL_STYLE_PLACEHOLDER,
 } from '../../shared/workflow';
@@ -26,8 +29,9 @@ import {
   ORIGINAL_VERSION_ID,
 } from '../utils';
 import { taskQueueService } from '../../../services/task-queue';
-import { TaskType } from '../../../types/task.types';
+import { TaskType, type KnowledgeContextRef } from '../../../types/task.types';
 import { syncMVRewriteTask } from '../task-sync';
+import { KnowledgeNoteContextSelector } from '../../shared';
 import { analytics } from '../../../utils/posthog-analytics';
 
 function autoResize(el: HTMLTextAreaElement) {
@@ -79,6 +83,9 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
 }) => {
   const [shots, setShots] = useState<VideoShot[]>(record.editedShots || []);
   const [rewritePrompt, setRewritePrompt] = useState(record.rewritePrompt || '');
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >([]);
   const [rewriting, setRewriting] = useState(false);
   const [rewriteProgress, setRewriteProgress] = useState('');
   const [error, setError] = useState('');
@@ -114,6 +121,9 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
 
   // 画面风格
   const [videoStyle, setVideoStyle] = useState(record.videoStyle || '');
+  const [creativeBrief, setCreativeBrief] = useState<CreativeBrief>(
+    () => normalizeCreativeBrief(record.creativeBrief)
+  );
 
   const setVideoModel = useCallback((model: string, ref?: ModelRef | null) => {
     setVideoModelState(model);
@@ -162,6 +172,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
         videoModelRef,
         segmentDuration: selectedSegmentDuration,
         videoStyle,
+        creativeBrief,
       });
       onRecordsChange(updated);
       onRecordUpdate({
@@ -171,15 +182,23 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
         videoModelRef,
         segmentDuration: selectedSegmentDuration,
         videoStyle,
+        creativeBrief,
       });
     }, 500);
     return () => clearTimeout(saveTimerRef.current);
-  }, [rewritePrompt, videoModel, videoModelRef, selectedSegmentDuration, videoStyle]);
+  }, [rewritePrompt, videoModel, videoModelRef, selectedSegmentDuration, videoStyle, creativeBrief]);
 
   // 同步 record 变化
   useEffect(() => {
     setShots(record.editedShots || []);
-  }, [record.editedShots]);
+    setRewritePrompt(record.rewritePrompt || '');
+    setVideoStyle(record.videoStyle || '');
+    setCreativeBrief(normalizeCreativeBrief(record.creativeBrief));
+  }, [record]);
+
+  useEffect(() => {
+    setKnowledgeContextRefs([]);
+  }, [record.id]);
 
   const saveShots = useCallback(async (updatedShots: VideoShot[]) => {
     setShots(updatedShots);
@@ -216,7 +235,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
     });
     try {
       const prompt = buildMVScriptRewritePrompt({
-        record,
+        record: { ...record, creativeBrief },
         currentShots: shots,
         rewritePrompt,
         videoModel,
@@ -230,6 +249,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
           modelRef: scriptModelRef,
           mvCreatorAction: 'rewrite',
           mvCreatorRecordId: record.id,
+          knowledgeContextRefs,
         },
         TaskType.CHAT
       );
@@ -244,7 +264,20 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
       setRewriting(false);
       rewritingRef.current = false;
     }
-  }, [record, shots, rewritePrompt, scriptModel, scriptModelRef, onRecordUpdate, onRecordsChange]);
+  }, [
+    record,
+    shots,
+    rewritePrompt,
+    videoModel,
+    selectedSegmentDuration,
+    videoStyle,
+    creativeBrief,
+    scriptModel,
+    scriptModelRef,
+    knowledgeContextRefs,
+    onRecordUpdate,
+    onRecordsChange,
+  ]);
 
   // 监听改编任务
   useEffect(() => {
@@ -335,6 +368,17 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
           value={rewritePrompt}
           onChange={e => setRewritePrompt(e.target.value)}
           onInput={e => autoResize(e.currentTarget)}
+        />
+        <KnowledgeNoteContextSelector
+          value={knowledgeContextRefs}
+          onChange={setKnowledgeContextRefs}
+          disabled={rewriting || !!pendingRewriteTaskId}
+          className="mv-knowledge-context-selector"
+        />
+        <CreativeBriefEditor
+          value={creativeBrief}
+          onChange={setCreativeBrief}
+          workflow="mv"
         />
         <div className="va-model-select">
           <label className="va-model-label">改编模型</label>

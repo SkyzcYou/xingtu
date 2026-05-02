@@ -755,6 +755,30 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     @extend .ai-input-bar__upload-btn;
   }
 
+  &__knowledge-selector {
+    flex: 0 0 auto;
+
+    .knowledge-note-context-selector__trigger {
+      width: 32px;
+      min-width: 32px;
+      height: 32px;
+      min-height: 32px;
+      border-radius: 8px;
+    }
+
+    .knowledge-note-context-selector__dropdown {
+      top: auto;
+      bottom: calc(100% + 8px);
+      left: 0;
+      width: min(360px, calc(100vw - 32px));
+      max-width: calc(100vw - 32px);
+    }
+
+    .knowledge-note-context-selector__hover-summary {
+      left: 0;
+    }
+  }
+
   // Generation Type Dropdown
   .generation-type-dropdown {
     position: relative;
@@ -1199,6 +1223,24 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       }
     }
 
+    &__knowledge-selector {
+      .knowledge-note-context-selector__trigger {
+        color: var(--color-gray-50, #999);
+
+        &:hover,
+        &:focus-visible {
+          color: $orange-primary;
+          background: rgba($orange-primary, 0.15);
+        }
+      }
+
+      &.knowledge-note-context-selector--selected
+        .knowledge-note-context-selector__trigger {
+        color: $orange-primary;
+        background: rgba($orange-primary, 0.18);
+      }
+    }
+
     .generation-type-dropdown,
     .count-dropdown,
     .skill-dropdown {
@@ -1595,6 +1637,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       min-width: 36px;
     }
 
+    &__knowledge-selector .knowledge-note-context-selector__trigger {
+      width: 36px;
+      height: 36px;
+      min-width: 36px;
+    }
+
     &__highlight-layer {
       font-size: 14px;
       padding: 4px 8px;
@@ -1665,6 +1713,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     &__upload-btn,
     &__library-btn,
     &__send-btn {
+      width: 34px;
+      height: 34px;
+      min-width: 34px;
+    }
+
+    &__knowledge-selector .knowledge-note-context-selector__trigger {
       width: 34px;
       height: 34px;
       min-width: 34px;

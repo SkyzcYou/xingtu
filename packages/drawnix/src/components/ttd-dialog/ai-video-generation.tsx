@@ -34,7 +34,7 @@ import {
 } from '../../services/ai-generation-preferences-service';
 import { promptStorageService } from '../../services/prompt-storage-service';
 import { useTaskQueue } from '../../hooks/useTaskQueue';
-import { TaskType } from '../../types/task.types';
+import { TaskType, type KnowledgeContextRef } from '../../types/task.types';
 import { MessagePlugin } from 'tdesign-react';
 import { DialogTaskList } from '../task-queue/DialogTaskList';
 import { LS_KEYS } from '../../constants/storage-keys';
@@ -68,6 +68,7 @@ import {
   getModelRefFromConfig,
   getSelectionKey,
 } from '../../utils/model-selection';
+import { KnowledgeNoteContextSelector } from '../shared';
 
 function areStringMapsEqual(
   a: Record<string, string>,
@@ -197,6 +198,7 @@ interface AIVideoGenerationProps {
   initialPrompt?: string;
   initialImage?: ImageFile; // 保留单图片支持（向后兼容）
   initialImages?: UploadedVideoImage[]; // 新增：支持多图片
+  initialKnowledgeContextRefs?: KnowledgeContextRef[];
   initialDuration?: number;
   initialModel?: VideoModel; // 新增：模型选择
   initialSize?: string; // 新增：尺寸选择
@@ -219,6 +221,7 @@ const AIVideoGeneration = ({
   initialPrompt = '',
   initialImage,
   initialImages,
+  initialKnowledgeContextRefs = [],
   initialDuration,
   initialModel,
   initialSize,
@@ -233,6 +236,9 @@ const AIVideoGeneration = ({
 }: AIVideoGenerationProps = {}) => {
   const videoModels = useSelectableModels('video');
   const [prompt, setPrompt] = useState(initialPrompt);
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >(initialKnowledgeContextRefs);
   const [error, setError] = useState<string | null>(null);
 
   // 任务列表面板状态 - 使用像素宽度
@@ -721,6 +727,7 @@ const AIVideoGeneration = ({
       prompt: initialPrompt,
       image: initialImage?.url,
       images: initialImages?.map((img) => img.url),
+      knowledgeContextRefs: initialKnowledgeContextRefs.map((ref) => ref.noteId),
       duration: initialDuration,
       model: initialModel,
       size: initialSize,
@@ -745,6 +752,7 @@ const AIVideoGeneration = ({
     }
 
     setPrompt(initialPrompt);
+    setKnowledgeContextRefs(initialKnowledgeContextRefs);
 
     // 处理图片：保存所有原始图片，并按当前模型过滤显示
     let newAllImages: UploadedVideoImage[] = [];
@@ -784,6 +792,7 @@ const AIVideoGeneration = ({
     initialPrompt,
     initialImage,
     initialImages,
+    initialKnowledgeContextRefs,
     initialDuration,
     initialSize,
     initialResultUrl,
@@ -1095,6 +1104,7 @@ const AIVideoGeneration = ({
           // 创建任务参数（包含新的 duration, size, uploadedImages）
           const taskParams = {
             prompt: finalPrompt,
+            knowledgeContextRefs,
             model: currentModel,
             modelRef: currentModelRef || null,
             seconds: splitParams.duration,
@@ -1374,6 +1384,13 @@ const AIVideoGeneration = ({
                 videoProvider={modelConfig.provider}
               />
             )}
+
+            <KnowledgeNoteContextSelector
+              value={knowledgeContextRefs}
+              onChange={setKnowledgeContextRefs}
+              disabled={isGenerating}
+              language={language}
+            />
 
             <ErrorDisplay error={error} />
           </div>

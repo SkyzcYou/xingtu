@@ -321,7 +321,7 @@ async function submitHappyHorseVideo(
     if (!image) {
       throw new Error('HappyHorse I2V 需要首帧图片');
     }
-    body.input_reference = image;
+    body.image = image;
   } else if (model === 'happyhorse-1.0-r2v') {
     const paramImages = await normalizeImageInputs(
       getStringArrayParam(request.params, ['input_reference', 'images'])
@@ -336,9 +336,9 @@ async function submitHappyHorseVideo(
       ? await normalizeImageInput(inputReferenceParam)
       : undefined;
     if (images.length > 0) {
-      body.input_reference = images;
+      body.images = images;
     } else if (inputReference) {
-      body.input_reference = inputReference;
+      body.images = [inputReference];
     } else {
       throw new Error('HappyHorse R2V 需要至少 1 张参考图');
     }
@@ -360,7 +360,7 @@ async function submitHappyHorseVideo(
       referenceImages[0] ||
       (imageParam ? await normalizeImageInput(imageParam) : undefined);
     if (editImage) {
-      body.input_reference = editImage;
+      body.image = editImage;
     }
   }
 

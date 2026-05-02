@@ -228,6 +228,11 @@
     flex: 1;
     min-height: 120px;
     overflow: hidden;
+
+    &--compact {
+      flex: 0 0 auto;
+      min-height: 92px;
+    }
   }
 
   &__prompt-header {
@@ -309,6 +314,28 @@
       .inspector-btn-delete { grid-area: delete; }
     }
 
+    &--with-select-subject {
+      grid-template-areas:
+        "select select"
+        "subject subject"
+        "download delete";
+
+      .inspector-btn-select { grid-area: select; }
+      .inspector-btn-subject { grid-area: subject; }
+      .inspector-btn-download { grid-area: download; }
+      .inspector-btn-delete { grid-area: delete; }
+    }
+
+    &--with-subject {
+      grid-template-areas:
+        "subject subject"
+        "download delete";
+
+      .inspector-btn-subject { grid-area: subject; }
+      .inspector-btn-download { grid-area: download; }
+      .inspector-btn-delete { grid-area: delete; }
+    }
+
     &--no-select {
       grid-template-columns: repeat(2, 1fr);
     }
@@ -348,6 +375,52 @@
         color: #ffffff !important;
         border-color: #dc3545 !important;
       }
+    }
+  }
+
+  &__subject-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__subject-label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  &__subject-hint {
+    margin: -4px 0 0;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  &__subject-textarea {
+    width: 100%;
+    min-height: 88px;
+    resize: vertical;
+    border: 1px solid #dcdfe6;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #1e293b;
+    outline: none;
+
+    &:focus {
+      border-color: #000;
+      box-shadow: 0 0 0 1px #000;
+    }
+
+    &:disabled {
+      color: #94a3b8;
+      background: #f8fafc;
+      cursor: not-allowed;
     }
   }
 

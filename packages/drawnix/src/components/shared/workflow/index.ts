@@ -29,7 +29,28 @@ export {
   type UseWorkflowNavigationOptions,
   type UseWorkflowNavigationResult,
 } from './useWorkflowNavigation';
-export { buildVideoPrompt, buildFramePrompt } from './prompt-builders';
+export {
+  buildVideoPrompt,
+  buildFramePrompt,
+  buildCharacterReferencePrompt,
+} from './prompt-builders';
+export {
+  CreativeBriefEditor,
+  type CreativeBriefEditorProps,
+} from './CreativeBriefEditor';
+export {
+  type CreativeBrief,
+  normalizeCreativeBrief,
+  hasCreativeBrief,
+  formatCreativeBriefSummary,
+  formatCreativeBriefPromptBlock,
+  CREATIVE_PURPOSE_OPTIONS,
+  DIRECTOR_STYLE_OPTIONS,
+  NARRATIVE_STYLE_OPTIONS,
+  TARGET_PLATFORM_OPTIONS,
+  AUDIENCE_OPTIONS,
+  PACING_OPTIONS,
+} from './creative-brief';
 export {
   useWorkflowAssetActions,
   type UseWorkflowAssetActionsOptions,

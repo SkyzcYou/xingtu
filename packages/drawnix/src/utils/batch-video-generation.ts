@@ -3,6 +3,29 @@ import { waitForTaskCompletion } from '../services/media-executor/task-polling';
 import type { Task } from '../types/task.types';
 import type { VideoModel } from '../types/video.types';
 
+const NON_RETRYABLE_VIDEO_ERROR_STATUS_PATTERN =
+  /(?:^|[^\d])(?:400|401|402|403|404|413|415|422)(?:[^\d]|$)/;
+
+const NON_RETRYABLE_VIDEO_ERROR_PATTERNS = [
+  /invalid\s*(?:request|parameters?|argument|input|field|payload|schema)/i,
+  /bad\s*request/i,
+  /unprocessable/i,
+  /unsupported\s*(?:model|parameter|size|duration|resolution|format|input|image|media)?/i,
+  /(?:missing|required)\s*(?:parameter|field|argument|input|prompt|model|duration|size)/i,
+  /requires?\s+(?:a\s+)?(?:reference\s+image|input|image)/i,
+  /(?:must|should)\s+be/i,
+  /no\s+(?:task\s+)?id\s+returned|no\s+video\s+url/i,
+  /\b(?:invalid_argument|invalid_parameter|parameter_invalid|validation_error|bad_request|unsupported_model)\b/i,
+  /参数(?:错误|无效|非法|不正确|校验失败|验证失败)/,
+  /请求(?:参数|数据).*?(?:无效|错误|非法|不支持)/,
+  /缺少(?:必填|必要|参数|字段)/,
+  /必须(?:是|为)|仅支持/,
+  /不支持(?:的)?(?:参数|模型|尺寸|时长|分辨率|格式|图片|视频)/,
+  /未返回(?:任务\s*)?ID|未返回有效的视频 URL/,
+  /(?:校验|验证)失败|格式错误|字段错误/,
+  /内容(?:政策|审核|安全)|安全策略|违规|敏感内容|policy|safety/i,
+];
+
 interface BuildBatchVideoReferenceImagesParams {
   model: VideoModel;
   firstFrameUrl?: string;
@@ -21,6 +44,45 @@ export interface BatchVideoReferenceResult {
    * 非 frames 模式下此字段为空（角色参考图已包含在 referenceImages 中）
    */
   unusedCharacterReferenceUrls?: string[];
+}
+
+function buildVideoFailureText(
+  task?: Pick<Task, 'error'> | null,
+  fallbackError?: string
+): string {
+  return [task?.error?.code, task?.error?.message, fallbackError]
+    .filter(
+      (item): item is string =>
+        typeof item === 'string' && item.trim() !== ''
+    )
+    .join(' ');
+}
+
+export function getNonRetryableBatchVideoFailureReason(
+  task?: Pick<Task, 'error'> | null,
+  fallbackError?: string
+): string | null {
+  const failureText = buildVideoFailureText(task, fallbackError);
+  if (!failureText) {
+    return null;
+  }
+
+  const isNonRetryable =
+    NON_RETRYABLE_VIDEO_ERROR_STATUS_PATTERN.test(failureText) ||
+    NON_RETRYABLE_VIDEO_ERROR_PATTERNS.some((pattern) =>
+      pattern.test(failureText)
+    );
+
+  if (!isNonRetryable) {
+    return null;
+  }
+
+  return (
+    task?.error?.message ||
+    fallbackError ||
+    task?.error?.code ||
+    '不可重试的视频生成错误'
+  );
 }
 
 /**

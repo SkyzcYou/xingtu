@@ -12,6 +12,7 @@ import {
   Plus,
   Cloud,
   Heart,
+  UserRound,
 } from 'lucide-react';
 import { Checkbox } from 'tdesign-react';
 import { formatDate, formatFileSize } from '../../utils/asset-utils';
@@ -21,7 +22,11 @@ import { useThumbnailUrl } from '../../hooks/useThumbnailUrl';
 import { useUnifiedCache } from '../../hooks/useUnifiedCache';
 import { VideoPosterPreview } from '../shared/VideoPosterPreview';
 import { HoverTip } from '../shared/hover';
-import type { Asset, ViewMode } from '../../types/asset.types';
+import {
+  AssetCategory,
+  type Asset,
+  type ViewMode,
+} from '../../types/asset.types';
 import './AssetItem.scss';
 
 export interface AssetItemProps {
@@ -136,6 +141,7 @@ export const AssetItem = memo<AssetItemProps>(
 
     const isListMode = viewMode === 'list';
     const isCompactMode = viewMode === 'compact';
+    const isSubjectAsset = asset.category === AssetCategory.CHARACTER;
 
     return (
       <div
@@ -211,6 +217,17 @@ export const AssetItem = memo<AssetItemProps>(
               </div>
               {asset.source === 'AI_GENERATED' && (
                 <div className="asset-item__ai-badge">AI</div>
+              )}
+              {isSubjectAsset && (
+                <HoverTip
+                  content={asset.characterMeta?.name || '主体'}
+                  showArrow={false}
+                >
+                  <div className="asset-item__subject-badge">
+                    <UserRound size={10} />
+                    <span>主体</span>
+                  </div>
+                </HoverTip>
               )}
               {isSynced && (
                 <HoverTip content="已同步到云端" showArrow={false}>
@@ -331,6 +348,18 @@ export const AssetItem = memo<AssetItemProps>(
           <div className="asset-item__ai-badge asset-item__ai-badge--list">
             AI
           </div>
+        )}
+
+        {isListMode && isSubjectAsset && (
+          <HoverTip
+            content={asset.characterMeta?.name || '主体'}
+            showArrow={false}
+          >
+            <div className="asset-item__subject-badge asset-item__subject-badge--list">
+              <UserRound size={12} />
+              <span>主体</span>
+            </div>
+          </HoverTip>
         )}
 
         {/* 列表模式：已同步标识 */}

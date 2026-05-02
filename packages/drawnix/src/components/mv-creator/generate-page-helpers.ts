@@ -7,6 +7,7 @@ import type {
 } from '../../utils/workflow-generation-utils';
 import type { VideoCharacter } from '../../services/video-analysis-service';
 import { resetWorkflowGeneratedAssets as buildResetResult } from '../../utils/workflow-generation-utils';
+import { formatCreativeBriefSummary } from '../shared/workflow';
 
 export function buildMVWorkflowExportOptions(
   record: MVRecord,
@@ -25,11 +26,12 @@ export function buildMVWorkflowExportOptions(
     scriptMarkdown: formatMVShotsMarkdown(record, shots),
     recordMeta: {
       id: record.id,
-      creationPrompt: record.creationPrompt || '',
       musicTitle: record.musicTitle || '',
       musicStyleTags: record.musicStyleTags || [],
       aspectRatio: record.aspectRatio || '16x9',
       videoStyle: record.videoStyle || '',
+      creativeBrief: record.creativeBrief || {},
+      creativeBriefSummary: formatCreativeBriefSummary(record.creativeBrief),
       shotCount: shots.length,
     },
     shots,

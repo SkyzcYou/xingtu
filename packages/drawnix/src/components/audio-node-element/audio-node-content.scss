@@ -116,9 +116,10 @@
     rgba(29, 78, 216, 0.92),
     rgba(15, 23, 42, 0.9)
   );
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.16),
+    0 0 0 1px rgba(15, 23, 42, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
   cursor: pointer;
   isolation: isolate;
   transform: scale(var(--audio-node-pulse-scale));
@@ -133,10 +134,12 @@
     pointer-events: none;
     background: linear-gradient(
       180deg,
-      rgba(15, 23, 42, 0.06),
-      rgba(15, 23, 42, 0.18) 38%,
-      rgba(15, 23, 42, 0.36)
+      rgba(255, 255, 255, 0.04),
+      rgba(15, 23, 42, 0) 46%,
+      rgba(15, 23, 42, 0.1)
     );
+    opacity: 0.28;
+    transition: opacity 0.18s ease;
   }
 
   img,
@@ -154,8 +157,30 @@
   }
 
   img {
-    filter: brightness(0.78) contrast(1.08) saturate(0.88);
-    transform: scale(1.03);
+    filter: none;
+    transform: scale(1);
+  }
+
+  &:hover,
+  &:focus-visible {
+    box-shadow: 0 18px 34px rgba(15, 23, 42, 0.2),
+      0 0 0 1px rgba(37, 99, 235, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  }
+
+  &:hover::before,
+  &:focus-visible::before {
+    opacity: 0.72;
+  }
+
+  &:hover img,
+  &:focus-visible img {
+    filter: brightness(0.92) contrast(1.04) saturate(1.04);
+    transform: scale(1.045);
+  }
+
+  &:focus-visible {
+    outline: none;
   }
 }
 
@@ -167,32 +192,39 @@
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.08),
-    rgba(15, 23, 42, 0.2) 42%,
-    rgba(15, 23, 42, 0.46)
-  );
+  background: rgba(15, 23, 42, 0.28);
+  opacity: 0;
   transition: background-color 0.18s ease, opacity 0.18s ease,
     transform 0.18s ease;
+
+  .audio-node__artwork-icon {
+    filter: drop-shadow(0 4px 10px rgba(15, 23, 42, 0.35));
+    transform: scale(0.86);
+    transition: transform 0.18s ease, opacity 0.18s ease;
+  }
+
+  .audio-node__artwork-icon--play {
+    margin-left: 3px;
+  }
 }
 
-.audio-node__artwork:hover .audio-node__artwork-overlay {
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.1),
-    rgba(15, 23, 42, 0.22) 42%,
-    rgba(15, 23, 42, 0.5)
-  );
+.audio-node__artwork:hover .audio-node__artwork-overlay,
+.audio-node__artwork:focus-visible .audio-node__artwork-overlay {
+  opacity: 1;
+}
+
+.audio-node__artwork:hover .audio-node__artwork-icon,
+.audio-node__artwork:focus-visible .audio-node__artwork-icon {
+  transform: scale(1);
 }
 
 .audio-node--playing .audio-node__artwork-overlay {
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.06),
-    rgba(15, 23, 42, 0.18) 42%,
-    rgba(15, 23, 42, 0.42)
-  );
+  background: rgba(15, 23, 42, 0.22);
+  opacity: 1;
+}
+
+.audio-node--playing .audio-node__artwork-icon {
+  transform: scale(1);
 }
 
 .audio-node--playing .audio-node__artwork {

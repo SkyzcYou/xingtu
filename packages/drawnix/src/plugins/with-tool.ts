@@ -34,6 +34,23 @@ import { geminiSettings } from '../utils/settings-manager';
 import { getDefaultImageModel } from '../constants/model-config';
 import { insertImageFromUrlAndSelect } from '../data/image';
 
+const MAX_GENERATE_IMAGE_DEDUPE_KEYS = 500;
+const generateImageRequestDedupeKeys = new Map<string, number>();
+
+function rememberGenerateImageRequest(key: string): boolean {
+  if (generateImageRequestDedupeKeys.has(key)) {
+    return false;
+  }
+
+  generateImageRequestDedupeKeys.set(key, Date.now());
+  while (generateImageRequestDedupeKeys.size > MAX_GENERATE_IMAGE_DEDUPE_KEYS) {
+    const oldestKey = generateImageRequestDedupeKeys.keys().next().value;
+    if (!oldestKey) break;
+    generateImageRequestDedupeKeys.delete(oldestKey);
+  }
+  return true;
+}
+
 /**
  * 设置通信处理器
  */
@@ -71,7 +88,7 @@ function setupCommunicationHandlers(
   // 处理插入图片请求
   helper.onInsertImage(async (toolId, payload: InsertImagePayload) => {
     // console.log(`[ToolCommunication] Insert image from ${toolId}:`, payload);
-    
+
     if (!payload.url) {
       console.error(`[ToolCommunication] Missing image URL from ${toolId}`);
       return;
@@ -124,6 +141,20 @@ function setupCommunicationHandlers(
   // 处理图片生成请求
   service.on(ToolMessageType.TOOL_TO_BOARD_GENERATE_IMAGE, async (message) => {
     const payload = message.payload as GenerateImagePayload;
+    const requestId = payload.messageId;
+    const dedupeKey = requestId ? `${message.toolId}:${requestId}` : '';
+    if (dedupeKey && !rememberGenerateImageRequest(dedupeKey)) {
+      await service.sendToTool(
+        message.toolId,
+        ToolMessageType.BOARD_TO_TOOL_IMAGE_GENERATED,
+        {
+          success: false,
+          responseId: requestId,
+          error: '重复生成请求已忽略',
+        } as GenerateImageResponse
+      );
+      return;
+    }
     // console.log(`[ToolCommunication] Generate image request from ${message.toolId}:`, payload);
 
     try {

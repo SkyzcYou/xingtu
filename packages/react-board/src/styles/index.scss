@@ -83,6 +83,15 @@
         cursor: default;
     }
 
+    &.viewport-moving,
+    &.viewport-moving .board-host-svg {
+        cursor: grab !important;
+    }
+
+    &.viewport-moving:active,
+    &.viewport-moving:active .board-host-svg {
+        cursor: grabbing !important;
+    }
 
     &.ns-resize {
         cursor: ns-resize;

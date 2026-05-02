@@ -1,3 +1,26 @@
+## 0.6.96 (2026-05-01)
+
+### 🚀 Features
+
+- enhance audio asset handling in workflow export and improve caching logic ([55000ab6](https://github.com/ljquan/aitu/commit/55000ab6))
+- 优化视频工作流批量生成 ([80732a5d](https://github.com/ljquan/aitu/commit/80732a5d))
+- add image 3d transform panel ([97fc60e4](https://github.com/ljquan/aitu/commit/97fc60e4))
+- enhance service worker handling and update video generation logic ([37fc4ee2](https://github.com/ljquan/aitu/commit/37fc4ee2))
+
+### 🩹 Fixes
+
+- pass image transform context to AI ([e642f466](https://github.com/ljquan/aitu/commit/e642f466))
+
+### 🔧 Chores
+
+- 补充视频主体引用经验 ([24363fcd](https://github.com/ljquan/aitu/commit/24363fcd))
+- 更新应用版本号至0.6.95并刷新构建时间 ([a6a8aed9](https://github.com/ljquan/aitu/commit/a6a8aed9))
+- refactor: 合并创作 Brief 用途场景字段 ([f95fde73](https://github.com/ljquan/aitu/commit/f95fde73))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
 ## 0.6.95 (2026-04-30)
 
 ### 🩹 Fixes

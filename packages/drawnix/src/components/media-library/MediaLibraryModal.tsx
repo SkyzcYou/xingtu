@@ -26,6 +26,7 @@ export function MediaLibraryModal({
   onClose,
   mode = SelectionMode.BROWSE,
   filterType,
+  filterCategory,
   onSelect,
   selectButtonText,
 }: MediaLibraryModalProps) {
@@ -39,6 +40,7 @@ export function MediaLibraryModal({
     storageStatus,
     checkStorageQuota,
     renameAsset,
+    markAssetAsSubject,
     removeAsset,
   } = useAssets();
 
@@ -68,12 +70,15 @@ export function MediaLibraryModal({
     }
   }, [isOpen, loadAssets, checkStorageQuota]);
 
-  // 应用filterType（如果提供）
+  // 应用入口限定筛选（如果提供）
   useEffect(() => {
-    if (isOpen && filterType) {
-      setFilters({ activeType: filterType });
+    if (isOpen && (filterType || filterCategory)) {
+      setFilters({
+        ...(filterType ? { activeType: filterType } : {}),
+        activeCategory: filterCategory || undefined,
+      });
     }
-  }, [isOpen, filterType, setFilters]);
+  }, [isOpen, filterType, filterCategory, setFilters]);
 
   // 同步选中状态
   useEffect(() => {
@@ -328,6 +333,7 @@ export function MediaLibraryModal({
           <div className="media-library-layout__main">
             <MediaLibraryGrid
               filterType={filterType}
+              filterCategory={filterCategory}
               selectedAssetId={localSelectedAssetId}
               onSelectAsset={handleSelectAsset}
               onDoubleClick={handleDoubleClick}
@@ -345,6 +351,7 @@ export function MediaLibraryModal({
                 onRename={renameAsset}
                 onDelete={handleRemoveAsset}
                 onDownload={handleDownloadAsset}
+                onMarkAsSubject={markAssetAsSubject}
                 onSelect={showSelectButton ? handleUseAsset : undefined}
                 showSelectButton={showSelectButton}
                 selecting={isSelecting}
@@ -371,6 +378,7 @@ export function MediaLibraryModal({
             onRename={renameAsset}
             onDelete={handleRemoveAsset}
             onDownload={handleDownloadAsset}
+            onMarkAsSubject={markAssetAsSubject}
             onSelect={showSelectButton ? handleUseAsset : undefined}
             showSelectButton={showSelectButton}
             selecting={isSelecting}

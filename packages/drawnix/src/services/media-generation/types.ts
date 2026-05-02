@@ -36,6 +36,7 @@ export interface ImageGenerationOptions {
   count?: number;
   /** 透传给具体适配器的额外参数（如 seedream_quality、aspect_ratio） */
   params?: Record<string, unknown>;
+  assetMetadata?: GenerationParams['assetMetadata'];
   promptMeta?: GenerationParams['promptMeta'];
   signal?: AbortSignal;
   /** 强制使用主线程（跳过 SW） */

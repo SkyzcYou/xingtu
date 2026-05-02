@@ -34,14 +34,11 @@ const swQueryParam =
   typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('sw')
     : null;
-const isServiceWorkerExplicitlyEnabled = swQueryParam === '1';
 const isServiceWorkerExplicitlyDisabled = swQueryParam === '0';
 const hasServiceWorkerSupport =
   typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
 const shouldUseServiceWorker =
-  hasServiceWorkerSupport &&
-  !isServiceWorkerExplicitlyDisabled &&
-  (!isLocalDev || isServiceWorkerExplicitlyEnabled);
+  hasServiceWorkerSupport && !isServiceWorkerExplicitlyDisabled;
 
 function setupLazyAssetRecoveryListeners(): void {
   if (typeof window === 'undefined') {
@@ -463,8 +460,7 @@ if (typeof window !== 'undefined') {
 
 if (
   hasServiceWorkerSupport &&
-  (isServiceWorkerExplicitlyDisabled ||
-    (isLocalDev && !isServiceWorkerExplicitlyEnabled))
+  isServiceWorkerExplicitlyDisabled
 ) {
   cleanupDisabledServiceWorker();
 }

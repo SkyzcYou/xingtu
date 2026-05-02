@@ -231,6 +231,16 @@ export async function exportWorkflowAssetsZip(
     normalizeImageDataUrl,
     processBatchWithConcurrency,
   } = await import('@aitu/utils');
+  const { unifiedCacheService } = await import(
+    '../services/unified-cache-service'
+  );
+  const loadBlob = async (url: string): Promise<Blob> => {
+    const blob = await unifiedCacheService.getCachedBlob(url);
+    if (!blob) {
+      throw new Error('未找到可用缓存，且网络下载失败');
+    }
+    return blob;
+  };
   const zip = new JSZip();
   const manifest: WorkflowExportManifest = {
     exportedAt,
@@ -267,16 +277,11 @@ export async function exportWorkflowAssetsZip(
       url: audioAsset.url,
     });
     try {
-      const response = await fetch(audioAsset.url, {
-        referrerPolicy: 'no-referrer',
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const blob = await response.blob();
-      const ext = getFileExtension(audioAsset.url, blob.type)
-        || audioAsset.fallbackExtension
-        || 'mp3';
+      const blob = await loadBlob(audioAsset.url);
+      const detectedExt = getFileExtension(audioAsset.url, blob.type);
+      const ext = detectedExt !== 'bin'
+        ? detectedExt
+        : audioAsset.fallbackExtension || 'mp3';
       const resolvedFileName = plannedFileName.replace(/\.[^.]+$/, `.${ext}`);
       zip.file(resolvedFileName, blob);
       manifest.files.music = resolvedFileName;
@@ -304,12 +309,9 @@ export async function exportWorkflowAssetsZip(
         url: assetUrl,
       });
       try {
-        const response = await fetch(assetUrl, { referrerPolicy: 'no-referrer' });
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const blob = await response.blob();
-        const ext = getFileExtension(assetUrl, blob.type) || fallbackExt;
+        const blob = await loadBlob(assetUrl);
+        const detectedExt = getFileExtension(assetUrl, blob.type);
+        const ext = detectedExt !== 'bin' ? detectedExt : fallbackExt;
         const filePath = `${getWorkflowExportBaseName(asset.shotIndex, asset.kind, shotIndexWidth)}.${ext}`;
         zip.file(filePath, blob);
         shotManifest.files[asset.kind] = filePath;

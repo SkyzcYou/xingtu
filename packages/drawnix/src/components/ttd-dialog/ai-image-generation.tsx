@@ -11,7 +11,11 @@ import { useI18n } from '../../i18n';
 import { type Language } from '../../constants/prompts';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import { useTaskQueue } from '../../hooks/useTaskQueue';
-import { TaskType } from '../../types/task.types';
+import {
+  TaskType,
+  type GenerationParams,
+  type KnowledgeContextRef,
+} from '../../types/task.types';
 import { MessagePlugin } from 'tdesign-react';
 import { useGenerationHistory } from '../../hooks/useGenerationHistory';
 import { ModelDropdown } from '../ai-input-bar/ModelDropdown';
@@ -49,7 +53,10 @@ import {
   clearAIImageDraftState,
   setAIImageDraftState,
 } from '../../utils/ai-image-draft-state';
-import { getImageTaskReferenceImages } from '../../utils/image-task-prefill';
+import {
+  getImageTaskKnowledgeContextRefs,
+  getImageTaskReferenceImages,
+} from '../../utils/image-task-prefill';
 import {
   geminiSettings,
   hasInvocationRouteCredentials,
@@ -71,10 +78,12 @@ import {
   getModelRefFromConfig,
   getSelectionKey,
 } from '../../utils/model-selection';
+import { KnowledgeNoteContextSelector } from '../shared';
 
 interface AIImageGenerationProps {
   initialPrompt?: string;
   initialImages?: ReferenceImage[];
+  initialKnowledgeContextRefs?: KnowledgeContextRef[];
   selectedElementIds?: string[];
   initialWidth?: number;
   initialHeight?: number;
@@ -91,6 +100,7 @@ interface AIImageGenerationProps {
   onModelRefChange?: (value: ModelRef | null) => void;
   /** 外部传入的 batchId，用于任务关联（如视频分析器帧生成） */
   externalBatchId?: string;
+  assetMetadata?: GenerationParams['assetMetadata'];
   initialAutoInsertToCanvas?: boolean;
   onDraftChange?: (draft: {
     prompt: string;
@@ -146,6 +156,7 @@ function applyAspectRatioToParams(
 const AIImageGeneration = ({
   initialPrompt = '',
   initialImages = [],
+  initialKnowledgeContextRefs = [],
   selectedElementIds: initialSelectedElementIds = [],
   initialWidth,
   initialHeight,
@@ -161,6 +172,7 @@ const AIImageGeneration = ({
   onModelChange,
   onModelRefChange,
   externalBatchId,
+  assetMetadata,
   initialAutoInsertToCanvas,
   onDraftChange,
 }: AIImageGenerationProps = {}) => {
@@ -200,6 +212,9 @@ const AIImageGeneration = ({
     initialSelectionKey
   );
   const [prompt, setPrompt] = useState(initialPrompt);
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >(initialKnowledgeContextRefs);
   const [mjSelectedParams, setMjSelectedParams] = useState<
     Record<string, string>
   >(initialScopedPreferences.extraParams);
@@ -337,6 +352,7 @@ const AIImageGeneration = ({
     const propsKey = JSON.stringify({
       prompt: initialPrompt,
       images: initialImages?.map((img) => img.url),
+      knowledgeContextRefs: initialKnowledgeContextRefs.map((ref) => ref.noteId),
       elementIds: initialSelectedElementIds,
       width: initialWidth,
       height: initialHeight,
@@ -358,6 +374,7 @@ const AIImageGeneration = ({
     processedPropsRef.current = propsKey;
 
     setPrompt(initialPrompt);
+    setKnowledgeContextRefs(initialKnowledgeContextRefs);
     // 使用 initialImages 的值,如果是 undefined 则使用空数组(确保清空)
     setUploadedImages(initialImages || []);
     if (initialWidth) setWidth(initialWidth);
@@ -372,6 +389,7 @@ const AIImageGeneration = ({
   }, [
     initialPrompt,
     initialImages,
+    initialKnowledgeContextRefs,
     initialSelectedElementIds,
     initialWidth,
     initialHeight,
@@ -390,10 +408,11 @@ const AIImageGeneration = ({
     setAIImageDraftState({
       prompt,
       imageCount: uploadedImages.length,
+      knowledgeContextCount: knowledgeContextRefs.length,
     });
 
     return clearAIImageDraftState;
-  }, [prompt, uploadedImages.length]);
+  }, [knowledgeContextRefs.length, prompt, uploadedImages.length]);
 
   useEffect(() => {
     if (!onDraftChange) {
@@ -542,6 +561,7 @@ const AIImageGeneration = ({
     setPrompt('');
     setMjSelectedParams(resetParams);
     setUploadedImages([]);
+    setKnowledgeContextRefs([]);
     setError(null);
     setAspectRatio(getAspectRatioFromParams(resetParams));
     setMobilePanel('config');
@@ -605,6 +625,7 @@ const AIImageGeneration = ({
     setHeight(task.params.height || 1024);
 
     setUploadedImages(getImageTaskReferenceImages(task));
+    setKnowledgeContextRefs(getImageTaskKnowledgeContextRefs(task));
 
     // 更新模型选择（通过全局设置）
     if (task.params.model) {
@@ -725,6 +746,7 @@ const AIImageGeneration = ({
           for (let i = 0; i < effectiveCount; i++) {
             const taskParams = {
               prompt: finalPrompt,
+              knowledgeContextRefs,
               width: finalWidth,
               height: finalHeight,
               aspectRatio,
@@ -735,6 +757,7 @@ const AIImageGeneration = ({
               batchId,
               batchIndex: i + 1,
               batchTotal: effectiveCount,
+              assetMetadata,
               autoInsertToCanvas:
                 initialAutoInsertToCanvas ??
                 getAutoInsertValue(LS_KEYS.AI_IMAGE_AUTO_INSERT),
@@ -801,6 +824,7 @@ const AIImageGeneration = ({
         // 创建任务参数（单个任务也需要 batchId 以跳过 SW 重复检测）
         const taskParams = {
           prompt: finalPrompt,
+          knowledgeContextRefs,
           width: finalWidth,
           height: finalHeight,
           aspectRatio,
@@ -816,6 +840,7 @@ const AIImageGeneration = ({
           batchId: externalBatchId || `image_single_${Date.now()}`,
           batchIndex: 1,
           batchTotal: 1,
+          assetMetadata,
           targetFrameId,
           targetFrameDimensions,
           pptSlideImage,
@@ -1002,6 +1027,13 @@ const AIImageGeneration = ({
               type="image"
               disabled={isGenerating}
               onError={setError}
+            />
+
+            <KnowledgeNoteContextSelector
+              value={knowledgeContextRefs}
+              onChange={setKnowledgeContextRefs}
+              disabled={isGenerating}
+              language={language}
             />
 
             <ErrorDisplay error={error} />

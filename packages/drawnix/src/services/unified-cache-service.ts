@@ -48,6 +48,7 @@ const VOLATILE_REMOTE_CACHE_QUERY_PARAMS = new Set([
   't',
   'retry',
   '_retry',
+  '_poster_retry',
   'rand',
   '_force',
   'bypass_sw',
@@ -274,13 +275,19 @@ class UnifiedCacheService {
   private cachedUrls: Set<string> = new Set();
 
   constructor() {
-    // 初始化数据库
-    this.initDB().then(async () => {
-      // 刷新缓存状态
-      await this.refreshCacheState();
-      // 触发数据迁移
-      this.migrateFromLegacyDBs();
-    });
+    if (typeof indexedDB !== 'undefined') {
+      // 初始化数据库
+      this.initDB()
+        .then(async () => {
+          // 刷新缓存状态
+          await this.refreshCacheState();
+          // 触发数据迁移
+          this.migrateFromLegacyDBs();
+        })
+        .catch((error) => {
+          console.warn('[UnifiedCache] Failed to initialize database:', error);
+        });
+    }
 
     // 监听 Service Worker 消息
     this.setupSWMessageListener();
@@ -1325,38 +1332,44 @@ class UnifiedCacheService {
       // 检查是否为虚拟 URL（素材库本地 URL 或缓存 URL）
       const isVirtualUrl = isVirtualMediaUrl(url);
       const cacheUrl = isVirtualUrl ? normalizeVirtualMediaUrl(url) : url;
+      const normalizedUrl = this.normalizeRemoteCacheUrl(cacheUrl);
 
-      // 如果是 taskId（不是完整 URL）或虚拟 URL，直接从 Cache API 获取
-      if (
-        isVirtualUrl ||
-        (!url.startsWith('http') &&
-          !url.startsWith('blob:') &&
-          !url.startsWith('/'))
-      ) {
-        if (typeof caches !== 'undefined') {
-          const cache = await caches.open(IMAGE_CACHE_NAME);
-          let response = await cache.match(cacheUrl);
-          if (!response && cacheUrl !== url) {
-            response = await cache.match(url);
-          }
-          if (
-            !response &&
-            cacheUrl.startsWith('/') &&
-            typeof window !== 'undefined'
-          ) {
-            response = await cache.match(
-              new URL(cacheUrl, window.location.origin).toString()
-            );
-          }
-          if (response) {
-            return await response.blob();
-          }
+      if (typeof caches !== 'undefined') {
+        const cache = await caches.open(IMAGE_CACHE_NAME);
+        let response = await cache.match(normalizedUrl);
+        if (!response && normalizedUrl !== cacheUrl) {
+          response = await cache.match(cacheUrl);
         }
+        if (!response && cacheUrl !== url) {
+          response = await cache.match(url);
+        }
+        if (
+          !response &&
+          normalizedUrl.startsWith('/') &&
+          typeof window !== 'undefined'
+        ) {
+          response = await cache.match(
+            new URL(normalizedUrl, window.location.origin).toString()
+          );
+        }
+        if (!response) {
+          response = await cache.match(normalizedUrl, { ignoreSearch: true });
+        }
+        if (response) {
+          return await response.blob();
+        }
+      }
+
+      const isTaskId =
+        !url.startsWith('http') &&
+        !url.startsWith('blob:') &&
+        !url.startsWith('data:') &&
+        !url.startsWith('/');
+      if (isVirtualUrl || isTaskId) {
         return null;
       }
 
-      // 完整 URL 通过 fetch 获取
-      const response = await fetch(url);
+      const response = await fetch(url, { referrerPolicy: 'no-referrer' });
       if (!response.ok) {
         return null;
       }

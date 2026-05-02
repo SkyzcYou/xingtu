@@ -179,6 +179,7 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
     RequirementsHistoryItem[]
   >([]);
   const optimizationAbortRef = useRef<AbortController | null>(null);
+  const optimizingLockRef = useRef(false);
   const historyPopoverRef = useRef<HTMLDivElement | null>(null);
   const { isMobile, viewportWidth, viewportHeight } = useDeviceType();
   const {
@@ -251,6 +252,7 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
   const handleClose = useCallback(() => {
     optimizationAbortRef.current?.abort();
     optimizationAbortRef.current = null;
+    optimizingLockRef.current = false;
     setIsOptimizing(false);
     setRequirements('');
     setOptimizedDraft('');
@@ -268,6 +270,10 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
       );
       return;
     }
+    if (optimizingLockRef.current || isOptimizing) {
+      return;
+    }
+    optimizingLockRef.current = true;
 
     addPromptHistory(rawPrompt, false, effectiveHistoryType || effectiveType);
     if (requirements.trim()) {
@@ -393,6 +399,7 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
       if (optimizationAbortRef.current === controller) {
         optimizationAbortRef.current = null;
       }
+      optimizingLockRef.current = false;
       setIsOptimizing(false);
     }
   }, [
@@ -405,6 +412,7 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
     addPromptHistory,
     effectiveHistoryType,
     effectiveType,
+    isOptimizing,
     scenarioId,
   ]);
 
@@ -471,6 +479,7 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
     return () => {
       optimizationAbortRef.current?.abort();
       optimizationAbortRef.current = null;
+      optimizingLockRef.current = false;
     };
   }, []);
 

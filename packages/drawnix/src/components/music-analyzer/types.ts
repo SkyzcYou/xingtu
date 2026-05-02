@@ -3,6 +3,7 @@ import {
   type MusicAnalysisData,
 } from '../../services/music-analysis-service';
 import { createModelRef, type ModelRef } from '../../utils/settings-manager';
+import type { MusicBrief } from './music-brief';
 
 export type { MusicAnalysisData };
 
@@ -52,6 +53,8 @@ export interface MusicAnalysisRecord {
   analysis?: MusicAnalysisData | null;
   // scratch 模式的创作描述
   creationPrompt?: string;
+  // 歌曲定位
+  musicBrief?: MusicBrief;
   // 歌词字段
   rewritePrompt?: string;
   lyricsDraft?: string;
@@ -84,13 +87,13 @@ export interface LyricsRewriteResult {
   lyricsDraft: string;
 }
 
-export function readModelRef(
-  raw?: Partial<ModelRef> | null
-): ModelRef | null {
+export function readModelRef(raw?: Partial<ModelRef> | null): ModelRef | null {
   return createModelRef(raw?.profileId || null, raw?.modelId || null);
 }
 
-export function formatMusicAnalysisMarkdown(analysis: MusicAnalysisData): string {
+export function formatMusicAnalysisMarkdown(
+  analysis: MusicAnalysisData
+): string {
   const normalized = normalizeMusicAnalysisData(analysis);
   const lines = [
     '# 音频分析结果',

@@ -19,6 +19,7 @@ import {
   validatePrompt,
   type PromptLineageMeta,
 } from './shared/queue-utils';
+import type { KnowledgeContextRef } from '../../types/task.types';
 
 export interface TextGenerationParams {
   prompt: string;
@@ -32,6 +33,7 @@ export interface TextGenerationParams {
   autoInsertToCanvas?: boolean;
   params?: Record<string, unknown>;
   promptMeta?: PromptLineageMeta;
+  knowledgeContextRefs?: KnowledgeContextRef[];
 }
 
 export function getCurrentTextModel(): string {
@@ -98,6 +100,7 @@ function getTextQueueConfig(params: TextGenerationParams) {
       modelRef: params.modelRef || null,
       referenceImages: params.referenceImages,
       promptMeta: params.promptMeta,
+      knowledgeContextRefs: params.knowledgeContextRefs,
       ...(params.params ? { params: params.params } : {}),
     }),
   };
@@ -152,6 +155,10 @@ export const textGenerationTool: MCPTool = {
       params: {
         type: 'object',
         description: '文本模型额外参数，如 temperature、top_p、max_tokens',
+      },
+      knowledgeContextRefs: {
+        type: 'array',
+        description: '本次生成使用的知识库笔记轻量引用',
       },
     },
     required: ['prompt'],

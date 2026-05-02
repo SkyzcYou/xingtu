@@ -5,6 +5,7 @@ import {
 import { callGoogleGenerateContentWithLog } from '../utils/gemini-api/logged-calls';
 import type { GeminiMessage } from '../utils/gemini-api/types';
 import { buildGenerateContentConfig, extractJsonObjects } from './analysis-core';
+import type { KnowledgeContextRef } from '../types/task.types';
 
 export type VideoShotType = 'opening' | 'product' | 'detail' | 'scene' | 'cta' | 'other';
 export type TransitionHint = 'cut' | 'dissolve' | 'match_cut' | 'fade_to_black';
@@ -88,13 +89,18 @@ export interface VideoAnalyzeParams {
   mimeType?: string;
   youtubeUrl?: string;
   videoCacheUrl?: string;
+  pdfCacheUrl?: string;
+  pdfMimeType?: string;
+  pdfName?: string;
   prompt?: string;
   model?: string;
   modelRef?: ModelRef | null;
   taskLabel?: string;
-  videoAnalyzerSource?: 'upload' | 'youtube';
+  videoAnalyzerAction?: 'analyze' | 'prompt-generate';
+  videoAnalyzerSource?: 'upload' | 'youtube' | 'prompt';
   videoAnalyzerSourceLabel?: string;
   videoAnalyzerSourceSnapshot?: Record<string, unknown>;
+  knowledgeContextRefs?: KnowledgeContextRef[];
 }
 
 export const DEFAULT_ANALYSIS_PROMPT = `请逐帧分析这个视频，并提供结构化的拆解。

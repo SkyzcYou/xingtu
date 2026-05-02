@@ -9,6 +9,8 @@ import { getVideoModelConfig } from '../../constants/video-model-config';
 import {
   DEFAULT_ORIGINAL_VERSION_ID,
   appendVersionToRecord,
+  formatCreativeBriefPromptBlock,
+  formatCreativeBriefSummary,
   switchVersionInRecord,
   updateActiveVersionShotsInRecord,
 } from '../shared/workflow';
@@ -71,16 +73,20 @@ export function formatMVShotsMarkdown(
     || shots.reduce((max, shot) => Math.max(max, shot.endTime || 0), 0);
   const musicStyles = record.musicStyleTags?.filter(Boolean).join(', ');
   const characters = record.characters || [];
+  const creativeBrief = formatCreativeBriefSummary(record.creativeBrief);
   const headerLines = [
     '# 爆款MV脚本',
     '',
-    `**创意描述：** ${record.creationPrompt || '-'}`,
     `**音乐标题：** ${record.musicTitle || '-'}`,
     `**音乐风格：** ${musicStyles || '-'}`,
     `**时长：** ${totalDuration || 0}s`,
     `**画面比例：** ${record.aspectRatio || '16x9'}`,
     `**视频风格：** ${record.videoStyle || '-'}`,
   ];
+
+  if (creativeBrief) {
+    headerLines.push('', '## 创作 Brief', '', creativeBrief);
+  }
 
   if (record.musicLyrics?.trim()) {
     headerLines.push('', '## 歌词', '', record.musicLyrics.trim());
@@ -128,7 +134,6 @@ export function formatMVShotsMarkdown(
 // ── AI 分镜 Prompt ──
 
 export function buildStoryboardPrompt(params: {
-  creationPrompt: string;
   musicTitle?: string;
   musicStyleTags?: string[];
   musicLyrics?: string;
@@ -137,10 +142,10 @@ export function buildStoryboardPrompt(params: {
   segmentDuration?: number;
   aspectRatio?: string;
   videoStyle?: string;
+  creativeBrief?: MVRecord['creativeBrief'];
   hasAudio?: boolean;
 }): string {
   const {
-    creationPrompt,
     musicTitle,
     musicStyleTags,
     musicLyrics,
@@ -149,6 +154,7 @@ export function buildStoryboardPrompt(params: {
     segmentDuration,
     aspectRatio,
     videoStyle,
+    creativeBrief,
     hasAudio,
   } = params;
 
@@ -185,13 +191,10 @@ export function buildStoryboardPrompt(params: {
 - 估算每个段落在 ${clipDuration} 秒音乐中的大致时间位置
 - 识别情绪曲线：哪里是铺垫、哪里是高潮、哪里是收尾`;
 
-  return `你是一个专业的 MV 分镜导演。请根据音乐和创意描述，规划一组视频分镜脚本。
+  return `你是一个专业的 MV 分镜导演。请根据音乐和创作 Brief，规划一组视频分镜脚本。
 
 音乐信息：
 ${musicInfo}
-
-创意描述：
-${creationPrompt}
 
 视频生成约束：
 - 视频模型：${videoModel}
@@ -200,8 +203,10 @@ ${creationPrompt}
 - 画面比例：${aspectRatio || '16x9'}
 ${videoStyle ? `- 画面风格：${videoStyle}` : ''}
 
+${formatCreativeBriefPromptBlock(creativeBrief, 'mv')}
+
 角色提取要求（极其重要！）：
-1. 分析创意描述中涉及的角色（人物、动物等有外貌特征的主体），无角色则 characters 为空数组
+1. 分析音乐信息和创作 Brief 中涉及的角色（人物、动物等有外貌特征的主体），无角色则 characters 为空数组
 2. 为每个角色生成：id（"char_1", "char_2"...）、name（展示名）、description（英文外貌描述，包含发型、服装、体型、肤色等，可直接用于文生图）
 3. 每个镜头标注 character_ids（该镜头涉及的角色 ID 列表，无角色则为空数组）
 4. first_frame_prompt 和 last_frame_prompt 中若有角色，必须包含对应角色的完整外貌描述
@@ -226,7 +231,7 @@ ${audioInstruction}
 1. 每个镜头的 duration 必须等于对应段的时长：${segments.map((d, i) => `第${i + 1}段=${d}s`).join('、')}
 2. startTime 从 0 开始，每个镜头的 startTime = 上一个镜头的 endTime
 3. 镜头之间要有视觉连贯性（共同视觉元素、运镜方向延续、色调一致）
-4. 所有字段使用与创意描述相同的语言
+4. 所有字段使用与音乐信息或创作 Brief 一致的语言
 
 每个镜头输出字段：
 - id: 镜头ID（如 "shot_1"）
@@ -294,15 +299,14 @@ export function buildMVScriptRewritePrompt(params: {
   })));
 
   const effectiveStyle = videoStyle || record.videoStyle || '';
+  const creativeBriefBlock = formatCreativeBriefPromptBlock(record.creativeBrief, 'mv');
 
   return `你是一个专业的 MV 脚本改编专家。请基于以下 MV 分镜脚本，根据用户提示词进行改编。
 
 音乐信息：
 ${musicInfo}
-
-创意描述：
-${record.creationPrompt || ''}
 ${effectiveStyle ? `\n画面风格：${effectiveStyle}` : ''}
+${creativeBriefBlock ? `\n${creativeBriefBlock}` : ''}
 ${hasCharacters ? `
 当前角色信息：
 ${characters.map((c: VideoCharacter) => `- ${c.id}（${c.name}）：${c.description}`).join('\n')}

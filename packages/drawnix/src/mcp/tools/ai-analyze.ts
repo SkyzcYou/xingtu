@@ -27,6 +27,8 @@ import {
   getDefaultImageModel,
   getDefaultVideoModel,
 } from '../../constants/model-config';
+import type { KnowledgeContextRef } from '../../types/task.types';
+import { normalizeKnowledgeContextRefs } from '../../services/generation-context-service';
 
 /**
  * AI 分析参数
@@ -47,6 +49,8 @@ export interface AIAnalyzeParams {
     role: 'system' | 'user' | 'assistant';
     content: string | GeminiMessagePart[];
   }>;
+  /** 本次 Agent 分析使用的知识库笔记轻量引用 */
+  knowledgeContextRefs?: KnowledgeContextRef[];
 }
 
 /**
@@ -94,6 +98,10 @@ export const aiAnalyzeTool: MCPTool = {
         description:
           '预构建的消息数组，传入时直接使用，不再生成默认系统提示词（用于 Skill 角色扮演/精准工具注入）',
       },
+      knowledgeContextRefs: {
+        type: 'array',
+        description: '本次 Agent 分析使用的知识库笔记轻量引用',
+      },
     },
     required: ['context'],
   },
@@ -104,7 +112,7 @@ export const aiAnalyzeTool: MCPTool = {
     params: Record<string, unknown>,
     options?: MCPExecuteOptions
   ): Promise<MCPResult> => {
-    const { context, textModel, messages, modelRef } =
+    const { context, textModel, messages, modelRef, knowledgeContextRefs } =
       params as unknown as AIAnalyzeParams;
 
     if (!context) {
@@ -117,10 +125,20 @@ export const aiAnalyzeTool: MCPTool = {
 
     const startTime = Date.now();
     const generatedSteps: WorkflowStepInfo[] = [];
+    const normalizedKnowledgeContextRefs = normalizeKnowledgeContextRefs(
+      knowledgeContextRefs || context.knowledgeContextRefs
+    );
+    const executionContext: AgentExecutionContext = {
+      ...context,
+      knowledgeContextRefs:
+        normalizedKnowledgeContextRefs.length > 0
+          ? normalizedKnowledgeContextRefs
+          : undefined,
+    };
 
     try {
-      const result = await agentExecutor.execute(context, {
-        model: textModel || context.model.id,
+      const result = await agentExecutor.execute(executionContext, {
+        model: textModel || executionContext.model.id,
         modelRef: modelRef || null,
         messages: messages as AgentExecuteOptions['messages'],
         onChunk: (chunk) => {
@@ -137,9 +155,9 @@ export const aiAnalyzeTool: MCPTool = {
             toolCall.name,
             { ...toolCall.arguments },
             {
-              defaultModels: context.defaultModels,
-              defaultModelRefs: context.defaultModelRefs,
-              contextModel: context.model,
+              defaultModels: executionContext.defaultModels,
+              defaultModelRefs: executionContext.defaultModelRefs,
+              contextModel: executionContext.model,
               contextModelRef: modelRef || null,
               fallbackModels: {
                 image: settings.imageModelName || getDefaultImageModel(),
@@ -148,6 +166,19 @@ export const aiAnalyzeTool: MCPTool = {
               },
             }
           );
+          if (
+            normalizedKnowledgeContextRefs.length > 0 &&
+            [
+              'generate_image',
+              'generate_video',
+              'generate_long_video',
+              'generate_audio',
+              'generate_text',
+            ].includes(toolCall.name) &&
+            !toolArgs.knowledgeContextRefs
+          ) {
+            toolArgs.knowledgeContextRefs = normalizedKnowledgeContextRefs;
+          }
 
           // 创建新的工作流步骤
           const newStep: WorkflowStepInfo = {

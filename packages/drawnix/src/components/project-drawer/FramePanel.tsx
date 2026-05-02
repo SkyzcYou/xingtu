@@ -3232,7 +3232,7 @@ export const FramePanel: React.FC<FramePanelProps> = ({
   ]);
 
   const handleGenerateOutlineSlides = useCallback(async () => {
-    if (!board || isOutlineGenerating) return;
+    if (!board || isOutlineGenerating || activePPTOutlineRuntime) return;
 
     const selectedFrames = orderedPPTFrames.filter((info) =>
       outlineSelectedFrameIds.has(info.frame.id)

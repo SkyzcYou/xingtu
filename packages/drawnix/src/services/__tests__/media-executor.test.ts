@@ -14,7 +14,10 @@ import type {
   VideoGenerationParams,
   AIAnalyzeParams,
 } from '../media-executor/types';
-import type { ImageModelAdapter } from '../model-adapters/types';
+import type {
+  ImageModelAdapter,
+  VideoModelAdapter,
+} from '../model-adapters/types';
 
 describe('Media Executor Module', () => {
   afterEach(() => {
@@ -267,6 +270,98 @@ describe('Media Executor Module', () => {
           referenceImages: ['data:image/png;base64,abc'],
           maskImage: 'data:image/png;base64,mask',
           outputFormat: 'png',
+        })
+      );
+    }, 15000);
+
+    it('passes video adapter progress through fallback adapter routes', async () => {
+      const updateRemoteId = vi.fn(async () => {});
+      const completeTask = vi.fn(async () => {});
+      const onProgress = vi.fn();
+
+      vi.doMock('../media-executor/llm-api-logger', () => ({
+        startLLMApiLog: vi.fn(() => 'log-id'),
+        completeLLMApiLog: vi.fn(),
+        failLLMApiLog: vi.fn(),
+      }));
+      vi.doMock('../media-executor/task-storage-writer', () => ({
+        taskStorageWriter: {
+          updateRemoteId,
+          completeTask,
+          failTask: vi.fn(async () => {}),
+        },
+      }));
+      vi.doMock('../unified-cache-service', () => ({
+        unifiedCacheService: {
+          getImageForAI: vi.fn(),
+          isCached: vi.fn(async () => false),
+          cacheMediaFromBlob: vi.fn(async () => {}),
+        },
+      }));
+      vi.doMock('../../utils/api-auth-error-event', () => ({
+        isAuthError: vi.fn(() => false),
+        dispatchApiAuthError: vi.fn(),
+      }));
+      vi.doMock('../model-adapters', async (importOriginal) => {
+        const actual = await importOriginal<
+          typeof import('../model-adapters')
+        >();
+
+        return {
+          ...actual,
+          getAdapterContextFromSettings: vi.fn(() => ({
+            baseUrl: 'https://api.example.com/v1',
+            apiKey: 'test-key',
+            authType: 'bearer',
+          })),
+        };
+      });
+
+      const { executeVideoViaAdapter } = await import(
+        '../media-executor/fallback-adapter-routes'
+      );
+      const adapter: VideoModelAdapter = {
+        id: 'happyhorse-adapter',
+        label: 'HappyHorse',
+        kind: 'video',
+        async generateVideo(_context, request) {
+          const handleProgress = request.params?.onProgress as
+            | ((progress: number, status?: string) => void)
+            | undefined;
+          const handleSubmitted = request.params?.onSubmitted as
+            | ((videoId: string) => void)
+            | undefined;
+
+          handleSubmitted?.('video-task-1');
+          handleProgress?.(30, 'in_progress');
+
+          return {
+            url: 'https://example.com/out.mp4',
+            format: 'mp4',
+          };
+        },
+      };
+
+      await executeVideoViaAdapter(
+        'task-1',
+        adapter,
+        {
+          prompt: 'A dancing cat',
+          model: 'happyhorse-1.0-t2v',
+        },
+        { onProgress }
+      );
+
+      expect(updateRemoteId).toHaveBeenCalledWith('task-1', 'video-task-1');
+      expect(onProgress).toHaveBeenCalledWith({
+        progress: 30,
+        phase: 'polling',
+      });
+      expect(completeTask).toHaveBeenCalledWith(
+        'task-1',
+        expect.objectContaining({
+          url: 'https://example.com/out.mp4',
+          format: 'mp4',
         })
       );
     }, 15000);

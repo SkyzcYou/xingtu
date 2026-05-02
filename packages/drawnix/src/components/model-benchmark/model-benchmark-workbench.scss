@@ -253,6 +253,7 @@
     display: flex;
     flex-direction: column;
     flex: 1;
+    gap: 8px;
 
     textarea {
       width: 100%;
@@ -271,6 +272,10 @@
         box-shadow: 0 0 0 2px var(--mb-accent-soft);
       }
     }
+  }
+
+  &__knowledge-context {
+    max-width: 100%;
   }
 
   &__action-row-inline {

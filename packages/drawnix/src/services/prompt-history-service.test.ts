@@ -168,6 +168,34 @@ describe('prompt-history-service', () => {
     expect(record.sentPrompt).toBe('最终提示词');
   });
 
+  it('keeps knowledge context out of prompt text while preserving note refs as tags', async () => {
+    const { taskSummaryToPromptHistoryRecord } = await import(
+      './prompt-history-service'
+    );
+
+    const record = taskSummaryToPromptHistoryRecord(
+      createSummary({
+        params: {
+          prompt: '用户提示\n\n---\n【参考知识库笔记】\n完整笔记正文',
+          knowledgeContextRefs: [
+            {
+              noteId: 'note-1',
+              title: '产品定位',
+              directoryId: 'dir-1',
+              updatedAt: 2,
+            },
+          ],
+        },
+      })
+    );
+
+    expect(record.sentPrompt).toBe('用户提示');
+    expect(record.initialPrompt).toBe('用户提示');
+    expect(record.sourceSentPrompt).toBe('用户提示');
+    expect(record.tags).toContain('知识库:产品定位');
+    expect(record.sentPrompt).not.toContain('完整笔记正文');
+  });
+
   it('uses Skill metadata for Agent records', async () => {
     const { taskSummaryToPromptHistoryRecord } = await import(
       './prompt-history-service'

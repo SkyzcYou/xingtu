@@ -166,9 +166,9 @@ describe('happyhorse video adapter', () => {
       ratio: '16:9',
       watermark: false,
     });
-    expect(body.input_reference).toEqual(['data:image/png;base64,converted']);
+    expect(body.images).toEqual(['data:image/png;base64,converted']);
     expect(body).not.toHaveProperty('image');
-    expect(body).not.toHaveProperty('images');
+    expect(body).not.toHaveProperty('input_reference');
     expect(body.parameters).not.toHaveProperty('seed');
   });
 
@@ -234,7 +234,7 @@ describe('happyhorse video adapter', () => {
     expect(body.parameters.seed).toBe(2147483647);
   });
 
-  it('maps R2V input_reference arrays to base64 input_reference arrays', async () => {
+  it('maps legacy R2V input_reference arrays to base64 images arrays', async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const fetcher = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -293,15 +293,15 @@ describe('happyhorse video adapter', () => {
     await resultPromise;
 
     const body = JSON.parse(String(requests[0]?.init.body));
-    expect(body.input_reference).toEqual([
+    expect(body.images).toEqual([
       'data:image/png;base64,converted',
       'data:image/png;base64,converted',
     ]);
     expect(body).not.toHaveProperty('image');
-    expect(body).not.toHaveProperty('images');
+    expect(body).not.toHaveProperty('input_reference');
   });
 
-  it('submits Video Edit with video and optional input_reference only', async () => {
+  it('submits Video Edit with video and optional image fields only', async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const fetcher = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -366,15 +366,15 @@ describe('happyhorse video adapter', () => {
       model: 'happyhorse-1.0-video-edit',
       prompt: 'keep the motion, change the style',
       video: 'https://example.com/input.mp4',
-      input_reference: 'data:image/png;base64,converted',
+      image: 'data:image/png;base64,converted',
       parameters: {
         resolution: '720P',
         watermark: false,
         audio_setting: 'origin',
       },
     });
-    expect(body).not.toHaveProperty('image');
     expect(body).not.toHaveProperty('images');
+    expect(body).not.toHaveProperty('input_reference');
     expect(body.parameters).not.toHaveProperty('duration');
     expect(body.parameters).not.toHaveProperty('ratio');
   });
@@ -453,8 +453,8 @@ describe('happyhorse video adapter', () => {
     await resultPromise;
 
     const body = JSON.parse(String(requests[0]?.init.body));
-    expect(body.input_reference).toBe('data:image/png;base64,converted');
-    expect(body).not.toHaveProperty('image');
+    expect(body.image).toBe('data:image/png;base64,converted');
     expect(body).not.toHaveProperty('images');
+    expect(body).not.toHaveProperty('input_reference');
   });
 });

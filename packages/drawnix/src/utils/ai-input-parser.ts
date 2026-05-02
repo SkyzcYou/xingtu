@@ -20,6 +20,7 @@ import {
 import { getEffectiveVideoDefaultParams } from '../services/video-binding-utils';
 import { buildMJPromptSuffix } from './mj-params';
 import type { ImageDimensions } from '../mcp/types';
+import type { KnowledgeContextRef } from '../types/task.types';
 
 // 重新导出 ImageDimensions 以便其他模块使用
 export type { ImageDimensions } from '../mcp/types';
@@ -139,6 +140,8 @@ export interface ParsedGenerationParams {
   hasExtraContent: boolean;
   /** 选中元素的分类信息 */
   selection: SelectionInfo;
+  /** 本次生成使用的知识库笔记轻量引用 */
+  knowledgeContextRefs?: KnowledgeContextRef[];
 }
 
 /**
@@ -236,6 +239,8 @@ export interface ParseAIInputOptions {
   count?: number;
   /** 指定其他参数（如 duration 等） */
   params?: Record<string, string>;
+  /** 本次生成使用的知识库笔记轻量引用 */
+  knowledgeContextRefs?: KnowledgeContextRef[];
 }
 
 export function parseAIInput(
@@ -490,6 +495,7 @@ export function parseAIInput(
     parseResult,
     hasExtraContent,
     selection,
+    knowledgeContextRefs: options?.knowledgeContextRefs,
   };
 }
 

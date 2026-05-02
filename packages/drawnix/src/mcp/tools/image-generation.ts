@@ -13,7 +13,11 @@ import type {
   MCPExecuteOptions,
   MCPTaskResult,
 } from '../types';
-import { TaskType } from '../../types/task.types';
+import {
+  TaskType,
+  type GenerationParams,
+  type KnowledgeContextRef,
+} from '../../types/task.types';
 import {
   getDefaultImageModel,
   IMAGE_PARAMS,
@@ -109,6 +113,10 @@ export interface ImageGenerationParams {
   autoInsertToCanvas?: boolean;
   /** 提示词历史轻量元数据 */
   promptMeta?: PromptLineageMeta;
+  /** 素材库轻量元数据 */
+  assetMetadata?: GenerationParams['assetMetadata'];
+  /** 本次生成使用的知识库笔记轻量引用 */
+  knowledgeContextRefs?: KnowledgeContextRef[];
   /** 连环画生成器动作元数据 */
   comicCreatorAction?: 'page-image';
   /** 连环画记录 ID */
@@ -273,6 +281,8 @@ function getImageQueueConfig(params: ImageGenerationParams) {
         pptSlidePrompt: params.pptSlidePrompt,
         pptReplaceElementId: params.pptReplaceElementId,
         promptMeta: params.promptMeta,
+        assetMetadata: params.assetMetadata,
+        knowledgeContextRefs: params.knowledgeContextRefs,
         comicCreatorAction: params.comicCreatorAction,
         comicCreatorRecordId: params.comicCreatorRecordId,
         comicCreatorPageId: params.comicCreatorPageId,
@@ -373,6 +383,22 @@ export const imageGenerationTool: MCPTool = {
         type: 'number',
         description: '生成数量，1-10 之间，默认为 1',
         default: 1,
+      },
+      assetMetadata: {
+        type: 'object',
+        description: '写入素材库的轻量业务元数据',
+        properties: {
+          category: {
+            type: 'string',
+            enum: ['GENERAL', 'CHARACTER'],
+          },
+          characterName: {
+            type: 'string',
+          },
+          characterPrompt: {
+            type: 'string',
+          },
+        },
       },
     },
     required: ['prompt'],

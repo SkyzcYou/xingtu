@@ -32,6 +32,8 @@ import type { SkillDSLVariables } from './skill-dsl.types';
 import { preprocessExternalSkillContent } from '../../services/external-skill-parser';
 import { applyMediaModelDefaultsToArgs } from '../../services/agent/media-model-routing';
 import type { SkillOutputType } from './skill-media-type';
+import { normalizeKnowledgeContextRefs } from '../../services/generation-context-service';
+import type { KnowledgeContextRef } from '../../types/task.types';
 import type {
   WorkflowDefinition,
   WorkflowStep,
@@ -107,6 +109,55 @@ function parseSunoFieldsFromMarkdown(prompt: string): {
  */
 function generateWorkflowId(): string {
   return `wf-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+}
+
+const GENERATION_CONTEXT_MCP_TOOLS = new Set([
+  'generate_image',
+  'generate_video',
+  'generate_long_video',
+  'generate_audio',
+  'generate_text',
+]);
+
+function normalizeWorkflowKnowledgeContextRefs(
+  refs?: KnowledgeContextRef[] | null
+): KnowledgeContextRef[] {
+  return normalizeKnowledgeContextRefs(refs);
+}
+
+function withKnowledgeContextRefs<T extends Record<string, unknown>>(
+  args: T,
+  refs: KnowledgeContextRef[]
+): T {
+  if (refs.length === 0) {
+    return args;
+  }
+  return {
+    ...args,
+    knowledgeContextRefs: refs,
+  };
+}
+
+function applyKnowledgeContextToWorkflowSteps(
+  steps: WorkflowStep[],
+  refs: KnowledgeContextRef[]
+): WorkflowStep[] {
+  if (refs.length === 0) {
+    return steps;
+  }
+
+  return steps.map((step) => {
+    if (
+      !GENERATION_CONTEXT_MCP_TOOLS.has(step.mcp) ||
+      step.args.knowledgeContextRefs
+    ) {
+      return step;
+    }
+    return {
+      ...step,
+      args: withKnowledgeContextRefs(step.args, refs),
+    };
+  });
 }
 
 function applyMediaDefaultsToWorkflowSteps(
@@ -200,7 +251,10 @@ export function convertDirectGenerationToWorkflow(
     selection,
     defaultModels,
     defaultModelRefs,
+    knowledgeContextRefs,
   } = params;
+  const normalizedKnowledgeContextRefs =
+    normalizeWorkflowKnowledgeContextRefs(knowledgeContextRefs);
 
   const steps: WorkflowStep[] = [];
 
@@ -226,7 +280,7 @@ export function convertDirectGenerationToWorkflow(
     if (generationType === 'image') {
       // 构建图片生成参数，size 为 undefined 时不传（让模型自动决定）
       // 注意：batchId 等参数直接放在 args 中，确保传输时不会丢失
-      const imageArgs: Record<string, unknown> = {
+      const imageArgs: Record<string, unknown> = withKnowledgeContextRefs({
         prompt,
         model: modelId,
         modelRef,
@@ -236,7 +290,7 @@ export function convertDirectGenerationToWorkflow(
         batchIndex: i + 1,
         batchTotal: count,
         globalIndex: i + 1,
-      };
+      }, normalizedKnowledgeContextRefs);
       if (size) {
         imageArgs.size = size;
       }
@@ -259,7 +313,7 @@ export function convertDirectGenerationToWorkflow(
     } else if (generationType === 'video') {
       // 构建视频生成参数，size 为 undefined 时不传（让模型自动决定）
       // 注意：batchId 等参数直接放在 args 中，确保传输时不会丢失
-      const videoArgs: Record<string, unknown> = {
+      const videoArgs: Record<string, unknown> = withKnowledgeContextRefs({
         prompt,
         model: modelId,
         modelRef,
@@ -270,7 +324,7 @@ export function convertDirectGenerationToWorkflow(
         batchIndex: i + 1,
         batchTotal: count,
         globalIndex: i + 1,
-      };
+      }, normalizedKnowledgeContextRefs);
       if (size) {
         videoArgs.size = size;
       }
@@ -304,7 +358,7 @@ export function convertDirectGenerationToWorkflow(
           ? extraParams.sunoAction
           : 'music';
       const isLyricsAction = sunoAction === 'lyrics';
-      const audioArgs: Record<string, unknown> = {
+      const audioArgs: Record<string, unknown> = withKnowledgeContextRefs({
         prompt,
         model: modelId,
         modelRef,
@@ -314,7 +368,7 @@ export function convertDirectGenerationToWorkflow(
         batchIndex: i + 1,
         batchTotal: count,
         globalIndex: i + 1,
-      };
+      }, normalizedKnowledgeContextRefs);
 
       // 从 Markdown 卡片内容解析 title/tags/lyrics（仅 music 动作且用户未手动设置时）
       if (!isLyricsAction && prompt) {
@@ -371,7 +425,7 @@ export function convertDirectGenerationToWorkflow(
         status: 'pending',
       });
     } else {
-      const textArgs: Record<string, unknown> = {
+      const textArgs: Record<string, unknown> = withKnowledgeContextRefs({
         prompt,
         model: modelId,
         modelRef,
@@ -381,7 +435,7 @@ export function convertDirectGenerationToWorkflow(
         batchIndex: i + 1,
         batchTotal: count,
         globalIndex: i + 1,
-      };
+      }, normalizedKnowledgeContextRefs);
       if (referenceImages.length > 0) {
         textArgs.referenceImages = referenceImages;
       }
@@ -446,6 +500,10 @@ export function convertDirectGenerationToWorkflow(
       duration,
       referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
       selection,
+      knowledgeContextRefs:
+        normalizedKnowledgeContextRefs.length > 0
+          ? normalizedKnowledgeContextRefs
+          : undefined,
     },
     createdAt: Date.now(),
   };
@@ -477,7 +535,10 @@ export function convertAgentFlowToWorkflow(
     selection,
     defaultModels,
     defaultModelRefs,
+    knowledgeContextRefs,
   } = params;
+  const normalizedKnowledgeContextRefs =
+    normalizeWorkflowKnowledgeContextRefs(knowledgeContextRefs);
 
   // 使用唯一 ID（每次提交都是新的工作流）
   const workflowId = generateWorkflowId();
@@ -504,6 +565,10 @@ export function convertAgentFlowToWorkflow(
     defaultModelRefs,
     selection,
     finalPrompt: prompt,
+    knowledgeContextRefs:
+      normalizedKnowledgeContextRefs.length > 0
+        ? normalizedKnowledgeContextRefs
+        : undefined,
   };
 
   // 收集所有参考图片 URL
@@ -547,6 +612,10 @@ export function convertAgentFlowToWorkflow(
         // 传递用户选择的文本模型（优先于系统配置）
         textModel: modelId,
         modelRef,
+        knowledgeContextRefs:
+          normalizedKnowledgeContextRefs.length > 0
+            ? normalizedKnowledgeContextRefs
+            : undefined,
       },
       options: {
         mode: 'async',
@@ -577,6 +646,10 @@ export function convertAgentFlowToWorkflow(
       defaultModelRefs,
       referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
       selection,
+      knowledgeContextRefs:
+        normalizedKnowledgeContextRefs.length > 0
+          ? normalizedKnowledgeContextRefs
+          : undefined,
     },
     createdAt: Date.now(),
   };
@@ -682,7 +755,10 @@ export async function convertSkillFlowToWorkflow(
     selection,
     defaultModels,
     defaultModelRefs,
+    knowledgeContextRefs,
   } = params;
+  const normalizedKnowledgeContextRefs =
+    normalizeWorkflowKnowledgeContextRefs(knowledgeContextRefs);
 
   const workflowId = generateWorkflowId();
 
@@ -721,9 +797,12 @@ export async function convertSkillFlowToWorkflow(
     userInputText
   );
   if (regexResult) {
-    const steps = applyReferenceImagesToWorkflowSteps(
-      applyMediaDefaultsToWorkflowSteps(regexResult.steps, params, true),
-      referenceImages
+    const steps = applyKnowledgeContextToWorkflowSteps(
+      applyReferenceImagesToWorkflowSteps(
+        applyMediaDefaultsToWorkflowSteps(regexResult.steps, params, true),
+        referenceImages
+      ),
+      normalizedKnowledgeContextRefs
     );
     return {
       id: workflowId,
@@ -748,6 +827,10 @@ export async function convertSkillFlowToWorkflow(
         referenceImages:
           referenceImages.length > 0 ? referenceImages : undefined,
         selection,
+        knowledgeContextRefs:
+          normalizedKnowledgeContextRefs.length > 0
+            ? normalizedKnowledgeContextRefs
+            : undefined,
         parseMethod: 'regex',
       },
       createdAt: Date.now(),
@@ -776,6 +859,10 @@ export async function convertSkillFlowToWorkflow(
     defaultModelRefs,
     selection,
     finalPrompt: prompt,
+    knowledgeContextRefs:
+      normalizedKnowledgeContextRefs.length > 0
+        ? normalizedKnowledgeContextRefs
+        : undefined,
   };
 
   // Skill 内容预处理：对图片类 Skill 进行 content 适配（外部 Skill 和配置了 outputType 的用户 Skill 均适用）
@@ -860,6 +947,10 @@ export async function convertSkillFlowToWorkflow(
             allReferenceImages.length > 0 ? allReferenceImages : undefined,
           textModel: modelId,
           modelRef,
+          knowledgeContextRefs:
+            normalizedKnowledgeContextRefs.length > 0
+              ? normalizedKnowledgeContextRefs
+              : undefined,
         },
         options: { mode: 'async' },
         description: `AI 分析用户意图（Skill: ${skillName}）`,
@@ -890,6 +981,10 @@ export async function convertSkillFlowToWorkflow(
         referenceImages:
           referenceImages.length > 0 ? referenceImages : undefined,
         selection,
+        knowledgeContextRefs:
+          normalizedKnowledgeContextRefs.length > 0
+            ? normalizedKnowledgeContextRefs
+            : undefined,
         parseMethod: 'agent_fallback',
       },
       createdAt: Date.now(),
@@ -931,6 +1026,10 @@ export async function convertSkillFlowToWorkflow(
           allReferenceImages.length > 0 ? allReferenceImages : undefined,
         textModel: modelId,
         modelRef,
+        knowledgeContextRefs:
+          normalizedKnowledgeContextRefs.length > 0
+            ? normalizedKnowledgeContextRefs
+            : undefined,
       },
       options: { mode: 'async' },
       description: `AI 以「${skillName}」角色回复`,
@@ -960,6 +1059,10 @@ export async function convertSkillFlowToWorkflow(
       duration,
       referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
       selection,
+      knowledgeContextRefs:
+        normalizedKnowledgeContextRefs.length > 0
+          ? normalizedKnowledgeContextRefs
+          : undefined,
       parseMethod: 'agent_fallback',
     },
     createdAt: Date.now(),

@@ -1,6 +1,12 @@
 import { generateUUID } from '../../utils/runtime-helpers';
 import type { Task } from '../../types/task.types';
-import type { AnalysisRecord, AnalysisSourceSnapshot, VideoAnalysisData } from './types';
+import {
+  migrateProductInfo,
+  type AnalysisRecord,
+  type AnalysisSourceSnapshot,
+  type ProductInfo,
+  type VideoAnalysisData,
+} from './types';
 import { addRecord, loadRecords, updateRecord } from './storage';
 import {
   parseStructuredOrChatJson,
@@ -16,10 +22,14 @@ import {
   parseRewriteShotUpdates,
 } from './utils';
 
-type VideoAnalyzerTaskAction = 'analyze' | 'rewrite';
+type VideoAnalyzerTaskAction = 'analyze' | 'rewrite' | 'prompt-generate';
 
 function getTaskAction(task: Task): VideoAnalyzerTaskAction | null {
-  return readTaskAction(task, 'videoAnalyzerAction', ['analyze', 'rewrite'] as const);
+  return readTaskAction(task, 'videoAnalyzerAction', [
+    'analyze',
+    'rewrite',
+    'prompt-generate',
+  ] as const);
 }
 
 function parseAnalysisResult(task: Task): VideoAnalysisData {
@@ -32,7 +42,11 @@ function parseAnalysisResult(task: Task): VideoAnalysisData {
 function getTaskSourceSnapshot(task: Task): AnalysisSourceSnapshot | null {
   const snapshot = (task.params as { videoAnalyzerSourceSnapshot?: unknown })
     .videoAnalyzerSourceSnapshot as AnalysisSourceSnapshot | undefined;
-  if (snapshot?.type === 'youtube' || snapshot?.type === 'upload') {
+  if (
+    snapshot?.type === 'youtube' ||
+    snapshot?.type === 'upload' ||
+    snapshot?.type === 'prompt'
+  ) {
     return snapshot;
   }
 
@@ -43,6 +57,15 @@ function getTaskSourceSnapshot(task: Task): AnalysisSourceSnapshot | null {
   if (source === 'youtube' && sourceLabel) {
     return { type: 'youtube', youtubeUrl: sourceLabel };
   }
+  if (source === 'prompt' && sourceLabel) {
+    return {
+      type: 'prompt',
+      prompt: String((task.params as { videoAnalyzerUserPrompt?: unknown }).videoAnalyzerUserPrompt || sourceLabel),
+      pdfCacheUrl: readTaskStringParam(task, 'pdfCacheUrl') || undefined,
+      pdfName: readTaskStringParam(task, 'pdfName') || undefined,
+      pdfMimeType: readTaskStringParam(task, 'pdfMimeType') || undefined,
+    };
+  }
 
   return null;
 }
@@ -52,6 +75,19 @@ function getStructuredEditedShots(task: Task) {
     | { editedShots?: AnalysisRecord['editedShots'] }
     | undefined;
   return Array.isArray(structured?.editedShots) ? structured.editedShots : null;
+}
+
+function getTaskProductInfo(
+  task: Task,
+  fallbackDuration: number
+): ProductInfo | undefined {
+  const raw = (task.params as { videoAnalyzerProductInfo?: unknown })
+    .videoAnalyzerProductInfo;
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+
+  return migrateProductInfo(raw as Partial<ProductInfo>, fallbackDuration);
 }
 
 export async function syncVideoAnalyzerTask(task: Task): Promise<{
@@ -67,7 +103,7 @@ export async function syncVideoAnalyzerTask(task: Task): Promise<{
     return null;
   }
 
-  if (action === 'analyze') {
+  if (action === 'analyze' || action === 'prompt-generate') {
     const records = await loadRecords();
     const existing = records.find(record => record.analyzeTaskId === task.id);
     if (existing) {
@@ -76,17 +112,26 @@ export async function syncVideoAnalyzerTask(task: Task): Promise<{
 
     const analysis = parseAnalysisResult(task);
     const sourceSnapshot = getTaskSourceSnapshot(task);
-    const source = ((task.params as { videoAnalyzerSource?: unknown }).videoAnalyzerSource === 'upload'
-      ? 'upload'
-      : 'youtube') as AnalysisRecord['source'];
+    const rawSource = (task.params as { videoAnalyzerSource?: unknown })
+      .videoAnalyzerSource;
+    const source = (
+      rawSource === 'prompt'
+        ? 'prompt'
+        : rawSource === 'upload'
+        ? 'upload'
+        : 'youtube'
+    ) as AnalysisRecord['source'];
     const sourceLabel = String(
       (task.params as { videoAnalyzerSourceLabel?: unknown }).videoAnalyzerSourceLabel ||
-        (source === 'youtube'
+        (source === 'prompt'
+          ? '提示词生成'
+          : source === 'youtube'
           ? sourceSnapshot?.type === 'youtube'
             ? sourceSnapshot.youtubeUrl
             : ''
           : '本地视频')
     );
+    const productInfo = getTaskProductInfo(task, analysis.totalDuration);
 
     const record: AnalysisRecord = {
       id: generateUUID(),
@@ -97,6 +142,7 @@ export async function syncVideoAnalyzerTask(task: Task): Promise<{
       model: String(task.params.model || ''),
       modelRef: (task.params as { modelRef?: AnalysisRecord['modelRef'] }).modelRef || null,
       analysis,
+      ...(productInfo ? { productInfo } : {}),
       starred: false,
       analyzeTaskId: task.id,
     };

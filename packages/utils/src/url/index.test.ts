@@ -98,6 +98,8 @@ describe('getFileExtension', () => {
     expect(getFileExtension('https://api.example.com/download/123', 'image/png')).toBe('png');
     expect(getFileExtension('https://api.example.com/download/456', 'video/mp4')).toBe('mp4');
     expect(getFileExtension('https://api.example.com/file', 'image/webp')).toBe('webp');
+    expect(getFileExtension('https://api.example.com/audio/123', 'audio/mpeg')).toBe('mp3');
+    expect(getFileExtension('https://api.example.com/audio/456', 'audio/mp4')).toBe('m4a');
   });
 
   it('should return "bin" for unknown types', () => {

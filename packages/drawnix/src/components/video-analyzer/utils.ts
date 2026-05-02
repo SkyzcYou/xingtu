@@ -12,20 +12,145 @@ import { getVideoModelConfig } from '../../constants/video-model-config';
 import {
   DEFAULT_ORIGINAL_VERSION_ID,
   appendVersionToRecord,
+  buildCharacterReferencePrompt,
   buildVideoPrompt,
   buildFramePrompt,
+  formatCreativeBriefPromptBlock,
+  type CreativeBrief,
   readStoredModelSelection,
   switchVersionInRecord,
   writeStoredModelSelection,
   updateActiveVersionShotsInRecord,
 } from '../shared/workflow';
 
-export { buildVideoPrompt, buildFramePrompt };
+export { buildVideoPrompt, buildFramePrompt, buildCharacterReferencePrompt };
 export { readStoredModelSelection, writeStoredModelSelection };
 
-/** 去除字符串末尾的中英文句号 */
-function trimTrailingPeriod(s: string): string {
-  return s.replace(/[。.]+$/, '');
+function extractJsonObject(text: string): string {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) {
+    throw new Error('响应为空，未找到有效 JSON');
+  }
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fencedMatch?.[1] || trimmed;
+  const start = candidate.indexOf('{');
+  const end = candidate.lastIndexOf('}');
+
+  if (start < 0 || end <= start) {
+    throw new Error('响应中未找到有效 JSON');
+  }
+
+  return candidate.slice(start, end + 1);
+}
+
+function toNumber(value: unknown, fallback: number): number {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+export function buildVideoPromptGenerationPrompt(params: {
+  userPrompt: string;
+  pdfAttachmentName?: string;
+  creativeBrief?: CreativeBrief | null;
+}): string {
+  const userPrompt = String(params.userPrompt || '').trim();
+  const pdfAttachmentName = String(params.pdfAttachmentName || '').trim();
+  const creativeBriefSection = formatCreativeBriefPromptBlock(
+    params.creativeBrief,
+    'popular_video'
+  );
+  const contextSources = [
+    '用户提示词',
+    ...(creativeBriefSection ? ['专业创作 Brief'] : []),
+    ...(pdfAttachmentName ? ['参考 PDF'] : []),
+  ].join('、');
+  const pdfSection = pdfAttachmentName
+    ? [
+        `参考 PDF：本次请求附带 PDF「${pdfAttachmentName}」。`,
+        '- 请优先阅读 PDF 内容，提取品牌/产品定位、受众、卖点、事实信息、视觉线索和禁忌边界。',
+        '- 用户提示词用于限定目标、风格和取舍；PDF 是主要上下文之一。若两者冲突，以用户提示词为准。',
+        '- 不要复述 PDF 原文，要重组为适合短视频生成的镜头脚本。',
+      ].join('\n')
+    : '';
+
+  return `你是爆款短视频脚本策划和视频生成提示词工程师。请根据${contextSources}，直接规划一个可进入视频生成流程的 VideoAnalysisData 兼容结构化短视频脚本，并只返回合法 JSON。
+
+用户提示词：
+${userPrompt || '围绕一个适合短视频传播的主题，策划一条完整视频。'}
+
+${creativeBriefSection ? `${creativeBriefSection}\n` : ''}
+${pdfSection ? `${pdfSection}\n` : ''}
+JSON 字段要求：
+- totalDuration: 计划视频总时长（秒）
+- productExposureDuration: 产品/主题核心露出时长（秒），没有具体产品时按核心主题出现时长估算
+- productExposureRatio: 核心露出占比（0-100）
+- shotCount: 镜头总数
+- firstProductAppearance: 核心产品/主题首次出现时间（秒）
+- aspect_ratio: 从 '16x9'、'9x16'、'1x1' 中选择最适合的平台比例
+- video_style: 整体视频风格，包含光影、色调、美术风格
+- bgm_mood: 背景音乐情绪
+- suggestion: 后续生成建议
+- characters: 固定角色列表，无角色则返回 []。每个角色包含 id、name、description，其中 description 必须是英文外貌描述
+- shots: 镜头数组，每个镜头包含 id、startTime、endTime、duration、description、first_frame_prompt、last_frame_prompt、camera_movement、type、label、narration、dialogue、dialogue_speakers、speech_relation、transition_hint、character_ids
+
+规划要求：
+1. 结构必须兼容视频分析结果，shots 的时间轴必须连续，duration 等于 endTime - startTime。
+2. first_frame_prompt 与 last_frame_prompt 必须可直接用于文生图模型，写清主体、构图、动作状态、光线、背景和必要文字。
+3. narration 是画外音；dialogue 是角色台词。speech_relation 必须与 narration/dialogue 是否为空一致。
+4. 相邻镜头要有可拼接的视觉锚点、动作延续或转场提示。
+5. 所有可读内容使用与用户提示词相同的语言；characters[].description 使用英文。
+6. 只返回 JSON，不要 markdown。`;
+}
+
+export function parseVideoPromptGenerationResponse(
+  text: string
+): VideoAnalysisData {
+  const parsed = JSON.parse(extractJsonObject(text)) as Partial<VideoAnalysisData>;
+  const rawShots = Array.isArray(parsed.shots) ? parsed.shots : [];
+  if (rawShots.length === 0) {
+    throw new Error('响应中未找到有效镜头数据');
+  }
+
+  const shots = rawShots.map((shot, index) => {
+    const fallbackStart =
+      index === 0 ? 0 : toNumber(rawShots[index - 1]?.endTime, index * 5);
+    const startTime = toNumber(shot.startTime, fallbackStart);
+    const endTime = toNumber(shot.endTime, startTime + toNumber(shot.duration, 5));
+    return {
+      ...shot,
+      id: String(shot.id || `shot_${index + 1}`),
+      startTime,
+      endTime,
+      duration: toNumber(shot.duration, Math.max(0, endTime - startTime)),
+      type: shot.type || 'scene',
+      label: String(shot.label || `镜头 ${index + 1}`),
+      description: String(shot.description || ''),
+      narration: String(shot.narration || ''),
+      dialogue: String(shot.dialogue || ''),
+      dialogue_speakers: String(shot.dialogue_speakers || ''),
+      speech_relation: shot.speech_relation || 'none',
+      character_ids: Array.isArray(shot.character_ids) ? shot.character_ids : [],
+    } as VideoShot;
+  });
+  const totalDuration = toNumber(
+    parsed.totalDuration,
+    shots[shots.length - 1]?.endTime || shots.length * 5
+  );
+
+  return {
+    totalDuration,
+    productExposureDuration: toNumber(parsed.productExposureDuration, totalDuration),
+    productExposureRatio: toNumber(parsed.productExposureRatio, 100),
+    shotCount: toNumber(parsed.shotCount, shots.length),
+    firstProductAppearance: toNumber(parsed.firstProductAppearance, 0),
+    suggestion: String(parsed.suggestion || ''),
+    video_style: parsed.video_style,
+    bgm_mood: parsed.bgm_mood,
+    aspect_ratio: parsed.aspect_ratio || '9x16',
+    characters: Array.isArray(parsed.characters) ? parsed.characters : [],
+    shots,
+  };
 }
 
 export function buildScriptRewritePrompt(params: {
@@ -92,6 +217,8 @@ ${originalShots}
 
 用户提示词：
 ${productInfo.prompt || '未指定'}
+
+${formatCreativeBriefPromptBlock(productInfo.creativeBrief, 'popular_video')}
 
 视频生成约束：
 - 使用的视频模型：${videoModel}

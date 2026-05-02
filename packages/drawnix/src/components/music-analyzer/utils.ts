@@ -13,6 +13,7 @@ import {
   appendVersionToRecord,
   switchVersionInRecord,
 } from '../shared/workflow';
+import { formatMusicBriefPromptBlock, type MusicBrief } from './music-brief';
 
 export function readStoredModelSelection(
   key: string,
@@ -64,9 +65,17 @@ export function buildLyricsRewritePrompt(params: {
   userPrompt: string;
   currentLyrics?: string;
   originalPrompt?: string;
+  musicBrief?: MusicBrief | null;
   mode?: 'rewrite' | 'create';
 }): string {
-  const { analysis, userPrompt, currentLyrics, originalPrompt, mode = 'rewrite' } = params;
+  const {
+    analysis,
+    userPrompt,
+    currentLyrics,
+    originalPrompt,
+    musicBrief,
+    mode = 'rewrite',
+  } = params;
   const isCreateMode = mode === 'create';
   const normalizedOriginalPrompt = String(originalPrompt || '').trim();
   const normalizedUserPrompt = String(userPrompt || '').trim();
@@ -74,11 +83,17 @@ export function buildLyricsRewritePrompt(params: {
     !!normalizedOriginalPrompt &&
     normalizedOriginalPrompt !== normalizedUserPrompt;
 
-  return `你是一个擅长做“爆款音乐拆解与歌词创作”的创作助手。请基于${analysis ? '音频分析结果' : '用户要求'}${isCreateMode ? '创作一版全新歌词草稿' : '改写歌词'}，并确保输出结果可以直接用于 Suno。
+  return `你是一个擅长做“爆款音乐拆解与歌词创作”的创作助手。请基于${
+    analysis ? '音频分析结果' : '用户要求'
+  }${
+    isCreateMode ? '创作一版全新歌词草稿' : '改写歌词'
+  }，并确保输出结果可以直接用于 Suno。
 
 ${SUNO_METATAG_GUIDE}
 
 ${analysis ? `音频分析结果：\n${JSON.stringify(analysis, null, 2)}\n` : ''}
+
+${formatMusicBriefPromptBlock(musicBrief)}
 
 下游会把你的输出直接用于 Suno 音乐生成，因此你必须同时补齐：
 - title: 适合歌曲发布与生成的标题
@@ -86,9 +101,18 @@ ${analysis ? `音频分析结果：\n${JSON.stringify(analysis, null, 2)}\n` : '
 - lyricsDraft: 带结构标签、可直接粘贴到 Suno 的歌词正文
 
 ${isCreateMode ? '用户创作要求' : '用户改写要求'}：
-${userPrompt || (isCreateMode ? '围绕用户描述补全一首完整、上口、可演唱的歌曲。' : '保留这首歌最抓人的情绪和节奏记忆点，重写成更容易传播的版本。')}
+${
+  userPrompt ||
+  (isCreateMode
+    ? '围绕用户描述补全一首完整、上口、可演唱的歌曲。'
+    : '保留这首歌最抓人的情绪和节奏记忆点，重写成更容易传播的版本。')
+}
 
-${shouldIncludeOriginalPrompt ? `第一步创作提示词：\n${normalizedOriginalPrompt}\n` : ''}
+${
+  shouldIncludeOriginalPrompt
+    ? `第一步创作提示词：\n${normalizedOriginalPrompt}\n`
+    : ''
+}
 
 ${currentLyrics ? `当前已有歌词草稿：\n${currentLyrics}\n` : ''}
 
@@ -102,7 +126,50 @@ ${currentLyrics ? `当前已有歌词草稿：\n${currentLyrics}\n` : ''}
 2. styleTags 中不要出现完整句子。
 3. lyricsDraft 要区分结构标签与歌词正文。
 4. 如果需要结构标签，优先使用 [Intro] [Verse] [Pre-Chorus] [Chorus] [Bridge] [Outro] 等通用标签。
-5. ${isCreateMode ? '如果用户只给了主题、情绪、乐器或人声信息，你需要主动补全合理的歌曲结构、段落推进与 hook。' : '改写时优先保留原有情绪核心、记忆点与适合传播的 hook。'}`;
+5. ${
+    isCreateMode
+      ? '如果用户只给了主题、情绪、乐器或人声信息，你需要主动补全合理的歌曲结构、段落推进与 hook。'
+      : '改写时优先保留原有情绪核心、记忆点与适合传播的 hook。'
+  }`;
+}
+
+export function buildSunoLyricsPrompt(params: {
+  userPrompt: string;
+  currentLyrics?: string;
+  originalPrompt?: string;
+  musicBrief?: MusicBrief | null;
+  mode?: 'rewrite' | 'create';
+}): string {
+  const {
+    userPrompt,
+    currentLyrics,
+    originalPrompt,
+    musicBrief,
+    mode = 'create',
+  } = params;
+  const normalizedUserPrompt = String(userPrompt || '').trim();
+  const normalizedOriginalPrompt = String(originalPrompt || '').trim();
+  const normalizedCurrentLyrics = String(currentLyrics || '').trim();
+  const sections = [
+    formatMusicBriefPromptBlock(musicBrief),
+    mode === 'create'
+      ? `用户创作要求：\n${
+          normalizedUserPrompt ||
+          '围绕用户描述补全一首完整、上口、可演唱的歌曲。'
+        }`
+      : `本轮改写要求：\n${
+          normalizedUserPrompt || '保留情绪核心，改成更容易传播和演唱的版本。'
+        }`,
+    mode === 'rewrite' &&
+    normalizedOriginalPrompt &&
+    normalizedOriginalPrompt !== normalizedUserPrompt
+      ? `第一步创作提示词：\n${normalizedOriginalPrompt}`
+      : '',
+    normalizedCurrentLyrics ? `当前歌词草稿：\n${normalizedCurrentLyrics}` : '',
+    '请输出可直接用于 Suno lyrics 的歌词结果，并让标题、标签、段落结构和 hook 服务于以上要求。',
+  ].filter(Boolean);
+
+  return sections.join('\n\n');
 }
 
 export function isSunoLyricsModel(modelId: string): boolean {
@@ -139,15 +206,15 @@ export function parseLyricsRewriteResult(text: string): LyricsRewriteResult {
   return {
     title: String(parsed.title || '').trim(),
     styleTags: Array.isArray(parsed.styleTags)
-      ? parsed.styleTags.map((item) => String(item || '').trim()).filter(Boolean)
+      ? parsed.styleTags
+          .map((item) => String(item || '').trim())
+          .filter(Boolean)
       : [],
     lyricsDraft: String(parsed.lyricsDraft || '').trim(),
   };
 }
 
-export function getDefaultRewritePrompt(
-  record: MusicAnalysisRecord
-): string {
+export function getDefaultRewritePrompt(record: MusicAnalysisRecord): string {
   const mood = record.analysis?.mood || '原曲情绪';
   return (
     record.rewritePrompt ||
@@ -183,11 +250,17 @@ export function addLyricsVersionToRecord(
   record: MusicAnalysisRecord,
   version: LyricsVersion
 ): Partial<MusicAnalysisRecord> {
-  return appendVersionToRecord(record, 'lyricsVersions', version, MAX_LYRICS_VERSIONS, {
-    title: version.title,
-    styleTags: version.styleTags,
-    lyricsDraft: version.lyricsDraft,
-  });
+  return appendVersionToRecord(
+    record,
+    'lyricsVersions',
+    version,
+    MAX_LYRICS_VERSIONS,
+    {
+      title: version.title,
+      styleTags: version.styleTags,
+      lyricsDraft: version.lyricsDraft,
+    }
+  );
 }
 
 /** 切换到指定版本，返回 record patch；版本不存在返回 null */
@@ -209,12 +282,11 @@ export function switchToLyricsVersion(
           analysis?.titleSuggestions?.[0] ||
           currentRecord.creationPrompt?.slice(0, 20) ||
           '',
-        styleTags:
-          analysis?.sunoStyleTags?.length
-            ? [...analysis.sunoStyleTags]
-            : analysis?.genreTags
-            ? [...analysis.genreTags]
-            : [],
+        styleTags: analysis?.sunoStyleTags?.length
+          ? [...analysis.sunoStyleTags]
+          : analysis?.genreTags
+          ? [...analysis.genreTags]
+          : [],
         lyricsDraft: analysis?.sunoLyricsDraft || '',
       };
     },

@@ -13,6 +13,7 @@ import {
   createLyricsVersion,
   parseLyricsRewriteResult,
 } from './utils';
+import { mergeMusicBriefStyleTags, normalizeMusicBrief } from './music-brief';
 import {
   extractBatchRecordId,
   extractGeneratedClipsFromAudioTask,
@@ -31,7 +32,11 @@ import {
 type MusicAnalyzerTaskAction = 'analyze' | 'rewrite' | 'lyrics-gen';
 
 function getTaskAction(task: Task): MusicAnalyzerTaskAction | null {
-  return readTaskAction(task, 'musicAnalyzerAction', ['analyze', 'rewrite', 'lyrics-gen'] as const);
+  return readTaskAction(task, 'musicAnalyzerAction', [
+    'analyze',
+    'rewrite',
+    'lyrics-gen',
+  ] as const);
 }
 
 function parseAnalysisResult(task: Task): MusicAnalysisData {
@@ -47,8 +52,17 @@ function getTaskSourceSnapshot(task: Task): MusicAnalysisSourceSnapshot | null {
   return snapshot?.type === 'upload' ? snapshot : null;
 }
 
+function getTaskMusicBrief(task: Task): MusicAnalysisRecord['musicBrief'] {
+  return normalizeMusicBrief(
+    (task.params as { musicAnalyzerMusicBrief?: unknown })
+      .musicAnalyzerMusicBrief as MusicAnalysisRecord['musicBrief'] | undefined
+  );
+}
+
 function getStructuredRewriteResult(task: Task): LyricsRewriteResult | null {
-  const structured = task.result?.analysisData as Partial<LyricsRewriteResult> | undefined;
+  const structured = task.result?.analysisData as
+    | Partial<LyricsRewriteResult>
+    | undefined;
   if (!structured || typeof structured !== 'object') {
     return null;
   }
@@ -64,7 +78,9 @@ function getStructuredRewriteResult(task: Task): LyricsRewriteResult | null {
   return {
     title: String(structured.title || '').trim(),
     styleTags: Array.isArray(structured.styleTags)
-      ? structured.styleTags.map((item) => String(item || '').trim()).filter(Boolean)
+      ? structured.styleTags
+          .map((item) => String(item || '').trim())
+          .filter(Boolean)
       : [],
     lyricsDraft: String(structured.lyricsDraft || '').trim(),
   };
@@ -93,10 +109,12 @@ export async function syncMusicAnalyzerTask(task: Task): Promise<{
     const analysis = parseAnalysisResult(task);
     const snapshot = getTaskSourceSnapshot(task);
     const sourceLabel = String(
-      (task.params as { musicAnalyzerSourceLabel?: unknown }).musicAnalyzerSourceLabel ||
+      (task.params as { musicAnalyzerSourceLabel?: unknown })
+        .musicAnalyzerSourceLabel ||
         snapshot?.fileName ||
         '本地音频'
     ).trim();
+    const musicBrief = getTaskMusicBrief(task);
 
     const record: MusicAnalysisRecord = {
       id: generateUUID(),
@@ -106,10 +124,16 @@ export async function syncMusicAnalyzerTask(task: Task): Promise<{
       sourceSnapshot: snapshot,
       analysisModel: String(task.params.model || ''),
       analysisModelRef:
-        (task.params as { modelRef?: MusicAnalysisRecord['analysisModelRef'] }).modelRef || null,
+        (task.params as { modelRef?: MusicAnalysisRecord['analysisModelRef'] })
+          .modelRef || null,
       analysis,
-      styleTags:
-        analysis.sunoStyleTags.length > 0 ? analysis.sunoStyleTags : analysis.genreTags,
+      musicBrief,
+      styleTags: mergeMusicBriefStyleTags(
+        analysis.sunoStyleTags.length > 0
+          ? analysis.sunoStyleTags
+          : analysis.genreTags,
+        musicBrief
+      ),
       title:
         analysis.sunoTitle ||
         analysis.titleSuggestions[0] ||
@@ -136,9 +160,10 @@ export async function syncMusicAnalyzerTask(task: Task): Promise<{
     const nextTitle = lyricsResult?.title || target.title || '';
     const nextStyleTags =
       lyricsResult && lyricsResult.styleTags.length > 0
-        ? lyricsResult.styleTags
-        : target.styleTags || [];
-    const nextLyricsDraft = lyricsResult?.lyricsDraft || target.lyricsDraft || '';
+        ? mergeMusicBriefStyleTags(lyricsResult.styleTags, target.musicBrief)
+        : mergeMusicBriefStyleTags(target.styleTags || [], target.musicBrief);
+    const nextLyricsDraft =
+      lyricsResult?.lyricsDraft || target.lyricsDraft || '';
     const versionPatch = lyricsResult
       ? addLyricsVersionToRecord(
           {
@@ -160,13 +185,17 @@ export async function syncMusicAnalyzerTask(task: Task): Promise<{
         )
       : {};
 
-    return updateWorkflowRecord(target, {
-      title: nextTitle,
-      styleTags: nextStyleTags,
-      lyricsDraft: nextLyricsDraft,
-      ...versionPatch,
-      pendingLyricsGenTaskId: null,
-    }, updateRecord);
+    return updateWorkflowRecord(
+      target,
+      {
+        title: nextTitle,
+        styleTags: nextStyleTags,
+        lyricsDraft: nextLyricsDraft,
+        ...versionPatch,
+        pendingLyricsGenTaskId: null,
+      },
+      updateRecord
+    );
   }
 
   const recordId = readTaskStringParam(task, 'musicAnalyzerRecordId');
@@ -181,29 +210,41 @@ export async function syncMusicAnalyzerTask(task: Task): Promise<{
   }
 
   const rewriteResult =
-    getStructuredRewriteResult(task) || parseLyricsRewriteResult(readTaskChatResponse(task));
+    getStructuredRewriteResult(task) ||
+    parseLyricsRewriteResult(readTaskChatResponse(task));
+  const nextRewriteTitle = rewriteResult.title || target.title;
+  const nextRewriteStyleTags =
+    rewriteResult.styleTags.length > 0
+      ? mergeMusicBriefStyleTags(rewriteResult.styleTags, target.musicBrief)
+      : mergeMusicBriefStyleTags(target.styleTags, target.musicBrief);
+  const nextRewriteLyricsDraft =
+    rewriteResult.lyricsDraft || target.lyricsDraft;
 
   // 创建歌词版本快照
   const versionCount = (target.lyricsVersions || []).length;
   const version = createLyricsVersion(
     {
       ...target,
-      title: rewriteResult.title || target.title,
-      styleTags: rewriteResult.styleTags.length > 0 ? rewriteResult.styleTags : target.styleTags,
-      lyricsDraft: rewriteResult.lyricsDraft || target.lyricsDraft,
+      title: nextRewriteTitle,
+      styleTags: nextRewriteStyleTags,
+      lyricsDraft: nextRewriteLyricsDraft,
     },
     `AI 改写 #${versionCount + 1}`,
     target.rewritePrompt
   );
   const versionPatch = addLyricsVersionToRecord(target, version);
 
-  return updateWorkflowRecord(target, {
-    title: rewriteResult.title || target.title,
-    styleTags: rewriteResult.styleTags.length > 0 ? rewriteResult.styleTags : target.styleTags,
-    lyricsDraft: rewriteResult.lyricsDraft || target.lyricsDraft,
-    pendingRewriteTaskId: null,
-    ...versionPatch,
-  }, updateRecord);
+  return updateWorkflowRecord(
+    target,
+    {
+      title: nextRewriteTitle,
+      styleTags: nextRewriteStyleTags,
+      lyricsDraft: nextRewriteLyricsDraft,
+      pendingRewriteTaskId: null,
+      ...versionPatch,
+    },
+    updateRecord
+  );
 }
 
 /** 从 Suno 歌词生成任务结果中提取歌词 */
@@ -252,7 +293,10 @@ export function extractClipsFromTask(task: Task): GeneratedClip[] {
 export async function syncMusicGenerationTask(
   task: Task,
   recordId: string
-): Promise<{ records: MusicAnalysisRecord[]; record: MusicAnalysisRecord } | null> {
+): Promise<{
+  records: MusicAnalysisRecord[];
+  record: MusicAnalysisRecord;
+} | null> {
   return syncGeneratedClipsForRecord(task, recordId, {
     loadRecords,
     updateRecord,

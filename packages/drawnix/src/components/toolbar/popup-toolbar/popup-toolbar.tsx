@@ -72,6 +72,7 @@ import { PopupAlignmentButton } from './alignment-button';
 import { PopupDistributeButton } from './distribute-button';
 import { PopupBooleanButton } from './boolean-button';
 import { TextPropertyPanel } from './text-property-panel';
+import { PopupImage3DTransformButton } from './image-3d-transform-button';
 import {
   AIImageIcon,
   AIVideoIcon,
@@ -165,6 +166,7 @@ import {
   getCanvasSpeechText,
   type CanvasSpeechTextResult,
 } from './text-to-speech-utils';
+import { isOrdinary3DTransformImage } from '../../../utils/image-3d-transform';
 
 const ImageEditor = lazy(() =>
   import('../../image-editor').then((module) => ({
@@ -358,6 +360,7 @@ export const PopupToolbar = () => {
     hasAudioPlayer?: boolean; // 是否显示在音乐播放器中播放按钮
     hasTextToSpeech?: boolean; // 是否显示语音朗读按钮
     hasMediaFitPPT?: boolean; // 是否显示素材自适应 PPT 按钮
+    hasImage3DTransform?: boolean; // 是否显示图片 3D 调节按钮
   } = {
     fill: 'red',
   };
@@ -619,6 +622,10 @@ export const PopupToolbar = () => {
       selectedElements.length === 1 &&
       !PlaitBoard.hasBeenTextEditing(board) &&
       isFrameElement(selectedElements[0]);
+    const hasImage3DTransform =
+      selectedElements.length === 1 &&
+      !PlaitBoard.hasBeenTextEditing(board) &&
+      isOrdinary3DTransformImage(selectedElements[0]);
 
     state = {
       ...getElementState(board),
@@ -654,6 +661,7 @@ export const PopupToolbar = () => {
       hasAudioPlayer,
       hasTextToSpeech,
       hasMediaFitPPT,
+      hasImage3DTransform,
     };
   }
 
@@ -2163,6 +2171,16 @@ export const PopupToolbar = () => {
               key={'layer-control'}
               title={t('textEffect.layer')}
             />
+            {state.hasImage3DTransform && selectedElements.length === 1 && (
+              <PopupImage3DTransformButton
+                board={board}
+                element={selectedElements[0]}
+                key="image-3d-transform"
+                language={language as 'zh' | 'en'}
+                selectionRect={selectionRect}
+                title={language === 'zh' ? '图片 3D 调节' : 'Image 3D Adjust'}
+              />
+            )}
             {state.hasSizeInput && <SizeInput board={board} key="size-input" />}
             {/* Frame 幻灯片播放按钮 - 选中单个 Frame 时显示 */}
             {state.hasFramePlay && (

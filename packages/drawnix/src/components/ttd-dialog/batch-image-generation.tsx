@@ -33,7 +33,12 @@ import { useConfirmDialog } from '../dialog/ConfirmDialog';
 import { useMediaViewer, urlsToMediaItems } from '../../hooks/useMediaViewer';
 import { smartDownload } from '../../utils/download-utils';
 import { useTaskQueue } from '../../hooks/useTaskQueue';
-import { TaskType, TaskStatus, Task } from '../../types/task.types';
+import {
+  TaskType,
+  TaskStatus,
+  Task,
+  type KnowledgeContextRef,
+} from '../../types/task.types';
 import {
   hasInvocationRouteCredentials,
   resolveInvocationRoute,
@@ -66,6 +71,7 @@ import type { ModelConfig } from '../../constants/model-config';
 import './batch-image-generation.scss';
 import { trackMemory } from '../../utils/common';
 import { HoverTip } from '../shared/hover';
+import { KnowledgeNoteContextSelector } from '../shared';
 import {
   loadScopedAIImageToolPreferences,
   sanitizeImageToolExtraParams,
@@ -363,6 +369,10 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
   const [taskIdCounter, setTaskIdCounter] = useState<number>(6);
   const [cacheLoaded, setCacheLoaded] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >([]);
 
   // 从 IndexedDB 加载缓存
   useEffect(() => {
@@ -2071,121 +2081,126 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
   const executeSubmit = useCallback(
     async (validTasks: { task: TaskRow; rowIndex: number }[]) => {
       setIsSubmitting(true);
+      try {
+        // 先检查 API Key，没有则弹窗获取（只弹一次）
+        if (
+          !hasInvocationRouteCredentials(
+            'image',
+            selectedModelRef || selectedModel
+          )
+        ) {
+          // 退出编辑模式，防止输入被捕获到表格
+          setEditingCell(null);
+          setActiveCell(null);
 
-      // 先检查 API Key，没有则弹窗获取（只弹一次）
-      if (
-        !hasInvocationRouteCredentials(
-          'image',
-          selectedModelRef || selectedModel
-        )
-      ) {
-        // 退出编辑模式，防止输入被捕获到表格
-        setEditingCell(null);
-        setActiveCell(null);
-
-        const newApiKey = await promptForApiKey();
-        if (!newApiKey) {
-          setIsSubmitting(false);
-          MessagePlugin.warning(
-            language === 'zh'
-              ? '需要 API Key 才能生成图片'
-              : 'API Key is required to generate images'
-          );
-          return;
+          const newApiKey = await promptForApiKey();
+          if (!newApiKey) {
+            MessagePlugin.warning(
+              language === 'zh'
+                ? '需要 API Key 才能生成图片'
+                : 'API Key is required to generate images'
+            );
+            return;
+          }
+          // promptForApiKey 内部已经更新了 settings 并同步到 SW
         }
-        // promptForApiKey 内部已经更新了 settings 并同步到 SW
-      }
-      const globalBatchTimestamp = Date.now();
-      let subTaskCounter = 0;
-      let submittedCount = 0;
+        const globalBatchTimestamp = Date.now();
+        let subTaskCounter = 0;
+        let submittedCount = 0;
 
-      for (const { task, rowIndex } of validTasks) {
-        const generateCount = task.count || 1;
-        const batchId = `batch_${task.id}_${globalBatchTimestamp}`;
-        const rowParams = normalizeRowParamsForModel(
-          task,
-          selectedModel,
-          defaultModelParams
-        );
-        const normalizedAspectRatio =
-          rowParams.size || defaultModelParams.size || 'auto';
-        const normalizedSize =
-          normalizedAspectRatio === 'auto' ? undefined : normalizedAspectRatio;
-        const currentImageModel =
-          selectedModel ||
-          resolveInvocationRoute('image').modelId ||
-          'gemini-2.5-flash-image-vip';
-        const isMJModel = currentImageModel.startsWith('mj');
-        const finalPrompt = isMJModel
-          ? [task.prompt.trim(), buildMJPromptSuffix(rowParams)]
-              .filter(Boolean)
-              .join(' ')
-          : task.prompt.trim();
-        const adapterParams = isMJModel
-          ? undefined
-          : buildTaskAdapterParams(rowParams);
+        for (const { task, rowIndex } of validTasks) {
+          const generateCount = task.count || 1;
+          const batchId = `batch_${task.id}_${globalBatchTimestamp}`;
+          const rowParams = normalizeRowParamsForModel(
+            task,
+            selectedModel,
+            defaultModelParams
+          );
+          const normalizedAspectRatio =
+            rowParams.size || defaultModelParams.size || 'auto';
+          const normalizedSize =
+            normalizedAspectRatio === 'auto'
+              ? undefined
+              : normalizedAspectRatio;
+          const currentImageModel =
+            selectedModel ||
+            resolveInvocationRoute('image').modelId ||
+            'gemini-2.5-flash-image-vip';
+          const isMJModel = currentImageModel.startsWith('mj');
+          const finalPrompt = isMJModel
+            ? [task.prompt.trim(), buildMJPromptSuffix(rowParams)]
+                .filter(Boolean)
+                .join(' ')
+            : task.prompt.trim();
+          const adapterParams = isMJModel
+            ? undefined
+            : buildTaskAdapterParams(rowParams);
 
-        const uploadedImages = task.images.map((url, index) => ({
-          type: 'url',
-          url,
-          name: `reference_${index + 1}`,
-        }));
+          const uploadedImages = task.images.map((url, index) => ({
+            type: 'url',
+            url,
+            name: `reference_${index + 1}`,
+          }));
 
-        const newTaskIds: string[] = [];
+          const newTaskIds: string[] = [];
 
-        for (let i = 0; i < generateCount; i++) {
-          subTaskCounter++;
+          for (let i = 0; i < generateCount; i++) {
+            subTaskCounter++;
 
-          const taskParams = {
-            prompt: finalPrompt,
-            aspectRatio: normalizedAspectRatio,
-            size: normalizedSize,
-            model: currentImageModel,
-            modelRef: selectedModelRef || null,
-            uploadedImages,
-            batchId,
-            batchIndex: i + 1,
-            batchTotal: generateCount,
-            globalIndex: subTaskCounter,
-            autoInsertToCanvas: true,
-            ...(adapterParams ? { params: adapterParams } : {}),
-          };
+            const taskParams = {
+              prompt: finalPrompt,
+              knowledgeContextRefs,
+              aspectRatio: normalizedAspectRatio,
+              size: normalizedSize,
+              model: currentImageModel,
+              modelRef: selectedModelRef || null,
+              uploadedImages,
+              batchId,
+              batchIndex: i + 1,
+              batchTotal: generateCount,
+              globalIndex: subTaskCounter,
+              autoInsertToCanvas: true,
+              ...(adapterParams ? { params: adapterParams } : {}),
+            };
 
-          const createdTask = createTask(taskParams, TaskType.IMAGE);
-          if (createdTask) {
-            submittedCount++;
-            newTaskIds.push(createdTask.id);
+            const createdTask = createTask(taskParams, TaskType.IMAGE);
+            if (createdTask) {
+              submittedCount++;
+              newTaskIds.push(createdTask.id);
+            }
+          }
+
+          // 更新行的关联任务ID
+          if (newTaskIds.length > 0) {
+            setTasks((prev) => {
+              const newTasks = [...prev];
+              if (newTasks[rowIndex]) {
+                newTasks[rowIndex] = {
+                  ...newTasks[rowIndex],
+                  taskIds: [...newTasks[rowIndex].taskIds, ...newTaskIds],
+                };
+              }
+              return newTasks;
+            });
           }
         }
 
-        // 更新行的关联任务ID
-        if (newTaskIds.length > 0) {
-          setTasks((prev) => {
-            const newTasks = [...prev];
-            if (newTasks[rowIndex]) {
-              newTasks[rowIndex] = {
-                ...newTasks[rowIndex],
-                taskIds: [...newTasks[rowIndex].taskIds, ...newTaskIds],
-              };
-            }
-            return newTasks;
-          });
+        if (submittedCount > 0) {
+          MessagePlugin.success(
+            language === 'zh'
+              ? `已提交 ${submittedCount} 个任务到队列`
+              : `Submitted ${submittedCount} tasks to queue`
+          );
         }
-      }
-
-      setIsSubmitting(false);
-
-      if (submittedCount > 0) {
-        MessagePlugin.success(
-          language === 'zh'
-            ? `已提交 ${submittedCount} 个任务到队列`
-            : `Submitted ${submittedCount} tasks to queue`
-        );
+      } finally {
+        submitLockRef.current = false;
+        setIsSubmitting(false);
       }
     },
     [
       createTask,
       defaultModelParams,
+      knowledgeContextRefs,
       language,
       selectedModel,
       selectedModelRef,
@@ -2197,6 +2212,12 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
 
   // 提交到任务队列 - 只提交选中的行
   const submitToQueue = useCallback(async () => {
+    if (submitLockRef.current || isSubmitting) {
+      return;
+    }
+    submitLockRef.current = true;
+    setIsSubmitting(true);
+
     // 获取选中的行索引（从 checkbox 选中状态获取）
     const selectedRowIndices = [...selectedRows].sort((a, b) => a - b);
 
@@ -2207,6 +2228,8 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
           ? '请先勾选要生成的行'
           : 'Please check rows to generate'
       );
+      submitLockRef.current = false;
+      setIsSubmitting(false);
       return;
     }
 
@@ -2221,6 +2244,8 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
           ? '选中的行没有填写提示词'
           : 'Selected rows have no prompts'
       );
+      submitLockRef.current = false;
+      setIsSubmitting(false);
       return;
     }
 
@@ -2294,17 +2319,33 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
         confirmText: language === 'zh' ? '继续生成' : 'Continue',
         cancelText: language === 'zh' ? '取消' : 'Cancel',
         confirmTheme: 'warning',
-      }).then((confirmed) => {
-        if (confirmed) {
-          executeSubmit(validTasks);
-        }
-      });
+      })
+        .then((confirmed) => {
+          if (confirmed) {
+            executeSubmit(validTasks);
+          } else {
+            submitLockRef.current = false;
+            setIsSubmitting(false);
+          }
+        })
+        .catch(() => {
+          submitLockRef.current = false;
+          setIsSubmitting(false);
+        });
       return;
     }
 
     // 没有超限，直接提交
     executeSubmit(validTasks);
-  }, [confirm, tasks, selectedRows, language, executeSubmit, getRowTasksInfo]);
+  }, [
+    confirm,
+    tasks,
+    selectedRows,
+    language,
+    executeSubmit,
+    getRowTasksInfo,
+    isSubmitting,
+  ]);
 
   // 键盘导航和直接输入
   useEffect(() => {
@@ -3215,6 +3256,16 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
           </div>
 
           <div className="toolbar-right">
+            <div className="batch-knowledge-context-wrapper">
+              <KnowledgeNoteContextSelector
+                value={knowledgeContextRefs}
+                onChange={setKnowledgeContextRefs}
+                disabled={isSubmitting}
+                language={language}
+                label={language === 'zh' ? '上下文' : 'Context'}
+              />
+            </div>
+
             {/* 模型选择器 */}
             <div
               className="model-selector-wrapper"
@@ -3248,6 +3299,7 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
               theme="primary"
               onClick={submitToQueue}
               loading={isSubmitting}
+              disabled={isSubmitting}
               className="batch-generate-btn"
               data-track="batch_generate_click"
               data-track-params={JSON.stringify({

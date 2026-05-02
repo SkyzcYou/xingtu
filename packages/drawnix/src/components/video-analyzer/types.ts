@@ -4,6 +4,11 @@
 
 import type { VideoAnalysisData, VideoShot, VideoCharacter } from '../../services/video-analysis-service';
 import { createModelRef, type ModelRef } from '../../utils/settings-manager';
+import {
+  formatCreativeBriefSummary,
+  normalizeCreativeBrief,
+  type CreativeBrief,
+} from '../shared/workflow/creative-brief';
 
 export type { VideoAnalysisData, VideoShot, VideoCharacter };
 
@@ -28,6 +33,8 @@ export interface ProductInfo {
   videoStyle?: string;
   /** 用户编辑的 BGM 情绪（覆盖 analysis.bgm_mood） */
   bgmMood?: string;
+  /** 专业创作 Brief（用途、导演风格、叙事风格等） */
+  creativeBrief?: CreativeBrief;
 
   /** @deprecated use prompt */
   name?: string;
@@ -48,6 +55,14 @@ export type AnalysisSourceSnapshot =
       fileName: string;
       mimeType: string;
       size: number;
+    }
+  | {
+      type: 'prompt';
+      prompt: string;
+      pdfCacheUrl?: string;
+      pdfName?: string;
+      pdfMimeType?: string;
+      pdfSize?: number;
     };
 
 /** 将旧格式 ProductInfo 迁移为新格式（幂等） */
@@ -62,6 +77,7 @@ export function migrateProductInfo(raw: Partial<ProductInfo>, fallbackDuration: 
       videoSize: raw.videoSize,
       videoStyle: raw.videoStyle,
       bgmMood: raw.bgmMood,
+      creativeBrief: normalizeCreativeBrief(raw.creativeBrief),
     };
   }
   const parts: string[] = [];
@@ -77,6 +93,7 @@ export function migrateProductInfo(raw: Partial<ProductInfo>, fallbackDuration: 
     videoSize: raw.videoSize,
     videoStyle: raw.videoStyle,
     bgmMood: raw.bgmMood,
+    creativeBrief: normalizeCreativeBrief(raw.creativeBrief),
   };
 }
 
@@ -96,7 +113,7 @@ export interface ScriptVersion {
 export interface AnalysisRecord {
   id: string;
   createdAt: number;
-  source: 'upload' | 'youtube';
+  source: 'upload' | 'youtube' | 'prompt';
   sourceLabel: string;
   sourceSnapshot?: AnalysisSourceSnapshot | null;
   model: string;
@@ -173,6 +190,8 @@ export function formatShotsMarkdown(
   headerParts.push(`\n**时长：** ${dur}s | **画面比例：** ${analysis.aspect_ratio || '16x9'}`);
   if (analysis.video_style) headerParts.push(` | **风格：** ${analysis.video_style}`);
   if (analysis.bgm_mood) headerParts.push(` | **BGM：** ${analysis.bgm_mood}`);
+  const creativeBrief = formatCreativeBriefSummary(productInfo?.creativeBrief);
+  if (creativeBrief) headerParts.push(`\n\n## 创作 Brief\n\n${creativeBrief}`);
   if (analysis.suggestion) headerParts.push(`\n\n> ${analysis.suggestion}`);
 
   return `${headerParts.join('')}\n\n${shotsMd}`;

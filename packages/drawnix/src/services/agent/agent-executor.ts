@@ -29,6 +29,7 @@ import {
   resolveInvocationPlanFromRoute,
   supportsTextBindingImageInput,
 } from '../provider-routing';
+import { buildKnowledgeContextBlock } from '../generation-context-service';
 
 /**
  * 将占位符替换为真实图片 URL
@@ -59,6 +60,41 @@ function replacePlaceholdersWithUrls(
   });
 
   return result;
+}
+
+function appendTextToLastUserMessage(
+  messages: GeminiMessage[],
+  text: string
+): GeminiMessage[] {
+  if (!text.trim()) {
+    return messages;
+  }
+
+  const lastUserMessageIndex = [...messages]
+    .map((message, index) => ({ message, index }))
+    .reverse()
+    .find(({ message }) => message.role === 'user')?.index;
+
+  const textPart = { type: 'text' as const, text };
+
+  if (lastUserMessageIndex == null) {
+    return [
+      ...messages,
+      {
+        role: 'user',
+        content: [textPart],
+      },
+    ];
+  }
+
+  return messages.map((message, index) =>
+    index === lastUserMessageIndex
+      ? {
+          ...message,
+          content: [...message.content, textPart],
+        }
+      : message
+  );
 }
 
 /**
@@ -376,6 +412,18 @@ class AgentExecutor {
             content: [{ type: 'text', text: userMessage }],
           },
         ];
+      }
+
+      if (context.knowledgeContextRefs?.length) {
+        const { contextBlock } = await buildKnowledgeContextBlock(
+          context.knowledgeContextRefs
+        );
+        if (contextBlock) {
+          messages = appendTextToLastUserMessage(
+            messages,
+            `\n\n${contextBlock}`
+          );
+        }
       }
 
       if (

@@ -6,10 +6,13 @@
  * Character creation is handled through the task queue system.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { Dialog, MessagePlugin } from 'tdesign-react';
 import { useTaskQueue } from '../../hooks/useTaskQueue';
-import { formatCharacterTimestamps, getCharacterModel } from '../../types/character.types';
+import {
+  formatCharacterTimestamps,
+  getCharacterModel,
+} from '../../types/character.types';
 import { useMediaUrl } from '../../hooks/useMediaCache';
 import { CharacterTimeRangeSelector } from './CharacterTimeRangeSelector';
 import { Task, TaskType, TaskStatus } from '../../types/task.types';
@@ -40,6 +43,7 @@ export const CharacterCreateDialog: React.FC<CharacterCreateDialogProps> = ({
 }) => {
   const { createTask, tasks } = useTaskQueue();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   // Get video URL from cache or original
   const { url: videoUrl } = useMediaUrl(task?.id ?? '', task?.result?.url);
@@ -54,50 +58,67 @@ export const CharacterCreateDialog: React.FC<CharacterCreateDialogProps> = ({
   const alreadyCreating = useMemo(() => {
     if (!task) return false;
     return tasks.some(
-      t => t.type === TaskType.CHARACTER &&
+      (t) =>
+        t.type === TaskType.CHARACTER &&
         t.params.sourceLocalTaskId === task.id &&
         (t.status === TaskStatus.PENDING || t.status === TaskStatus.PROCESSING)
     );
   }, [task, tasks]);
 
   // Handle time range confirmation - create a task in the queue
-  const handleConfirm = useCallback(async (startTime: number, endTime: number) => {
-    if (!task || !task.remoteId) {
-      MessagePlugin.error('无效的任务数据');
-      return;
-    }
+  const handleConfirm = useCallback(
+    async (startTime: number, endTime: number) => {
+      if (submitLockRef.current || isSubmitting || alreadyCreating) {
+        return;
+      }
+      if (!task || !task.remoteId) {
+        MessagePlugin.error('无效的任务数据');
+        return;
+      }
 
-    setIsSubmitting(true);
-    onCreateStart?.();
+      submitLockRef.current = true;
+      setIsSubmitting(true);
+      onCreateStart?.();
 
-    try {
-      const timestamps = formatCharacterTimestamps(startTime, endTime);
+      try {
+        const timestamps = formatCharacterTimestamps(startTime, endTime);
 
-      // Create a character task in the queue
-      // Use the actual character API model name (e.g., sora-2-character, sora-2-pro-character)
-      const characterModel = getCharacterModel(task.params.model);
-      const characterTask = createTask(
-        {
-          prompt: task.params.prompt || '角色提取',
-          model: characterModel,
-          sourceVideoTaskId: task.remoteId,
-          characterTimestamps: timestamps,
-          sourceLocalTaskId: task.id,
-        },
-        TaskType.CHARACTER
-      );
+        // Create a character task in the queue
+        // Use the actual character API model name (e.g., sora-2-character, sora-2-pro-character)
+        const characterModel = getCharacterModel(task.params.model);
+        const characterTask = createTask(
+          {
+            prompt: task.params.prompt || '角色提取',
+            model: characterModel,
+            sourceVideoTaskId: task.remoteId,
+            characterTimestamps: timestamps,
+            sourceLocalTaskId: task.id,
+          },
+          TaskType.CHARACTER
+        );
 
-      MessagePlugin.success('角色创建任务已加入队列');
-      onCreateComplete?.(characterTask!.id);
-      onClose();
-    } catch (err) {
-      console.error('Failed to create character task:', err);
-      const errorMessage = (err as Error).message || '创建任务失败';
-      MessagePlugin.error(errorMessage);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [task, createTask, onCreateStart, onCreateComplete, onClose]);
+        MessagePlugin.success('角色创建任务已加入队列');
+        onCreateComplete?.(characterTask!.id);
+        onClose();
+      } catch (err) {
+        console.error('Failed to create character task:', err);
+        const errorMessage = (err as Error).message || '创建任务失败';
+        MessagePlugin.error(errorMessage);
+      } finally {
+        submitLockRef.current = false;
+        setIsSubmitting(false);
+      }
+    },
+    [
+      alreadyCreating,
+      createTask,
+      isSubmitting,
+      onClose,
+      onCreateComplete,
+      onCreateStart,
+      task,
+    ]
+  );
 
   // Handle dialog close
   const handleClose = () => {

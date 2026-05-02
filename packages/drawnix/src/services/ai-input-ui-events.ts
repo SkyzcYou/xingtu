@@ -1,5 +1,6 @@
 import type { GenerationType } from '../utils/ai-input-parser';
 import type { ModelRef } from '../utils/settings-manager';
+import type { KnowledgeContextRef } from '../types/task.types';
 
 export interface AIInputFocusEventDetail {
   generationType?: GenerationType;
@@ -23,6 +24,7 @@ export interface AIInputPrefillEventDetail {
   modelRef?: ModelRef | null;
   params?: Record<string, string>;
   count?: number;
+  knowledgeContextRefs?: KnowledgeContextRef[];
   source?: AIInputPrefillSource;
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AssetCategory,
   AssetSource,
   AssetType,
   type Asset,
@@ -25,6 +26,7 @@ function createFilters(overrides: Partial<FilterState> = {}): FilterState {
   return {
     activeType: 'ALL',
     activeSource: 'ALL',
+    activeCategory: 'ALL',
     searchQuery: '',
     sortBy: 'DATE_DESC',
     ...overrides,
@@ -59,5 +61,42 @@ describe('asset-utils', () => {
     );
 
     expect(result.assets.map((asset) => asset.id)).toEqual(['matched']);
+  });
+
+  it('matches fuzzy keywords from subject metadata', () => {
+    const asset = createAsset({
+      name: '普通标题',
+      prompt: '',
+      category: AssetCategory.CHARACTER,
+      characterMeta: {
+        name: 'Lily',
+        prompt: 'short double ponytails, yellow bucket hat',
+      },
+    });
+
+    expect(matchesAssetSearchQuery(asset, 'lily bucket')).toBe(true);
+  });
+
+  it('filters subject assets by business category', () => {
+    const character = createAsset({
+      id: 'character',
+      category: AssetCategory.CHARACTER,
+      characterMeta: { name: 'Dad', prompt: 'green polo shirt' },
+    });
+    const general = createAsset({
+      id: 'general',
+      category: AssetCategory.GENERAL,
+    });
+    const legacy = createAsset({
+      id: 'legacy',
+      category: undefined,
+    });
+
+    const result = filterAssets(
+      [general, character, legacy],
+      createFilters({ activeCategory: AssetCategory.CHARACTER })
+    );
+
+    expect(result.assets.map((asset) => asset.id)).toEqual(['character']);
   });
 });

@@ -38,6 +38,7 @@ export enum ModelVendor {
   ANTHROPIC = 'ANTHROPIC',
   GOOGLE = 'GOOGLE',
   DOUBAO = 'DOUBAO',
+  HAPPYHORSE = 'HAPPYHORSE',
   OTHER = 'OTHER',
 }
 
@@ -67,6 +68,7 @@ export const VENDOR_NAMES: Record<ModelVendor, string> = {
   [ModelVendor.ANTHROPIC]: 'Anthropic',
   [ModelVendor.GOOGLE]: 'Google',
   [ModelVendor.DOUBAO]: '即梦',
+  [ModelVendor.HAPPYHORSE]: 'HappyHorse',
   [ModelVendor.OTHER]: '其它',
 };
 
@@ -793,7 +795,7 @@ const BUILT_IN_VIDEO_MODELS: ModelConfig[] = [
     shortCode: 'h10i',
     description: 'HappyHorse 首帧图生视频，输出比例跟随首帧',
     type: 'video',
-    vendor: ModelVendor.OTHER,
+    vendor: ModelVendor.HAPPYHORSE,
     supportsTools: true,
     videoDefaults: {
       ...HAPPYHORSE_DEFAULT_PARAMS,
@@ -807,7 +809,7 @@ const BUILT_IN_VIDEO_MODELS: ModelConfig[] = [
     shortCode: 'h10r',
     description: 'HappyHorse 多参考图生视频，支持 1-9 张参考图和比例控制',
     type: 'video',
-    vendor: ModelVendor.OTHER,
+    vendor: ModelVendor.HAPPYHORSE,
     supportsTools: true,
     videoDefaults: HAPPYHORSE_DEFAULT_PARAMS,
     tags: ['happyhorse'],
@@ -818,7 +820,7 @@ const BUILT_IN_VIDEO_MODELS: ModelConfig[] = [
     shortCode: 'h10t',
     description: 'HappyHorse 文生视频，支持分辨率、比例和 3-15 秒时长控制',
     type: 'video',
-    vendor: ModelVendor.OTHER,
+    vendor: ModelVendor.HAPPYHORSE,
     supportsTools: true,
     videoDefaults: HAPPYHORSE_DEFAULT_PARAMS,
     tags: ['happyhorse'],
@@ -829,7 +831,7 @@ const BUILT_IN_VIDEO_MODELS: ModelConfig[] = [
     shortCode: 'h10v',
     description: 'HappyHorse 视频参考生成视频，时长跟随输入视频，支持保留原音频',
     type: 'video',
-    vendor: ModelVendor.OTHER,
+    vendor: ModelVendor.HAPPYHORSE,
     supportsTools: true,
     videoDefaults: {
       ...HAPPYHORSE_DEFAULT_PARAMS,

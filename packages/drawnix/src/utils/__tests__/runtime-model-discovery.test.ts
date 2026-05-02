@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 describe('runtime-model-discovery', () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.unstubAllGlobals();
   });
 
   it('不会把图片模型钉到音频类型列表里', async () => {
@@ -143,5 +144,121 @@ describe('runtime-model-discovery', () => {
     expect(result.models.map((model) => model.id)).toEqual(['model-b', 'model-c']);
     expect(result.addedModelIds).toEqual(['model-c']);
     expect(result.removedModelIds).toEqual(['model-a']);
+  });
+
+  it('加载旧目录时会刷新 HappyHorse 的供应商分类', async () => {
+    vi.doMock('../settings-manager', () => ({
+      LEGACY_DEFAULT_PROVIDER_PROFILE_ID: 'legacy-default',
+      providerCatalogsSettings: {
+        get: () => [
+          {
+            profileId: 'provider-happyhorse',
+            discoveredAt: Date.now(),
+            discoveredModels: [
+              {
+                id: 'happyhorse-1.0-t2v',
+                label: 'HappyHorse 1.0 T2V',
+                shortLabel: 'HappyHorse 1.0 T2V',
+                type: 'video',
+                vendor: 'OTHER',
+                tags: ['happyhorse'],
+              },
+            ],
+            selectedModelIds: ['happyhorse-1.0-t2v'],
+          },
+        ],
+        addListener: () => {},
+        removeListener: () => {},
+        update: async () => {},
+      },
+      providerProfilesSettings: {
+        get: () => [
+          {
+            id: 'provider-happyhorse',
+            name: 'HappyHorse',
+            enabled: true,
+          },
+        ],
+        addListener: () => {},
+        removeListener: () => {},
+      },
+      invocationPresetsSettings: {
+        addListener: () => {},
+        removeListener: () => {},
+      },
+      settingsManager: {
+        getSetting: () => ({}),
+        addListener: () => {},
+        removeListener: () => {},
+      },
+    }));
+
+    const { runtimeModelDiscovery } = await import('../runtime-model-discovery');
+    const state = runtimeModelDiscovery.getState('provider-happyhorse');
+
+    expect(state.discoveredModels[0]).toMatchObject({
+      id: 'happyhorse-1.0-t2v',
+      type: 'video',
+      vendor: 'HAPPYHORSE',
+      sourceProfileId: 'provider-happyhorse',
+    });
+    expect(state.models[0]?.vendor).toBe('HAPPYHORSE');
+  });
+
+  it('运行时发现模型会识别 HappyHorse 供应商', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            data: [{ id: 'happyhorse-alpha-video', owned_by: 'happyhorse' }],
+          }),
+      }))
+    );
+
+    vi.doMock('../settings-manager', () => ({
+      LEGACY_DEFAULT_PROVIDER_PROFILE_ID: 'legacy-default',
+      providerCatalogsSettings: {
+        get: () => [],
+        addListener: () => {},
+        removeListener: () => {},
+        update: async () => {},
+      },
+      providerProfilesSettings: {
+        get: () => [
+          {
+            id: 'provider-happyhorse',
+            name: 'HappyHorse',
+            enabled: true,
+          },
+        ],
+        addListener: () => {},
+        removeListener: () => {},
+      },
+      invocationPresetsSettings: {
+        addListener: () => {},
+        removeListener: () => {},
+      },
+      settingsManager: {
+        getSetting: () => ({}),
+        addListener: () => {},
+        removeListener: () => {},
+      },
+    }));
+
+    const { runtimeModelDiscovery } = await import('../runtime-model-discovery');
+
+    const models = await runtimeModelDiscovery.discover(
+      'provider-happyhorse',
+      'https://api.example.com/v1',
+      'test-key'
+    );
+
+    expect(models[0]).toMatchObject({
+      id: 'happyhorse-alpha-video',
+      type: 'video',
+      vendor: 'HAPPYHORSE',
+    });
   });
 });

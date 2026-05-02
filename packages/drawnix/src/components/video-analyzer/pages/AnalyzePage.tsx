@@ -10,22 +10,40 @@ import React, {
   useEffect,
 } from 'react';
 import type { AnalysisRecord, VideoAnalysisData, VideoShot } from '../types';
+import type { KnowledgeContextRef } from '../../../types/task.types';
 import { formatShotsMarkdown } from '../types';
 import { videoAnalyzeTool } from '../../../mcp/tools/video-analyze';
 import { quickInsert } from '../../../mcp/tools/canvas-insertion';
 import { ModelDropdown } from '../../ai-input-bar/ModelDropdown';
+import { KnowledgeNoteContextSelector } from '../../shared';
+import {
+  CreativeBriefEditor,
+  normalizeCreativeBrief,
+  type CreativeBrief,
+} from '../../shared/workflow';
 import { useSelectableModels } from '../../../hooks/use-runtime-models';
 import { useProviderProfiles } from '../../../hooks/use-provider-profiles';
 import { useDrawnix } from '../../../hooks/use-drawnix';
 import { ShotTimeline } from '../components/ShotTimeline';
 import { ShotCard } from '../components/ShotCard';
 import { updateRecord } from '../storage';
-import { getSelectionKey } from '../../../utils/model-selection';
+import {
+  findMatchingSelectableModel,
+  getModelRefFromConfig,
+  getSelectionKey,
+} from '../../../utils/model-selection';
+import { ModelVendor, type ModelConfig } from '../../../constants/model-config';
 import {
   TUZI_MIX_PROVIDER_PROFILE_ID,
   type ModelRef,
 } from '../../../utils/settings-manager';
-import { readStoredModelSelection, writeStoredModelSelection } from '../utils';
+import {
+  buildVideoPromptGenerationPrompt,
+  readStoredModelSelection,
+  writeStoredModelSelection,
+} from '../utils';
+import { generateUUID } from '../../../utils/runtime-helpers';
+import { unifiedCacheService } from '../../../services/unified-cache-service';
 import {
   extractFramesFromVideo,
   cacheFrameBlob,
@@ -37,15 +55,35 @@ import {
 import { taskQueueService } from '../../../services/task-queue';
 import { syncVideoAnalyzerTask } from '../task-sync';
 import { analytics } from '../../../utils/posthog-analytics';
+import { MessagePlugin } from '../../../utils/message-plugin';
 
-type InputMode = 'upload' | 'youtube';
+type InputMode = 'prompt' | 'upload' | 'youtube';
+
+interface PromptPdfAttachment {
+  cacheUrl: string;
+  name: string;
+  size: number;
+  mimeType: string;
+}
 
 const DEFAULT_ANALYSIS_MODEL = 'gemini-3.1-pro-preview';
 const STORAGE_KEY_MODEL = 'video-analyzer:model';
 const SETTINGS_PROVIDER_NAV_EVENT = 'aitu:settings:provider-nav';
+const MAX_PROMPT_PDF_SIZE = 20 * 1024 * 1024;
 
 function formatSize(bytes: number): string {
   return (bytes / 1024 / 1024).toFixed(1) + 'MB';
+}
+
+function isGeminiTextModel(model: ModelConfig): boolean {
+  const value = `${model.id} ${model.label} ${model.shortLabel || ''} ${
+    model.sourceProfileName || ''
+  }`.toLowerCase();
+  return (
+    model.vendor === ModelVendor.GEMINI ||
+    model.vendor === ModelVendor.GOOGLE ||
+    value.includes('gemini')
+  );
 }
 
 interface AnalyzePageProps {
@@ -64,7 +102,14 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   onNext,
 }) => {
   const { setAppState } = useDrawnix();
-  const [inputMode, setInputMode] = useState<InputMode>('upload');
+  const [inputMode, setInputMode] = useState<InputMode>('prompt');
+  const [promptText, setPromptText] = useState('');
+  const [creativeBrief, setCreativeBrief] = useState<CreativeBrief>({});
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >([]);
+  const [pdfAttachment, setPdfAttachment] =
+    useState<PromptPdfAttachment | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [selectedModel, setSelectedModelState] = useState(
@@ -98,7 +143,9 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   );
   const providerProfiles = useProviderProfiles();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const analyzingRef = useRef(false);
 
   // 视频预览 URL
   const videoPreviewUrl = useMemo(() => {
@@ -129,7 +176,10 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
           return;
         }
         setAnalysis(null);
-        setInputMode('upload');
+        setInputMode('prompt');
+        setPromptText('');
+        setCreativeBrief({});
+        setPdfAttachment(null);
         setYoutubeUrl('');
         setVideoFile(null);
         setError('');
@@ -142,8 +192,32 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       setError('');
 
       const snapshot = existingRecord.sourceSnapshot;
+      if (snapshot?.type === 'prompt') {
+        setInputMode('prompt');
+        setPromptText(snapshot.prompt || existingRecord.sourceLabel || '');
+        setCreativeBrief(
+          normalizeCreativeBrief(existingRecord.productInfo?.creativeBrief)
+        );
+        setYoutubeUrl('');
+        setVideoFile(null);
+        setPdfAttachment(
+          snapshot.pdfCacheUrl
+            ? {
+                cacheUrl: snapshot.pdfCacheUrl,
+                name: snapshot.pdfName || '参考资料.pdf',
+                size: snapshot.pdfSize || 0,
+                mimeType: snapshot.pdfMimeType || 'application/pdf',
+              }
+            : null
+        );
+        return;
+      }
+
       if (snapshot?.type === 'upload') {
         setInputMode('upload');
+        setPromptText('');
+        setCreativeBrief({});
+        setPdfAttachment(null);
         setYoutubeUrl('');
         const restoredFile = await restoreVideoFileFromSnapshot(snapshot);
         if (disposed) return;
@@ -156,6 +230,9 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
 
       if (existingRecord.source === 'upload') {
         setInputMode('upload');
+        setPromptText('');
+        setCreativeBrief({});
+        setPdfAttachment(null);
         setYoutubeUrl('');
         setVideoFile(null);
         setError('这条旧历史未保存原视频，无法自动回填视频');
@@ -163,6 +240,9 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       }
 
       setInputMode('youtube');
+      setPromptText('');
+      setCreativeBrief({});
+      setPdfAttachment(null);
       setVideoFile(null);
       if (snapshot?.type === 'youtube') {
         setYoutubeUrl(snapshot.youtubeUrl);
@@ -180,9 +260,15 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
     };
   }, [existingRecord]);
   const allTextModels = useSelectableModels('text');
-  const videoAnalysisModels = useMemo(
-    () => allTextModels.filter((m) => /^gemini/i.test(m.id)),
+  const geminiTextModels = useMemo(
+    () => allTextModels.filter(isGeminiTextModel),
     [allTextModels]
+  );
+  const isGeminiRequiredForAnalysis =
+    inputMode !== 'prompt' || Boolean(pdfAttachment);
+  const selectableAnalysisModels = useMemo(
+    () => (isGeminiRequiredForAnalysis ? geminiTextModels : allTextModels),
+    [allTextModels, geminiTextModels, isGeminiRequiredForAnalysis]
   );
   const isGeminiMixConfigured = useMemo(() => {
     const mixProfile = providerProfiles.find(
@@ -210,6 +296,24 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
     );
     setAppState((prev) => ({ ...prev, openSettings: true }));
   }, [setAppState]);
+
+  useEffect(() => {
+    if (selectableAnalysisModels.length === 0) return;
+    const currentModel = findMatchingSelectableModel(
+      selectableAnalysisModels,
+      selectedModel,
+      selectedModelRef
+    );
+    if (currentModel) return;
+
+    const nextModel = selectableAnalysisModels[0];
+    setSelectedModel(nextModel.id, getModelRefFromConfig(nextModel));
+  }, [
+    selectableAnalysisModels,
+    selectedModel,
+    selectedModelRef,
+    setSelectedModel,
+  ]);
 
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -239,6 +343,69 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
     setError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
+
+  const clearPdfAttachment = useCallback(() => {
+    const shouldDeleteCache = !pendingAnalyzeTaskId;
+    setPdfAttachment((prev) => {
+      if (shouldDeleteCache && prev?.cacheUrl) {
+        void unifiedCacheService
+          .deleteCache(prev.cacheUrl)
+          .catch(() => undefined);
+      }
+      return null;
+    });
+    if (pdfInputRef.current) {
+      pdfInputRef.current.value = '';
+    }
+  }, [pendingAnalyzeTaskId]);
+
+  const handlePdfFileChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) return;
+
+      const isPdf =
+        file.type === 'application/pdf' ||
+        file.name.toLowerCase().endsWith('.pdf');
+      if (!isPdf) {
+        MessagePlugin.warning('请上传 PDF 文件');
+        return;
+      }
+      if (file.size > MAX_PROMPT_PDF_SIZE) {
+        MessagePlugin.warning('PDF 不能超过 20MB');
+        return;
+      }
+      if (geminiTextModels.length === 0) {
+        MessagePlugin.warning('PDF 入参需要 Gemini 文本模型，请先配置 Gemini 模型');
+        return;
+      }
+
+      try {
+        const cacheUrl = `video-prompt-pdf-${generateUUID()}.pdf`;
+        await unifiedCacheService.cacheToCacheStorageOnly(cacheUrl, file);
+        setPdfAttachment((prev) => {
+          if (!pendingAnalyzeTaskId && prev?.cacheUrl) {
+            void unifiedCacheService
+              .deleteCache(prev.cacheUrl)
+              .catch(() => undefined);
+          }
+          return {
+            cacheUrl,
+            name: file.name,
+            size: file.size,
+            mimeType: file.type || 'application/pdf',
+          };
+        });
+        MessagePlugin.success('PDF 已添加，将作为提示词上下文提交给 Gemini');
+      } catch (error) {
+        MessagePlugin.error(
+          error instanceof Error ? error.message : 'PDF 上传失败'
+        );
+      }
+    },
+    [geminiTextModels.length, pendingAnalyzeTaskId]
+  );
 
   const [extractingFrames, setExtractingFrames] = useState(false);
   const [frameProgress, setFrameProgress] = useState('');
@@ -280,12 +447,82 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   );
 
   const handleAnalyze = useCallback(async () => {
+    if (analyzingRef.current || pendingAnalyzeTaskId) {
+      return;
+    }
+    analyzingRef.current = true;
     setAnalyzing(true);
     setError('');
     setProgress('准备中...');
     try {
       let params: Record<string, unknown> = {};
-      if (inputMode === 'upload' && videoFile) {
+      if (inputMode === 'prompt') {
+        const sourcePrompt = promptText.trim();
+        if (!sourcePrompt) {
+          setError('请输入提示词');
+          analyzingRef.current = false;
+          setAnalyzing(false);
+          return;
+        }
+        if (
+          pdfAttachment &&
+          !findMatchingSelectableModel(
+            geminiTextModels,
+            selectedModel,
+            selectedModelRef
+          )
+        ) {
+          const nextModel = geminiTextModels[0];
+          if (nextModel) {
+            setSelectedModel(nextModel.id, getModelRefFromConfig(nextModel));
+          }
+          MessagePlugin.warning('PDF 入参仅支持 Gemini 文本模型');
+          analyzingRef.current = false;
+          setAnalyzing(false);
+          setProgress('');
+          return;
+        }
+        const normalizedCreativeBrief = normalizeCreativeBrief(creativeBrief);
+        const prompt = buildVideoPromptGenerationPrompt({
+          userPrompt: sourcePrompt,
+          pdfAttachmentName: pdfAttachment?.name,
+          creativeBrief: normalizedCreativeBrief,
+        });
+        params = {
+          prompt,
+          model: selectedModel,
+          modelRef: selectedModelRef,
+          taskLabel: `提示词生成：${sourcePrompt.slice(0, 32)}`,
+          videoAnalyzerAction: 'prompt-generate',
+          videoAnalyzerSource: 'prompt',
+          videoAnalyzerSourceLabel: sourcePrompt.slice(0, 80),
+          videoAnalyzerUserPrompt: sourcePrompt,
+          videoAnalyzerSourceSnapshot: {
+            type: 'prompt',
+            prompt: sourcePrompt,
+            ...(pdfAttachment
+              ? {
+                  pdfCacheUrl: pdfAttachment.cacheUrl,
+                  pdfName: pdfAttachment.name,
+                  pdfMimeType: pdfAttachment.mimeType,
+                  pdfSize: pdfAttachment.size,
+                }
+              : {}),
+          },
+          videoAnalyzerProductInfo: {
+            prompt: sourcePrompt,
+            creativeBrief: normalizedCreativeBrief,
+          },
+          knowledgeContextRefs,
+          ...(pdfAttachment
+            ? {
+                pdfCacheUrl: pdfAttachment.cacheUrl,
+                pdfMimeType: pdfAttachment.mimeType,
+                pdfName: pdfAttachment.name,
+              }
+            : {}),
+        };
+      } else if (inputMode === 'upload' && videoFile) {
         setProgress('缓存视频文件...');
         const sourceSnapshot = await cacheVideoSource(videoFile);
         params = {
@@ -317,7 +554,8 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
           },
         };
       } else {
-        setError('请先选择视频文件或输入 YouTube URL');
+        setError('请先输入提示词、选择视频文件或输入 YouTube URL');
+        analyzingRef.current = false;
         setAnalyzing(false);
         return;
       }
@@ -329,6 +567,8 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
         source: 'video_analyzer_analyze_page',
         metadata: {
           inputMode,
+          hasPrompt: !!promptText.trim(),
+          hasPdfAttachment: !!pdfAttachment,
           hasUpload: !!videoFile,
           hasYoutubeUrl: !!youtubeUrl,
           fileSizeBytes: videoFile?.size,
@@ -343,14 +583,29 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
         setPendingAnalyzeTaskId((result as { taskId?: string }).taskId || null);
         setProgress('已加入任务队列，等待分析...');
       } else {
+        analyzingRef.current = false;
         setError(result.error || '创建分析任务失败');
       }
     } catch (err: any) {
+      analyzingRef.current = false;
       setError(err.message || '分析失败');
     } finally {
       setAnalyzing(false);
     }
-  }, [inputMode, videoFile, youtubeUrl, selectedModel, selectedModelRef]);
+  }, [
+    inputMode,
+    videoFile,
+    youtubeUrl,
+    promptText,
+    creativeBrief,
+    knowledgeContextRefs,
+    pdfAttachment,
+    pendingAnalyzeTaskId,
+    selectedModel,
+    selectedModelRef,
+    geminiTextModels,
+    setSelectedModel,
+  ]);
 
   useEffect(() => {
     if (!pendingAnalyzeTaskId) {
@@ -365,6 +620,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
         }
 
         if (event.task.status === 'failed') {
+          analyzingRef.current = false;
           setPendingAnalyzeTaskId(null);
           setProgress('');
           setError(event.task.error?.message || '分析失败');
@@ -405,6 +661,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
               setError(err.message || '分析结果同步失败');
             })
             .finally(() => {
+              analyzingRef.current = false;
               setPendingAnalyzeTaskId(null);
               setProgress('');
             });
@@ -450,6 +707,12 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
         <>
           <div className="va-tabs">
             <button
+              className={`va-tab ${inputMode === 'prompt' ? 'active' : ''}`}
+              onClick={() => setInputMode('prompt')}
+            >
+              提示词生成
+            </button>
+            <button
               className={`va-tab ${inputMode === 'upload' ? 'active' : ''}`}
               onClick={() => setInputMode('upload')}
             >
@@ -462,7 +725,70 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
               YouTube URL
             </button>
           </div>
-          {inputMode === 'upload' ? (
+          {inputMode === 'prompt' ? (
+            <div className="va-prompt-start">
+              <div className="va-context-panel">
+                <div className="va-pdf-row">
+                  <input
+                    ref={pdfInputRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={handlePdfFileChange}
+                    style={{ display: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    className="va-secondary-btn"
+                    onClick={() => pdfInputRef.current?.click()}
+                    disabled={analyzing || !!pendingAnalyzeTaskId}
+                  >
+                    {pdfAttachment ? '更换 PDF' : '上传 PDF'}
+                  </button>
+                  {pdfAttachment ? (
+                    <div className="va-pdf-chip">
+                      <span title={pdfAttachment.name}>
+                        {pdfAttachment.name} · {formatSize(pdfAttachment.size)}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="移除 PDF"
+                        onClick={clearPdfAttachment}
+                        disabled={analyzing || !!pendingAnalyzeTaskId}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="va-pdf-hint">
+                      可选，上传后仅支持 Gemini 模型，PDF 不超过 20MB
+                    </span>
+                  )}
+                </div>
+                <KnowledgeNoteContextSelector
+                  value={knowledgeContextRefs}
+                  onChange={setKnowledgeContextRefs}
+                  disabled={analyzing || !!pendingAnalyzeTaskId}
+                  className="va-knowledge-context-selector"
+                />
+              </div>
+              <CreativeBriefEditor
+                value={creativeBrief}
+                onChange={setCreativeBrief}
+                workflow="popular_video"
+              />
+              <textarea
+                className="va-prompt-textarea"
+                value={promptText}
+                onChange={(e) => {
+                  setPromptText(e.target.value);
+                  setError('');
+                  setAnalysis(null);
+                }}
+                placeholder="输入产品、主题、受众、风格或爆款方向，可附带 PDF 作为上下文"
+                rows={5}
+              />
+            </div>
+          ) : inputMode === 'upload' ? (
             videoFile ? (
               <div className="va-video-preview">
                 {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
@@ -521,23 +847,46 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
               onChange={(e) => setYoutubeUrl(e.target.value)}
             />
           )}
-          <div className="va-model-select">
-            <label className="va-model-label">分析模型</label>
-            <ModelDropdown
-              variant="form"
-              selectedModel={selectedModel}
-              selectedSelectionKey={getSelectionKey(
-                selectedModel,
-                selectedModelRef
-              )}
-              onSelect={setSelectedModel}
-              models={videoAnalysisModels}
-              placement="down"
-              disabled={analyzing}
-              placeholder="选择多模态模型"
-            />
+          <div className="va-analyze-control-row">
+            <div className="va-model-select va-model-select--analysis">
+              <label className="va-model-label">分析模型</label>
+              <ModelDropdown
+                variant="form"
+                selectedModel={selectedModel}
+                selectedSelectionKey={getSelectionKey(
+                  selectedModel,
+                  selectedModelRef
+                )}
+                onSelect={setSelectedModel}
+                models={selectableAnalysisModels}
+                placement="down"
+                disabled={analyzing}
+                placeholder={
+                  isGeminiRequiredForAnalysis ? '选择 Gemini 模型' : '选择文本模型'
+                }
+              />
+            </div>
+            <button
+              className="va-analyze-btn va-analyze-btn--inline"
+              onClick={handleAnalyze}
+              disabled={
+                analyzing ||
+                !!pendingAnalyzeTaskId ||
+                (inputMode === 'prompt'
+                  ? !promptText.trim()
+                  : inputMode === 'upload'
+                  ? !videoFile
+                  : !youtubeUrl)
+              }
+            >
+              {analyzing || pendingAnalyzeTaskId
+                ? progress || '分析中...'
+                : inputMode === 'prompt'
+                ? '生成提示词'
+                : '开始分析'}
+            </button>
           </div>
-          {!isUsingGeminiMixModel && (
+          {isGeminiRequiredForAnalysis && !isUsingGeminiMixModel && (
             <div className="va-model-tip">
               <span>建议使用 gemini-mix 分组的gemini-3.1-pro-preview</span>
               {!isGeminiMixConfigured && (
@@ -551,19 +900,6 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
               )}
             </div>
           )}
-          <button
-            className="va-analyze-btn"
-            onClick={handleAnalyze}
-            disabled={
-              analyzing ||
-              !!pendingAnalyzeTaskId ||
-              (inputMode === 'upload' ? !videoFile : !youtubeUrl)
-            }
-          >
-            {analyzing || pendingAnalyzeTaskId
-              ? progress || '分析中...'
-              : '开始分析'}
-          </button>
           {error && <div className="va-error">{error}</div>}
         </>
       )}

@@ -5,6 +5,7 @@
  */
 
 import type { ModelRef } from '../utils/settings-manager';
+import type { KnowledgeContextRef } from './task.types';
 
 // ============================================================================
 // Enums
@@ -281,6 +282,8 @@ export interface AIInputContext {
 
   /** 合并后的最终 prompt（文本元素 + 默认 prompt） */
   finalPrompt: string;
+  /** 本次生成使用的知识库笔记轻量引用 */
+  knowledgeContextRefs?: KnowledgeContextRef[];
 }
 
 /** 工作流消息参数 */

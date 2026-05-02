@@ -6,8 +6,9 @@ import type {
 } from '../types';
 import { updateRecord } from '../storage';
 import { taskQueueService } from '../../../services/task-queue';
-import { TaskType } from '../../../types/task.types';
+import { TaskType, type KnowledgeContextRef } from '../../../types/task.types';
 import { ModelDropdown } from '../../ai-input-bar/ModelDropdown';
+import { KnowledgeNoteContextSelector } from '../../shared';
 import { useSelectableModels } from '../../../hooks/use-runtime-models';
 import { getSelectionKey } from '../../../utils/model-selection';
 import type { ModelRef } from '../../../utils/settings-manager';
@@ -81,6 +82,9 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const [title, setTitle] = useState(record.title || '');
   const [tags, setTags] = useState((record.styleTags || []).join(', '));
   const [prompt, setPrompt] = useState(record.lyricsDraft || '');
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >([]);
   const [mv, setMv] = useState('chirp-v5-5');
   const [batchCount, setBatchCount] = useState(1);
   const [selectedModel, setSelectedModelState] = useState(
@@ -310,6 +314,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
             continueAt: requiresContinuation ? continueAt ?? undefined : undefined,
             infillStartS: requiresInfill ? infillStartS ?? undefined : undefined,
             infillEndS: requiresInfill ? infillEndS ?? undefined : undefined,
+            knowledgeContextRefs,
             batchId: `ma_${record.id}_${batchAction}_${i}`,
             batchIndex: i,
             batchTotal: batchCount,
@@ -351,6 +356,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     continueClipId,
     infillEndInput,
     infillStartInput,
+    knowledgeContextRefs,
     mv,
     onRecordUpdate,
     onRecordsChange,
@@ -535,6 +541,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
           placeholder="这里的内容会直接作为 prompt 提交给 Suno"
+        />
+        <KnowledgeNoteContextSelector
+          value={knowledgeContextRefs}
+          onChange={setKnowledgeContextRefs}
+          disabled={submitting}
+          className="ma-knowledge-context-selector"
+          placement="up"
         />
       </div>
 

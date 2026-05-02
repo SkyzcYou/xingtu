@@ -42,11 +42,13 @@ import {
   providerProfilesSettings,
   type ProviderProfile,
 } from '../../utils/settings-manager';
+import type { KnowledgeContextRef } from '../../types/task.types';
 import type { ModelConfig } from '../../constants/model-config';
 import { AI_GENERATION_CONCURRENCY_LIMIT } from '../../constants/TASK_CONSTANTS';
 import { useConfirmDialog } from '../dialog/ConfirmDialog';
 import './model-benchmark-workbench.scss';
 import { HoverTip } from '../shared/hover';
+import { KnowledgeNoteContextSelector } from '../shared';
 
 interface ModelBenchmarkWorkbenchProps {
   // props reserved for future use
@@ -409,7 +411,11 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
     getDefaultPromptPreset('text').id
   );
   const [prompt, setPrompt] = useState(getDefaultPromptPreset('text').prompt);
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >([]);
   const [concurrency, setConcurrency] = useState(2);
+  const [isCreatingRun, setIsCreatingRun] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [rankingMode, setRankingMode] = useState<BenchmarkRankingMode>('speed');
   const [sessionSearchQuery, setSessionSearchQuery] = useState('');
@@ -417,6 +423,7 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
     useState<SessionModalityFilter>('all');
   const launchSignatureRef = useRef<string>('');
   const launchGuardRef = useRef(false);
+  const createRunLockRef = useRef(false);
   const pickerAnchorRef = useRef<string | null>(null);
   const pickerButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -616,6 +623,7 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
       return matchesQuery(sessionSearchQuery, [
         session.title,
         session.prompt,
+        ...(session.knowledgeContextRefs || []).map((ref) => ref.title),
         MODE_LABELS[session.compareMode],
         MODALITY_LABELS[session.modality],
         ...session.entries.flatMap((entry) => [
@@ -1037,19 +1045,30 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
   ]);
 
   const handleCreateAndRun = async () => {
+    if (createRunLockRef.current || isCreatingRun) {
+      return;
+    }
     if (resolvedTargets.length === 0 || !prompt.trim()) {
       return;
     }
-    const session = modelBenchmarkService.createSession({
-      modality,
-      compareMode,
-      promptPresetId,
-      prompt,
-      rankingMode,
-      targets: resolvedTargets,
-      source: 'manual',
-    });
-    await modelBenchmarkService.runSession(session.id, concurrency);
+    createRunLockRef.current = true;
+    setIsCreatingRun(true);
+    try {
+      const session = modelBenchmarkService.createSession({
+        modality,
+        compareMode,
+        promptPresetId,
+        prompt,
+        knowledgeContextRefs,
+        rankingMode,
+        targets: resolvedTargets,
+        source: 'manual',
+      });
+      await modelBenchmarkService.runSession(session.id, concurrency);
+    } finally {
+      createRunLockRef.current = false;
+      setIsCreatingRun(false);
+    }
   };
 
   const handleExportExcel = async () => {
@@ -1083,6 +1102,9 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
           会话状态: SESSION_STATUS_LABELS[session.status],
           提示词预设: session.promptPresetId,
           提示词: normalizeExportText(session.prompt),
+          知识库上下文: normalizeExportList(
+            session.knowledgeContextRefs?.map((ref) => ref.title)
+          ),
           供应商配置: entry.profileName,
           供应商ID: entry.profileId,
           模型名称: entry.modelLabel,
@@ -1975,6 +1997,11 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                     onChange={(event) => setPrompt(event.target.value)}
                     placeholder="在此输入测试提示词..."
                   />
+                  <KnowledgeNoteContextSelector
+                    value={knowledgeContextRefs}
+                    onChange={setKnowledgeContextRefs}
+                    className="model-benchmark__knowledge-context"
+                  />
                 </div>
                 <div className="model-benchmark__action-row-inline">
                   <div className="model-benchmark__concurrency">
@@ -2004,12 +2031,15 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
                     className="model-benchmark__primary-button"
                     onClick={handleCreateAndRun}
                     disabled={
+                      isCreatingRun ||
                       !storeState.ready ||
                       resolvedTargets.length === 0 ||
                       !prompt.trim()
                     }
                   >
-                    开始测试 ({resolvedTargets.length})
+                    {isCreatingRun
+                      ? '测试中...'
+                      : `开始测试 (${resolvedTargets.length})`}
                   </button>
                 </div>
               </div>

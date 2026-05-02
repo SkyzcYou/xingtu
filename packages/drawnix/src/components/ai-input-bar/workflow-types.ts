@@ -4,6 +4,7 @@ import type {
   SelectionInfo,
 } from '../../utils/ai-input-parser';
 import type { ModelRef } from '../../utils/settings-types';
+import type { KnowledgeContextRef } from '../../types/task.types';
 
 /**
  * 工作流步骤执行选项（批量参数等）
@@ -95,6 +96,8 @@ export interface WorkflowDefinition {
     referenceImages?: string[];
     /** 选中元素的分类信息 */
     selection: SelectionInfo;
+    /** 本次生成使用的知识库笔记轻量引用 */
+    knowledgeContextRefs?: KnowledgeContextRef[];
     /** 解析方式标记（用于调试和数据分析） */
     parseMethod?: 'regex' | 'llm' | 'agent_fallback';
   };

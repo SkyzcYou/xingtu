@@ -202,6 +202,7 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+  const loadingRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -277,6 +278,7 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
       });
       abortController.abort();
       setAbortController(null);
+      loadingRef.current = false;
       setIsLoading(false);
 
       // 添加一个系统消息提示已停止
@@ -295,7 +297,8 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
 
   const handleSendMessage = useCallback(async () => {
     const trimmedInput = input.trim();
-    if (!trimmedInput || isLoading) return;
+    if (!trimmedInput || loadingRef.current || isLoading) return;
+    loadingRef.current = true;
     const startedAt = Date.now();
     trackKnowledgeExtractionAction('chat', {
       status: 'start',
@@ -418,6 +421,7 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
         });
       }
     } finally {
+      loadingRef.current = false;
       setIsLoading(false);
       setAbortController(null);
       setStreamingMsgId(null);
@@ -432,7 +436,8 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
   ]);
 
   const handleQuickExtract = useCallback(async () => {
-    if (isLoading) return;
+    if (loadingRef.current || isLoading) return;
+    loadingRef.current = true;
     const startedAt = Date.now();
     trackKnowledgeExtractionAction('quick_extract', {
       status: 'start',
@@ -525,6 +530,7 @@ export const KBKnowledgeExtraction: React.FC<KBKnowledgeExtractionProps> = ({
         });
       }
     } finally {
+      loadingRef.current = false;
       setIsLoading(false);
       setAbortController(null);
     }

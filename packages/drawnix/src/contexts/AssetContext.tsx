@@ -20,6 +20,7 @@ import {
 import { MessagePlugin } from '../utils/message-plugin';
 import { assetStorageService } from '../services/asset-storage-service';
 import { taskQueueService } from '../services/task-queue';
+import { markAssetAsCharacter } from '../services/character-asset-metadata-service';
 import {
   taskStorageReader,
   type AssetTaskRecord,
@@ -41,6 +42,7 @@ import type {
 import {
   AssetType as AssetTypeEnum,
   AssetSource as AssetSourceEnum,
+  AssetCategory as AssetCategoryEnum,
   DEFAULT_FILTER_STATE,
 } from '../types/asset.types';
 import { TaskType } from '../types/task.types';
@@ -121,6 +123,35 @@ function hasAIGeneratedCacheMetadata(item: {
     item.metadata?.taskId &&
       (item.metadata.prompt || item.metadata.model || item.metadata.params)
   );
+}
+
+function normalizeAssetCategory(
+  category: unknown
+): AssetCategoryEnum | undefined {
+  return category === AssetCategoryEnum.CHARACTER
+    ? AssetCategoryEnum.CHARACTER
+    : category === AssetCategoryEnum.GENERAL
+    ? AssetCategoryEnum.GENERAL
+    : undefined;
+}
+
+function buildCharacterMeta(input: {
+  characterName?: unknown;
+  characterPrompt?: unknown;
+  prompt?: unknown;
+}): Asset['characterMeta'] | undefined {
+  const name =
+    typeof input.characterName === 'string' && input.characterName.trim()
+      ? input.characterName.trim()
+      : undefined;
+  const prompt =
+    typeof input.characterPrompt === 'string' && input.characterPrompt.trim()
+      ? input.characterPrompt.trim()
+      : typeof input.prompt === 'string' && input.prompt.trim()
+      ? input.prompt.trim()
+      : undefined;
+
+  return name || prompt ? { ...(name && { name }), ...(prompt && { prompt }) } : undefined;
 }
 
 function isInternalLibraryExcludedCache(
@@ -210,6 +241,8 @@ function mergeAudioAssetMetadata(preferred: Asset, fallback: Asset): Asset {
     clipId: preferred.clipId || fallback.clipId,
     prompt: preferred.prompt || fallback.prompt,
     modelName: preferred.modelName || fallback.modelName,
+    category: preferred.category || fallback.category,
+    characterMeta: preferred.characterMeta || fallback.characterMeta,
     dedupeUrls: Array.from(mergedUrls),
     dedupeAssetIds: Array.from(mergedAssetIds),
   };
@@ -337,6 +370,9 @@ function mergeLocalAssets(assets: Asset[]): Asset[] {
       createdAt: Math.max(existing.createdAt, asset.createdAt),
       thumbnail:
         representative.thumbnail || existing.thumbnail || asset.thumbnail,
+      category: representative.category || existing.category || asset.category,
+      characterMeta:
+        representative.characterMeta || existing.characterMeta || asset.characterMeta,
       dedupeAssetIds: Array.from(mergedAssetIds),
       dedupeUrls: Array.from(mergedUrls),
     });
@@ -473,6 +509,15 @@ export function AssetProvider({ children }: AssetProviderProps) {
         ? 'video/webm'
         : `image/${result.format || 'png'}`;
 
+    const assetCategory = normalizeAssetCategory(
+      task.params.assetMetadata?.category
+    );
+    const characterMeta = buildCharacterMeta({
+      characterName: task.params.assetMetadata?.characterName,
+      characterPrompt: task.params.assetMetadata?.characterPrompt,
+      prompt: task.params.prompt,
+    });
+
     if (task.type === TaskType.AUDIO) {
       const clipAssets = (result.clips || [])
         .map((clip, index): Asset | null => {
@@ -507,6 +552,8 @@ export function AssetProvider({ children }: AssetProviderProps) {
             mimeType,
             createdAt: task.completedAt || task.createdAt,
             size: result.size,
+            category: assetCategory,
+            characterMeta,
             prompt: task.params.prompt,
             modelName: task.params.model,
             duration: clipDuration,
@@ -542,6 +589,8 @@ export function AssetProvider({ children }: AssetProviderProps) {
         mimeType,
         createdAt: task.completedAt || task.createdAt,
         size: result.size,
+        category: assetCategory,
+        characterMeta,
         cacheWarning: result.cacheWarning,
         prompt: task.params.prompt,
         modelName: task.params.model,
@@ -660,12 +709,18 @@ export function AssetProvider({ children }: AssetProviderProps) {
             id: `unified-cache-${filename}`,
             type: assetType,
             source: assetSource,
+            category: normalizeAssetCategory(item.metadata?.category),
             url: normalizedPathname,
             name: item.metadata?.name || filename,
             mimeType: item.mimeType,
             createdAt: item.cachedAt,
             size: item.size,
             cacheWarning: item.metadata?.cacheWarning,
+            characterMeta: buildCharacterMeta({
+              characterName: item.metadata?.characterName,
+              characterPrompt: item.metadata?.characterPrompt,
+              prompt: item.metadata?.prompt,
+            }),
             contentHash:
               item.contentHash ||
               getAssetContentHash({ url: normalizedPathname }),
@@ -766,9 +821,19 @@ export function AssetProvider({ children }: AssetProviderProps) {
             typeof cachedMetadata?.metadata?.providerTaskId === 'string'
               ? cachedMetadata.metadata.providerTaskId
               : cachedMetadata?.metadata?.taskId;
+          const cachedCategory = normalizeAssetCategory(
+            cachedMetadata?.metadata?.category
+          );
+          const cachedCharacterMeta = buildCharacterMeta({
+            characterName: cachedMetadata?.metadata?.characterName,
+            characterPrompt: cachedMetadata?.metadata?.characterPrompt,
+            prompt: cachedMetadata?.metadata?.prompt,
+          });
 
           return {
             ...asset,
+            category: asset.category || cachedCategory,
+            characterMeta: asset.characterMeta || cachedCharacterMeta,
             contentHash:
               getAssetContentHash(asset) || cachedMetadata?.contentHash,
             duration: asset.duration ?? cachedDuration,
@@ -1408,6 +1473,55 @@ export function AssetProvider({ children }: AssetProviderProps) {
     [assets]
   );
 
+  const markAssetAsSubject = useCallback(
+    async (
+      asset: Asset,
+      mark: { name: string; prompt?: string }
+    ): Promise<void> => {
+      const name = mark.name.trim();
+      const prompt = mark.prompt?.trim();
+
+      if (!name) {
+        throw new Error('主体名不能为空');
+      }
+
+      try {
+        await markAssetAsCharacter(asset, {
+          name,
+          ...(prompt && { prompt }),
+        });
+
+        const normalizedUrl = normalizeAssetUrl(asset.url);
+        const nextCharacterMeta = {
+          name,
+          ...(prompt && { prompt }),
+        };
+
+        setAssets((prev) =>
+          prev.map((item) =>
+            item.id === asset.id || normalizeAssetUrl(item.url) === normalizedUrl
+              ? {
+                  ...item,
+                  category: AssetCategoryEnum.CHARACTER,
+                  characterMeta: nextCharacterMeta,
+                }
+              : item
+          )
+        );
+
+        MessagePlugin.success({
+          content: '已设为主体',
+          duration: 2000,
+        });
+      } catch (err: unknown) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        setError(error.message);
+        throw err;
+      }
+    },
+    []
+  );
+
   /**
    * Set Filters
    * 设置筛选条件
@@ -1459,6 +1573,7 @@ export function AssetProvider({ children }: AssetProviderProps) {
       removeAsset,
       removeAssets,
       renameAsset,
+      markAssetAsSubject,
       setFilters,
       setSelectedAssetId,
       checkStorageQuota,
@@ -1477,6 +1592,7 @@ export function AssetProvider({ children }: AssetProviderProps) {
       removeAsset,
       removeAssets,
       renameAsset,
+      markAssetAsSubject,
       setFilters,
       checkStorageQuota,
       loadSyncedUrls,

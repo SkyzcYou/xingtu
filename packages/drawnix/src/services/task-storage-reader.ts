@@ -95,6 +95,11 @@ export interface AssetTaskRecord {
     prompt?: string;
     model?: string;
     title?: string;
+    assetMetadata?: {
+      category?: 'GENERAL' | 'CHARACTER';
+      characterName?: string;
+      characterPrompt?: string;
+    };
   };
   result?: {
     url: string;
@@ -130,6 +135,7 @@ export interface PromptHistoryTaskSummary {
   params: Pick<
     GenerationParams,
     | 'prompt'
+    | 'knowledgeContextRefs'
     | 'promptMeta'
     | 'sourcePrompt'
     | 'rawInput'
@@ -238,6 +244,9 @@ function convertSWTaskToAssetTask(swTask: SWTask): AssetTaskRecord | null {
       prompt: swTask.params?.prompt,
       model: swTask.params?.model,
       title: swTask.params?.title,
+      assetMetadata: swTask.params?.assetMetadata as
+        | AssetTaskRecord['params']['assetMetadata']
+        | undefined,
     },
     result: normalizedResult
       ? {
@@ -327,6 +336,7 @@ function convertSWTaskToPromptHistorySummary(
     completedAt: swTask.completedAt,
     params: {
       prompt: swTask.params?.prompt,
+      knowledgeContextRefs: swTask.params?.knowledgeContextRefs,
       promptMeta: swTask.params?.promptMeta,
       sourcePrompt: swTask.params?.sourcePrompt,
       rawInput: swTask.params?.rawInput,

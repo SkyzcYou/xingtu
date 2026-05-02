@@ -4,13 +4,14 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Button, Input, MessagePlugin } from 'tdesign-react';
+import { Button, Dialog, Input, MessagePlugin } from 'tdesign-react';
 import {
   Download,
   Trash2,
   Edit2,
   CheckCircle,
   Copy,
+  UserRound,
 } from 'lucide-react';
 import { isDataURL, normalizeImageDataUrl } from '@aitu/utils';
 import { copyToClipboard } from '../../utils/runtime-helpers';
@@ -22,6 +23,7 @@ import { ConfirmDialog } from '../dialog/ConfirmDialog';
 import { VideoPosterPreview } from '../shared/VideoPosterPreview';
 import { HoverTip } from '../shared/hover';
 import type { MediaLibraryInspectorProps } from '../../types/asset.types';
+import { AssetCategory, AssetType } from '../../types/asset.types';
 import './MediaLibraryInspector.scss';
 
 /**
@@ -56,6 +58,7 @@ export function MediaLibraryInspector({
   onRename,
   onDelete,
   onDownload,
+  onMarkAsSubject,
   onSelect,
   showSelectButton,
   selecting = false,
@@ -64,6 +67,10 @@ export function MediaLibraryInspector({
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState('');
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+  const [subjectDialogVisible, setSubjectDialogVisible] = useState(false);
+  const [subjectName, setSubjectName] = useState('');
+  const [subjectPrompt, setSubjectPrompt] = useState('');
+  const [isSavingSubject, setIsSavingSubject] = useState(false);
   const { board } = useDrawnix();
 
   // 获取实际文件大小（支持从缓存获取）
@@ -175,6 +182,49 @@ export function MediaLibraryInspector({
     }
   }, [asset?.prompt]);
 
+  const handleOpenSubjectDialog = useCallback(() => {
+    if (!asset) return;
+    setSubjectName(asset.characterMeta?.name || '');
+    setSubjectPrompt(asset.characterMeta?.prompt || asset.prompt || '');
+    setSubjectDialogVisible(true);
+  }, [asset]);
+
+  const handleCloseSubjectDialog = useCallback(() => {
+    if (isSavingSubject) return;
+    setSubjectDialogVisible(false);
+  }, [isSavingSubject]);
+
+  const handleSubmitSubjectDialog = useCallback(async () => {
+    if (!asset || !onMarkAsSubject || isSavingSubject) return;
+    const trimmedName = subjectName.trim();
+    const trimmedPrompt = subjectPrompt.trim();
+
+    if (!trimmedName) {
+      MessagePlugin.warning('请先给主体起一个名字');
+      return;
+    }
+
+    try {
+      setIsSavingSubject(true);
+      await onMarkAsSubject(asset, {
+        name: trimmedName,
+        ...(trimmedPrompt && { prompt: trimmedPrompt }),
+      });
+      setSubjectDialogVisible(false);
+    } catch (error) {
+      console.error('[MediaLibraryInspector] Failed to mark subject:', error);
+      MessagePlugin.error('设置主体失败');
+    } finally {
+      setIsSavingSubject(false);
+    }
+  }, [
+    asset,
+    isSavingSubject,
+    onMarkAsSubject,
+    subjectName,
+    subjectPrompt,
+  ]);
+
   if (!asset) {
     return (
       <div className="media-library-inspector media-library-inspector--empty">
@@ -185,6 +235,8 @@ export function MediaLibraryInspector({
 
   const normalizedAssetUrl =
     asset.type === 'IMAGE' ? normalizeImageDataUrl(asset.url) : asset.url;
+  const isSubjectAsset = asset.category === AssetCategory.CHARACTER;
+  const showSubjectAction = asset.type === AssetType.IMAGE && !!onMarkAsSubject;
 
   return (
     <div className="media-library-inspector">
@@ -276,6 +328,22 @@ export function MediaLibraryInspector({
             {asset.source === 'AI_GENERATED' ? 'AI生成' : '本地上传'}
           </span>
         </div>
+        {isSubjectAsset && (
+          <>
+            <div className="media-library-inspector__meta-item">
+              <span className="media-library-inspector__meta-label">类别</span>
+              <span className="media-library-inspector__meta-value">主体</span>
+            </div>
+            {asset.characterMeta?.name && (
+              <div className="media-library-inspector__meta-item">
+                <span className="media-library-inspector__meta-label">主体名</span>
+                <span className="media-library-inspector__meta-value">
+                  {asset.characterMeta.name}
+                </span>
+              </div>
+            )}
+          </>
+        )}
         <div className="media-library-inspector__meta-item">
           <span className="media-library-inspector__meta-label">创建时间</span>
           <span className="media-library-inspector__meta-value">
@@ -313,8 +381,30 @@ export function MediaLibraryInspector({
         </div>
       )}
 
+      {asset.characterMeta?.prompt &&
+        asset.characterMeta.prompt !== asset.prompt && (
+          <div className="media-library-inspector__prompt-section media-library-inspector__prompt-section--compact">
+            <div className="media-library-inspector__prompt-header">
+              <span className="media-library-inspector__prompt-label">主体提示词</span>
+            </div>
+            <div className="media-library-inspector__prompt-content">
+              {asset.characterMeta.prompt}
+            </div>
+          </div>
+        )}
+
       {/* 操作按钮 */}
-      <div className={`media-library-inspector__actions ${showSelectButton && onSelect ? 'media-library-inspector__actions--with-select' : 'media-library-inspector__actions--no-select'}`}>
+      <div
+        className={`media-library-inspector__actions ${
+          showSelectButton && onSelect && showSubjectAction
+            ? 'media-library-inspector__actions--with-select-subject'
+            : showSelectButton && onSelect
+            ? 'media-library-inspector__actions--with-select'
+            : showSubjectAction
+            ? 'media-library-inspector__actions--with-subject'
+            : 'media-library-inspector__actions--no-select'
+        }`}
+      >
         {showSelectButton && onSelect && (
           <Button
             theme="primary"
@@ -328,6 +418,19 @@ export function MediaLibraryInspector({
             className="inspector-btn-select"
           >
             {selectButtonText}
+          </Button>
+        )}
+        {showSubjectAction && (
+          <Button
+            variant="outline"
+            block
+            icon={<UserRound size={16} />}
+            onClick={handleOpenSubjectDialog}
+            data-track="inspector_mark_subject"
+            data-track-params={inspectorTrackParams}
+            className="inspector-btn-subject"
+          >
+            {isSubjectAsset ? '编辑主体' : '设为主体'}
           </Button>
         )}
         <Button
@@ -354,6 +457,42 @@ export function MediaLibraryInspector({
           删除
         </Button>
       </div>
+
+      <Dialog
+        visible={subjectDialogVisible}
+        header={isSubjectAsset ? '编辑主体信息' : '设为主体'}
+        onClose={handleCloseSubjectDialog}
+        onConfirm={() => void handleSubmitSubjectDialog()}
+        confirmBtn={isSavingSubject ? '保存中...' : '保存'}
+        cancelBtn="取消"
+      >
+        <div className="media-library-inspector__subject-dialog">
+          <label className="media-library-inspector__subject-label">
+            主体名
+            <Input
+              value={subjectName}
+              onChange={(value) => setSubjectName(String(value))}
+              placeholder="例如：Lily / 银色耳机 / 红色跑车"
+              autofocus
+              disabled={isSavingSubject}
+            />
+          </label>
+          <p className="media-library-inspector__subject-hint">
+            主体名用于脚本复用，不会修改素材标题。
+          </p>
+          <label className="media-library-inspector__subject-label">
+            主体提示词
+            <textarea
+              className="media-library-inspector__subject-textarea"
+              value={subjectPrompt}
+              onChange={(event) => setSubjectPrompt(event.target.value)}
+              placeholder="可选；用于回填脚本中的主体提示词"
+              rows={4}
+              disabled={isSavingSubject}
+            />
+          </label>
+        </div>
+      </Dialog>
 
       {/* 删除确认对话框 */}
       <ConfirmDialog

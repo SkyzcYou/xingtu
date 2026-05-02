@@ -1,12 +1,12 @@
 /**
- * MV 分析页 — 合并音乐选择 + 创意描述 + AI 分镜生成
+ * MV 分析页 — 合并音乐选择 + AI 分镜生成
  * 分镜生成后输入区折叠，结果同页展示
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { generateUUID } from '../../../utils/runtime-helpers';
 import type { MVRecord, GeneratedClip } from '../types';
-import { TaskType, TaskStatus } from '../../../types/task.types';
+import { TaskType, TaskStatus, type KnowledgeContextRef } from '../../../types/task.types';
 import { addRecord, updateRecord } from '../storage';
 import { extractClipsFromTask } from '../../music-analyzer/task-sync';
 import { toolWindowService } from '../../../services/tool-window-service';
@@ -20,25 +20,35 @@ import { getSelectionKey } from '../../../utils/model-selection';
 import type { ModelRef } from '../../../utils/settings-manager';
 import { getVideoModelConfig } from '../../../constants/video-model-config';
 import {
+  ComboInput,
+  CreativeBriefEditor,
+  normalizeCreativeBrief,
   readStoredModelSelection,
   writeStoredModelSelection,
   ShotCard,
+  type CreativeBrief,
+  VISUAL_STYLE_OPTIONS,
+  VISUAL_STYLE_PLACEHOLDER,
 } from '../../shared/workflow';
+import { KnowledgeNoteContextSelector } from '../../shared';
 import { analytics } from '../../../utils/posthog-analytics';
 
-const STORAGE_KEY_PROMPT = 'mv-creator:creation-prompt';
 const STORAGE_KEY_VIDEO_MODEL = 'mv-creator:video-model';
 const STORAGE_KEY_STORYBOARD_MODEL = 'mv-creator:storyboard-model';
 const DEFAULT_STORYBOARD_MODEL = 'gemini-2.5-pro';
+const DRAFT_STORYBOARD_SOURCE_LABEL = 'AI 分镜草稿';
 
-function readSessionPrompt(): string {
-  try { return sessionStorage.getItem(STORAGE_KEY_PROMPT) || ''; } catch { return ''; }
-}
-function writeSessionPrompt(value: string): void {
-  try {
-    if (value) sessionStorage.setItem(STORAGE_KEY_PROMPT, value);
-    else sessionStorage.removeItem(STORAGE_KEY_PROMPT);
-  } catch { /* noop */ }
+function getDraftStoryboardSourceLabel(
+  brief: CreativeBrief,
+  style: string
+): string {
+  const label =
+    brief.purpose ||
+    brief.directorStyle ||
+    brief.narrativeStyle ||
+    style ||
+    DRAFT_STORYBOARD_SOURCE_LABEL;
+  return label.trim().slice(0, 24) || DRAFT_STORYBOARD_SOURCE_LABEL;
 }
 
 interface AnalyzePageProps {
@@ -57,9 +67,13 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   onRecordsChange,
   onNext,
 }) => {
-  const [creationPrompt, setCreationPrompt] = useState(
-    () => existingRecord?.creationPrompt || readSessionPrompt()
+  const [videoStyle, setVideoStyle] = useState(existingRecord?.videoStyle || '');
+  const [creativeBrief, setCreativeBrief] = useState<CreativeBrief>(
+    () => normalizeCreativeBrief(existingRecord?.creativeBrief)
   );
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >([]);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(
     existingRecord?.selectedClipId || null
   );
@@ -98,13 +112,24 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const generatingRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const latestRecordRef = useRef<MVRecord | null>(existingRecord || null);
 
   // 回填已有 record
   useEffect(() => {
     if (!existingRecord) return;
-    setCreationPrompt(existingRecord.creationPrompt || '');
+    setVideoStyle(existingRecord.videoStyle || '');
+    setCreativeBrief(normalizeCreativeBrief(existingRecord.creativeBrief));
     setSelectedClipId(existingRecord.selectedClipId || null);
   }, [existingRecord]);
+
+  useEffect(() => {
+    latestRecordRef.current = existingRecord || null;
+  }, [existingRecord]);
+
+  useEffect(() => {
+    setKnowledgeContextRefs([]);
+  }, [existingRecord?.id]);
 
   // 有分镜结果时自动折叠输入区
   const shots = existingRecord?.editedShots || [];
@@ -112,9 +137,35 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
     if (shots.length > 0) setInputCollapsed(true);
   }, [shots.length]);
 
+  const existingRecordId = existingRecord?.id;
   useEffect(() => {
-    if (!existingRecord) writeSessionPrompt(creationPrompt);
-  }, [creationPrompt, existingRecord]);
+    if (!existingRecordId) return;
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      const currentRecord = latestRecordRef.current;
+      if (!currentRecord || currentRecord.id !== existingRecordId) return;
+      const patch: Partial<MVRecord> = {
+        videoStyle,
+        creativeBrief,
+        videoModel,
+        videoModelRef,
+        segmentDuration,
+      };
+      const updated = await updateRecord(existingRecordId, patch);
+      onRecordsChange(updated);
+      onComplete({ ...currentRecord, ...patch });
+    }, 500);
+    return () => clearTimeout(saveTimerRef.current);
+  }, [
+    existingRecordId,
+    videoStyle,
+    creativeBrief,
+    videoModel,
+    videoModelRef,
+    segmentDuration,
+    onComplete,
+    onRecordsChange,
+  ]);
 
   // 监听 pending 任务状态
   useEffect(() => {
@@ -151,7 +202,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
         }
       }
       setExistingAudioClips(result);
-    }).catch(() => {});
+    }).catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
 
@@ -181,7 +232,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       launchMode: 'reuse',
       position: offsetPos,
     });
-  }, []);
+  }, [existingAudioClips.length]);
 
   const handleSelectExistingClip = useCallback(async (clip: GeneratedClip & { prompt?: string }) => {
     analytics.trackUIInteraction({
@@ -195,16 +246,12 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
         duration: clip.duration,
       },
     });
-    if (clip.prompt && !creationPrompt.trim()) {
-      setCreationPrompt(clip.prompt);
-    }
     let record = existingRecord || null;
     if (!record) {
       const sourceLabel = clip.title || clip.prompt?.slice(0, 20) || '已有音频';
       record = {
         id: generateUUID(),
         createdAt: Date.now(),
-        creationPrompt: creationPrompt.trim() || clip.prompt || '',
         sourceLabel,
         starred: false,
         musicTitle: clip.title || '',
@@ -232,7 +279,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       onComplete({ ...record, ...patch });
     }
     setSelectedClipId(clip.clipId);
-  }, [existingRecord, creationPrompt, onComplete, onRecordsChange]);
+  }, [existingRecord, onComplete, onRecordsChange]);
 
   const setVideoModel = useCallback((model: string, ref?: ModelRef | null) => {
     setVideoModelState(model);
@@ -249,8 +296,19 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   }, []);
 
   const handleGenerateStoryboard = useCallback(async () => {
-    if (generatingRef.current || !existingRecord) return;
+    if (generatingRef.current) return;
     generatingRef.current = true;
+    const targetRecord: MVRecord = existingRecord || {
+      id: generateUUID(),
+      createdAt: Date.now(),
+      sourceLabel: getDraftStoryboardSourceLabel(creativeBrief, videoStyle),
+      starred: false,
+      musicTitle: '',
+      generatedClips: [],
+      selectedClipId: null,
+      selectedClipDuration: null,
+      selectedClipAudioUrl: null,
+    };
     analytics.trackUIInteraction({
       area: 'popular_mv_tool',
       action: 'storyboard_generation_started',
@@ -268,13 +326,15 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
     setMessage('');
     try {
       const prompt = buildStoryboardPrompt({
-        creationPrompt: creationPrompt || existingRecord.creationPrompt,
-        musicTitle: existingRecord.musicTitle,
-        musicStyleTags: existingRecord.musicStyleTags,
-        musicLyrics: existingRecord.musicLyrics,
+        musicTitle: targetRecord.musicTitle,
+        musicStyleTags: targetRecord.musicStyleTags,
+        musicLyrics: targetRecord.musicLyrics,
         clipDuration,
         videoModel,
         segmentDuration,
+        aspectRatio: targetRecord.aspectRatio || '16x9',
+        videoStyle,
+        creativeBrief,
         hasAudio: !!selectedClip?.audioUrl,
       });
       const task = taskQueueService.createTask(
@@ -283,29 +343,35 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
           model: storyboardModel,
           modelRef: storyboardModelRef,
           mvCreatorAction: 'storyboard',
-          mvCreatorRecordId: existingRecord.id,
+          mvCreatorRecordId: targetRecord.id,
+          knowledgeContextRefs,
           audioCacheUrl: selectedClip?.audioUrl,
         },
         TaskType.CHAT
       );
       const patch: Partial<MVRecord> = {
         pendingStoryboardTaskId: task.id,
-        creationPrompt: creationPrompt || existingRecord.creationPrompt,
         videoModel,
         videoModelRef,
         segmentDuration,
+        videoStyle,
+        creativeBrief,
+        aspectRatio: targetRecord.aspectRatio || '16x9',
       };
-      const updated = await updateRecord(existingRecord.id, patch);
+      const nextRecord = { ...targetRecord, ...patch };
+      const updated = existingRecord
+        ? await updateRecord(targetRecord.id, patch)
+        : await addRecord(nextRecord);
       onRecordsChange(updated);
-      onComplete({ ...existingRecord, ...patch });
+      onComplete(nextRecord);
       setMessage('分镜规划任务已提交，等待 AI 生成...');
-    } catch (err: any) {
-      setMessage(err.message || '提交失败');
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : '提交失败');
     } finally {
       setSubmitting(false);
       generatingRef.current = false;
     }
-  }, [existingRecord, creationPrompt, clipDuration, videoModel, videoModelRef, segmentDuration, storyboardModel, storyboardModelRef, selectedClip, onComplete, onRecordsChange]);
+  }, [existingRecord, clipDuration, videoModel, videoModelRef, segmentDuration, videoStyle, creativeBrief, storyboardModel, storyboardModelRef, knowledgeContextRefs, selectedClip, onComplete, onRecordsChange]);
 
 // PLACEHOLDER_ANALYZE_PAGE_RENDER
 
@@ -381,16 +447,23 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
             )}
           </div>
 
-          {/* 创意描述 */}
           <div className="ma-card">
-            <div className="ma-card-header"><span>MV 创意描述</span></div>
-            <textarea
-              className="ma-textarea"
-              rows={2}
-              placeholder="描述你想要的 MV 主题、风格、情绪、画面..."
-              value={creationPrompt}
-              onChange={e => setCreationPrompt(e.target.value)}
+            <div className="ma-card-header"><span>专业创作 Brief</span></div>
+            <CreativeBriefEditor
+              value={creativeBrief}
+              onChange={setCreativeBrief}
+              workflow="mv"
             />
+            <div style={{ marginTop: '8px' }}>
+              <label className="va-edit-label mv-visual-style-label">画面风格</label>
+              <ComboInput
+                className="va-style-combo"
+                value={videoStyle}
+                onChange={setVideoStyle}
+                options={VISUAL_STYLE_OPTIONS}
+                placeholder={VISUAL_STYLE_PLACEHOLDER}
+              />
+            </div>
           </div>
 
           {/* 视频模型 + 单段时长 */}
@@ -424,35 +497,40 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
             </div>
           )}
 
-          {/* 分镜模型 */}
-          {selectedClipId && (
-            <div className="ma-card">
-              <div className="ma-card-header"><span>AI 分镜模型</span></div>
-              <ModelDropdown
-                models={storyboardModels}
-                selectedModel={storyboardModel}
-                selectedSelectionKey={getSelectionKey(storyboardModel, storyboardModelRef)}
-                onSelect={(id: string, ref?: ModelRef | null) => setStoryboardModel(id, ref)}
-                variant="form"
-                placement="down"
-              />
-            </div>
-          )}
-
-          {message && <div className="ma-progress">{message}</div>}
-
-          {/* 生成分镜按钮 */}
-          {selectedClipId && (
-            <div className="va-page-actions">
+          <div className="ma-card mv-storyboard-control-card">
+            <div className="mv-storyboard-control-row">
+              <div className="mv-storyboard-field mv-storyboard-field--knowledge">
+                <label className="mv-storyboard-field-label">知识库上下文</label>
+                <KnowledgeNoteContextSelector
+                  value={knowledgeContextRefs}
+                  onChange={setKnowledgeContextRefs}
+                  disabled={submitting}
+                  className="mv-knowledge-context-selector mv-knowledge-context-selector--inline"
+                />
+              </div>
+              <div className="mv-storyboard-field mv-storyboard-field--model">
+                <label className="mv-storyboard-field-label">AI 分镜模型</label>
+                <ModelDropdown
+                  models={storyboardModels}
+                  selectedModel={storyboardModel}
+                  selectedSelectionKey={getSelectionKey(storyboardModel, storyboardModelRef)}
+                  onSelect={(id: string, ref?: ModelRef | null) => setStoryboardModel(id, ref)}
+                  variant="form"
+                  placement="down"
+                  disabled={submitting}
+                />
+              </div>
               <button
-                className="va-btn-primary"
+                className="va-analyze-btn va-analyze-btn--inline mv-storyboard-generate-btn"
                 onClick={handleGenerateStoryboard}
-                disabled={submitting || !existingRecord}
+                disabled={submitting}
               >
                 {submitting ? '提交中...' : shots.length > 0 ? '重新生成分镜' : 'AI 生成分镜'}
               </button>
             </div>
-          )}
+          </div>
+
+          {message && <div className="ma-progress">{message}</div>}
         </>
       )}
 

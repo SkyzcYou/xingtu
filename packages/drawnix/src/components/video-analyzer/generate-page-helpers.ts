@@ -7,6 +7,7 @@ import type {
 } from '../../utils/workflow-generation-utils';
 import type { VideoCharacter } from '../../services/video-analysis-service';
 import { resetWorkflowGeneratedAssets as buildResetResult } from '../../utils/workflow-generation-utils';
+import { formatCreativeBriefSummary } from '../shared/workflow';
 
 export function buildVideoAnalyzerWorkflowExportOptions(
   record: AnalysisRecord,
@@ -26,6 +27,8 @@ export function buildVideoAnalyzerWorkflowExportOptions(
       aspectRatio: record.analysis.aspect_ratio || '16x9',
       videoStyle: record.productInfo?.videoStyle || record.analysis.video_style || '',
       bgmMood: record.productInfo?.bgmMood || record.analysis.bgm_mood || '',
+      creativeBrief: record.productInfo?.creativeBrief || {},
+      creativeBriefSummary: formatCreativeBriefSummary(record.productInfo?.creativeBrief),
       shotCount: shots.length,
     },
     shots,

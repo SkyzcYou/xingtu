@@ -5,6 +5,7 @@
 import type { VideoShot, VideoCharacter } from '../../services/video-analysis-service';
 import type { GeneratedClip } from '../music-analyzer/types';
 import type { ModelRef } from '../../utils/settings-manager';
+import type { CreativeBrief } from '../shared/workflow';
 
 export type { VideoShot, VideoCharacter, GeneratedClip };
 
@@ -23,8 +24,8 @@ export interface StoryboardVersion {
 export interface MVRecord {
   id: string;
   createdAt: number;
-  /** 用户创意描述 */
-  creationPrompt: string;
+  /** @deprecated 旧版用户创意描述，仅用于兼容历史记录 */
+  creationPrompt?: string;
   sourceLabel: string;
   starred: boolean;
 
@@ -49,6 +50,8 @@ export interface MVRecord {
   segmentDuration?: number;
   videoSize?: string;
   videoStyle?: string;
+  /** 专业创作 Brief（用途、导演风格、叙事风格等） */
+  creativeBrief?: CreativeBrief;
   aspectRatio?: string;
   /** 脚本页改编提示词（持久化） */
   rewritePrompt?: string;

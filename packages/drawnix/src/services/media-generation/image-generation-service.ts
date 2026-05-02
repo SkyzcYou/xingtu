@@ -82,6 +82,7 @@ function buildStoredImageTaskParams(
         ? options.uploadedImages
         : undefined,
     count: options.count,
+    assetMetadata: options.assetMetadata,
     promptMeta: options.promptMeta,
     params: buildStoredImageAdapterParams(options),
   };
@@ -156,6 +157,7 @@ export async function generateImage(
     outputCompression: options.outputCompression,
     uploadedImages: options.uploadedImages,
     count: options.count,
+    assetMetadata: options.assetMetadata,
     params: options.params,
   };
 

@@ -1,6 +1,6 @@
 {
   "name": "@aitu/source",
-  "version": "0.6.95",
+  "version": "0.6.96",
   "license": "MIT",
   "packageManager": "pnpm@10.21.0",
   "description": "Opentu - An open-source whiteboard tool with AI-powered image/video creation, mind mapping, flowcharts, and freehand drawing",
@@ -23,7 +23,7 @@
   ],
   "author": "ljquan",
   "scripts": {
-    "start": "nx serve web",
+    "start": "nx run web:serve-pwa",
     "build": "node scripts/update-version.js && nx run-many -t=build",
     "build:web": "node scripts/update-version.js && nx build web",
     "preview": "npx serve dist/apps/web -l 7288",

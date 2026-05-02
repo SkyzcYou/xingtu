@@ -27,6 +27,11 @@ import {
   type BenchmarkPromptPreset,
   type BenchmarkRankingMode,
 } from './model-benchmark-pure';
+import {
+  buildPromptWithKnowledgeContext,
+  normalizeKnowledgeContextRefs,
+} from './generation-context-service';
+import type { KnowledgeContextRef } from '../types/task.types';
 
 export type { BenchmarkModality, BenchmarkRankingMode };
 
@@ -92,6 +97,7 @@ export interface ModelBenchmarkSession {
   compareMode: BenchmarkCompareMode;
   promptPresetId: string;
   prompt: string;
+  knowledgeContextRefs?: KnowledgeContextRef[];
   status: BenchmarkSessionStatus;
   rankingMode: BenchmarkRankingMode;
   createdAt: number;
@@ -118,6 +124,7 @@ export interface CreateBenchmarkSessionInput {
   compareMode: BenchmarkCompareMode;
   promptPresetId: string;
   prompt: string;
+  knowledgeContextRefs?: KnowledgeContextRef[];
   rankingMode: BenchmarkRankingMode;
   targets: ModelBenchmarkTarget[];
   source?: 'manual' | 'shortcut';
@@ -187,6 +194,9 @@ function sanitizeSession(
   return {
     ...session,
     prompt: sanitizeText(session.prompt) || session.prompt,
+    knowledgeContextRefs: normalizeKnowledgeContextRefs(
+      session.knowledgeContextRefs
+    ),
     entries: session.entries.map(sanitizeEntry),
   };
 }
@@ -599,6 +609,9 @@ class ModelBenchmarkService {
       compareMode: input.compareMode,
       promptPresetId: input.promptPresetId,
       prompt: input.prompt,
+      knowledgeContextRefs: normalizeKnowledgeContextRefs(
+        input.knowledgeContextRefs
+      ),
       status: 'draft',
       rankingMode: input.rankingMode,
       createdAt,
@@ -621,6 +634,7 @@ class ModelBenchmarkService {
       targetCount: session.entries.length,
       promptPresetId: session.promptPresetId,
       promptLength: session.prompt.length,
+      knowledgeContextCount: session.knowledgeContextRefs?.length || 0,
     });
 
     return session;
@@ -778,12 +792,22 @@ class ModelBenchmarkService {
       concurrency,
       promptPresetId: currentSession.promptPresetId,
       promptLength: currentSession.prompt.length,
+      knowledgeContextCount: currentSession.knowledgeContextRefs?.length || 0,
     });
 
     const preset = resolvePromptPreset(
       currentSession.promptPresetId,
       currentSession.modality
     );
+    const knowledgeContextResult =
+      currentSession.knowledgeContextRefs?.length
+        ? await buildPromptWithKnowledgeContext(
+            currentSession.prompt,
+            currentSession.knowledgeContextRefs
+          )
+        : null;
+    const executionPrompt =
+      knowledgeContextResult?.prompt || currentSession.prompt;
     const queue = [...currentSession.entries];
 
     this.mutate((state) => ({
@@ -819,7 +843,7 @@ class ModelBenchmarkService {
           const next = queue[cursor];
           cursor += 1;
           if (next) {
-            await this.runEntry(sessionId, next.id, preset);
+            await this.runEntry(sessionId, next.id, preset, executionPrompt);
           }
         }
       })
@@ -871,7 +895,8 @@ class ModelBenchmarkService {
   private async runEntry(
     sessionId: string,
     entryId: string,
-    preset: BenchmarkPromptPreset
+    preset: BenchmarkPromptPreset,
+    executionPrompt: string
   ) {
     const startedAt = Date.now();
 
@@ -908,7 +933,7 @@ class ModelBenchmarkService {
       }
       const result = await executeBenchmark(
         latestEntry,
-        latestSession.prompt,
+        executionPrompt,
         preset
       );
       const completedAt = Date.now();

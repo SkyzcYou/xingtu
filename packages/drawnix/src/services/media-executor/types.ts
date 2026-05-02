@@ -1,5 +1,6 @@
 import type { ModelRef } from '../../utils/settings-manager';
 import type { GeminiMessagePart } from '../../utils/gemini-api/types';
+import type { GenerationParams as TaskGenerationParams } from '../../types/shared/core.types';
 import type {
   ProviderAuthStrategy,
   ProviderModelBinding,
@@ -52,6 +53,8 @@ export interface ImageGenerationParams {
   count?: number;
   /** 额外参数（如 seedream_quality），透传给 adapter */
   params?: Record<string, unknown>;
+  /** 素材库轻量元数据 */
+  assetMetadata?: TaskGenerationParams['assetMetadata'];
 }
 
 // ============================================================================

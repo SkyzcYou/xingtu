@@ -90,9 +90,26 @@ export enum TaskExecutionPhase {
 // Generation Parameters
 // ============================================================================
 
+export interface KnowledgeContextRef {
+  noteId: string;
+  title: string;
+  directoryId?: string;
+  updatedAt?: number;
+}
+
+export interface GenerationAssetMetadata {
+  category?: 'GENERAL' | 'CHARACTER';
+  characterName?: string;
+  characterPrompt?: string;
+}
+
 export interface GenerationParams {
   /** Text prompt describing the desired content */
   prompt: string;
+  /** Lightweight asset-library metadata for generated media */
+  assetMetadata?: GenerationAssetMetadata;
+  /** Lightweight Knowledge Base note references used as generation context */
+  knowledgeContextRefs?: KnowledgeContextRef[];
   /** Lightweight prompt lineage metadata used by prompt history views */
   promptMeta?: {
     /** Prompt entered before parsing or optimization */
@@ -112,6 +129,8 @@ export interface GenerationParams {
       | 'ppt-slide';
     /** Lightweight tags such as Skill names */
     tags?: string[];
+    /** Lightweight Knowledge Base note references used by this prompt */
+    knowledgeContextRefs?: KnowledgeContextRef[];
     /** Agent Skill identifier, when available */
     skillId?: string;
     /** Agent Skill display name, when available */

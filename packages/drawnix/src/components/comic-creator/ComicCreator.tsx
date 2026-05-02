@@ -44,7 +44,11 @@ import { getSelectionKey } from '../../utils/model-selection';
 import { generateUUID } from '../../utils/runtime-helpers';
 import { taskQueueService } from '../../services/task-queue';
 import { unifiedCacheService } from '../../services/unified-cache-service';
-import { TaskType, type Task } from '../../types/task.types';
+import {
+  TaskType,
+  type KnowledgeContextRef,
+  type Task,
+} from '../../types/task.types';
 import { createImageTask } from '../../mcp/tools/image-generation';
 import { waitForTaskCompletion } from '../../services/media-executor';
 import { MessagePlugin } from '../../utils/message-plugin';
@@ -62,6 +66,7 @@ import {
   type WorkflowStepConfig,
 } from '../shared/workflow';
 import { PromptOptimizeButton } from '../shared/PromptOptimizeButton';
+import { KnowledgeNoteContextSelector } from '../shared/KnowledgeNoteContextSelector';
 import { HoverTip } from '../shared/hover';
 import { useWorkflowTaskSync } from '../shared/workflow/useWorkflowTaskSync';
 import { useMediaViewer } from '../../hooks/useMediaViewer';
@@ -561,6 +566,8 @@ const ComicCreator: React.FC = () => {
   const latestRecordRef = useRef<ComicRecord | null>(null);
   const activeTaskIdsRef = useRef<Set<string>>(new Set());
   const abortControllerRef = useRef<AbortController | null>(null);
+  const outlineSubmittingRef = useRef(false);
+  const generationRunningRef = useRef(false);
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
   const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const outlineResultRef = useRef<HTMLDivElement | null>(null);
@@ -602,6 +609,9 @@ const ComicCreator: React.FC = () => {
       readSessionStoryPrompt() ||
       getComicScenarioPrompt(initialScenarioId, 'text')
   );
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >([]);
   const [promptInputMode, setPromptInputMode] = useState<ComicPromptInputMode>(
     () => initialPromptMode
   );
@@ -1103,7 +1113,7 @@ const ComicCreator: React.FC = () => {
   );
 
   const handleGenerateOutline = useCallback(async () => {
-    if (submittingOutline) return;
+    if (outlineSubmittingRef.current || submittingOutline) return;
     if (!storyPrompt.trim()) {
       MessagePlugin.warning('请输入创作需求');
       return;
@@ -1116,6 +1126,7 @@ const ComicCreator: React.FC = () => {
       return;
     }
 
+    outlineSubmittingRef.current = true;
     setSubmittingOutline(true);
     try {
       const sourcePrompt = storyPrompt.trim();
@@ -1165,6 +1176,7 @@ const ComicCreator: React.FC = () => {
       const task = taskQueueService.createTask(
         {
           prompt,
+          knowledgeContextRefs,
           model: textModel,
           modelRef: textModelRef,
           comicCreatorAction: 'outline',
@@ -1214,6 +1226,7 @@ const ComicCreator: React.FC = () => {
       });
       MessagePlugin.error(error instanceof Error ? error.message : '提交失败');
     } finally {
+      outlineSubmittingRef.current = false;
       setSubmittingOutline(false);
     }
   }, [
@@ -1570,6 +1583,7 @@ const ComicCreator: React.FC = () => {
 
       const result = await createImageTask({
         prompt,
+        knowledgeContextRefs,
         size,
         count: imageCountPerPage,
         model: imageModel,
@@ -1677,6 +1691,7 @@ const ComicCreator: React.FC = () => {
       imageModel,
       imageModelRef,
       imageParams,
+      knowledgeContextRefs,
       referenceImageUrls,
       updatePageStatus,
     ]
@@ -1712,7 +1727,9 @@ const ComicCreator: React.FC = () => {
   const handleGenerateImages = useCallback(
     async (singlePageId?: string) => {
       const record = latestRecordRef.current;
-      if (!record || generationState.running) return;
+      if (!record || generationRunningRef.current || generationState.running)
+        return;
+      generationRunningRef.current = true;
 
       const selectedPages = getComicPagesForGeneration({
         pages: record.pages,
@@ -1731,6 +1748,7 @@ const ComicCreator: React.FC = () => {
           ...getComicRecordAnalytics(record),
         });
         MessagePlugin.warning('请选择要生成的页面');
+        generationRunningRef.current = false;
         return;
       }
       const generationStartedAt = Date.now();
@@ -1869,6 +1887,7 @@ const ComicCreator: React.FC = () => {
       } finally {
         activeTaskIdsRef.current.clear();
         abortControllerRef.current = null;
+        generationRunningRef.current = false;
         setGenerationState({
           running: false,
           stopping: false,
@@ -2274,6 +2293,12 @@ const ComicCreator: React.FC = () => {
           placeholder={getComicScenarioPrompt(scenarioId, 'text')}
           spellCheck
         />
+        <KnowledgeNoteContextSelector
+          value={knowledgeContextRefs}
+          onChange={setKnowledgeContextRefs}
+          disabled={submittingOutline || !!currentRecord?.pendingOutlineTaskId}
+          language="zh"
+        />
         {currentRecord?.outlineError && (
           <div className="ma-error">{currentRecord.outlineError}</div>
         )}
@@ -2441,6 +2466,13 @@ const ComicCreator: React.FC = () => {
         )}
 
         <div className="comic-batch-bar comic-batch-bar--generation">
+          <KnowledgeNoteContextSelector
+            value={knowledgeContextRefs}
+            onChange={setKnowledgeContextRefs}
+            disabled={generationState.running}
+            language="zh"
+            className="comic-knowledge-context-selector"
+          />
           <HoverTip content="选择或取消选择全部页面" showArrow={false}>
             <label className="comic-check comic-selection-check">
               <input

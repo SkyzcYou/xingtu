@@ -25,6 +25,7 @@ import { mcpRegistry } from '../../../mcp/registry';
 import { quickInsert, setCanvasBoard } from '../../../mcp/tools/canvas-insertion';
 import {
   ShotCard,
+  buildCharacterReferencePrompt,
   buildVideoPrompt,
   buildFramePrompt,
   readStoredModelSelection,
@@ -42,20 +43,29 @@ import type { ModelRef } from '../../../utils/settings-manager';
 import type { VideoModel } from '../../../types/video.types';
 import { useDrawnix, DialogType } from '../../../hooks/use-drawnix';
 import { useSharedTaskState } from '../../../hooks/useTaskQueue';
-import { TaskStatus } from '../../../types/task.types';
+import { TaskStatus, type KnowledgeContextRef } from '../../../types/task.types';
 import { taskQueueService } from '../../../services/task-queue';
-import { buildBatchVideoReferenceImages, waitForBatchVideoTask } from '../../../utils/batch-video-generation';
+import {
+  buildBatchVideoReferenceImages,
+  getNonRetryableBatchVideoFailureReason,
+  waitForBatchVideoTask,
+} from '../../../utils/batch-video-generation';
 import { MediaLibraryModal } from '../../media-library';
 import { VideoPosterPreview } from '../../shared/VideoPosterPreview';
-import { HoverTip } from '../../shared';
+import { HoverTip, KnowledgeNoteContextSelector } from '../../shared';
 import { buildMVResetPayload, buildMVWorkflowExportOptions } from '../generate-page-helpers';
-import { SelectionMode, AssetType } from '../../../types/asset.types';
+import {
+  AssetCategory,
+  SelectionMode,
+  AssetType,
+} from '../../../types/asset.types';
 import type { Asset } from '../../../types/asset.types';
 import {
   collectWorkflowExportAssets,
   exportWorkflowAssetsZip,
 } from '../../../utils/workflow-generation-utils';
 import { analytics } from '../../../utils/posthog-analytics';
+import { markAssetAsCharacter } from '../../../services/character-asset-metadata-service';
 
 const STORAGE_KEY_IMAGE_MODEL = 'mv-creator:image-model';
 const STORAGE_KEY_VIDEO_MODEL = 'mv-creator:gen-video-model';
@@ -172,10 +182,15 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const latestRecordRef = useRef(record);
   const latestShotsRef = useRef(shots);
   const batchStopRef = useRef(false);
+  const batchVideoRunningRef = useRef(false);
   const batchAbortControllerRef = useRef<AbortController | null>(null);
-  const activeBatchTaskIdRef = useRef<string | null>(null);
+  const activeBatchTaskIdsRef = useRef(new Set<string>());
+  const batchCreatedVideoTaskIdsRef = useRef(new Set<string>());
 
   const [refImages, setRefImages] = useState<ReferenceImage[]>([]);
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >([]);
   const characters = useMemo<VideoCharacter[]>(
     () => record.characters || [],
     [record.characters]
@@ -234,6 +249,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     running: false,
     stopping: false,
     currentIndex: -1,
+    completedCount: 0,
     retryCount: 0,
   });
   const [insertGeneratedVideosToCanvas, setInsertGeneratedVideosToCanvas] = useState(false);
@@ -287,6 +303,10 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   useEffect(() => {
     latestRecordRef.current = record;
   }, [record]);
+
+  useEffect(() => {
+    setKnowledgeContextRefs([]);
+  }, [record.id]);
 
   useEffect(() => {
     latestShotsRef.current = shots;
@@ -418,6 +438,32 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
 
   const refImageUrls = useMemo(() => refImages.map(img => img.url).filter(Boolean), [refImages]);
   const exportableAssets = useMemo(() => collectWorkflowExportAssets(shots), [shots]);
+  const pseudoAnalysis = useMemo(() => ({
+    totalDuration: record.selectedClipDuration || 30,
+    productExposureDuration: 0,
+    productExposureRatio: 0,
+    shotCount: shots.length,
+    firstProductAppearance: 0,
+    aspect_ratio: aspectRatio,
+    video_style: record.videoStyle || '',
+    bgm_mood: record.musicStyleTags?.filter(Boolean).join(', ') || '',
+    suggestion: '',
+    shots,
+  }), [record, shots, aspectRatio]);
+
+  const pseudoProductInfo = useMemo(() => ({
+    prompt: '',
+    videoStyle: record.videoStyle || '',
+    bgmMood: record.musicStyleTags?.filter(Boolean).join(', ') || '',
+    creativeBrief: record.creativeBrief,
+    generationContext: [
+      record.musicTitle ? `音乐标题：${record.musicTitle}` : '',
+      record.musicStyleTags?.length ? `音乐风格：${record.musicStyleTags.join(', ')}` : '',
+      record.selectedClipDuration ? `音乐时长：${record.selectedClipDuration}秒` : '',
+      record.musicLyrics?.trim() ? `歌词/意象：${record.musicLyrics.trim()}` : '',
+      record.rewritePrompt?.trim() ? `改编要求：${record.rewritePrompt.trim()}` : '',
+    ].filter(Boolean).join('\n'),
+  }), [record]);
 
   const handleCharacterRefImageChange = useCallback(async (charId: string, url: string | undefined) => {
     const base = latestRecordRef.current.characters || [];
@@ -488,16 +534,26 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
 
   const handleGenerateCharacterRef = useCallback((char: VideoCharacter) => {
     const charBatchId = `mv_${record.id}_char${char.id}_ref`;
-    const style = record.videoStyle ? `${record.videoStyle} style. ` : '';
+    const prompt = buildCharacterReferencePrompt(
+      char,
+      pseudoAnalysis,
+      pseudoProductInfo
+    );
     openDialog(DialogType.aiImageGeneration, {
-      initialPrompt: `${style}${char.description}`,
+      initialPrompt: prompt,
+      initialKnowledgeContextRefs: knowledgeContextRefs,
       batchId: charBatchId,
       initialAspectRatio: '1:1',
       initialModel: imageModel || undefined,
       initialModelRef: imageModelRef,
       autoInsertToCanvas: false,
+      assetMetadata: {
+        category: AssetCategory.CHARACTER,
+        characterName: char.name,
+        characterPrompt: prompt,
+      },
     });
-  }, [record.id, record.videoStyle, openDialog, imageModel, imageModelRef]);
+  }, [record.id, pseudoAnalysis, pseudoProductInfo, knowledgeContextRefs, openDialog, imageModel, imageModelRef]);
 
   const ensureBatchId = useCallback(async () => {
     if (!record.batchId) {
@@ -605,12 +661,20 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
         : frameType === 'last' ? 'generated_last_frame_url'
         : 'generated_video_url';
       const shot = currentShots.find(s => s.id === shotId);
+      const isBatchCreatedVideoTask =
+        frameType === 'video' && batchCreatedVideoTaskIdsRef.current.has(task.id);
       const suppressedUrl = shot?.suppressed_generated_urls?.[frameType];
       if (suppressedUrl && suppressedUrl === resultUrl) {
+        if (isBatchCreatedVideoTask) {
+          batchCreatedVideoTaskIdsRef.current.delete(task.id);
+        }
         processedTaskIdsRef.current.add(task.id);
         continue;
       }
       if (!shot || shot[field] === resultUrl) {
+        if (isBatchCreatedVideoTask) {
+          batchCreatedVideoTaskIdsRef.current.delete(task.id);
+        }
         processedTaskIdsRef.current.add(task.id);
         continue;
       }
@@ -633,7 +697,11 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       hasUpdate = true;
 
       if (frameType === 'video') {
-        newVideoShots.push({ shotId, videoUrl: resultUrl });
+        if (isBatchCreatedVideoTask) {
+          batchCreatedVideoTaskIdsRef.current.delete(task.id);
+        } else {
+          newVideoShots.push({ shotId, videoUrl: resultUrl });
+        }
       }
     }
 
@@ -769,6 +837,50 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     );
   }, []);
 
+  const mergeReferenceImages = useCallback((
+    ...groups: Array<Array<{ url: string; name: string }> | undefined>
+  ): ReferenceImage[] | undefined => {
+    const seenUrls = new Set<string>();
+    const merged: ReferenceImage[] = [];
+
+    groups.forEach((group) => {
+      group?.forEach((image) => {
+        const url = image.url?.trim();
+        if (!url || seenUrls.has(url)) {
+          return;
+        }
+        seenUrls.add(url);
+        merged.push({
+          url,
+          name: image.name || '参考图',
+        });
+      });
+    });
+
+    return merged.length > 0 ? merged : undefined;
+  }, []);
+
+  const getShotCharacterReferenceImages = useCallback((shot: VideoShot): ReferenceImage[] => {
+    if (!shot.character_ids?.length) {
+      return [];
+    }
+
+    const seenUrls = new Set<string>();
+    return shot.character_ids.reduce<ReferenceImage[]>((acc, charId) => {
+      const character = characters.find((item) => item.id === charId);
+      const url = character?.referenceImageUrl?.trim();
+      if (!url || seenUrls.has(url)) {
+        return acc;
+      }
+      seenUrls.add(url);
+      acc.push({
+        url,
+        name: character?.name ? `角色：${character.name}` : '角色参考图',
+      });
+      return acc;
+    }, []);
+  }, [characters]);
+
   const saveShotDraft = useCallback(async (
     shotId: string,
     type: 'first' | 'last' | 'video',
@@ -848,25 +960,6 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     await applyUpdatedShots(updatedShots);
   }, [applyUpdatedShots, areDraftImagesEqual, toDraftImages]);
 
-  // 构建 MV 专用的 analysis-like 对象给 buildVideoPrompt / buildFramePrompt
-  const pseudoAnalysis = useMemo(() => ({
-    totalDuration: record.selectedClipDuration || 30,
-    productExposureDuration: 0,
-    productExposureRatio: 0,
-    shotCount: shots.length,
-    firstProductAppearance: 0,
-    aspect_ratio: aspectRatio,
-    video_style: record.videoStyle || '',
-    bgm_mood: '',
-    suggestion: '',
-    shots,
-  }), [record, shots, aspectRatio]);
-
-  const pseudoProductInfo = useMemo(() => ({
-    prompt: record.creationPrompt || '',
-    videoStyle: record.videoStyle || '',
-  }), [record]);
-
   // 单镜头操作
   const handleShotGenerateFirstFrame = useCallback((shot: VideoShot) => {
     const rawPrompt = shot.first_frame_prompt || shot.description || '';
@@ -878,28 +971,37 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       source: 'mv_creator_generate_page',
       metadata: { shotId: shot.id, hasDraft: !!shot.first_frame_draft },
     });
-    const prompt = buildFramePrompt(rawPrompt, pseudoAnalysis, pseudoProductInfo);
+    const prompt = buildFramePrompt(rawPrompt, pseudoAnalysis, pseudoProductInfo, {
+      shot,
+      characters,
+    });
     const draft = shot.first_frame_draft;
+    const draftImages = draft ? toDraftImages(draft.images || []) : undefined;
+    const existingFrameImages = !draft && shot.generated_first_frame_url
+      ? [{ url: shot.generated_first_frame_url, name: '首帧' }]
+      : undefined;
+    const characterReferenceImages = getShotCharacterReferenceImages(shot);
     const shotBatchId = `mv_${record.id}_shot${shot.id}_first`;
     openDialog(DialogType.aiImageGeneration, {
       initialPrompt: draft?.prompt || prompt,
+      initialKnowledgeContextRefs: knowledgeContextRefs,
       batchId: shotBatchId,
       initialAspectRatio: draft?.aspectRatio ?? selectedImageAspectRatio,
       initialModel: imageModel || undefined,
       initialModelRef: imageModelRef,
       autoInsertToCanvas: false,
-      initialImages: draft
-        ? toDraftImages(draft.images || [])
-        : shot.generated_first_frame_url
-          ? [{ url: shot.generated_first_frame_url, name: '首帧' }]
-          : undefined,
+      initialImages: mergeReferenceImages(
+        draftImages,
+        existingFrameImages,
+        characterReferenceImages
+      ),
       onDraftChange: (nextDraft: {
         prompt: string;
         images: Array<{ url: string; name: string }>;
         aspectRatio?: string;
       }) => saveShotDraft(shot.id, 'first', nextDraft),
     });
-  }, [record.id, pseudoAnalysis, pseudoProductInfo, openDialog, imageModel, imageModelRef, saveShotDraft, selectedImageAspectRatio, toDraftImages]);
+  }, [record.id, pseudoAnalysis, pseudoProductInfo, characters, knowledgeContextRefs, openDialog, imageModel, imageModelRef, mergeReferenceImages, getShotCharacterReferenceImages, saveShotDraft, selectedImageAspectRatio, toDraftImages]);
 
   const getLastFrameUrl = useCallback((shot: VideoShot, index: number) => {
     if (shot.generated_last_frame_url) return shot.generated_last_frame_url;
@@ -916,12 +1018,16 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       source: 'mv_creator_generate_page',
       metadata: { shotId: shot.id, shotIndex: index, hasDraft: !!shot.last_frame_draft },
     });
-    const prompt = buildFramePrompt(rawPrompt, pseudoAnalysis, pseudoProductInfo);
+    const prompt = buildFramePrompt(rawPrompt, pseudoAnalysis, pseudoProductInfo, {
+      shot,
+      characters,
+    });
     const draft = shot.last_frame_draft;
     const shotBatchId = `mv_${record.id}_shot${shot.id}_last`;
     const lastFrameUrl = getLastFrameUrl(shot, index);
     openDialog(DialogType.aiImageGeneration, {
       initialPrompt: draft?.prompt || prompt,
+      initialKnowledgeContextRefs: knowledgeContextRefs,
       batchId: shotBatchId,
       initialAspectRatio: draft?.aspectRatio ?? selectedImageAspectRatio,
       initialModel: imageModel || undefined,
@@ -938,7 +1044,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
         aspectRatio?: string;
       }) => saveShotDraft(shot.id, 'last', nextDraft),
     });
-  }, [record.id, pseudoAnalysis, pseudoProductInfo, openDialog, getLastFrameUrl, imageModel, imageModelRef, saveShotDraft, selectedImageAspectRatio, toDraftImages]);
+  }, [record.id, pseudoAnalysis, pseudoProductInfo, characters, knowledgeContextRefs, openDialog, getLastFrameUrl, imageModel, imageModelRef, saveShotDraft, selectedImageAspectRatio, toDraftImages]);
 
   const handleShotGenerateVideo = useCallback(async (shot: VideoShot, index: number) => {
     const prompt = buildVideoPrompt(shot, pseudoAnalysis, pseudoProductInfo);
@@ -977,6 +1083,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
 
     openDialog(DialogType.aiVideoGeneration, {
       initialPrompt: draft?.prompt || prompt,
+      initialKnowledgeContextRefs: knowledgeContextRefs,
       initialImages: resolvedInitialImages,
       initialDuration: validDuration,
       initialSize: validSize,
@@ -991,7 +1098,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
         size?: string;
       }) => saveShotDraft(shot.id, 'video', nextDraft),
     });
-  }, [record.id, pseudoAnalysis, pseudoProductInfo, segmentDuration, videoSize, videoModel, videoModelConfig, videoModelRef, openDialog, getLastFrameUrl, saveShotDraft, toDraftImages]);
+  }, [record.id, pseudoAnalysis, pseudoProductInfo, knowledgeContextRefs, segmentDuration, videoSize, videoModel, videoModelConfig, videoModelRef, openDialog, getLastFrameUrl, saveShotDraft, toDraftImages]);
 
   const handleDeleteFrame = useCallback((shotId: string, frameType: 'first' | 'last' | 'video') => {
     const field = frameType === 'first' ? 'generated_first_frame_url'
@@ -1049,10 +1156,10 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   ) => {
     const shot = currentShots[index];
     if (!shot || shot.generated_video_url === videoUrl) {
-      return currentShots;
+      return latestShotsRef.current;
     }
-    const updatedShots = currentShots.map((item, shotIndex) =>
-      shotIndex === index ? { ...item, generated_video_url: videoUrl } : item
+    const updatedShots = latestShotsRef.current.map((item) =>
+      item.id === shot.id ? { ...item, generated_video_url: videoUrl } : item
     );
     await applyUpdatedShots(updatedShots);
     return updatedShots;
@@ -1060,30 +1167,17 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
 
   const generateFirstFrameForShot = useCallback(async (
     shot: VideoShot,
-    prevLastFrameUrl: string | undefined,
     currentCharacters: VideoCharacter[]
   ): Promise<string | null> => {
     const rawPrompt = shot.first_frame_prompt || shot.description || '';
     if (!rawPrompt) return null;
 
-    let prompt = buildFramePrompt(rawPrompt, pseudoAnalysis, pseudoProductInfo);
-    // 在 prompt 中补充角色外貌描述和前帧上下文，提升生图一致性
-    const charDescs: string[] = [];
-    if (shot.character_ids && shot.character_ids.length > 0) {
-      for (const charId of shot.character_ids) {
-        const char = currentCharacters.find(c => c.id === charId);
-        if (char?.description) charDescs.push(`${char.name}: ${char.description}`);
-      }
-    }
-    if (charDescs.length > 0) {
-      prompt += `\nCharacters in this frame: ${charDescs.join('; ')}`;
-    }
-    if (prevLastFrameUrl) {
-      prompt += '\nThis frame should visually continue from the previous shot\'s last frame (provided as reference image #1).';
-    }
+    const prompt = buildFramePrompt(rawPrompt, pseudoAnalysis, pseudoProductInfo, {
+      shot,
+      characters: currentCharacters,
+    });
 
-    const referenceImages: string[] = [];
-    if (prevLastFrameUrl) referenceImages.push(prevLastFrameUrl);
+    const referenceImages: string[] = [...refImageUrls];
     if (shot.character_ids && shot.character_ids.length > 0) {
       for (const charId of shot.character_ids) {
         const char = currentCharacters.find(c => c.id === charId);
@@ -1098,6 +1192,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       { name: 'generate_image', arguments: {
         prompt: prompt.trim(), count: 1, size: imageGenerationSize,
         referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+        knowledgeContextRefs,
         batchId: shotBatchId,
         autoInsertToCanvas: false,
         ...(imageModel ? { model: imageModel, modelRef: imageModelRef } : {}),
@@ -1110,33 +1205,45 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       || (result.data as { taskId?: string } | undefined)?.taskId;
     if (!result.success || !taskId) return null;
 
-    const waitResult = await waitForBatchVideoTask(taskId, batchAbortControllerRef.current?.signal);
-    if (!waitResult.success) return null;
+    activeBatchTaskIdsRef.current.add(taskId);
+    let waitResult: Awaited<ReturnType<typeof waitForBatchVideoTask>> | null = null;
+    try {
+      waitResult = await waitForBatchVideoTask(taskId, batchAbortControllerRef.current?.signal);
+    } finally {
+      activeBatchTaskIdsRef.current.delete(taskId);
+    }
+    if (!waitResult?.success) return null;
 
     const task = waitResult.task || taskQueueService.getTask(taskId);
     return task?.result?.url || null;
-  }, [record.id, pseudoAnalysis, pseudoProductInfo, imageGenerationExtraParams, imageGenerationSize, imageModel, imageModelRef]);
+  }, [record.id, pseudoAnalysis, pseudoProductInfo, knowledgeContextRefs, imageGenerationExtraParams, imageGenerationSize, imageModel, imageModelRef, refImageUrls]);
 
   const createBatchVideoTask = useCallback(async (
     shot: VideoShot,
     index: number,
-    currentShots: VideoShot[]
+    currentShots: VideoShot[],
+    currentCharacters: VideoCharacter[]
   ) => {
     const prompt = buildVideoPrompt(shot, pseudoAnalysis, pseudoProductInfo);
     if (!prompt) {
       return null;
     }
 
-    const firstFrameUrl =
-      index === 0
-        ? refImageUrls[0] || shot.generated_first_frame_url
-        : shot.generated_first_frame_url;
-    const lastFrameUrl = shot.generated_last_frame_url || currentShots[index + 1]?.generated_first_frame_url;
+    const currentShot = currentShots.find((item) => item.id === shot.id) || currentShots[index] || shot;
+    const firstFrameUrl = currentShot.generated_first_frame_url;
+    const lastFrameUrl = currentShot.generated_last_frame_url;
+    const characterReferenceUrls = (currentShot.character_ids || [])
+      .map((charId) => currentCharacters.find((char) => char.id === charId)?.referenceImageUrl)
+      .filter((url): url is string => !!url);
+    const extraReferenceUrls = Array.from(new Set([
+      ...refImageUrls,
+      ...characterReferenceUrls,
+    ]));
     const { referenceImages } = buildBatchVideoReferenceImages({
       model: videoModel,
       firstFrameUrl,
       lastFrameUrl,
-      extraReferenceUrls: refImageUrls.slice(index === 0 ? 1 : 0),
+      extraReferenceUrls,
     });
 
     const shotBatchId = `mv_${record.id}_shot${shot.id}_video`;
@@ -1159,6 +1266,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
           model: videoModel,
           modelRef: videoModelRef,
           referenceImages,
+          knowledgeContextRefs,
           autoInsertToCanvas: false,
           params: Object.keys(videoExtraParams).length > 0 ? videoExtraParams : undefined,
         },
@@ -1179,6 +1287,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     pseudoProductInfo,
     refImageUrls,
     record.id,
+    knowledgeContextRefs,
     splitVideoParams,
     videoModel,
     videoModelConfig.provider,
@@ -1189,9 +1298,10 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const stopBatchVideoGeneration = useCallback(() => {
     batchStopRef.current = true;
     setBatchVideoState(prev => prev.running ? { ...prev, stopping: true } : prev);
-    if (activeBatchTaskIdRef.current) {
-      taskQueueService.cancelTask(activeBatchTaskIdRef.current);
+    for (const taskId of activeBatchTaskIdsRef.current) {
+      taskQueueService.cancelTask(taskId);
     }
+    activeBatchTaskIdsRef.current.clear();
     batchAbortControllerRef.current?.abort();
   }, []);
 
@@ -1203,9 +1313,10 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   }, []);
 
   const handleGenerateAllVideos = useCallback(async () => {
-    if (batchVideoState.running) {
+    if (batchVideoRunningRef.current || batchVideoState.running) {
       return;
     }
+    batchVideoRunningRef.current = true;
 
     analytics.trackUIInteraction({
       area: 'popular_mv_tool',
@@ -1229,30 +1340,41 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     await ensureBatchId();
     batchStopRef.current = false;
     batchAbortControllerRef.current = new AbortController();
-    activeBatchTaskIdRef.current = null;
+    activeBatchTaskIdsRef.current.clear();
     setBatchVideoState({
       running: true,
       stopping: false,
       currentIndex: -1,
+      completedCount: 0,
       retryCount: 0,
     });
 
     try {
       // ── Step 0: 为缺少参考图的角色生成参考图 ──
-      let currentCharacters = latestRecordRef.current.characters || [];
+      const currentCharacters = latestRecordRef.current.characters || [];
       const charsNeedingRef = currentCharacters.filter(c => !c.referenceImageUrl);
-      const stylePrefix = latestRecordRef.current.videoStyle ? `${latestRecordRef.current.videoStyle} style. ` : '';
       if (charsNeedingRef.length > 0 && !batchStopRef.current) {
         for (const char of charsNeedingRef) {
           if (batchStopRef.current) break;
           const charBatchId = `mv_${record.id}_char${char.id}_ref`;
+          const charPrompt = buildCharacterReferencePrompt(
+            char,
+            pseudoAnalysis,
+            pseudoProductInfo
+          );
           const result = await mcpRegistry.executeTool(
             { name: 'generate_image', arguments: {
-              prompt: `${stylePrefix}${char.description}`,
+              prompt: charPrompt,
               count: 1,
               size: imageGenerationSize,
+              knowledgeContextRefs,
               batchId: charBatchId,
               autoInsertToCanvas: false,
+              assetMetadata: {
+                category: AssetCategory.CHARACTER,
+                characterName: char.name,
+                characterPrompt: charPrompt,
+              },
               ...(imageModel ? { model: imageModel, modelRef: imageModelRef } : {}),
               ...(imageGenerationExtraParams ? { params: imageGenerationExtraParams } : {}),
             }},
@@ -1261,8 +1383,14 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
           const taskId = (result as { taskId?: string; data?: { taskId?: string } }).taskId
             || (result.data as { taskId?: string } | undefined)?.taskId;
           if (taskId) {
-            const waitResult = await waitForBatchVideoTask(taskId, batchAbortControllerRef.current?.signal);
-            if (waitResult.success) {
+            activeBatchTaskIdsRef.current.add(taskId);
+            let waitResult: Awaited<ReturnType<typeof waitForBatchVideoTask>> | null = null;
+            try {
+              waitResult = await waitForBatchVideoTask(taskId, batchAbortControllerRef.current?.signal);
+            } finally {
+              activeBatchTaskIdsRef.current.delete(taskId);
+            }
+            if (waitResult?.success) {
               const task = waitResult.task || taskQueueService.getTask(taskId);
               const url = task?.result?.url;
               if (url) {
@@ -1273,29 +1401,37 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
             }
           }
         }
-        currentCharacters = latestRecordRef.current.characters || [];
       }
 
-      // ── Step 1: 逐镜头生成首帧 + 视频 ──
-      let currentShots = latestShotsRef.current;
-      let prevLastFrameUrl: string | undefined;
+      // ── Step 1: 镜头级并行生成。每个镜头内部仍保持：首帧 -> 视频。 ──
+      let completedCount = 0;
+      const completedShotIndexes = new Set<number>();
+      const markShotDone = (index: number, retryCount = 0) => {
+        if (completedShotIndexes.has(index)) {
+          return;
+        }
+        completedShotIndexes.add(index);
+        completedCount += 1;
+        setBatchVideoState(prev => ({
+          ...prev,
+          currentIndex: index,
+          completedCount,
+          retryCount,
+        }));
+      };
 
-      for (let index = 0; index < currentShots.length; index++) {
+      const runShotPipeline = async (initialShot: VideoShot, index: number) => {
         if (batchStopRef.current) {
-          break;
+          return;
         }
 
-        currentShots = latestShotsRef.current;
-        const shot = currentShots[index];
-        if (!shot) {
-          continue;
-        }
-
-        const prompt = buildVideoPrompt(shot, pseudoAnalysis, pseudoProductInfo);
+        const prompt = buildVideoPrompt(initialShot, pseudoAnalysis, pseudoProductInfo);
         if (!prompt) {
-          continue;
+          markShotDone(index);
+          return;
         }
 
+        let shot = latestShotsRef.current.find((item) => item.id === initialShot.id) || initialShot;
         setBatchVideoState(prev => ({
           ...prev,
           currentIndex: index,
@@ -1306,33 +1442,26 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
           if (shouldInsertToCanvas) {
             await insertGeneratedVideoToCanvas(shot.generated_video_url);
           }
-          try {
-            const lastFrame = await extractFrameFromUrl(shot.generated_video_url, shot.id, 'last', 'last');
-            prevLastFrameUrl = lastFrame || undefined;
-          } catch {
-            prevLastFrameUrl = undefined;
-          }
-          continue;
+          markShotDone(index);
+          return;
         }
 
-        // 仅在缺少首帧时补生成：
-        // 有角色或有上一段尾帧时，需要一个首帧来保证角色一致性/镜头连贯性；
-        // 但如果当前镜头已经有首帧，则直接复用，避免批量生成时重复覆盖。
-        currentCharacters = latestRecordRef.current.characters || [];
-        const shotHasCharacters = (shot.character_ids || []).length > 0;
-        const needsFirstFrame = shotHasCharacters || (prevLastFrameUrl !== undefined);
-        const hasGeneratedFirstFrame = !!shot.generated_first_frame_url;
-        // 第二段开始必须先用“上一段尾帧 + 角色参考图”重新生首帧，不能直接把尾帧当首帧复用。
-        const shouldGenerateFirstFrame = needsFirstFrame && !hasGeneratedFirstFrame;
-
-        if (shouldGenerateFirstFrame && !batchStopRef.current) {
-          const firstFrameUrl = await generateFirstFrameForShot(shot, prevLastFrameUrl, currentCharacters);
-          if (firstFrameUrl) {
-            currentShots = currentShots.map((s, i) =>
-              i === index ? { ...s, generated_first_frame_url: firstFrameUrl } : s
+        const shotCharacters = latestRecordRef.current.characters || [];
+        if (!shot.generated_first_frame_url && !batchStopRef.current) {
+          const firstFrameUrl = await generateFirstFrameForShot(shot, shotCharacters);
+          if (firstFrameUrl && !batchStopRef.current) {
+            const updatedShots = latestShotsRef.current.map((item) =>
+              item.id === shot.id ? { ...item, generated_first_frame_url: firstFrameUrl } : item
             );
-            await applyUpdatedShots(currentShots);
+            await applyUpdatedShots(updatedShots);
+            shot = { ...shot, generated_first_frame_url: firstFrameUrl };
           }
+        }
+
+        shot = latestShotsRef.current.find((item) => item.id === shot.id) || shot;
+        if (!shot.generated_first_frame_url) {
+          markShotDone(index);
+          return;
         }
 
         let retryCount = 0;
@@ -1340,27 +1469,44 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
 
         while (!batchStopRef.current) {
           if (!taskId) {
-            taskId = await createBatchVideoTask(currentShots[index] || shot, index, currentShots);
+            const snapshotShots = latestShotsRef.current;
+            const snapshotCharacters = latestRecordRef.current.characters || [];
+            taskId = await createBatchVideoTask(
+              snapshotShots.find((item) => item.id === shot.id) || shot,
+              index,
+              snapshotShots,
+              snapshotCharacters
+            );
           }
 
           if (!taskId) {
             break;
           }
 
-          activeBatchTaskIdRef.current = taskId;
-          setBatchVideoState({
-            running: true,
-            stopping: false,
+          batchCreatedVideoTaskIdsRef.current.add(taskId);
+          activeBatchTaskIdsRef.current.add(taskId);
+          const currentRetryCount = retryCount;
+          setBatchVideoState(prev => ({
+            ...prev,
             currentIndex: index,
-            retryCount,
-          });
+            retryCount: currentRetryCount,
+          }));
 
-          const waitResult = await waitForBatchVideoTask(
-            taskId,
-            batchAbortControllerRef.current?.signal
-          );
+          let waitResult: Awaited<ReturnType<typeof waitForBatchVideoTask>> | null = null;
+          try {
+            waitResult = await waitForBatchVideoTask(
+              taskId,
+              batchAbortControllerRef.current?.signal
+            );
+          } finally {
+            activeBatchTaskIdsRef.current.delete(taskId);
+          }
 
           if (batchStopRef.current) {
+            break;
+          }
+
+          if (!waitResult) {
             break;
           }
 
@@ -1368,44 +1514,70 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
           const videoUrl = task?.result?.url;
 
           if (waitResult.success && task && videoUrl) {
-            currentShots = await writeShotVideoResult(currentShots, index, videoUrl);
+            await writeShotVideoResult(latestShotsRef.current, index, videoUrl);
             if (shouldInsertToCanvas) {
               await insertGeneratedVideoToCanvas(videoUrl);
             }
-            try {
-              const lastFrame = await extractFrameFromUrl(videoUrl, shot.id, 'last', 'last');
-              prevLastFrameUrl = lastFrame || undefined;
-            } catch {
-              prevLastFrameUrl = undefined;
-            }
+            markShotDone(index, retryCount);
             break;
           }
 
-          retryCount += 1;
-          setBatchVideoState({
-            running: true,
-            stopping: false,
-            currentIndex: index,
-            retryCount,
-          });
-
           if (task?.status === TaskStatus.FAILED) {
+            const nonRetryableReason = getNonRetryableBatchVideoFailureReason(
+              task,
+              waitResult.error
+            );
+            if (nonRetryableReason) {
+              batchStopRef.current = true;
+              for (const activeTaskId of activeBatchTaskIdsRef.current) {
+                taskQueueService.cancelTask(activeTaskId);
+              }
+              activeBatchTaskIdsRef.current.clear();
+              batchAbortControllerRef.current?.abort();
+              MessagePlugin.error(
+                `视频生成失败且不可重试，已停止：${nonRetryableReason}`
+              );
+              break;
+            }
+
+            retryCount += 1;
+            const nextRetryCount = retryCount;
+            setBatchVideoState(prev => ({
+              ...prev,
+              currentIndex: index,
+              retryCount: nextRetryCount,
+            }));
             taskQueueService.retryTask(taskId);
             continue;
           }
 
           taskId = null;
         }
+      };
 
-        activeBatchTaskIdRef.current = null;
-      }
+      await Promise.allSettled(
+        latestShotsRef.current.map((shot, index) =>
+          runShotPipeline(shot, index)
+            .catch((error) => {
+              if (!batchStopRef.current) {
+                console.error('[MVCreator] Batch shot pipeline failed:', {
+                  shotId: shot.id,
+                  error,
+                });
+              }
+            })
+            .finally(() => markShotDone(index))
+        )
+      );
     } finally {
-      activeBatchTaskIdRef.current = null;
+      batchVideoRunningRef.current = false;
+      activeBatchTaskIdsRef.current.clear();
       batchAbortControllerRef.current = null;
       setBatchVideoState({
         running: false,
         stopping: false,
         currentIndex: -1,
+        completedCount: 0,
         retryCount: 0,
       });
     }
@@ -1419,6 +1591,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     applyUpdatedShots,
     applyRecordPatch,
     record.id,
+    knowledgeContextRefs,
     imageModel,
     imageGenerationExtraParams,
     imageGenerationSize,
@@ -1450,6 +1623,12 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       <div className="va-batch-config">
         <div className="va-batch-config-title">批量生成配置</div>
         <ReferenceImageUpload images={refImages} onImagesChange={setRefImages} multiple label="参考图 (可选)" />
+        <KnowledgeNoteContextSelector
+          value={knowledgeContextRefs}
+          onChange={setKnowledgeContextRefs}
+          disabled={batchVideoState.running}
+          className="mv-knowledge-context-selector"
+        />
         {characters.length > 0 && (
           <div className="va-characters">
             <div className="va-characters-title">角色</div>
@@ -1469,7 +1648,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
                     <span className="va-character-ref-empty">未设置</span>
                   )}
                   <button onClick={() => handleGenerateCharacterRef(char)}>生成</button>
-                  <button onClick={() => setCharLibraryTarget(char.id)}>素材库</button>
+                  <button onClick={() => setCharLibraryTarget(char.id)}>选主体</button>
                 </div>
               </div>
             ))}
@@ -1509,7 +1688,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
         </div>
         {batchVideoState.running && (
           <div className="va-batch-config-title">
-            正在串行生成第 {Math.max(batchVideoState.currentIndex + 1, 1)}/{shots.length} 段
+            正在并行生成，已完成 {batchVideoState.completedCount}/{shots.length} 段
             {batchVideoState.retryCount > 0 ? `，已重试 ${batchVideoState.retryCount} 次` : ''}
           </div>
         )}
@@ -1702,13 +1881,23 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
         onClose={() => setCharLibraryTarget(null)}
         mode={SelectionMode.SELECT}
         filterType={AssetType.IMAGE}
+        filterCategory={AssetCategory.CHARACTER}
         onSelect={(asset: Asset) => {
           if (charLibraryTarget) {
+            const char = latestRecordRef.current.characters?.find(c => c.id === charLibraryTarget);
             void handleCharacterRefImageChange(charLibraryTarget, asset.url);
+            if (char) {
+              markAssetAsCharacter(asset, {
+                name: char.name,
+                prompt: char.description,
+              }).catch((error) => {
+                console.warn('[MVCreator] Failed to mark asset as character:', error);
+              });
+            }
           }
           setCharLibraryTarget(null);
         }}
-        selectButtonText="使用此图片"
+        selectButtonText="使用此主体"
       />
 
       {hoverPreview && ReactDOM.createPortal(

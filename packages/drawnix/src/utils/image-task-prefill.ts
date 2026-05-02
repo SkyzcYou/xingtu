@@ -1,5 +1,5 @@
 import { normalizeImageDataUrl } from '@aitu/utils';
-import type { Task } from '../types/task.types';
+import type { KnowledgeContextRef, Task } from '../types/task.types';
 import type { ModelRef } from './settings-manager';
 import type { AIInputPrefillEventDetail } from '../services/ai-input-ui-events';
 
@@ -16,6 +16,7 @@ export interface ImageGenerationInitialData {
   initialResultUrl?: string;
   initialAspectRatio?: string;
   initialImages: ImageGenerationReferenceImage[];
+  initialKnowledgeContextRefs?: KnowledgeContextRef[];
 }
 
 function readString(value: unknown): string | undefined {
@@ -59,6 +60,35 @@ function readStringParams(value: unknown): Record<string, string> {
     }
     return acc;
   }, {});
+}
+
+function readKnowledgeContextRefs(value: unknown): KnowledgeContextRef[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const refs: KnowledgeContextRef[] = [];
+  const seen = new Set<string>();
+  value.forEach((item) => {
+    if (!item || typeof item !== 'object') {
+      return;
+    }
+
+    const record = item as Record<string, unknown>;
+    const noteId = readString(record.noteId);
+    if (!noteId || seen.has(noteId)) {
+      return;
+    }
+
+    seen.add(noteId);
+    refs.push({
+      noteId,
+      title: readString(record.title) || '未命名笔记',
+      directoryId: readString(record.directoryId),
+      updatedAt: readFiniteNumber(record.updatedAt),
+    });
+  });
+  return refs;
 }
 
 function normalizeReferenceImage(
@@ -110,6 +140,24 @@ function appendReferenceImages(
   });
 }
 
+export function getImageTaskKnowledgeContextRefs(
+  task: Pick<Task, 'params'>
+): KnowledgeContextRef[] {
+  const params = task.params as Record<string, unknown>;
+  const refs = readKnowledgeContextRefs(params.knowledgeContextRefs);
+  if (refs.length > 0) {
+    return refs;
+  }
+
+  const promptMeta = params.promptMeta;
+  if (!promptMeta || typeof promptMeta !== 'object') {
+    return [];
+  }
+  return readKnowledgeContextRefs(
+    (promptMeta as Record<string, unknown>).knowledgeContextRefs
+  );
+}
+
 export function getImageTaskReferenceImages(
   task: Pick<Task, 'params'>
 ): ImageGenerationReferenceImage[] {
@@ -147,6 +195,7 @@ export function buildImageTaskPrefillInitialData(
   task: Task
 ): ImageGenerationInitialData {
   const params = task.params as Record<string, unknown>;
+  const knowledgeContextRefs = getImageTaskKnowledgeContextRefs(task);
 
   return {
     prefillId: `${task.id}-${Date.now()}`,
@@ -156,6 +205,9 @@ export function buildImageTaskPrefillInitialData(
     initialResultUrl: readString(task.result?.url),
     initialAspectRatio: readString(params.aspectRatio),
     initialImages: getImageTaskReferenceImages(task),
+    ...(knowledgeContextRefs.length > 0
+      ? { initialKnowledgeContextRefs: knowledgeContextRefs }
+      : {}),
   };
 }
 
@@ -167,6 +219,7 @@ export function buildImageTaskAIInputPrefillData(
   const size = readString(params.size) || readString(params.aspectRatio);
   const model = readString(params.model);
   const count = readPositiveInteger(params.batchTotal);
+  const knowledgeContextRefs = getImageTaskKnowledgeContextRefs(task);
 
   return {
     generationType: 'image',
@@ -174,6 +227,7 @@ export function buildImageTaskAIInputPrefillData(
     images: getImageTaskReferenceImages(task),
     ...(model ? { model } : {}),
     modelRef: readModelRef(params.modelRef),
+    ...(knowledgeContextRefs.length > 0 ? { knowledgeContextRefs } : {}),
     params: {
       ...nestedParams,
       ...(size ? { size: size.replace(':', 'x').toLowerCase() } : {}),

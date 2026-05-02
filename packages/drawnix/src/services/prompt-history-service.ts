@@ -8,6 +8,7 @@ import {
   type PromptHistoryItem,
   type PromptType,
 } from './prompt-storage-service';
+import { stripKnowledgeContextFromPrompt } from './generation-context-service';
 
 export type PromptHistoryCategory =
   | 'image'
@@ -260,22 +261,34 @@ export function taskSummaryToPromptHistoryRecord(
   const meta = task.params.promptMeta;
   const category = inferPromptHistoryCategory(task);
   const sentPrompt = compactText(
-    meta?.sentPrompt ||
-      (category === 'ppt-slide' ? task.params.pptSlidePrompt : undefined) ||
-      task.params.prompt
+    stripKnowledgeContextFromPrompt(
+      meta?.sentPrompt ||
+        (category === 'ppt-slide' ? task.params.pptSlidePrompt : undefined) ||
+        task.params.prompt
+    )
   );
   const initialPrompt = compactText(
-    meta?.initialPrompt ||
-      task.params.sourcePrompt ||
-      task.params.rawInput ||
-      sentPrompt
+    stripKnowledgeContextFromPrompt(
+      meta?.initialPrompt ||
+        task.params.sourcePrompt ||
+        task.params.rawInput ||
+        sentPrompt
+    )
   );
   const skillName = compactText(meta?.skillName, 80);
   const skillId = compactText(meta?.skillId, 120);
+  const knowledgeContextTags = (
+    meta?.knowledgeContextRefs ||
+    task.params.knowledgeContextRefs ||
+    []
+  ).map((ref) =>
+    ref?.title ? `知识库:${compactText(ref.title, 40)}` : undefined
+  );
   const tags = uniqueTags([
     category,
     skillName || undefined,
     ...(meta?.tags || []),
+    ...knowledgeContextTags,
   ]);
 
   return {

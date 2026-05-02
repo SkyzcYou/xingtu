@@ -270,6 +270,12 @@ export function isPenPointerType(board: PlaitBoard): boolean {
   return (pointerType as string) === PenShape.pen;
 }
 
+const isTemporaryHandMode = (board: PlaitBoard) => {
+  return PlaitBoard.getBoardContainer(board).classList.contains(
+    'viewport-moving'
+  );
+};
+
 /**
  * 检测并处理工具切换
  * 如果正在创建路径且切换到其他工具，完成或取消创建
@@ -296,6 +302,7 @@ function checkAndFinishOnToolSwitch(board: PlaitBoard) {
  */
 export const withPenCreate = (board: PlaitBoard) => {
   const { pointerDown, pointerMove, pointerUp, globalPointerUp, keyDown, globalKeyDown } = board;
+  let isTemporaryHandPanning = false;
 
   const isEditableTarget = (target: EventTarget | null): boolean => {
     return (
@@ -359,6 +366,12 @@ export const withPenCreate = (board: PlaitBoard) => {
   };
 
   board.pointerDown = (event: PointerEvent) => {
+    if (isTemporaryHandMode(board)) {
+      isTemporaryHandPanning = true;
+      pointerDown(event);
+      return;
+    }
+
     // 检测工具切换，如果正在创建路径且切换到其他工具，完成或取消
     checkAndFinishOnToolSwitch(board);
     
@@ -408,6 +421,11 @@ export const withPenCreate = (board: PlaitBoard) => {
   };
 
   board.pointerMove = (event: PointerEvent) => {
+    if (isTemporaryHandPanning) {
+      pointerMove(event);
+      return;
+    }
+
     if (!isPenPointerType(board)) {
       pointerMove(event);
       return;
@@ -460,6 +478,12 @@ export const withPenCreate = (board: PlaitBoard) => {
   };
 
   board.pointerUp = (event: PointerEvent) => {
+    if (isTemporaryHandPanning) {
+      isTemporaryHandPanning = false;
+      pointerUp(event);
+      return;
+    }
+
     if (!isPenPointerType(board)) {
       pointerUp(event);
       return;
@@ -476,6 +500,7 @@ export const withPenCreate = (board: PlaitBoard) => {
   };
 
   board.globalPointerUp = (event: PointerEvent) => {
+    isTemporaryHandPanning = false;
     globalPointerUp(event);
   };
 

@@ -29,7 +29,7 @@ export function autoResizeTextarea(element: HTMLTextAreaElement | null) {
 export const CharacterDescriptionList: React.FC<CharacterDescriptionListProps> = ({
   characters,
   onChange,
-  placeholder = '角色外貌描述（英文，用于文生图）',
+  placeholder = '主体外貌描述（英文，用于文生图）',
 }) => {
   if (characters.length === 0) {
     return null;

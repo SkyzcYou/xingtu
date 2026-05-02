@@ -27,7 +27,13 @@ export type {
 
 function executeQueue(params: VideoAnalyzeParams): MCPResult & { taskId?: string; task?: unknown } {
   const prompt = params.prompt || DEFAULT_ANALYSIS_PROMPT;
-  if (!params.videoData && !params.youtubeUrl && !params.videoCacheUrl) {
+  const action = params.videoAnalyzerAction || 'analyze';
+  if (
+    action !== 'prompt-generate' &&
+    !params.videoData &&
+    !params.youtubeUrl &&
+    !params.videoCacheUrl
+  ) {
     return {
       success: false,
       error: '需要提供 videoData、videoCacheUrl 或 youtubeUrl',
@@ -44,11 +50,15 @@ function executeQueue(params: VideoAnalyzeParams): MCPResult & { taskId?: string
       youtubeUrl: params.youtubeUrl,
       videoData: params.videoData,
       videoCacheUrl: params.videoCacheUrl,
-      videoAnalyzerAction: 'analyze',
+      pdfCacheUrl: params.pdfCacheUrl,
+      pdfMimeType: params.pdfMimeType,
+      pdfName: params.pdfName,
+      videoAnalyzerAction: action,
       videoAnalyzerPrompt: prompt,
       videoAnalyzerSource: params.videoAnalyzerSource,
       videoAnalyzerSourceLabel: params.videoAnalyzerSourceLabel,
       videoAnalyzerSourceSnapshot: params.videoAnalyzerSourceSnapshot,
+      knowledgeContextRefs: params.knowledgeContextRefs,
       autoInsertToCanvas: false,
     },
     TaskType.CHAT
@@ -96,9 +106,25 @@ export const videoAnalyzeTool: MCPTool = {
         type: 'string',
         description: '本地缓存的视频 URL（队列模式）',
       },
+      pdfCacheUrl: {
+        type: 'string',
+        description: '本地缓存的 PDF URL（提示词生成上下文）',
+      },
+      pdfMimeType: {
+        type: 'string',
+        description: 'PDF MIME 类型，默认 application/pdf',
+      },
+      pdfName: {
+        type: 'string',
+        description: 'PDF 文件名',
+      },
       prompt: {
         type: 'string',
         description: '自定义分析 prompt（可选，有内置默认值）',
+      },
+      videoAnalyzerAction: {
+        type: 'string',
+        description: '视频工具动作：analyze 或 prompt-generate',
       },
       model: {
         type: 'string',

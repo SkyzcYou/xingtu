@@ -5,10 +5,10 @@ export const AI_GENERATED_AUDIO_URL_PREFIX = `${AI_GENERATED_URL_PREFIX}audio/`;
 
 export function normalizeVirtualMediaUrl(url: string): string {
   if (!url) return url;
-  if (url.startsWith('/')) return url;
 
   try {
-    return new URL(url).pathname;
+    const parsed = new URL(url, 'http://aitu.local');
+    return parsed.pathname;
   } catch {
     return url;
   }

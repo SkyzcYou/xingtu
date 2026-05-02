@@ -27,6 +27,7 @@ vi.mock('@plait/core', () => ({
   PlaitBoard: {
     getPointer: (board: TestBoard) => board.pointer,
     getElementHost: (board: TestBoard) => board.host,
+    getBoardContainer: (board: TestBoard) => board.container,
   },
   Transforms: {
     insertNode: insertNodeMock,
@@ -80,6 +81,15 @@ type TestBoard = PlaitBoard & {
   pointer: string;
   children: unknown[];
   host: SVGGElement;
+  container: HTMLDivElement;
+  baseHandlers: {
+    pointerDown: ReturnType<typeof vi.fn>;
+    pointerMove: ReturnType<typeof vi.fn>;
+    pointerUp: ReturnType<typeof vi.fn>;
+    globalPointerUp: ReturnType<typeof vi.fn>;
+    keyDown: ReturnType<typeof vi.fn>;
+    globalKeyDown: ReturnType<typeof vi.fn>;
+  };
   pointerDown: (event: PointerEvent) => void;
   pointerMove: (event: PointerEvent) => void;
   pointerUp: (event: PointerEvent) => void;
@@ -90,16 +100,22 @@ type TestBoard = PlaitBoard & {
 
 function createBoard(): TestBoard {
   const host = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  return {
-    pointer: PenShape.pen,
-    children: [],
-    host,
+  const container = document.createElement('div');
+  const baseHandlers = {
     pointerDown: vi.fn(),
     pointerMove: vi.fn(),
     pointerUp: vi.fn(),
     globalPointerUp: vi.fn(),
     keyDown: vi.fn(),
     globalKeyDown: vi.fn(),
+  };
+  return {
+    pointer: PenShape.pen,
+    children: [],
+    host,
+    container,
+    baseHandlers,
+    ...baseHandlers,
   } as unknown as TestBoard;
 }
 
@@ -186,5 +202,35 @@ describe('withPenCreate', () => {
     expect(getPreviewAnchorCount(board)).toBe(2);
     expect(insertNodeMock).not.toHaveBeenCalled();
     expect(board.children).toHaveLength(0);
+  });
+
+  it('delegates pointer events while the space-hand shortcut is active', () => {
+    const board = withPenCreate(createBoard()) as TestBoard;
+
+    addAnchor(board, 100, 100);
+    addAnchor(board, 200, 120);
+    expect(getPreviewAnchorCount(board)).toBe(2);
+
+    board.container.classList.add('viewport-moving');
+
+    const pointerDownEvent = createPointerEvent(300, 140, board.host);
+    const pointerMoveEvent = createPointerEvent(320, 160, board.host);
+    const pointerUpEvent = createPointerEvent(320, 160, board.host);
+
+    board.pointerDown(pointerDownEvent);
+    board.pointerMove(pointerMoveEvent);
+    board.pointerUp(pointerUpEvent);
+
+    expect(board.baseHandlers.pointerDown).toHaveBeenLastCalledWith(
+      pointerDownEvent
+    );
+    expect(board.baseHandlers.pointerMove).toHaveBeenLastCalledWith(
+      pointerMoveEvent
+    );
+    expect(board.baseHandlers.pointerUp).toHaveBeenLastCalledWith(
+      pointerUpEvent
+    );
+    expect(getPreviewAnchorCount(board)).toBe(2);
+    expect(insertNodeMock).not.toHaveBeenCalled();
   });
 });

@@ -378,10 +378,15 @@
 
   .comic-batch-bar--generation {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
     gap: 10px;
     margin-top: 2px;
+
+    .comic-knowledge-context-selector {
+      flex: 1 1 240px;
+      min-width: 220px;
+    }
 
     .comic-selection-check {
       min-height: 36px;

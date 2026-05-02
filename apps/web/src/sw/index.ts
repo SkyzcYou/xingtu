@@ -4853,13 +4853,16 @@ async function fetchQuick(
 }
 
 function getVirtualMediaCacheKeys(request: Request, url: URL): string[] {
-  const canonicalUrl = new URL(request.url);
-  for (const param of ['thumbnail', 'bypass_sw', 'direct_fetch', '_retry']) {
-    canonicalUrl.searchParams.delete(param);
-  }
+  const canonicalUrl = buildNormalizedCacheUrl(request.url);
+  const scopeRelativePathname = getScopeRelativePathname(url.pathname);
 
   return Array.from(
-    new Set([url.pathname, canonicalUrl.toString(), request.url])
+    new Set([
+      scopeRelativePathname,
+      url.pathname,
+      canonicalUrl.toString(),
+      request.url,
+    ])
   );
 }
 

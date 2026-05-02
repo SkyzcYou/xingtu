@@ -18,6 +18,7 @@ export {
 } from '../constants/model-config';
 import type { ModelRef } from '../utils/settings-manager';
 import type { GeminiMessagePart } from '../utils/gemini-api/types';
+import type { KnowledgeContextRef } from '../types/task.types';
 
 /**
  * JSON Schema 类型定义
@@ -283,6 +284,9 @@ export interface AgentExecutionContext {
 
   /** 最终生成用的 prompt */
   finalPrompt: string;
+
+  /** 本次 Agent 分析使用的知识库笔记轻量引用 */
+  knowledgeContextRefs?: KnowledgeContextRef[];
 }
 
 /**

@@ -5,7 +5,7 @@
  */
 
 import type { MCPExecuteOptions, MCPResult, MCPTool } from '../types';
-import { TaskType } from '../../types/task.types';
+import { TaskType, type KnowledgeContextRef } from '../../types/task.types';
 import { geminiSettings, type ModelRef } from '../../utils/settings-manager';
 import { getDefaultAudioModel } from '../../constants/model-config';
 import {
@@ -41,6 +41,8 @@ export interface AudioGenerationParams {
   autoInsertToCanvas?: boolean;
   params?: Record<string, unknown>;
   promptMeta?: PromptLineageMeta;
+  /** 本次生成使用的知识库笔记轻量引用 */
+  knowledgeContextRefs?: KnowledgeContextRef[];
 }
 
 export function getCurrentAudioModel(): string {
@@ -127,6 +129,7 @@ function getAudioQueueConfig(params: AudioGenerationParams) {
       infillStartS: params.infillStartS,
       infillEndS: params.infillEndS,
       promptMeta: params.promptMeta,
+      knowledgeContextRefs: params.knowledgeContextRefs,
       ...((params.params || params.continueSource)
         ? {
             params: {

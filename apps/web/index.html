@@ -159,7 +159,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
-    <meta name="app-version" content="0.6.95" />
+    <meta name="app-version" content="0.6.96" />
     <style>
       :root {
         --app-boot-bg: radial-gradient(
@@ -1273,24 +1273,15 @@
         function shouldEnableEarlyServiceWorkerBootstrap() {
           try {
             var swParam = new URLSearchParams(window.location.search).get('sw');
-            var isLocalDev =
-              window.location.hostname === 'localhost' ||
-              window.location.hostname === '127.0.0.1';
             if (swParam === '0') {
               return false;
             }
-            if (isLocalDev) {
-              return swParam === '1';
-            }
             return true;
           } catch {
-            var isFallbackLocalDev =
-              window.location.hostname === 'localhost' ||
-              window.location.hostname === '127.0.0.1';
             if (window.location.search.indexOf('sw=0') !== -1) {
               return false;
             }
-            return !isFallbackLocalDev || window.location.search.indexOf('sw=1') !== -1;
+            return true;
           }
         }
 

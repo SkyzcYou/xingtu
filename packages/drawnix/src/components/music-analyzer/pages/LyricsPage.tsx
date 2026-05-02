@@ -1,10 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { MusicAnalysisRecord } from '../types';
 import { formatLyricsMarkdown } from '../types';
 import { updateRecord } from '../storage';
 import { taskQueueService } from '../../../services/task-queue';
-import { TaskType } from '../../../types/task.types';
+import { TaskType, type KnowledgeContextRef } from '../../../types/task.types';
 import { ModelDropdown } from '../../ai-input-bar/ModelDropdown';
+import { KnowledgeNoteContextSelector } from '../../shared';
 import { useSelectableModels } from '../../../hooks/use-runtime-models';
 import { getSelectionKey } from '../../../utils/model-selection';
 import type { ModelRef } from '../../../utils/settings-manager';
@@ -12,6 +19,7 @@ import { quickInsert } from '../../../mcp/tools/canvas-insertion';
 import { syncMusicAnalyzerTask } from '../task-sync';
 import {
   buildLyricsRewritePrompt,
+  buildSunoLyricsPrompt,
   collectLyricsDraftModels,
   getDefaultRewritePrompt,
   isSunoLyricsModel,
@@ -20,6 +28,12 @@ import {
   ORIGINAL_VERSION_ID,
   switchToLyricsVersion,
 } from '../utils';
+import { MusicBriefEditor } from '../components/MusicBriefEditor';
+import {
+  areMusicBriefsEqual,
+  normalizeMusicBrief,
+  type MusicBrief,
+} from '../music-brief';
 import { analytics } from '../../../utils/posthog-analytics';
 
 const STORAGE_KEY_MODEL = 'music-analyzer:model';
@@ -38,7 +52,12 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
   onRecordsChange,
   onNext,
 }) => {
-  const [rewritePrompt, setRewritePrompt] = useState(() => getDefaultRewritePrompt(record));
+  const [rewritePrompt, setRewritePrompt] = useState(() =>
+    getDefaultRewritePrompt(record)
+  );
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >([]);
   const [lyricsDraft, setLyricsDraft] = useState(record.lyricsDraft || '');
   const [title, setTitle] = useState(
     record.title || record.analysis?.titleSuggestions?.[0] || ''
@@ -46,35 +65,50 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
   const [styleTagsInput, setStyleTagsInput] = useState(
     (record.styleTags || record.analysis?.genreTags || []).join(', ')
   );
-  const [pendingRewriteTaskId, setPendingRewriteTaskId] = useState<string | null>(
-    () => record.pendingRewriteTaskId || null
+  const [musicBrief, setMusicBrief] = useState<MusicBrief>(() =>
+    normalizeMusicBrief(record.musicBrief)
   );
+  const [pendingRewriteTaskId, setPendingRewriteTaskId] = useState<
+    string | null
+  >(() => record.pendingRewriteTaskId || null);
   const [rewriteProgress, setRewriteProgress] = useState('');
   const [error, setError] = useState('');
   const [selectedModel, setSelectedModelState] = useState(
     () =>
       record.analysisModel ||
-      readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL).modelId
+      readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL)
+        .modelId
   );
   const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
     () =>
       record.analysisModelRef ||
-      readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL).modelRef
+      readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL)
+        .modelRef
   );
   const [versionMenuOpen, setVersionMenuOpen] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const rewritingRef = useRef(false);
 
-  const setSelectedModel = useCallback((model: string, modelRef?: ModelRef | null) => {
-    setSelectedModelState(model);
-    setSelectedModelRef(modelRef || null);
-    writeStoredModelSelection(STORAGE_KEY_MODEL, model, modelRef);
-  }, []);
+  const setSelectedModel = useCallback(
+    (model: string, modelRef?: ModelRef | null) => {
+      setSelectedModelState(model);
+      setSelectedModelRef(modelRef || null);
+      writeStoredModelSelection(STORAGE_KEY_MODEL, model, modelRef);
+    },
+    []
+  );
 
   useEffect(() => {
     setRewritePrompt(getDefaultRewritePrompt(record));
     setLyricsDraft(record.lyricsDraft || '');
     setTitle(record.title || record.analysis?.titleSuggestions?.[0] || '');
-    setStyleTagsInput((record.styleTags || record.analysis?.genreTags || []).join(', '));
+    setStyleTagsInput(
+      (record.styleTags || record.analysis?.genreTags || []).join(', ')
+    );
+    setMusicBrief((current) => {
+      const next = normalizeMusicBrief(record.musicBrief);
+      return areMusicBriefsEqual(current, next) ? current : next;
+    });
     setPendingRewriteTaskId(record.pendingRewriteTaskId || null);
   }, [record]);
 
@@ -90,6 +124,7 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
         lyricsDraft,
         title,
         styleTags,
+        musicBrief: normalizeMusicBrief(musicBrief),
         pendingRewriteTaskId,
       });
       onRecordsChange(updated);
@@ -99,12 +134,14 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
         lyricsDraft,
         title,
         styleTags,
+        musicBrief: normalizeMusicBrief(musicBrief),
         pendingRewriteTaskId,
       });
     }, 400);
     return () => clearTimeout(saveTimerRef.current);
   }, [
     lyricsDraft,
+    musicBrief,
     onRecordUpdate,
     onRecordsChange,
     pendingRewriteTaskId,
@@ -120,7 +157,10 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
     () => collectLyricsDraftModels(allTextModels, audioModels),
     [allTextModels, audioModels]
   );
-  const isSunoModel = useMemo(() => isSunoLyricsModel(selectedModel), [selectedModel]);
+  const isSunoModel = useMemo(
+    () => isSunoLyricsModel(selectedModel),
+    [selectedModel]
+  );
 
   // 版本列表
   const versions = useMemo(() => {
@@ -137,16 +177,23 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
   const hasVersions = versions.length > 1;
   const creationPrompt = String(record.creationPrompt || '').trim();
 
-  const handleSwitchVersion = useCallback(async (versionId: string) => {
-    const patch = switchToLyricsVersion(record, versionId);
-    if (!patch) return;
-    const updated = await updateRecord(record.id, patch);
-    onRecordsChange(updated);
-    onRecordUpdate({ ...record, ...patch });
-    setVersionMenuOpen(false);
-  }, [onRecordUpdate, onRecordsChange, record]);
+  const handleSwitchVersion = useCallback(
+    async (versionId: string) => {
+      const patch = switchToLyricsVersion(record, versionId);
+      if (!patch) return;
+      const updated = await updateRecord(record.id, patch);
+      onRecordsChange(updated);
+      onRecordUpdate({ ...record, ...patch });
+      setVersionMenuOpen(false);
+    },
+    [onRecordUpdate, onRecordsChange, record]
+  );
 
   const handleRewrite = useCallback(async () => {
+    if (rewritingRef.current || pendingRewriteTaskId) {
+      return;
+    }
+    rewritingRef.current = true;
     setError('');
     setRewriteProgress(isSunoModel ? '歌词生成中...' : '歌词改写中 0%');
     analytics.trackUIInteraction({
@@ -163,16 +210,13 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
     try {
       let task;
       if (isSunoModel) {
-        const promptSections = [
-          rewritePrompt.trim() ? `本轮改写要求：\n${rewritePrompt.trim()}` : '',
-          creationPrompt && creationPrompt !== rewritePrompt.trim()
-            ? `第一步创作提示词：\n${creationPrompt}`
-            : '',
-          lyricsDraft.trim() ? `当前歌词草稿：\n${lyricsDraft.trim()}` : '',
-        ].filter(Boolean);
-
-        const sunoPrompt =
-          promptSections.join('\n\n') || rewritePrompt || lyricsDraft || record.sourceLabel;
+        const sunoPrompt = buildSunoLyricsPrompt({
+          userPrompt: rewritePrompt,
+          originalPrompt: creationPrompt,
+          currentLyrics: lyricsDraft,
+          musicBrief,
+          mode: 'rewrite',
+        });
 
         // Suno lyrics API：补齐首轮创作提示词与当前歌词，避免改写上下文缺失
         task = taskQueueService.createTask(
@@ -183,6 +227,8 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
             sunoAction: 'lyrics',
             musicAnalyzerAction: 'lyrics-gen',
             musicAnalyzerRecordId: record.id,
+            musicAnalyzerMusicBrief: normalizeMusicBrief(musicBrief),
+            knowledgeContextRefs,
             autoInsertToCanvas: false,
           },
           TaskType.AUDIO
@@ -200,8 +246,11 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
               userPrompt: rewritePrompt,
               originalPrompt: creationPrompt,
               currentLyrics: lyricsDraft,
+              musicBrief,
             }),
             musicAnalyzerRecordId: record.id,
+            musicAnalyzerMusicBrief: normalizeMusicBrief(musicBrief),
+            knowledgeContextRefs,
             autoInsertToCanvas: false,
           },
           TaskType.CHAT
@@ -210,15 +259,23 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
       setPendingRewriteTaskId(task.id);
       const updated = await updateRecord(record.id, {
         rewritePrompt,
+        musicBrief: normalizeMusicBrief(musicBrief),
         pendingRewriteTaskId: task.id,
       });
       onRecordsChange(updated);
-      onRecordUpdate({ ...record, rewritePrompt, pendingRewriteTaskId: task.id });
+      onRecordUpdate({
+        ...record,
+        rewritePrompt,
+        musicBrief: normalizeMusicBrief(musicBrief),
+        pendingRewriteTaskId: task.id,
+      });
     } catch (taskError: any) {
+      rewritingRef.current = false;
       setError(taskError.message || '歌词改写失败');
       setRewriteProgress('');
     }
   }, [
+    creationPrompt,
     lyricsDraft,
     onRecordUpdate,
     onRecordsChange,
@@ -227,6 +284,9 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
     selectedModel,
     selectedModelRef,
     isSunoModel,
+    knowledgeContextRefs,
+    musicBrief,
+    pendingRewriteTaskId,
   ]);
 
   useEffect(() => {
@@ -237,41 +297,47 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
       setRewriteProgress(`歌词改写中 ${Math.round(currentTask.progress)}%`);
     }
 
-    const subscription = taskQueueService.observeTaskUpdates().subscribe((event) => {
-      if (event.task.id !== pendingRewriteTaskId) return;
+    const subscription = taskQueueService
+      .observeTaskUpdates()
+      .subscribe((event) => {
+        if (event.task.id !== pendingRewriteTaskId) return;
 
-      if (event.task.status === 'failed') {
-        setPendingRewriteTaskId(null);
-        setRewriteProgress('');
-        setError(event.task.error?.message || '歌词改写失败');
-        void updateRecord(record.id, { pendingRewriteTaskId: null }).then(onRecordsChange);
-        return;
-      }
+        if (event.task.status === 'failed') {
+          rewritingRef.current = false;
+          setPendingRewriteTaskId(null);
+          setRewriteProgress('');
+          setError(event.task.error?.message || '歌词改写失败');
+          void updateRecord(record.id, { pendingRewriteTaskId: null }).then(
+            onRecordsChange
+          );
+          return;
+        }
 
-      if (event.task.status === 'completed') {
-        void syncMusicAnalyzerTask(event.task)
-          .then((synced) => {
-            if (!synced) return;
-            onRecordsChange(synced.records);
-            onRecordUpdate(synced.record);
-            setLyricsDraft(synced.record.lyricsDraft || '');
-            setTitle(synced.record.title || '');
-            setStyleTagsInput((synced.record.styleTags || []).join(', '));
-          })
-          .catch((taskError: any) => {
-            setError(taskError.message || '改写结果同步失败');
-          })
-          .finally(() => {
-            setPendingRewriteTaskId(null);
-            setRewriteProgress('');
-          });
-        return;
-      }
+        if (event.task.status === 'completed') {
+          void syncMusicAnalyzerTask(event.task)
+            .then((synced) => {
+              if (!synced) return;
+              onRecordsChange(synced.records);
+              onRecordUpdate(synced.record);
+              setLyricsDraft(synced.record.lyricsDraft || '');
+              setTitle(synced.record.title || '');
+              setStyleTagsInput((synced.record.styleTags || []).join(', '));
+            })
+            .catch((taskError: any) => {
+              setError(taskError.message || '改写结果同步失败');
+            })
+            .finally(() => {
+              rewritingRef.current = false;
+              setPendingRewriteTaskId(null);
+              setRewriteProgress('');
+            });
+          return;
+        }
 
-      if (typeof event.task.progress === 'number') {
-        setRewriteProgress(`歌词改写中 ${Math.round(event.task.progress)}%`);
-      }
-    });
+        if (typeof event.task.progress === 'number') {
+          setRewriteProgress(`歌词改写中 ${Math.round(event.task.progress)}%`);
+        }
+      });
 
     return () => subscription.unsubscribe();
   }, [onRecordUpdate, onRecordsChange, pendingRewriteTaskId, record.id]);
@@ -299,7 +365,8 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
       source: 'music_analyzer_lyrics_page',
       metadata: {
         lyricsLength: lyricsDraft.trim().length,
-        tagsCount: styleTagsInput.split(',').filter((item) => item.trim()).length,
+        tagsCount: styleTagsInput.split(',').filter((item) => item.trim())
+          .length,
       },
     });
   }, [lyricsDraft, styleTagsInput, title]);
@@ -307,24 +374,32 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
   return (
     <div className="va-page">
       <div className="ma-card">
+        <MusicBriefEditor value={musicBrief} onChange={setMusicBrief} />
+      </div>
+
+      <div className="ma-card">
         <div className="ma-card-header">
-          <span>歌词模型</span>
-          {/* 版本切换 */}
+          <span>改写要求</span>
           {hasVersions && (
             <div className="ma-version-dropdown">
               <button
                 className="ma-version-btn"
                 onClick={() => setVersionMenuOpen((v) => !v)}
               >
-                {versions.find((v) => v.id === activeVersionId)?.label || '原始版本'}
-                <span className="ma-version-arrow">{versionMenuOpen ? '▲' : '▼'}</span>
+                {versions.find((v) => v.id === activeVersionId)?.label ||
+                  '原始版本'}
+                <span className="ma-version-arrow">
+                  {versionMenuOpen ? '▲' : '▼'}
+                </span>
               </button>
               {versionMenuOpen && (
                 <div className="ma-version-menu">
                   {versions.map((v) => (
                     <button
                       key={v.id}
-                      className={`ma-version-menu-item ${v.id === activeVersionId ? 'active' : ''}`}
+                      className={`ma-version-menu-item ${
+                        v.id === activeVersionId ? 'active' : ''
+                      }`}
                       onClick={() => handleSwitchVersion(v.id)}
                     >
                       {v.label}
@@ -335,21 +410,6 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
             </div>
           )}
         </div>
-        <ModelDropdown
-          selectedModel={selectedModel}
-          selectedSelectionKey={getSelectionKey(selectedModel, selectedModelRef)}
-          onSelect={setSelectedModel}
-          models={rewriteModels}
-          variant="form"
-          placement="down"
-          placeholder="选择歌词模型"
-        />
-      </div>
-
-      <div className="ma-card">
-        <div className="ma-card-header">
-          <span>改写要求</span>
-        </div>
         <textarea
           className="ma-textarea"
           value={rewritePrompt}
@@ -357,10 +417,44 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
           rows={4}
           placeholder="告诉 AI 要保留什么、强化什么、改成什么风格"
         />
-        <button className="va-btn-primary ma-rewrite-submit" onClick={handleRewrite}>
-          {isSunoModel ? 'Suno 生成歌词' : 'AI 改写'}
-        </button>
-        {rewriteProgress && <div className="ma-progress">{rewriteProgress}</div>}
+        <KnowledgeNoteContextSelector
+          value={knowledgeContextRefs}
+          onChange={setKnowledgeContextRefs}
+          disabled={!!pendingRewriteTaskId}
+          className="ma-knowledge-context-selector"
+          placement="up"
+        />
+        <div className="ma-lyrics-submit-row ma-lyrics-submit-row--rewrite">
+          <div className="ma-lyrics-model-inline">
+            <span className="ma-inline-label">歌词模型</span>
+            <ModelDropdown
+              selectedModel={selectedModel}
+              selectedSelectionKey={getSelectionKey(
+                selectedModel,
+                selectedModelRef
+              )}
+              onSelect={setSelectedModel}
+              models={rewriteModels}
+              variant="form"
+              placement="up"
+              placeholder="选择歌词模型"
+            />
+          </div>
+          <button
+            className="va-btn-primary ma-rewrite-submit"
+            onClick={handleRewrite}
+            disabled={!!pendingRewriteTaskId}
+          >
+            {pendingRewriteTaskId
+              ? rewriteProgress || (isSunoModel ? '歌词生成中...' : '歌词改写中...')
+              : isSunoModel
+              ? 'Suno 生成歌词'
+              : 'AI 改写'}
+          </button>
+        </div>
+        {rewriteProgress && (
+          <div className="ma-progress">{rewriteProgress}</div>
+        )}
       </div>
 
       <div className="ma-card">
@@ -406,7 +500,11 @@ export const LyricsPage: React.FC<LyricsPageProps> = ({
         <button onClick={handleInsertLyrics} disabled={!lyricsDraft.trim()}>
           插入歌词
         </button>
-        <button className="va-btn-primary" onClick={onNext} disabled={!lyricsDraft.trim()}>
+        <button
+          className="va-btn-primary"
+          onClick={onNext}
+          disabled={!lyricsDraft.trim()}
+        >
           下一步
         </button>
       </div>

@@ -399,7 +399,8 @@ export async function cacheRemoteUrls(
   urls: string[],
   taskId: string,
   mediaType: 'image' | 'video' | 'audio',
-  format: string
+  format: string,
+  options?: Parameters<typeof cacheRemoteUrl>[5]
 ): Promise<string[]> {
   return Promise.all(
     urls.map((url, i) =>
@@ -408,7 +409,8 @@ export async function cacheRemoteUrls(
         taskId,
         mediaType,
         format,
-        urls.length > 1 ? i : undefined
+        urls.length > 1 ? i : undefined,
+        options
       )
     )
   );

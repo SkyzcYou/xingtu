@@ -169,6 +169,7 @@ function isSeedanceModel(model: ModelConfig): boolean {
 function isHappyHorseModel(model: ModelConfig): boolean {
   const lowerId = model.id.toLowerCase();
   return (
+    model.vendor === ModelVendor.HAPPYHORSE ||
     lowerId.includes('happyhorse') ||
     normalizeModelTags(model).includes('happyhorse')
   );

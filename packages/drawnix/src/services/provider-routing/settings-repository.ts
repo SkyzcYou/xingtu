@@ -124,6 +124,7 @@ function inferVendorFromModelId(modelId: string): ModelVendor {
     return ModelVendor.SUNO;
   }
   if (lowerId.includes('kling')) return ModelVendor.KLING;
+  if (lowerId.includes('happyhorse')) return ModelVendor.HAPPYHORSE;
   if (lowerId.includes('seedance') || lowerId.includes('seedream')) {
     return ModelVendor.DOUBAO;
   }

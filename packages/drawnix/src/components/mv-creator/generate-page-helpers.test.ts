@@ -19,13 +19,16 @@ describe('mv-creator generate helpers', () => {
     const record: MVRecord = {
       id: 'mv_1',
       createdAt: 1,
-      creationPrompt: '创意提示词',
       sourceLabel: 'source',
       starred: false,
       musicTitle: '歌名',
       musicStyleTags: ['pop'],
       aspectRatio: '1x1',
       videoStyle: '霓虹',
+      creativeBrief: {
+        purpose: '品牌广告',
+        directorStyle: '高质感广告导演',
+      },
       selectedClipId: 'clip_1',
       generatedClips: [
         {
@@ -42,11 +45,11 @@ describe('mv-creator generate helpers', () => {
     const options = buildMVWorkflowExportOptions(record, shots, assets);
 
     expect(options.recordMeta).toMatchObject({
-      creationPrompt: '创意提示词',
       musicTitle: '歌名',
       musicStyleTags: ['pop'],
       aspectRatio: '1x1',
       videoStyle: '霓虹',
+      creativeBriefSummary: expect.stringContaining('视频用途/场景：品牌广告'),
       shotCount: 1,
     });
     expect(options.audioAsset).toMatchObject({
@@ -54,13 +57,13 @@ describe('mv-creator generate helpers', () => {
       fallbackExtension: 'mp3',
     });
     expect(options.scriptMarkdown).toContain('# 爆款MV脚本');
+    expect(options.scriptMarkdown).toContain('## 创作 Brief');
   });
 
   it('marks missing audio when no clip is selected', () => {
     const record: MVRecord = {
       id: 'mv_2',
       createdAt: 1,
-      creationPrompt: '创意提示词',
       sourceLabel: 'source',
       starred: false,
     };

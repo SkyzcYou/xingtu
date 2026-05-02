@@ -1,8 +1,9 @@
 {
-  "version": "0.6.95",
-  "buildTime": "2026-04-30T11:36:27.829Z",
+  "version": "0.6.96",
+  "buildTime": "2026-05-01T15:15:12.754Z",
   "gitCommit": "unknown",
   "changelog": [
-    "优化页面卡片布局并修复提示词回填逻辑"
+    "enhance audio asset handling in workflow export and improve caching logic",
+    "优化视频工作流批量生成"
   ]
 }

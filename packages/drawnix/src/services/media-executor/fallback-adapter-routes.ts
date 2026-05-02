@@ -6,6 +6,7 @@
  */
 
 import type { ModelRef } from '../../utils/settings-manager';
+import type { GenerationParams } from '../../types/shared/core.types';
 import type { ExecutionOptions } from './types';
 import { taskStorageWriter } from './task-storage-writer';
 import {
@@ -100,6 +101,7 @@ export async function executeImageViaAdapter(
     outputFormat?: ImageOutputFormat;
     outputCompression?: number;
     params?: Record<string, unknown>;
+    assetMetadata?: GenerationParams['assetMetadata'];
     preferredRequestSchema?: string | readonly string[];
   },
   options?: ExecutionOptions,
@@ -179,7 +181,11 @@ export async function executeImageViaAdapter(
     // 缓存远程签名 URL 到本地，避免 Referer 校验导致 403
     const fmt = result.format || 'png';
     const allUrls = result.urls?.length ? result.urls : [result.url];
-    const cachedUrls = await cacheRemoteUrls(allUrls, taskId, 'image', fmt);
+    const cachedUrls = await cacheRemoteUrls(allUrls, taskId, 'image', fmt, {
+      extraMetadata: params.assetMetadata
+        ? { ...params.assetMetadata }
+        : undefined,
+    });
     const cachedPrimary = cachedUrls[0];
 
     await taskStorageWriter.completeTask(taskId, {
@@ -283,7 +289,19 @@ export async function executeVideoViaAdapter(
         size: params.size,
         duration: durationNum,
         referenceImages: processedImages,
-        params: params.params,
+        params: {
+          ...params.params,
+          onProgress: (progress: number) => {
+            const safeProgress = Math.min(100, Math.max(10, progress));
+            options?.onProgress?.({
+              progress: safeProgress,
+              phase: safeProgress <= 10 ? 'submitting' : 'polling',
+            });
+          },
+          onSubmitted: (videoId: string) => {
+            void taskStorageWriter.updateRemoteId(taskId, videoId);
+          },
+        },
       }
     );
 

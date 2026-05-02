@@ -100,6 +100,95 @@
     min-height: 220px;
   }
 
+  .ma-knowledge-context-selector {
+    margin-top: 2px;
+  }
+
+  .ma-brief-combo {
+    width: 100%;
+
+    .va-combo-trigger {
+      min-height: 43px;
+      box-sizing: border-box;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 8px;
+      background: #fff;
+
+      &:focus-within {
+        border-color: rgba(243, 156, 18, 0.45);
+      }
+    }
+
+    .va-combo-input {
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .va-combo-clear {
+      padding: 0 6px;
+      font-size: 15px;
+    }
+
+    .va-combo-arrow {
+      padding: 0 10px 0 4px;
+    }
+  }
+
+  .ma-lyrics-submit-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(120px, 0.75fr);
+    gap: 8px;
+    align-items: stretch;
+
+    > button {
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+  }
+
+  .ma-lyrics-submit-row--rewrite {
+    padding-top: 2px;
+  }
+
+  .ma-lyrics-model-inline {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 8px;
+    background: #fff;
+
+    .model-dropdown {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .model-dropdown__trigger--form {
+      min-height: 36px;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+
+    .model-dropdown__form-input,
+    .model-dropdown__form-label {
+      font-size: 13px !important;
+    }
+  }
+
+  .ma-inline-label {
+    flex: 0 0 auto;
+    color: #555;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
   .ma-rewrite-submit {
     width: 100%;
     padding: 8px 6px;
@@ -247,6 +336,23 @@
 
   .ma-suno-summary .ma-textarea {
     min-height: 220px;
+  }
+
+  .ma-music-brief {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ma-music-brief-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+
+    .ma-field:first-child,
+    .ma-field:last-child {
+      grid-column: 1 / -1;
+    }
   }
 
   .ma-history-title {
@@ -561,6 +667,7 @@
   }
 
   @media (max-width: 900px) {
+    .ma-music-brief-grid,
     .ma-fields-grid,
     .ma-fields-grid--triple {
       grid-template-columns: 1fr;
@@ -578,6 +685,12 @@
 
     .ma-clip-actions {
       width: 100%;
+    }
+  }
+
+  @media (max-width: 460px) {
+    .ma-lyrics-submit-row {
+      grid-template-columns: 1fr;
     }
   }
 }

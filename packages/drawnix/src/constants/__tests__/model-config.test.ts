@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getCompatibleParams, getSizeOptionsForModel } from '../model-config';
+import {
+  getCompatibleParams,
+  getSizeOptionsForModel,
+  getStaticModelConfig,
+  ModelVendor,
+} from '../model-config';
 
 describe('model-config image size options', () => {
   it('为 gpt-image-2 系列暴露扩展比例', () => {
@@ -119,6 +124,9 @@ describe('model-config image size options', () => {
       r2vParams.find((param) => param.id === 'watermark')?.defaultValue
     ).toBe(
       'false'
+    );
+    expect(getStaticModelConfig('happyhorse-1.0-t2v')?.vendor).toBe(
+      ModelVendor.HAPPYHORSE
     );
   });
 });

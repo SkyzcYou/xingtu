@@ -762,6 +762,11 @@ const TTDDialogComponent = ({
               }
               initialPrompt={aiImageData.initialPrompt}
               initialImages={aiImageData.initialImages}
+              initialKnowledgeContextRefs={
+                imageDialogInitialData?.initialKnowledgeContextRefs ||
+                imageDialogInitialData?.knowledgeContextRefs ||
+                []
+              }
               selectedElementIds={aiImageData.selectedElementIds}
               initialWidth={
                 imageDialogInitialData?.initialWidth ||
@@ -783,6 +788,7 @@ const TTDDialogComponent = ({
               onModelChange={handleImageModelChange}
               onModelRefChange={handleImageModelRefChange}
               externalBatchId={imageDialogInitialData?.batchId}
+              assetMetadata={imageDialogInitialData?.assetMetadata}
               initialAutoInsertToCanvas={imageDialogInitialData?.autoInsertToCanvas}
               onDraftChange={imageDialogInitialData?.onDraftChange}
             />
@@ -812,6 +818,11 @@ const TTDDialogComponent = ({
             initialPrompt={aiVideoData.initialPrompt}
             initialImage={aiVideoData.initialImage}
             initialImages={aiVideoData.initialImages}
+            initialKnowledgeContextRefs={
+              videoDialogInitialData?.initialKnowledgeContextRefs ||
+              videoDialogInitialData?.knowledgeContextRefs ||
+              []
+            }
             initialDuration={aiVideoData.initialDuration}
             initialModel={aiVideoData.initialModel}
             initialSize={aiVideoData.initialSize}

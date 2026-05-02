@@ -1,16 +1,25 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { generateUUID } from '../../../utils/runtime-helpers';
 import type { CreationMode, MusicAnalysisRecord } from '../types';
 import { formatMusicAnalysisMarkdown } from '../types';
 import { ModelDropdown } from '../../ai-input-bar/ModelDropdown';
-import { PromptOptimizeButton } from '../../shared';
+import {
+  KnowledgeNoteContextSelector,
+  PromptOptimizeButton,
+} from '../../shared';
 import { useSelectableModels } from '../../../hooks/use-runtime-models';
 import { getSelectionKey } from '../../../utils/model-selection';
 import type { ModelRef } from '../../../utils/settings-manager';
 import { taskQueueService } from '../../../services/task-queue';
 import { quickInsert } from '../../../mcp/tools/canvas-insertion';
 import { syncMusicAnalyzerTask } from '../task-sync';
-import { TaskType } from '../../../types/task.types';
+import { TaskType, type KnowledgeContextRef } from '../../../types/task.types';
 import { addRecord, updateRecord } from '../storage';
 import {
   cacheAudioSource,
@@ -18,11 +27,20 @@ import {
 } from '../audio-source-cache';
 import {
   buildLyricsRewritePrompt,
+  buildSunoLyricsPrompt,
   collectLyricsDraftModels,
   isSunoLyricsModel,
   readStoredModelSelection,
   writeStoredModelSelection,
 } from '../utils';
+import { MusicBriefEditor } from '../components/MusicBriefEditor';
+import {
+  areMusicBriefsEqual,
+  deriveMusicBriefStyleTags,
+  formatMusicBriefPromptBlock,
+  normalizeMusicBrief,
+  type MusicBrief,
+} from '../music-brief';
 import {
   DEFAULT_MUSIC_ANALYSIS_PROMPT,
   normalizeMusicAnalysisData,
@@ -59,6 +77,16 @@ function writeSessionPrompt(value: string): void {
   }
 }
 
+function areStringListsEqual(
+  left: string[] = [],
+  right: string[] = []
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((item, index) => item === right[index]);
+}
+
 interface CreatePageProps {
   existingRecord?: MusicAnalysisRecord | null;
   onComplete: (record: MusicAnalysisRecord) => void;
@@ -84,14 +112,22 @@ export const CreatePage: React.FC<CreatePageProps> = ({
   const [creationPrompt, setCreationPrompt] = useState(
     () => existingRecord?.creationPrompt || readSessionPrompt()
   );
-  const [pendingLyricsGenTaskId, setPendingLyricsGenTaskId] = useState<string | null>(
-    () => existingRecord?.pendingLyricsGenTaskId || null
+  const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
+    KnowledgeContextRef[]
+  >([]);
+  const [musicBrief, setMusicBrief] = useState<MusicBrief>(() =>
+    normalizeMusicBrief(existingRecord?.musicBrief)
   );
+  const [pendingLyricsGenTaskId, setPendingLyricsGenTaskId] = useState<
+    string | null
+  >(() => existingRecord?.pendingLyricsGenTaskId || null);
   const [lyricsGenProgress, setLyricsGenProgress] = useState('');
 
   // ── reference 模式状态 ──
   const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [pendingAnalyzeTaskId, setPendingAnalyzeTaskId] = useState<string | null>(null);
+  const [pendingAnalyzeTaskId, setPendingAnalyzeTaskId] = useState<
+    string | null
+  >(null);
   const [progress, setProgress] = useState('');
   const [analysisSummaryOpen, setAnalysisSummaryOpen] = useState(true);
   const [analysisTitle, setAnalysisTitle] = useState('');
@@ -100,37 +136,54 @@ export const CreatePage: React.FC<CreatePageProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const analyzingRef = useRef(false);
+  const lyricsGeneratingRef = useRef(false);
 
   // ── 共享状态 ──
   const [error, setError] = useState('');
   const [selectedModel, setSelectedModelState] = useState(
     () =>
       existingRecord?.analysisModel ||
-      readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL).modelId
+      readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL)
+        .modelId
   );
   const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
     () =>
       existingRecord?.analysisModelRef ||
-      readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL).modelRef
+      readStoredModelSelection(STORAGE_KEY_MODEL, DEFAULT_ANALYSIS_MODEL)
+        .modelRef
   );
   const [selectedLyricsModel, setSelectedLyricsModelState] = useState(
-    () => readStoredModelSelection(STORAGE_KEY_LYRICS_MODEL, getDefaultAudioModel()).modelId
+    () =>
+      readStoredModelSelection(STORAGE_KEY_LYRICS_MODEL, getDefaultAudioModel())
+        .modelId
   );
-  const [selectedLyricsModelRef, setSelectedLyricsModelRef] = useState<ModelRef | null>(
-    () => readStoredModelSelection(STORAGE_KEY_LYRICS_MODEL, getDefaultAudioModel()).modelRef
+  const [selectedLyricsModelRef, setSelectedLyricsModelRef] =
+    useState<ModelRef | null>(
+      () =>
+        readStoredModelSelection(
+          STORAGE_KEY_LYRICS_MODEL,
+          getDefaultAudioModel()
+        ).modelRef
+    );
+
+  const setSelectedModel = useCallback(
+    (model: string, modelRef?: ModelRef | null) => {
+      setSelectedModelState(model);
+      setSelectedModelRef(modelRef || null);
+      writeStoredModelSelection(STORAGE_KEY_MODEL, model, modelRef);
+    },
+    []
   );
 
-  const setSelectedModel = useCallback((model: string, modelRef?: ModelRef | null) => {
-    setSelectedModelState(model);
-    setSelectedModelRef(modelRef || null);
-    writeStoredModelSelection(STORAGE_KEY_MODEL, model, modelRef);
-  }, []);
-
-  const setSelectedLyricsModel = useCallback((model: string, modelRef?: ModelRef | null) => {
-    setSelectedLyricsModelState(model);
-    setSelectedLyricsModelRef(modelRef || null);
-    writeStoredModelSelection(STORAGE_KEY_LYRICS_MODEL, model, modelRef);
-  }, []);
+  const setSelectedLyricsModel = useCallback(
+    (model: string, modelRef?: ModelRef | null) => {
+      setSelectedLyricsModelState(model);
+      setSelectedLyricsModelRef(modelRef || null);
+      writeStoredModelSelection(STORAGE_KEY_LYRICS_MODEL, model, modelRef);
+    },
+    []
+  );
 
   const audioPreviewUrl = useMemo(() => {
     if (previewUrlRef.current) {
@@ -161,21 +214,31 @@ export const CreatePage: React.FC<CreatePageProps> = ({
       if (!existingRecord) {
         if (!pendingAnalyzeTaskId && !pendingLyricsGenTaskId) {
           setAudioFile(null);
+          setMusicBrief({});
           setError('');
         }
         return;
       }
-      setSelectedModelState(existingRecord.analysisModel || DEFAULT_ANALYSIS_MODEL);
+      setSelectedModelState(
+        existingRecord.analysisModel || DEFAULT_ANALYSIS_MODEL
+      );
       setSelectedModelRef(existingRecord.analysisModelRef || null);
       setCreationPrompt(existingRecord.creationPrompt || '');
+      setMusicBrief((current) => {
+        const next = normalizeMusicBrief(existingRecord.musicBrief);
+        return areMusicBriefsEqual(current, next) ? current : next;
+      });
       const analysis = existingRecord.analysis
         ? normalizeMusicAnalysisData(existingRecord.analysis)
         : null;
       setAnalysisTitle(existingRecord.title || analysis?.sunoTitle || '');
       setAnalysisStyleTags(
-        (existingRecord.styleTags || analysis?.sunoStyleTags || analysis?.genreTags || []).join(
-          ', '
-        )
+        (
+          existingRecord.styleTags ||
+          analysis?.sunoStyleTags ||
+          analysis?.genreTags ||
+          []
+        ).join(', ')
       );
       setAnalysisLyricsDraft(
         existingRecord.lyricsDraft || analysis?.sunoLyricsDraft || ''
@@ -183,7 +246,9 @@ export const CreatePage: React.FC<CreatePageProps> = ({
       setError('');
 
       if (existingRecord.source === 'upload') {
-        const restoredFile = await restoreAudioFileFromSnapshot(existingRecord.sourceSnapshot);
+        const restoredFile = await restoreAudioFileFromSnapshot(
+          existingRecord.sourceSnapshot
+        );
         if (disposed) return;
         setAudioFile(restoredFile);
         if (!restoredFile) {
@@ -192,7 +257,9 @@ export const CreatePage: React.FC<CreatePageProps> = ({
       }
     };
     void hydrate();
-    return () => { disposed = true; };
+    return () => {
+      disposed = true;
+    };
   }, [existingRecord, pendingAnalyzeTaskId, pendingLyricsGenTaskId]);
 
   useEffect(() => {
@@ -206,21 +273,44 @@ export const CreatePage: React.FC<CreatePageProps> = ({
   }, [creationPrompt, existingRecord]);
 
   useEffect(() => {
-    if (!existingRecord || mode !== 'reference') {
+    if (!existingRecord) {
       return;
     }
 
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      const styleTags = analysisStyleTags
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
-      const updated = await updateRecord(existingRecord.id, {
-        title: analysisTitle.trim(),
-        styleTags,
-        lyricsDraft: analysisLyricsDraft,
-      });
+      const normalizedBrief = normalizeMusicBrief(musicBrief);
+      const patch: Partial<MusicAnalysisRecord> = {
+        musicBrief: normalizedBrief,
+      };
+      if (mode === 'reference') {
+        const styleTags = analysisStyleTags
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const titleChanged = existingRecord.title !== analysisTitle.trim();
+        const tagsChanged = !areStringListsEqual(
+          existingRecord.styleTags || [],
+          styleTags
+        );
+        const lyricsChanged =
+          (existingRecord.lyricsDraft || '') !== analysisLyricsDraft;
+        const briefChanged = !areMusicBriefsEqual(
+          existingRecord.musicBrief,
+          normalizedBrief
+        );
+        if (!titleChanged && !tagsChanged && !lyricsChanged && !briefChanged) {
+          return;
+        }
+        patch.title = analysisTitle.trim();
+        patch.styleTags = styleTags;
+        patch.lyricsDraft = analysisLyricsDraft;
+      } else if (
+        areMusicBriefsEqual(existingRecord.musicBrief, normalizedBrief)
+      ) {
+        return;
+      }
+      const updated = await updateRecord(existingRecord.id, patch);
       onRecordsChange(updated);
       const nextRecord = updated.find((item) => item.id === existingRecord.id);
       if (nextRecord) {
@@ -234,6 +324,7 @@ export const CreatePage: React.FC<CreatePageProps> = ({
     analysisStyleTags,
     analysisTitle,
     existingRecord,
+    musicBrief,
     mode,
     onComplete,
     onRecordsChange,
@@ -251,20 +342,25 @@ export const CreatePage: React.FC<CreatePageProps> = ({
   );
   const normalizedAnalysis = useMemo(
     () =>
-      existingRecord?.analysis ? normalizeMusicAnalysisData(existingRecord.analysis) : null,
+      existingRecord?.analysis
+        ? normalizeMusicAnalysisData(existingRecord.analysis)
+        : null,
     [existingRecord?.analysis]
   );
 
   // ── reference 模式：文件选择 ──
-  const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file?.type.startsWith('audio/')) {
-      setAudioFile(file);
-      setError('');
-    } else {
-      setError('请选择音频文件');
-    }
-  }, []);
+  const handleFileSelect = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file?.type.startsWith('audio/')) {
+        setAudioFile(file);
+        setError('');
+      } else {
+        setError('请选择音频文件');
+      }
+    },
+    []
+  );
 
   const handleDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -279,10 +375,14 @@ export const CreatePage: React.FC<CreatePageProps> = ({
 
   // ── reference 模式：分析 ──
   const handleAnalyze = useCallback(async () => {
+    if (analyzingRef.current || pendingAnalyzeTaskId) {
+      return;
+    }
     if (!audioFile) {
       setError('请先上传音频');
       return;
     }
+    analyzingRef.current = true;
     analytics.trackUIInteraction({
       area: 'popular_music_tool',
       action: 'audio_analysis_started',
@@ -297,6 +397,13 @@ export const CreatePage: React.FC<CreatePageProps> = ({
     setProgress('缓存音频...');
     try {
       const sourceSnapshot = await cacheAudioSource(audioFile);
+      const musicBriefBlock = formatMusicBriefPromptBlock(musicBrief);
+      const musicAnalyzerPrompt = [
+        DEFAULT_MUSIC_ANALYSIS_PROMPT,
+        musicBriefBlock,
+      ]
+        .filter(Boolean)
+        .join('\n');
       const task = taskQueueService.createTask(
         {
           prompt: `分析音频：${audioFile.name || '本地音频'}`,
@@ -305,7 +412,8 @@ export const CreatePage: React.FC<CreatePageProps> = ({
           mimeType: sourceSnapshot.mimeType,
           audioCacheUrl: sourceSnapshot.cacheUrl,
           musicAnalyzerAction: 'analyze',
-          musicAnalyzerPrompt: DEFAULT_MUSIC_ANALYSIS_PROMPT,
+          musicAnalyzerPrompt,
+          musicAnalyzerMusicBrief: normalizeMusicBrief(musicBrief),
           musicAnalyzerSource: 'upload',
           musicAnalyzerSourceLabel: sourceSnapshot.fileName,
           musicAnalyzerSourceSnapshot: sourceSnapshot,
@@ -316,16 +424,21 @@ export const CreatePage: React.FC<CreatePageProps> = ({
       setPendingAnalyzeTaskId(task.id);
       setProgress('音频分析中 0%');
     } catch (taskError: any) {
+      analyzingRef.current = false;
       setError(taskError.message || '音频分析失败');
     }
-  }, [audioFile, selectedModel, selectedModelRef]);
+  }, [audioFile, musicBrief, pendingAnalyzeTaskId, selectedModel, selectedModelRef]);
 
   // ── scratch 模式：Suno 歌词生成 ──
   const handleGenerateLyrics = useCallback(async () => {
+    if (lyricsGeneratingRef.current || pendingLyricsGenTaskId) {
+      return;
+    }
     if (!creationPrompt.trim()) {
       setError('请先描述你想创作的歌曲');
       return;
     }
+    lyricsGeneratingRef.current = true;
     const useSunoLyricsModel = isSunoLyricsModel(selectedLyricsModel);
     analytics.trackUIInteraction({
       area: 'popular_music_tool',
@@ -339,7 +452,9 @@ export const CreatePage: React.FC<CreatePageProps> = ({
       },
     });
     setError('');
-    setLyricsGenProgress(useSunoLyricsModel ? '歌词生成中...' : '歌词草稿生成中 0%');
+    setLyricsGenProgress(
+      useSunoLyricsModel ? '歌词生成中...' : '歌词草稿生成中 0%'
+    );
     try {
       // 先创建 record
       const record: MusicAnalysisRecord = {
@@ -348,18 +463,26 @@ export const CreatePage: React.FC<CreatePageProps> = ({
         source: 'scratch',
         sourceLabel: creationPrompt.slice(0, 30) || '从零创作',
         creationPrompt,
+        musicBrief: normalizeMusicBrief(musicBrief),
+        styleTags: deriveMusicBriefStyleTags(musicBrief),
         starred: false,
       };
 
       const task = useSunoLyricsModel
         ? taskQueueService.createTask(
             {
-              prompt: creationPrompt,
+              prompt: buildSunoLyricsPrompt({
+                userPrompt: creationPrompt,
+                musicBrief,
+                mode: 'create',
+              }),
               model: selectedLyricsModel,
               modelRef: selectedLyricsModelRef,
               sunoAction: 'lyrics',
               musicAnalyzerAction: 'lyrics-gen',
               musicAnalyzerRecordId: record.id,
+              musicAnalyzerMusicBrief: normalizeMusicBrief(musicBrief),
+              knowledgeContextRefs,
               autoInsertToCanvas: false,
             },
             TaskType.AUDIO
@@ -372,9 +495,12 @@ export const CreatePage: React.FC<CreatePageProps> = ({
               musicAnalyzerAction: 'lyrics-gen',
               musicAnalyzerPrompt: buildLyricsRewritePrompt({
                 userPrompt: creationPrompt,
+                musicBrief,
                 mode: 'create',
               }),
               musicAnalyzerRecordId: record.id,
+              musicAnalyzerMusicBrief: normalizeMusicBrief(musicBrief),
+              knowledgeContextRefs,
               autoInsertToCanvas: false,
             },
             TaskType.CHAT
@@ -386,13 +512,17 @@ export const CreatePage: React.FC<CreatePageProps> = ({
       onComplete(record);
       setPendingLyricsGenTaskId(task.id);
     } catch (taskError: any) {
+      lyricsGeneratingRef.current = false;
       setError(taskError.message || '歌词生成失败');
       setLyricsGenProgress('');
     }
   }, [
     creationPrompt,
+    knowledgeContextRefs,
+    musicBrief,
     onComplete,
     onRecordsChange,
+    pendingLyricsGenTaskId,
     selectedLyricsModel,
     selectedLyricsModelRef,
   ]);
@@ -404,29 +534,36 @@ export const CreatePage: React.FC<CreatePageProps> = ({
     if (typeof currentTask?.progress === 'number') {
       setProgress(`音频分析中 ${Math.round(currentTask.progress)}%`);
     }
-    const subscription = taskQueueService.observeTaskUpdates().subscribe((event) => {
-      if (event.task.id !== pendingAnalyzeTaskId) return;
-      if (event.task.status === 'failed') {
-        setPendingAnalyzeTaskId(null);
-        setProgress('');
-        setError(event.task.error?.message || '音频分析失败');
-        return;
-      }
-      if (event.task.status === 'completed') {
-        void syncMusicAnalyzerTask(event.task)
-          .then((synced) => {
-            if (!synced) return;
-            onRecordsChange(synced.records);
-            onComplete(synced.record);
-          })
-          .catch((e: any) => setError(e.message || '分析结果同步失败'))
-          .finally(() => { setPendingAnalyzeTaskId(null); setProgress(''); });
-        return;
-      }
-      if (typeof event.task.progress === 'number') {
-        setProgress(`音频分析中 ${Math.round(event.task.progress)}%`);
-      }
-    });
+    const subscription = taskQueueService
+      .observeTaskUpdates()
+      .subscribe((event) => {
+        if (event.task.id !== pendingAnalyzeTaskId) return;
+        if (event.task.status === 'failed') {
+          analyzingRef.current = false;
+          setPendingAnalyzeTaskId(null);
+          setProgress('');
+          setError(event.task.error?.message || '音频分析失败');
+          return;
+        }
+        if (event.task.status === 'completed') {
+          void syncMusicAnalyzerTask(event.task)
+            .then((synced) => {
+              if (!synced) return;
+              onRecordsChange(synced.records);
+              onComplete(synced.record);
+            })
+            .catch((e: any) => setError(e.message || '分析结果同步失败'))
+            .finally(() => {
+              analyzingRef.current = false;
+              setPendingAnalyzeTaskId(null);
+              setProgress('');
+            });
+          return;
+        }
+        if (typeof event.task.progress === 'number') {
+          setProgress(`音频分析中 ${Math.round(event.task.progress)}%`);
+        }
+      });
     return () => subscription.unsubscribe();
   }, [pendingAnalyzeTaskId, onComplete, onRecordsChange]);
 
@@ -435,35 +572,44 @@ export const CreatePage: React.FC<CreatePageProps> = ({
     if (!pendingLyricsGenTaskId) return;
     const currentTask = taskQueueService.getTask(pendingLyricsGenTaskId);
     if (typeof currentTask?.progress === 'number') {
-      const label = currentTask.type === TaskType.CHAT ? '歌词草稿生成中' : '歌词生成中';
+      const label =
+        currentTask.type === TaskType.CHAT ? '歌词草稿生成中' : '歌词生成中';
       setLyricsGenProgress(`${label} ${Math.round(currentTask.progress)}%`);
     }
-    const subscription = taskQueueService.observeTaskUpdates().subscribe((event) => {
-      if (event.task.id !== pendingLyricsGenTaskId) return;
-      if (event.task.status === 'failed') {
-        const recordId = String(
-          (event.task.params as { musicAnalyzerRecordId?: unknown }).musicAnalyzerRecordId || ''
-        ).trim();
-        setPendingLyricsGenTaskId(null);
-        setLyricsGenProgress('');
-        setError(event.task.error?.message || '歌词生成失败');
-        if (recordId) {
-          void updateRecord(recordId, { pendingLyricsGenTaskId: null }).then(onRecordsChange);
+    const subscription = taskQueueService
+      .observeTaskUpdates()
+      .subscribe((event) => {
+        if (event.task.id !== pendingLyricsGenTaskId) return;
+        if (event.task.status === 'failed') {
+          const recordId = String(
+            (event.task.params as { musicAnalyzerRecordId?: unknown })
+              .musicAnalyzerRecordId || ''
+          ).trim();
+          lyricsGeneratingRef.current = false;
+          setPendingLyricsGenTaskId(null);
+          setLyricsGenProgress('');
+          setError(event.task.error?.message || '歌词生成失败');
+          if (recordId) {
+            void updateRecord(recordId, { pendingLyricsGenTaskId: null }).then(
+              onRecordsChange
+            );
+          }
+          return;
         }
-        return;
-      }
-      if (event.task.status === 'completed') {
-        setPendingLyricsGenTaskId(null);
-        setLyricsGenProgress('');
-        // task-sync 会处理回填，完成后跳转歌词页
-        onLyricsReady?.();
-        return;
-      }
-      if (typeof event.task.progress === 'number') {
-        const label = event.task.type === TaskType.CHAT ? '歌词草稿生成中' : '歌词生成中';
-        setLyricsGenProgress(`${label} ${Math.round(event.task.progress)}%`);
-      }
-    });
+        if (event.task.status === 'completed') {
+          lyricsGeneratingRef.current = false;
+          setPendingLyricsGenTaskId(null);
+          setLyricsGenProgress('');
+          // task-sync 会处理回填，完成后跳转歌词页
+          onLyricsReady?.();
+          return;
+        }
+        if (typeof event.task.progress === 'number') {
+          const label =
+            event.task.type === TaskType.CHAT ? '歌词草稿生成中' : '歌词生成中';
+          setLyricsGenProgress(`${label} ${Math.round(event.task.progress)}%`);
+        }
+      });
     return () => subscription.unsubscribe();
   }, [onLyricsReady, onRecordsChange, pendingLyricsGenTaskId]);
 
@@ -501,217 +647,261 @@ export const CreatePage: React.FC<CreatePageProps> = ({
       </div>
 
       <div className="va-page">
-
-      {mode === 'scratch' ? (
-        <>
-          <div className="ma-card">
-            <div className="ma-card-header">
-              <span>歌词草稿模型</span>
-              <span className="ma-muted">文本模型会补齐 Suno 所需标题/标签/歌词</span>
+        {mode === 'scratch' ? (
+          <>
+            <div className="ma-card">
+              <MusicBriefEditor value={musicBrief} onChange={setMusicBrief} />
             </div>
-            <ModelDropdown
-              selectedModel={selectedLyricsModel}
-              selectedSelectionKey={getSelectionKey(selectedLyricsModel, selectedLyricsModelRef)}
-              onSelect={setSelectedLyricsModel}
-              models={lyricsDraftModels}
-              variant="form"
-              placement="down"
-              placeholder="选择歌词草稿模型"
-            />
-          </div>
 
-          <div className="ma-card">
-            <div className="ma-card-header">
-              <span>描述你想创作的歌曲</span>
-              <PromptOptimizeButton
-                className="ma-icon-btn"
-                originalPrompt={creationPrompt}
-                language="zh"
-                scenarioId="music.create-song"
-                onApply={setCreationPrompt}
+            <div className="ma-card">
+              <div className="ma-card-header">
+                <span>描述你想创作的歌曲</span>
+                <PromptOptimizeButton
+                  className="ma-icon-btn"
+                  originalPrompt={creationPrompt}
+                  language="zh"
+                  scenarioId="music.create-song"
+                  onApply={setCreationPrompt}
+                />
+              </div>
+              <textarea
+                className="ma-textarea"
+                value={creationPrompt}
+                onChange={(e) => setCreationPrompt(e.target.value)}
+                rows={6}
+                placeholder="例如：一首关于夏天海边的轻快流行歌，女声，带有吉他和电子节拍"
+              />
+              <KnowledgeNoteContextSelector
+                value={knowledgeContextRefs}
+                onChange={setKnowledgeContextRefs}
+                disabled={!!pendingLyricsGenTaskId}
+                className="ma-knowledge-context-selector"
+                placement="up"
               />
             </div>
-            <textarea
-              className="ma-textarea"
-              value={creationPrompt}
-              onChange={(e) => setCreationPrompt(e.target.value)}
-              rows={6}
-              placeholder="例如：一首关于夏天海边的轻快流行歌，女声，带有吉他和电子节拍"
-            />
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="ma-card">
-            <div className="ma-card-header">
-              <span>上传音频</span>
-              {audioFile && <span className="ma-muted">{formatSize(audioFile.size)}</span>}
-            </div>
-            <div
-              className="va-dropzone ma-dropzone"
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
-            >
-              {audioFile ? (
-                <div className="ma-audio-preview">
-                  <div className="ma-audio-preview__meta">
-                    <strong>{audioFile.name}</strong>
-                    <button
-                      className="va-nav-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAudioFile(null);
-                        setError('');
-                        if (fileInputRef.current) fileInputRef.current.value = '';
-                      }}
-                    >
-                      清空
-                    </button>
-                  </div>
-                  {audioPreviewUrl && <audio controls src={audioPreviewUrl} />}
-                </div>
-              ) : (
-                <div className="ma-dropzone__placeholder">
-                  <span>点击或拖拽上传本地音频</span>
-                  <small>支持 mp3、wav、m4a 等常见格式</small>
-                </div>
-              )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="audio/*"
-              hidden
-              onChange={handleFileSelect}
-            />
-          </div>
-
-          <div className="ma-card">
-            <div className="ma-card-header">
-              <span>分析模型</span>
-            </div>
-            <ModelDropdown
-              selectedModel={selectedModel}
-              selectedSelectionKey={getSelectionKey(selectedModel, selectedModelRef)}
-              onSelect={setSelectedModel}
-              models={analysisModels}
-              variant="form"
-              placement="down"
-              placeholder="选择 Gemini 分析模型"
-            />
-          </div>
-        </>
-      )}
-
-      {/* 分析摘要（reference 模式已有 record 时） */}
-      {normalizedAnalysis && mode === 'reference' && (
-        <div className="ma-card">
-          <button
-            className="ma-section-toggle"
-            onClick={() => setAnalysisSummaryOpen((v) => !v)}
-          >
-            <span>分析摘要</span>
-            <span>{analysisSummaryOpen ? '收起' : '展开'}</span>
-          </button>
-          {analysisSummaryOpen && (
-            <div className="ma-analysis-summary">
-              <p>{normalizedAnalysis.summary}</p>
-              <div className="ma-chip-row">
-                <span className="ma-chip">{normalizedAnalysis.language || '未知语言'}</span>
-                <span className="ma-chip">{normalizedAnalysis.mood || '未知情绪'}</span>
-                {normalizedAnalysis.genreTags.map((tag) => (
-                  <span key={tag} className="ma-chip ma-chip--accent">{tag}</span>
-                ))}
-              </div>
-              <div className="ma-tag-row">
-                {normalizedAnalysis.structure.map((tag) => (
-                  <code key={tag}>{tag}</code>
-                ))}
-              </div>
-              {normalizedAnalysis.titleSuggestions.length > 0 && (
-                <div className="ma-suggestions">
-                  推荐标题：{normalizedAnalysis.titleSuggestions.join(' / ')}
-                </div>
-              )}
-              {(normalizedAnalysis.sunoTitle ||
-                normalizedAnalysis.sunoStyleTags.length > 0 ||
-                normalizedAnalysis.sunoLyricsDraft) && (
-                <div className="ma-suno-summary">
-                  <div className="ma-suno-summary__title">Suno 生成草稿</div>
-                  <div className="ma-suno-summary__form">
-                    <label className="ma-suno-summary__field">
-                      <span>歌曲标题</span>
-                      <input
-                        className="ma-input"
-                        value={analysisTitle}
-                        onChange={(event) => setAnalysisTitle(event.target.value)}
-                        placeholder="可直接用于 Suno 的标题"
-                      />
-                    </label>
-                    <label className="ma-suno-summary__field">
-                      <span>Suno 风格标签</span>
-                      <input
-                        className="ma-input"
-                        value={analysisStyleTags}
-                        onChange={(event) => setAnalysisStyleTags(event.target.value)}
-                        placeholder="逗号分隔的风格标签"
-                      />
-                    </label>
-                    <label className="ma-suno-summary__field">
-                      <span>带 Suno 标签的歌词草稿</span>
-                      <textarea
-                        className="ma-textarea"
-                        rows={12}
-                        value={analysisLyricsDraft}
-                        onChange={(event) => setAnalysisLyricsDraft(event.target.value)}
-                        placeholder="分析阶段整理出的可用歌词草稿"
-                      />
-                    </label>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {(error || progress || lyricsGenProgress) && (
-        <div className="ma-status-stack">
-          {error && <div className="ma-error">{error}</div>}
-          {progress && <div className="ma-progress">{progress}</div>}
-          {lyricsGenProgress && <div className="ma-progress">{lyricsGenProgress}</div>}
-        </div>
-      )}
-
-      <div className="va-page-actions">
-        {mode === 'scratch' ? (
-          <button
-            className="va-btn-primary"
-            onClick={handleGenerateLyrics}
-            disabled={!creationPrompt.trim() || !!pendingLyricsGenTaskId}
-          >
-            生成歌词
-          </button>
+          </>
         ) : (
           <>
-            <button onClick={onCreateNew}>新建</button>
-            <button onClick={handleInsertAnalysis} disabled={!existingRecord?.analysis}>
-              插入分析
-            </button>
-            <button
-              className="va-btn-primary"
-              onClick={handleAnalyze}
-              disabled={!audioFile || !!pendingAnalyzeTaskId}
-            >
-              开始分析
-            </button>
-            <button onClick={onNext} disabled={!existingRecord}>
-              下一步
-            </button>
+            <div className="ma-card">
+              <div className="ma-card-header">
+                <span>上传音频</span>
+                {audioFile && (
+                  <span className="ma-muted">{formatSize(audioFile.size)}</span>
+                )}
+              </div>
+              <div
+                className="va-dropzone ma-dropzone"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleDrop}
+              >
+                {audioFile ? (
+                  <div className="ma-audio-preview">
+                    <div className="ma-audio-preview__meta">
+                      <strong>{audioFile.name}</strong>
+                      <button
+                        className="va-nav-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAudioFile(null);
+                          setError('');
+                          if (fileInputRef.current)
+                            fileInputRef.current.value = '';
+                        }}
+                      >
+                        清空
+                      </button>
+                    </div>
+                    {audioPreviewUrl && (
+                      <audio controls src={audioPreviewUrl} />
+                    )}
+                  </div>
+                ) : (
+                  <div className="ma-dropzone__placeholder">
+                    <span>点击或拖拽上传本地音频</span>
+                    <small>支持 mp3、wav、m4a 等常见格式</small>
+                  </div>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="audio/*"
+                hidden
+                onChange={handleFileSelect}
+              />
+            </div>
+
+            <div className="ma-card">
+              <MusicBriefEditor value={musicBrief} onChange={setMusicBrief} />
+            </div>
+
+            <div className="ma-card">
+              <div className="ma-card-header">
+                <span>分析模型</span>
+              </div>
+              <ModelDropdown
+                selectedModel={selectedModel}
+                selectedSelectionKey={getSelectionKey(
+                  selectedModel,
+                  selectedModelRef
+                )}
+                onSelect={setSelectedModel}
+                models={analysisModels}
+                variant="form"
+                placement="down"
+                placeholder="选择 Gemini 分析模型"
+              />
+            </div>
           </>
         )}
-      </div>
+
+        {/* 分析摘要（reference 模式已有 record 时） */}
+        {normalizedAnalysis && mode === 'reference' && (
+          <div className="ma-card">
+            <button
+              className="ma-section-toggle"
+              onClick={() => setAnalysisSummaryOpen((v) => !v)}
+            >
+              <span>分析摘要</span>
+              <span>{analysisSummaryOpen ? '收起' : '展开'}</span>
+            </button>
+            {analysisSummaryOpen && (
+              <div className="ma-analysis-summary">
+                <p>{normalizedAnalysis.summary}</p>
+                <div className="ma-chip-row">
+                  <span className="ma-chip">
+                    {normalizedAnalysis.language || '未知语言'}
+                  </span>
+                  <span className="ma-chip">
+                    {normalizedAnalysis.mood || '未知情绪'}
+                  </span>
+                  {normalizedAnalysis.genreTags.map((tag) => (
+                    <span key={tag} className="ma-chip ma-chip--accent">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+                <div className="ma-tag-row">
+                  {normalizedAnalysis.structure.map((tag) => (
+                    <code key={tag}>{tag}</code>
+                  ))}
+                </div>
+                {normalizedAnalysis.titleSuggestions.length > 0 && (
+                  <div className="ma-suggestions">
+                    推荐标题：{normalizedAnalysis.titleSuggestions.join(' / ')}
+                  </div>
+                )}
+                {(normalizedAnalysis.sunoTitle ||
+                  normalizedAnalysis.sunoStyleTags.length > 0 ||
+                  normalizedAnalysis.sunoLyricsDraft) && (
+                  <div className="ma-suno-summary">
+                    <div className="ma-suno-summary__title">Suno 生成草稿</div>
+                    <div className="ma-suno-summary__form">
+                      <label className="ma-suno-summary__field">
+                        <span>歌曲标题</span>
+                        <input
+                          className="ma-input"
+                          value={analysisTitle}
+                          onChange={(event) =>
+                            setAnalysisTitle(event.target.value)
+                          }
+                          placeholder="可直接用于 Suno 的标题"
+                        />
+                      </label>
+                      <label className="ma-suno-summary__field">
+                        <span>Suno 风格标签</span>
+                        <input
+                          className="ma-input"
+                          value={analysisStyleTags}
+                          onChange={(event) =>
+                            setAnalysisStyleTags(event.target.value)
+                          }
+                          placeholder="逗号分隔的风格标签"
+                        />
+                      </label>
+                      <label className="ma-suno-summary__field">
+                        <span>带 Suno 标签的歌词草稿</span>
+                        <textarea
+                          className="ma-textarea"
+                          rows={12}
+                          value={analysisLyricsDraft}
+                          onChange={(event) =>
+                            setAnalysisLyricsDraft(event.target.value)
+                          }
+                          placeholder="分析阶段整理出的可用歌词草稿"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {(error || progress || lyricsGenProgress) && (
+          <div className="ma-status-stack">
+            {error && <div className="ma-error">{error}</div>}
+            {progress && <div className="ma-progress">{progress}</div>}
+            {lyricsGenProgress && (
+              <div className="ma-progress">{lyricsGenProgress}</div>
+            )}
+          </div>
+        )}
+
+        <div
+          className={`va-page-actions ${
+            mode === 'scratch' ? 'ma-lyrics-submit-row' : ''
+          }`}
+        >
+          {mode === 'scratch' ? (
+            <>
+              <div className="ma-lyrics-model-inline">
+                <span className="ma-inline-label">歌词模型</span>
+                <ModelDropdown
+                  selectedModel={selectedLyricsModel}
+                  selectedSelectionKey={getSelectionKey(
+                    selectedLyricsModel,
+                    selectedLyricsModelRef
+                  )}
+                  onSelect={setSelectedLyricsModel}
+                  models={lyricsDraftModels}
+                  variant="form"
+                  placement="up"
+                  placeholder="选择歌词模型"
+                />
+              </div>
+              <button
+                className="va-btn-primary"
+                onClick={handleGenerateLyrics}
+                disabled={!creationPrompt.trim() || !!pendingLyricsGenTaskId}
+              >
+                生成歌词
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={onCreateNew}>新建</button>
+              <button
+                onClick={handleInsertAnalysis}
+                disabled={!existingRecord?.analysis}
+              >
+                插入分析
+              </button>
+              <button
+                className="va-btn-primary"
+                onClick={handleAnalyze}
+                disabled={!audioFile || !!pendingAnalyzeTaskId}
+              >
+                开始分析
+              </button>
+              <button onClick={onNext} disabled={!existingRecord}>
+                下一步
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -614,7 +614,19 @@ export const AudioNodeContent: React.FC<AudioNodeContentProps> = ({
               iconSize={22}
             />
             <div className="audio-node__artwork-overlay">
-              {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+              {isPlaying ? (
+                <Pause
+                  size={18}
+                  className="audio-node__artwork-icon audio-node__artwork-icon--pause"
+                />
+              ) : (
+                <Play
+                  size={28}
+                  fill="currentColor"
+                  strokeWidth={0}
+                  className="audio-node__artwork-icon audio-node__artwork-icon--play"
+                />
+              )}
             </div>
           </button>
         </HoverTip>

@@ -94,7 +94,7 @@ export const BUILT_IN_TOOL_MANIFESTS: ToolDefinition[] = [
   {
     id: 'chat-mj',
     name: 'Chat-MJ',
-    description: 'ChatGPT Web 聊天界面，支持 Midjourney 绘图代理',
+    description: 'ChatGPT Web 聊天界面，支持 Midjourney 绘图代理；外部工具暂不支持知识库上下文',
     icon: React.createElement(MessageIcon),
     category: ToolCategory.AI_TOOLS,
     url: 'https://vercel.ddaiai.com/#/?settings={"key":"${apiKey}","url":"https://api.tu-zi.com"}',

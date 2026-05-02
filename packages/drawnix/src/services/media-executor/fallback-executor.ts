@@ -233,6 +233,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
           outputFormat: params.outputFormat,
           outputCompression: params.outputCompression,
           params: params.params,
+          assetMetadata: params.assetMetadata,
           preferredRequestSchema: invocationOptions.preferredRequestSchema,
         },
         options,
@@ -244,7 +245,13 @@ export class FallbackMediaExecutor implements IMediaExecutor {
     if (isAsyncImageModel(modelName)) {
       return this.generateAsyncImageTask(
         taskId,
-        { prompt, model: modelName, size, referenceImages },
+        {
+          prompt,
+          model: modelName,
+          size,
+          referenceImages,
+          assetMetadata: params.assetMetadata,
+        },
         config,
         options,
         startTime
@@ -404,6 +411,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       model: string;
       size?: string;
       referenceImages?: string[];
+      assetMetadata?: ImageGenerationParams['assetMetadata'];
     },
     config: { imageConfig: GeminiConfig; videoConfig: VideoAPIConfig },
     options?: ExecutionOptions,
@@ -481,7 +489,13 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         result.url,
         taskId,
         'image',
-        result.format
+        result.format,
+        undefined,
+        {
+          extraMetadata: params.assetMetadata
+            ? { ...params.assetMetadata }
+            : undefined,
+        }
       );
 
       // 完成任务

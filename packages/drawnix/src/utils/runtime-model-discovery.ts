@@ -250,6 +250,7 @@ function inferVendorByKeywords(modelId: string): ModelVendor {
   }
   if (lowerId.includes('deepseek')) return ModelVendor.DEEPSEEK;
   if (lowerId.includes('kling')) return ModelVendor.KLING;
+  if (lowerId.includes('happyhorse')) return ModelVendor.HAPPYHORSE;
   if (lowerId.includes('veo')) return ModelVendor.VEO;
   if (lowerId.includes('sora')) return ModelVendor.SORA;
   if (lowerId.includes('suno') || lowerId.includes('chirp')) {
@@ -375,6 +376,9 @@ function inferVendor(model: RemoteModelListItem): ModelVendor {
   if (owner === 'suno' || owner.includes('suno') || owner.includes('chirp')) {
     return ModelVendor.SUNO;
   }
+  if (owner === 'happyhorse' || owner.includes('happyhorse')) {
+    return ModelVendor.HAPPYHORSE;
+  }
   if (owner === 'google' || owner.includes('google')) {
     return keywordVendor !== ModelVendor.OTHER
       ? keywordVendor
@@ -491,6 +495,7 @@ function inferModelType(model: RemoteModelListItem): ModelType {
       return 'image';
     case ModelVendor.SORA:
     case ModelVendor.VEO:
+    case ModelVendor.HAPPYHORSE:
       return 'video';
     case ModelVendor.RUNWAY:
       if (
@@ -746,6 +751,15 @@ function buildFallbackConfig(model: RemoteModelListItem): ModelConfig {
     : fallbackConfig;
 }
 
+function cloneModelConfig(model: ModelConfig): ModelConfig {
+  return {
+    ...model,
+    tags: model.tags ? [...model.tags] : undefined,
+    imageDefaults: model.imageDefaults ? { ...model.imageDefaults } : undefined,
+    videoDefaults: model.videoDefaults ? { ...model.videoDefaults } : undefined,
+  };
+}
+
 function adaptRuntimeModel(model: RemoteModelListItem): ModelConfig | null {
   if (!model?.id || typeof model.id !== 'string') {
     return null;
@@ -753,10 +767,7 @@ function adaptRuntimeModel(model: RemoteModelListItem): ModelConfig | null {
 
   const staticConfig = getStaticModelConfig(model.id);
   if (staticConfig) {
-    return {
-      ...staticConfig,
-      tags: staticConfig.tags ? [...staticConfig.tags] : undefined,
-    };
+    return cloneModelConfig(staticConfig);
   }
 
   return buildFallbackConfig(model);
@@ -840,11 +851,33 @@ function attachRuntimeSource(
   };
 }
 
+function refreshPersistedModelConfig(model: ModelConfig): ModelConfig {
+  const staticConfig = getStaticModelConfig(model.id);
+  if (staticConfig) {
+    return cloneModelConfig(staticConfig);
+  }
+
+  const lowerId = model.id.toLowerCase();
+  const lowerTags = (model.tags || []).map((tag) => tag.toLowerCase());
+  if (lowerId.includes('happyhorse') || lowerTags.includes('happyhorse')) {
+    return {
+      ...model,
+      type: 'video',
+      vendor: ModelVendor.HAPPYHORSE,
+      tags: Array.from(new Set([...(model.tags || []), 'happyhorse'])),
+    };
+  }
+
+  return model;
+}
+
 function decorateRuntimeModels(
   profileId: string,
   models: ModelConfig[]
 ): ModelConfig[] {
-  return models.map((model) => attachRuntimeSource(profileId, model));
+  return models.map((model) =>
+    attachRuntimeSource(profileId, refreshPersistedModelConfig(model))
+  );
 }
 
 function decorateStaticModels(models: ModelConfig[]): ModelConfig[] {

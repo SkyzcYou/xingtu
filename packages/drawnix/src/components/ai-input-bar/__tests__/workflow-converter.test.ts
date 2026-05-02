@@ -87,6 +87,15 @@ const createMockParams = (overrides: Partial<ParsedGenerationParams> = {}): Pars
   ...overrides,
 });
 
+const knowledgeContextRefs = [
+  {
+    noteId: 'note-1',
+    title: '产品定位',
+    directoryId: 'dir-1',
+    updatedAt: 2,
+  },
+];
+
 describe('workflow-converter', () => {
   beforeAll(() => {
     initializeMCP();
@@ -150,6 +159,23 @@ describe('workflow-converter', () => {
         const workflow = convertDirectGenerationToWorkflow(params, referenceImages);
 
         expect(workflow.steps[0].args.referenceImages).toEqual(referenceImages);
+      });
+
+      it('应该把知识库上下文 refs 传递到直接生成步骤和元数据', () => {
+        const params = createMockParams({
+          generationType: 'image',
+          prompt: '品牌海报',
+          knowledgeContextRefs,
+        });
+
+        const workflow = convertDirectGenerationToWorkflow(params);
+
+        expect(workflow.steps[0].args.knowledgeContextRefs).toEqual(
+          knowledgeContextRefs
+        );
+        expect(workflow.metadata.knowledgeContextRefs).toEqual(
+          knowledgeContextRefs
+        );
       });
 
       it('应该使用默认宽高 1x1', () => {
@@ -389,6 +415,26 @@ describe('workflow-converter', () => {
         modelId: 'gpt-image-2',
       });
     });
+
+    it('应该把知识库上下文 refs 传递到 Agent 分析步骤', () => {
+      const params = createMockParams({
+        scenario: 'agent_flow',
+        prompt: '基于品牌笔记生成一组图',
+        knowledgeContextRefs,
+      });
+
+      const workflow = convertAgentFlowToWorkflow(params);
+
+      expect(workflow.steps[0].args.knowledgeContextRefs).toEqual(
+        knowledgeContextRefs
+      );
+      expect((workflow.steps[0].args.context as any).knowledgeContextRefs).toEqual(
+        knowledgeContextRefs
+      );
+      expect(workflow.metadata.knowledgeContextRefs).toEqual(
+        knowledgeContextRefs
+      );
+    });
   });
 
   describe('convertToWorkflow', () => {
@@ -441,6 +487,33 @@ describe('workflow-converter', () => {
       expect(workflow.steps[0].mcp).toBe('generate_grid_image');
       expect(workflow.steps[0].args.model).toBe('gpt-image-2');
       expect(workflow.steps[0].args.modelRef).toEqual(imageRef);
+    });
+
+    it('DSL 媒体步骤应继承知识库上下文 refs', async () => {
+      const params = createMockParams({
+        scenario: 'agent_flow',
+        generationType: 'agent',
+        modelId: 'deepseek-v3.2',
+        prompt: '生成宫格图',
+        knowledgeContextRefs,
+      });
+
+      const workflow = await convertSkillFlowToWorkflow(params, {
+        id: 'grid',
+        name: '宫格图',
+        type: 'system',
+        mcpTool: 'generate_image',
+        outputType: 'image',
+        description: '调用 generate_image\n- prompt: {{input}}',
+      });
+
+      expect(workflow.steps[0].mcp).toBe('generate_image');
+      expect(workflow.steps[0].args.knowledgeContextRefs).toEqual(
+        knowledgeContextRefs
+      );
+      expect(workflow.metadata.knowledgeContextRefs).toEqual(
+        knowledgeContextRefs
+      );
     });
 
     it('PPT Skill 只将文本模型和参考图片透传给 generate_ppt', async () => {
@@ -511,6 +584,32 @@ describe('workflow-converter', () => {
       }>;
       expect(messages[0].content).toContain('generate_image');
       expect(messages[0].content).toContain('必须实际调用工具生成图片');
+    });
+
+    it('Skill 回退到 Agent 路径时应携带知识库上下文 refs', async () => {
+      const params = createMockParams({
+        scenario: 'agent_flow',
+        generationType: 'agent',
+        modelId: 'deepseek-v3.2',
+        prompt: '按品牌笔记写一段文案',
+        knowledgeContextRefs,
+      });
+
+      const workflow = await convertSkillFlowToWorkflow(params, {
+        id: 'copy-skill',
+        name: '品牌文案',
+        type: 'external',
+        outputType: 'text',
+        content: '你是品牌文案专家，输出简洁中文文案。',
+      });
+
+      expect(workflow.steps[0].mcp).toBe('ai_analyze');
+      expect(workflow.steps[0].args.knowledgeContextRefs).toEqual(
+        knowledgeContextRefs
+      );
+      expect((workflow.steps[0].args.context as any).knowledgeContextRefs).toEqual(
+        knowledgeContextRefs
+      );
     });
   });
 

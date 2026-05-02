@@ -19,6 +19,9 @@ export enum ToolMessageType {
   /** 发送配置更新 */
   BOARD_TO_TOOL_CONFIG = 'board:config',
 
+  /** 图片生成完成 */
+  BOARD_TO_TOOL_IMAGE_GENERATED = 'board:image-generated',
+
   // ========== 工具 → 画布 ==========
   /** 工具准备就绪 */
   TOOL_TO_BOARD_READY = 'tool:ready',

@@ -20,6 +20,7 @@ export const DISCOVERY_VENDOR_ORDER: ModelVendor[] = [
   ModelVendor.PIKA,
   ModelVendor.HUNYUAN,
   ModelVendor.STEPFUN,
+  ModelVendor.HAPPYHORSE,
   ModelVendor.FLUX,
   ModelVendor.MIDJOURNEY,
   ModelVendor.SUNO,
@@ -142,6 +143,12 @@ const MODEL_VENDOR_BRANDS: Record<ModelVendor, VendorPalette> = {
     accent: '#f97316',
     surface: '#fff7ed',
     border: 'rgba(249, 115, 22, 0.14)',
+  },
+  [ModelVendor.HAPPYHORSE]: {
+    label: 'HappyHorse',
+    accent: '#111827',
+    surface: '#f8fafc',
+    border: 'rgba(15, 23, 42, 0.12)',
   },
   [ModelVendor.FLUX]: {
     label: 'Flux',
@@ -463,6 +470,23 @@ const OtherMark = ({ size }: IconProps) => (
   </MarkFrame>
 );
 
+const HappyHorseMark = ({ size }: IconProps) => (
+  <img
+    src="https://happyhorse.app/logo.webp"
+    alt=""
+    width={size}
+    height={size}
+    loading="lazy"
+    style={{
+      width: size,
+      height: size,
+      borderRadius: '50%',
+      display: 'block',
+      objectFit: 'cover',
+    }}
+  />
+);
+
 const HunyuanMark = ({ size }: IconProps) => (
   <MarkFrame size={size}>
     <path
@@ -515,6 +539,8 @@ function getVendorIcon(vendor: ModelVendor, size: number) {
       return <PikaMark size={size} />;
     case ModelVendor.DOUBAO:
       return <DoubaoMark size={size} />;
+    case ModelVendor.HAPPYHORSE:
+      return <HappyHorseMark size={size} />;
     case ModelVendor.GOOGLE:
       return <GoogleMark size={size} />;
     case ModelVendor.KLING:

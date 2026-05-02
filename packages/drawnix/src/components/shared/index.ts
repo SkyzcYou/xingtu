@@ -13,6 +13,10 @@ export {
   type PromptItem,
 } from './PromptListPanel';
 export {
+  KnowledgeNoteContextSelector,
+  type KnowledgeNoteContextSelectorProps,
+} from './KnowledgeNoteContextSelector';
+export {
   MediaViewer,
   type MediaViewerProps,
   type MediaItem,

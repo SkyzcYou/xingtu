@@ -10,6 +10,7 @@ import type {
   FilterState,
   FilteredAssetsResult,
 } from '../types/asset.types';
+import { AssetCategory } from '../types/asset.types';
 
 type SearchableAsset = Asset & {
   title?: string;
@@ -89,6 +90,8 @@ export function matchesAssetSearchQuery(
     searchableAsset.name,
     searchableAsset.title,
     searchableAsset.prompt,
+    asset.characterMeta?.name,
+    asset.characterMeta?.prompt,
   ]
     .map(normalizeSearchText)
     .filter(Boolean)
@@ -119,10 +122,16 @@ export function filterAssets(
         filters.activeSource === ('ALL' as any) ||
         asset.source === (filters.activeSource as any);
 
+      // Category filter
+      const matchesCategory =
+        !filters.activeCategory ||
+        filters.activeCategory === ('ALL' as any) ||
+        (asset.category || AssetCategory.GENERAL) === filters.activeCategory;
+
       // Search filter
       const matchesSearch = matchesAssetSearchQuery(asset, filters.searchQuery);
 
-      return matchesType && matchesSource && matchesSearch;
+      return matchesType && matchesSource && matchesCategory && matchesSearch;
     })
     .sort((a, b) => {
       switch (filters.sortBy) {
