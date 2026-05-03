@@ -24,7 +24,7 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
-import { Send } from 'lucide-react';
+import { Maximize2, Minimize2, Send } from 'lucide-react';
 import { MessagePlugin } from 'tdesign-react';
 import { useConfirmDialog } from '../dialog/ConfirmDialog';
 import { ImageUploadIcon, MediaLibraryIcon } from '../icons';
@@ -395,10 +395,16 @@ function getPromptLengthBucket(length: number): string {
 const AI_INPUT_COLLAPSED_ROWS = 1;
 const AI_INPUT_EXPANDED_ROWS = 4;
 const AI_INPUT_MAX_ROWS = 6;
+const AI_INPUT_PROMPT_EXPAND_TRIGGER_ROWS = 5;
+const AI_INPUT_LONG_TEXT_ROWS = 8;
+const AI_INPUT_LONG_TEXT_MAX_VIEWPORT_RATIO = 0.65;
+const AI_INPUT_LONG_TEXT_MIN_MAX_HEIGHT = 320;
+const AI_INPUT_LONG_TEXT_MAX_HEIGHT = 680;
 const AI_INPUT_LINE_HEIGHT = 1.5;
+type AIInputResizeMode = 'collapsed' | 'expanded' | 'long-text';
 type AIInputSubmitTrigger = 'button' | 'keyboard';
 
-function getTextareaHeightForRows(textarea: HTMLTextAreaElement, rows: number) {
+function getTextareaMetrics(textarea: HTMLTextAreaElement) {
   const styles = window.getComputedStyle(textarea);
   const fontSize = Number.parseFloat(styles.fontSize) || 15;
   const lineHeight =
@@ -410,26 +416,62 @@ function getTextareaHeightForRows(textarea: HTMLTextAreaElement, rows: number) {
     Number.parseFloat(styles.borderTopWidth) +
     Number.parseFloat(styles.borderBottomWidth);
 
+  return { lineHeight, verticalPadding, verticalBorder };
+}
+
+function getTextareaHeightForRows(textarea: HTMLTextAreaElement, rows: number) {
+  const { lineHeight, verticalPadding, verticalBorder } =
+    getTextareaMetrics(textarea);
   return Math.ceil(lineHeight * rows + verticalPadding + verticalBorder);
+}
+
+function getTextareaContentRows(textarea: HTMLTextAreaElement): number {
+  const { lineHeight, verticalPadding } = getTextareaMetrics(textarea);
+  const explicitRows = textarea.value.split(/\r\n|\r|\n/).length;
+  const previousHeight = textarea.style.height;
+  textarea.style.height = 'auto';
+  const contentHeight = textarea.scrollHeight;
+  textarea.style.height = previousHeight;
+  const visualRows = Math.ceil(
+    Math.max(0, contentHeight - verticalPadding) / lineHeight
+  );
+  return Math.max(explicitRows, visualRows);
+}
+
+function getAIInputLongTextMaxHeight() {
+  return Math.min(
+    Math.max(
+      Math.floor(window.innerHeight * AI_INPUT_LONG_TEXT_MAX_VIEWPORT_RATIO),
+      AI_INPUT_LONG_TEXT_MIN_MAX_HEIGHT
+    ),
+    AI_INPUT_LONG_TEXT_MAX_HEIGHT
+  );
 }
 
 function resizeAIInputTextarea(
   textarea: HTMLTextAreaElement | null,
-  isExpanded: boolean
+  resizeMode: AIInputResizeMode
 ) {
   if (!textarea) return;
 
-  if (!isExpanded) {
+  if (resizeMode === 'collapsed') {
     textarea.style.height = '';
     textarea.style.overflowY = '';
     return;
   }
 
-  const minHeight = getTextareaHeightForRows(textarea, AI_INPUT_EXPANDED_ROWS);
-  const maxHeight = getTextareaHeightForRows(textarea, AI_INPUT_MAX_ROWS);
-
   textarea.style.height = 'auto';
   const contentHeight = textarea.scrollHeight;
+
+  if (resizeMode === 'long-text') {
+    const maxHeight = getAIInputLongTextMaxHeight();
+    textarea.style.height = `${maxHeight}px`;
+    textarea.style.overflowY = contentHeight > maxHeight ? 'auto' : 'hidden';
+    return;
+  }
+
+  const minHeight = getTextareaHeightForRows(textarea, AI_INPUT_EXPANDED_ROWS);
+  const maxHeight = getTextareaHeightForRows(textarea, AI_INPUT_MAX_ROWS);
   const nextHeight = Math.min(Math.max(contentHeight, minHeight), maxHeight);
 
   textarea.style.height = `${nextHeight}px`;
@@ -997,6 +1039,9 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const submitLockRef = useRef(false);
     const submitCooldownRef = useRef<NodeJS.Timeout | null>(null); // 提交冷却定时器
     const [isFocused, setIsFocused] = useState(false);
+    const [isPromptManuallyExpanded, setIsPromptManuallyExpanded] =
+      useState(false);
+    const [canPromptManuallyExpand, setCanPromptManuallyExpand] = useState(false);
     const [isCanvasEmpty, setIsCanvasEmpty] = useState<boolean | null>(null); // null=加载中, true=空, false=有内容
     // 当前选中的生成类型（图片、视频、Agent）
     const [generationType, setGenerationType] = useState<GenerationType>(
@@ -4346,6 +4391,19 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       setIsFocused(false);
     }, []);
 
+    const handleTogglePromptExpanded = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsPromptManuallyExpanded((expanded) => !expanded);
+        setIsFocused(true);
+        requestAnimationFrame(() => {
+          inputRef.current?.focus();
+        });
+      },
+      []
+    );
+
     // 处理输入变化，检测特殊符号触发下拉菜单
     const handleInputChange = useCallback(
       (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -4401,11 +4459,31 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       (item) => item.type === 'text' && item.text?.trim()
     );
     const shouldKeepExpanded =
-      isFocused || allContent.length > 0 || isPromptOptimizeOpen;
+      isPromptManuallyExpanded ||
+      isFocused ||
+      allContent.length > 0 ||
+      isPromptOptimizeOpen;
+    const inputResizeMode: AIInputResizeMode = isPromptManuallyExpanded
+      ? 'long-text'
+      : shouldKeepExpanded
+      ? 'expanded'
+      : 'collapsed';
 
     useLayoutEffect(() => {
-      resizeAIInputTextarea(inputRef.current, shouldKeepExpanded);
-    }, [shouldKeepExpanded, prompt]);
+      const textarea = inputRef.current;
+      if (!textarea) return;
+
+      const shouldShowExpandButton =
+        getTextareaContentRows(textarea) > AI_INPUT_PROMPT_EXPAND_TRIGGER_ROWS;
+      setCanPromptManuallyExpand(shouldShowExpandButton);
+      if (!shouldShowExpandButton && isPromptManuallyExpanded) {
+        setIsPromptManuallyExpanded(false);
+        resizeAIInputTextarea(textarea, shouldKeepExpanded ? 'expanded' : 'collapsed');
+        return;
+      }
+
+      resizeAIInputTextarea(textarea, inputResizeMode);
+    }, [inputResizeMode, isPromptManuallyExpanded, prompt, shouldKeepExpanded]);
 
     return (
       <>
@@ -4661,6 +4739,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           <div
             className={classNames('ai-input-bar__input-area', {
               'ai-input-bar__input-area--expanded': shouldKeepExpanded,
+              'ai-input-bar__input-area--long-text': isPromptManuallyExpanded,
             })}
           >
             {allContent.length > 0 && (
@@ -4677,10 +4756,50 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
             <div className="ai-input-bar__prompt-row">
               <div className="ai-input-bar__rich-input">
+                {canPromptManuallyExpand ? (
+                  <button
+                    type="button"
+                    className={classNames('ai-input-bar__prompt-expand-btn', {
+                      'ai-input-bar__prompt-expand-btn--active':
+                        isPromptManuallyExpanded,
+                    })}
+                    aria-label={
+                      isPromptManuallyExpanded
+                        ? language === 'zh'
+                          ? '收起提示词输入框'
+                          : 'Collapse prompt input'
+                        : language === 'zh'
+                        ? '展开提示词输入框'
+                        : 'Expand prompt input'
+                    }
+                    title={
+                      isPromptManuallyExpanded
+                        ? language === 'zh'
+                          ? '收起提示词输入框'
+                          : 'Collapse prompt input'
+                        : language === 'zh'
+                        ? '展开提示词输入框'
+                        : 'Expand prompt input'
+                    }
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                    onClick={handleTogglePromptExpanded}
+                    disabled={isSubmitting}
+                  >
+                    {isPromptManuallyExpanded ? (
+                      <Minimize2 size={13} aria-hidden="true" />
+                    ) : (
+                      <Maximize2 size={13} aria-hidden="true" />
+                    )}
+                  </button>
+                ) : null}
                 <textarea
                   ref={inputRef}
                   className={classNames('ai-input-bar__input', {
                     'ai-input-bar__input--focused': shouldKeepExpanded,
+                    'ai-input-bar__input--long-text': isPromptManuallyExpanded,
                   })}
                   value={prompt}
                   onChange={handleInputChange}
@@ -4713,7 +4832,9 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                         } you want to create`
                   }
                   rows={
-                    shouldKeepExpanded
+                    isPromptManuallyExpanded
+                      ? AI_INPUT_LONG_TEXT_ROWS
+                      : shouldKeepExpanded
                       ? AI_INPUT_EXPANDED_ROWS
                       : AI_INPUT_COLLAPSED_ROWS
                   }
