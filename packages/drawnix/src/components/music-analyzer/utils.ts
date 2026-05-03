@@ -7,6 +7,7 @@ import { generateUUID } from '../../utils/runtime-helpers';
 import type { MusicAnalysisData } from '../../services/music-analysis-service';
 import type { ModelConfig } from '../../constants/model-config';
 import { createModelRef, type ModelRef } from '../../utils/settings-manager';
+import { extractJsonObject } from '../../utils/llm-json-extractor';
 import { SUNO_METATAG_GUIDE } from '../../services/music-analysis-service';
 import {
   DEFAULT_ORIGINAL_VERSION_ID,
@@ -197,12 +198,17 @@ export function collectLyricsDraftModels(
 }
 
 export function parseLyricsRewriteResult(text: string): LyricsRewriteResult {
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('响应中未找到有效 JSON');
-  }
-
-  const parsed = JSON.parse(jsonMatch[0]) as Partial<LyricsRewriteResult>;
+  const parsed = extractJsonObject<Partial<LyricsRewriteResult>>(
+    text,
+    value => {
+      const candidate = value as Partial<LyricsRewriteResult>;
+      return (
+        typeof candidate.lyricsDraft === 'string' ||
+        Array.isArray(candidate.styleTags) ||
+        typeof candidate.title === 'string'
+      );
+    }
+  );
   return {
     title: String(parsed.title || '').trim(),
     styleTags: Array.isArray(parsed.styleTags)

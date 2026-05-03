@@ -9,6 +9,7 @@ import type { ModelRef } from '../../utils/settings-manager';
 import type { GenerationParams } from '../../types/shared/core.types';
 import type { ExecutionOptions } from './types';
 import { taskStorageWriter } from './task-storage-writer';
+import { createTaskInvocationRouteSnapshot } from '../task-invocation-route';
 import {
   startLLMApiLog,
   completeLLMApiLog,
@@ -299,7 +300,14 @@ export async function executeVideoViaAdapter(
             });
           },
           onSubmitted: (videoId: string) => {
-            void taskStorageWriter.updateRemoteId(taskId, videoId);
+            void taskStorageWriter.updateRemoteId(
+              taskId,
+              videoId,
+              createTaskInvocationRouteSnapshot(
+                'video',
+                params.modelRef || params.model
+              )
+            );
           },
         },
       }

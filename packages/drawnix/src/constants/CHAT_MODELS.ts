@@ -45,15 +45,6 @@ export const PROVIDER_NAMES: Record<ModelProvider, string> = {
 export const CHAT_MODELS: ChatModel[] = [
   // OpenAI Models
   {
-    id: 'gpt-image-1.5',
-    name: 'GPT Image 1.5',
-    description: 'OpenAI 最新图片生成模型',
-    provider: ModelProvider.OPENAI,
-    badges: ['NEW', 'Multimodal'],
-    maxTokens: 128000,
-    supportsVision: true,
-  },
-  {
     id: 'gpt-4o-image',
     name: 'GPT-4o Image',
     description: 'OpenAI 多模态图片模型',

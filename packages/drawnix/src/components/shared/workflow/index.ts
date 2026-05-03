@@ -33,11 +33,17 @@ export {
   buildVideoPrompt,
   buildFramePrompt,
   buildCharacterReferencePrompt,
+  buildVideoReferenceImageDescriptions,
 } from './prompt-builders';
 export {
   CreativeBriefEditor,
   type CreativeBriefEditorProps,
 } from './CreativeBriefEditor';
+export {
+  VideoParametersRow,
+  type VideoDurationOption,
+  type VideoParametersRowProps,
+} from './VideoParametersRow';
 export {
   type CreativeBrief,
   normalizeCreativeBrief,

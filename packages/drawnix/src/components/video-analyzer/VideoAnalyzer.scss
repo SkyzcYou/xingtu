@@ -959,17 +959,18 @@
 
   .va-character-ref-thumb {
     position: relative;
-    width: 48px;
-    height: 48px;
+    width: 56px;
+    height: 72px;
     border-radius: 6px;
     overflow: hidden;
     border: 1px solid var(--td-border-level-1-color, #ddd);
+    background: var(--td-bg-color-container, #fff);
     flex-shrink: 0;
 
     img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       display: block;
     }
 
@@ -1011,6 +1012,7 @@
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--td-border-level-1-color, #ddd);
+  background: var(--td-bg-color-secondarycontainer, #f7f7f7);
   flex-shrink: 0;
 
   img,
@@ -1018,7 +1020,7 @@
   .va-shot-frame-media {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     display: block;
     cursor: pointer;
   }
@@ -1164,6 +1166,23 @@
   align-items: flex-start;
 }
 
+.va-video-parameters-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--td-border-level-1-color, #eee);
+  border-radius: 8px;
+  background: var(--td-bg-color-secondarycontainer, #fafafa);
+  box-sizing: border-box;
+}
+
+.va-video-parameters-row__controls {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
 .va-form-input {
   flex: 1;
   padding: 7px 10px;
@@ -1268,6 +1287,19 @@
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.va-target-duration-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+
+  .va-form-input {
+    width: 72px;
+    flex: 0 0 72px;
+    text-align: center;
+  }
 }
 
 // ComboInput

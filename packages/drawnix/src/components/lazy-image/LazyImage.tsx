@@ -7,6 +7,7 @@
 
 import React, { memo, useRef, useState, useEffect, useCallback } from 'react';
 import { Loading } from 'tdesign-react';
+import { RetryImage } from '../retry-image';
 import './lazy-image.scss';
 
 export interface LazyImageProps {
@@ -95,33 +96,11 @@ export const LazyImage = memo(function LazyImage({
     };
   }, [isVisible, rootMargin]);
 
-  // Load image when visible
   useEffect(() => {
-    if (!isVisible || !src || isLoaded || hasError) return;
-
-    setIsLoading(true);
-
-    const img = new Image();
-
-    img.onload = () => {
-      setIsLoading(false);
-      setIsLoaded(true);
-      onLoad?.();
-    };
-
-    img.onerror = () => {
-      setIsLoading(false);
-      setHasError(true);
-      onError?.();
-    };
-
-    img.src = src;
-
-    return () => {
-      img.onload = null;
-      img.onerror = null;
-    };
-  }, [isVisible, src, isLoaded, hasError, onLoad, onError]);
+    if (isVisible && src && !isLoaded && !hasError) {
+      setIsLoading(true);
+    }
+  }, [hasError, isLoaded, isVisible, src]);
 
   const handleRetry = useCallback(() => {
     setHasError(false);
@@ -161,15 +140,23 @@ export const LazyImage = memo(function LazyImage({
         </div>
       )}
 
-      {/* Loaded image */}
-      {isLoaded && (
-        <img
+      {isVisible && !hasError && (
+        <RetryImage
           src={src}
           alt={alt}
           className="lazy-image__img"
           style={{ objectFit }}
-          loading="lazy"
-          decoding="async"
+          showSkeleton={false}
+          onLoad={() => {
+            setIsLoading(false);
+            setIsLoaded(true);
+            onLoad?.();
+          }}
+          onLoadFailure={() => {
+            setIsLoading(false);
+            setHasError(true);
+            onError?.();
+          }}
         />
       )}
     </div>

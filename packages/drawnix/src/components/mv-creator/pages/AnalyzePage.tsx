@@ -14,22 +14,20 @@ import { musicAnalyzerTool } from '../../../tools/tools/music-analyzer';
 import { taskStorageReader } from '../../../services/task-storage-reader';
 import { taskQueueService } from '../../../services/task-queue';
 import { buildStoryboardPrompt } from '../utils';
-import { ModelDropdown } from '../../ai-input-bar/ModelDropdown';
 import { useSelectableModels } from '../../../hooks/use-runtime-models';
 import { getSelectionKey } from '../../../utils/model-selection';
 import type { ModelRef } from '../../../utils/settings-manager';
 import { getVideoModelConfig } from '../../../constants/video-model-config';
 import {
-  ComboInput,
   CreativeBriefEditor,
+  VideoParametersRow,
   normalizeCreativeBrief,
   readStoredModelSelection,
   writeStoredModelSelection,
   ShotCard,
   type CreativeBrief,
-  VISUAL_STYLE_OPTIONS,
-  VISUAL_STYLE_PLACEHOLDER,
 } from '../../shared/workflow';
+import { ModelDropdown } from '../../ai-input-bar/ModelDropdown';
 import { KnowledgeNoteContextSelector } from '../../shared';
 import { analytics } from '../../../utils/posthog-analytics';
 
@@ -213,6 +211,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       || null;
   }, [selectedClipId, existingRecord?.generatedClips, existingAudioClips]);
 
+  const selectedAudioUrl = selectedClip?.audioUrl || (selectedClipId ? existingRecord?.selectedClipAudioUrl : null);
   const clipDuration = existingRecord?.selectedClipDuration || selectedClip?.duration || 30;
 
   const handleOpenMusicTool = useCallback(() => {
@@ -279,6 +278,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       onComplete({ ...record, ...patch });
     }
     setSelectedClipId(clip.clipId);
+    setMessage('');
   }, [existingRecord, onComplete, onRecordsChange]);
 
   const setVideoModel = useCallback((model: string, ref?: ModelRef | null) => {
@@ -297,6 +297,10 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
 
   const handleGenerateStoryboard = useCallback(async () => {
     if (generatingRef.current) return;
+    if (!selectedAudioUrl) {
+      setMessage('请先选择配乐');
+      return;
+    }
     generatingRef.current = true;
     const targetRecord: MVRecord = existingRecord || {
       id: generateUUID(),
@@ -315,7 +319,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       control: 'generate_storyboard',
       source: 'mv_creator_analyze_page',
       metadata: {
-        hasSelectedClip: !!selectedClip?.audioUrl,
+        hasSelectedClip: !!selectedAudioUrl,
         clipDuration,
         segmentDuration,
         hasStoryboardModelRef: !!storyboardModelRef,
@@ -335,7 +339,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
         aspectRatio: targetRecord.aspectRatio || '16x9',
         videoStyle,
         creativeBrief,
-        hasAudio: !!selectedClip?.audioUrl,
+        hasAudio: !!selectedAudioUrl,
       });
       const task = taskQueueService.createTask(
         {
@@ -345,7 +349,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
           mvCreatorAction: 'storyboard',
           mvCreatorRecordId: targetRecord.id,
           knowledgeContextRefs,
-          audioCacheUrl: selectedClip?.audioUrl,
+          audioCacheUrl: selectedAudioUrl,
         },
         TaskType.CHAT
       );
@@ -371,7 +375,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       setSubmitting(false);
       generatingRef.current = false;
     }
-  }, [existingRecord, clipDuration, videoModel, videoModelRef, segmentDuration, videoStyle, creativeBrief, storyboardModel, storyboardModelRef, knowledgeContextRefs, selectedClip, onComplete, onRecordsChange]);
+  }, [existingRecord, clipDuration, videoModel, videoModelRef, segmentDuration, videoStyle, creativeBrief, storyboardModel, storyboardModelRef, knowledgeContextRefs, selectedAudioUrl, onComplete, onRecordsChange]);
 
 // PLACEHOLDER_ANALYZE_PAGE_RENDER
 
@@ -447,57 +451,29 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
             )}
           </div>
 
-          <div className="ma-card">
-            <div className="ma-card-header"><span>专业创作 Brief</span></div>
-            <CreativeBriefEditor
-              value={creativeBrief}
-              onChange={setCreativeBrief}
-              workflow="mv"
-            />
-            <div style={{ marginTop: '8px' }}>
-              <label className="va-edit-label mv-visual-style-label">画面风格</label>
-              <ComboInput
-                className="va-style-combo"
-                value={videoStyle}
-                onChange={setVideoStyle}
-                options={VISUAL_STYLE_OPTIONS}
-                placeholder={VISUAL_STYLE_PLACEHOLDER}
-              />
-            </div>
-          </div>
+          <CreativeBriefEditor
+            value={creativeBrief}
+            onChange={setCreativeBrief}
+            workflow="mv"
+            videoStyle={videoStyle}
+            onVideoStyleChange={setVideoStyle}
+          />
 
           {/* 视频模型 + 单段时长 */}
           {selectedClipId && (
-            <div className="ma-card">
-              <div className="ma-card-header"><span>视频参数</span></div>
-              <div className="va-model-select">
-                <label className="va-model-label">视频模型</label>
-                <ModelDropdown
-                  models={videoModels}
-                  selectedModel={videoModel}
-                  selectedSelectionKey={getSelectionKey(videoModel, videoModelRef)}
-                  onSelect={(id: string, ref?: ModelRef | null) => setVideoModel(id, ref)}
-                  variant="form"
-                  placement="down"
-                />
-                <div className="va-segment-duration-select">
-                  <label className="va-model-label">单段</label>
-                  <select
-                    className="va-form-select"
-                    value={String(segmentDuration)}
-                    onChange={e => setSegmentDuration(parseInt(e.target.value, 10))}
-                    disabled={durationOptions.length <= 1}
-                  >
-                    {durationOptions.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
+            <VideoParametersRow
+              selectedModel={videoModel}
+              selectedSelectionKey={getSelectionKey(videoModel, videoModelRef)}
+              onSelectModel={setVideoModel}
+              models={videoModels}
+              segmentDuration={segmentDuration}
+              durationOptions={durationOptions}
+              onSegmentDurationChange={setSegmentDuration}
+            />
           )}
 
           <div className="ma-card mv-storyboard-control-card">
+            {message && <div className="ma-progress mv-storyboard-message">{message}</div>}
             <div className="mv-storyboard-control-row">
               <div className="mv-storyboard-field mv-storyboard-field--knowledge">
                 <label className="mv-storyboard-field-label">知识库上下文</label>
@@ -516,7 +492,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
                   selectedSelectionKey={getSelectionKey(storyboardModel, storyboardModelRef)}
                   onSelect={(id: string, ref?: ModelRef | null) => setStoryboardModel(id, ref)}
                   variant="form"
-                  placement="down"
+                  placement="auto"
                   disabled={submitting}
                 />
               </div>
@@ -529,8 +505,6 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
               </button>
             </div>
           </div>
-
-          {message && <div className="ma-progress">{message}</div>}
         </>
       )}
 

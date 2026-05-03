@@ -20,6 +20,7 @@ import { useAssetSize } from '../../hooks/useAssetSize';
 import { isCacheUrl, countElementsByAssetUrls } from '../../utils/asset-cleanup';
 import { useDrawnix } from '../../hooks/use-drawnix';
 import { ConfirmDialog } from '../dialog/ConfirmDialog';
+import { RetryImage } from '../retry-image';
 import { VideoPosterPreview } from '../shared/VideoPosterPreview';
 import { HoverTip } from '../shared/hover';
 import type { MediaLibraryInspectorProps } from '../../types/asset.types';
@@ -245,10 +246,12 @@ export function MediaLibraryInspector({
         {asset.type === 'AUDIO' ? (
           <div className="media-library-inspector__audio-preview">
             {asset.thumbnail && (
-              <img
+              <RetryImage
                 src={asset.thumbnail}
                 alt={asset.name}
                 className="media-library-inspector__audio-cover"
+                showSkeleton={false}
+                eager
               />
             )}
             <audio
@@ -258,14 +261,21 @@ export function MediaLibraryInspector({
             />
           </div>
         ) : asset.type === 'IMAGE' ? (
-          <img
+          <RetryImage
             src={getThumbnailUrl(normalizedAssetUrl, 'large')}
             alt={asset.name}
             className="media-library-inspector__image"
-            onError={(e) => {
-              // 预览图加载失败，回退到原图
-              (e.target as HTMLImageElement).src = normalizedAssetUrl;
-            }}
+            fallback={
+              <RetryImage
+                src={normalizedAssetUrl}
+                alt={asset.name}
+                className="media-library-inspector__image"
+                showSkeleton={false}
+                eager
+              />
+            }
+            showSkeleton={false}
+            eager
           />
         ) : (
           <VideoPosterPreview

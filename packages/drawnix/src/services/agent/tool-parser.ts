@@ -5,6 +5,10 @@
  */
 
 import type { ToolCall } from '../../mcp/types';
+import {
+  collectJsonSources,
+  extractJsonSource,
+} from '../../utils/llm-json-extractor';
 
 /**
  * 工作流 JSON 响应格式
@@ -36,6 +40,16 @@ function tryParseJson(jsonStr: string): Record<string, unknown> | null {
   }
 }
 
+function isWorkflowJsonCandidate(value: unknown): value is WorkflowJsonResponse {
+  const candidate = value as Partial<WorkflowJsonResponse>;
+  return (
+    !!candidate &&
+    typeof candidate === 'object' &&
+    typeof candidate.content === 'string' &&
+    Array.isArray(candidate.next)
+  );
+}
+
 /**
  * 清理 LLM 响应文本
  * 移除常见的干扰内容，提取纯净的 JSON
@@ -53,53 +67,6 @@ export function cleanLLMResponse(response: string): string {
 }
 
 /**
- * 检查响应是否可能是完整的工作流 JSON
- * 用于流式传输时避免对不完整数据进行解析
- */
-function isLikelyCompleteWorkflowJson(response: string): boolean {
-  const trimmed = response.trim();
-
-  // 必须以 { 开头，以 } 结尾
-  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
-    return false;
-  }
-
-  // 必须包含 content 和 next 字段
-  if (!trimmed.includes('"content"') || !trimmed.includes('"next"')) {
-    return false;
-  }
-
-  // 检查括号是否平衡（简单检查）
-  let braceCount = 0;
-  let bracketCount = 0;
-  let inString = false;
-  let escape = false;
-
-  for (const char of trimmed) {
-    if (escape) {
-      escape = false;
-      continue;
-    }
-    if (char === '\\') {
-      escape = true;
-      continue;
-    }
-    if (char === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-
-    if (char === '{') braceCount++;
-    else if (char === '}') braceCount--;
-    else if (char === '[') bracketCount++;
-    else if (char === ']') bracketCount--;
-  }
-
-  return braceCount === 0 && bracketCount === 0;
-}
-
-/**
  * 解析新格式的工作流 JSON 响应
  * 格式: {"content": "...", "next": [{"mcp": "tool_name", "args": {...}}]}
  */
@@ -107,29 +74,42 @@ export function parseWorkflowJson(response: string): WorkflowJsonResponse | null
   // 清理响应文本
   const cleaned = cleanLLMResponse(response);
 
-  // 快速检查：如果响应明显不完整，直接返回 null（不打印警告）
-  if (!isLikelyCompleteWorkflowJson(cleaned)) {
+  if (!cleaned.includes('"content"') || !cleaned.includes('"next"')) {
     return null;
   }
 
   // 先尝试直接解析整个响应
   let parsed = tryParseJson(cleaned);
+  if (parsed && !isWorkflowJsonCandidate(parsed)) {
+    parsed = null;
+  }
 
-  // 如果直接解析失败，尝试从响应中提取 JSON
+  // 如果直接解析失败，尝试从响应中提取匹配的 JSON 对象
   if (!parsed) {
-    // 尝试从文本中找到 JSON 对象（更精确的匹配）
-    // 从第一个 { 开始匹配，包含 content 和 next 字段
-    const jsonMatch = cleaned.match(/\{\s*"content"\s*:\s*"[^"]*"\s*,\s*"next"\s*:\s*\[[\s\S]*?\]\s*\}/);
-    if (jsonMatch) {
-      parsed = tryParseJson(jsonMatch[0]);
+    try {
+      const source = extractJsonSource(cleaned, {
+        kinds: ['object'],
+        predicate: isWorkflowJsonCandidate,
+      });
+      parsed = tryParseJson(source);
+    } catch {
+      // Fall through to repair-friendly source extraction.
     }
   }
 
-  // 如果还是失败，尝试更宽松的匹配
+  // 如果还是失败，尝试提取原始对象后走 healJson 修复。
   if (!parsed) {
-    const jsonMatch = cleaned.match(/\{[\s\S]*"content"[\s\S]*"next"[\s\S]*\}/);
-    if (jsonMatch) {
-      parsed = tryParseJson(jsonMatch[0]);
+    try {
+      const source = extractJsonSource(cleaned, {
+        kinds: ['object'],
+        allowInvalid: true,
+      });
+      const repaired = tryParseJson(source);
+      if (repaired && isWorkflowJsonCandidate(repaired)) {
+        parsed = repaired;
+      }
+    } catch {
+      // noop
     }
   }
 
@@ -263,14 +243,31 @@ export function parseToolCalls(response: string): ToolCall[] {
 
   // 格式 4: 直接在文本中的 JSON（无代码块包裹，旧格式）
   if (toolCalls.length === 0) {
-    // 匹配看起来像工具调用的 JSON 对象
-    const directJsonRegex = /\{[\s\S]*?"name"\s*:\s*"(?:generate_image|generate_video|generate_long_video|generate_audio|generate_grid_image|generate_photo_wall|generate_inspiration_board|generate_ppt)"[\s\S]*?\}/g;
+    const allowedDirectToolNames = new Set([
+      'generate_image',
+      'generate_video',
+      'generate_long_video',
+      'generate_audio',
+      'generate_grid_image',
+      'generate_photo_wall',
+      'generate_inspiration_board',
+      'generate_ppt',
+    ]);
+    let directSources: string[] = [];
+    try {
+      directSources = collectJsonSources(response, {
+        kinds: ['object'],
+        allowInvalid: true,
+      });
+    } catch {
+      directSources = [];
+    }
 
-    while ((match = directJsonRegex.exec(response)) !== null) {
-      const parsed = tryParseJson(match[0]);
+    for (const source of directSources) {
+      const parsed = tryParseJson(source);
       if (parsed) {
         const toolCall = createToolCall(parsed);
-        if (toolCall) {
+        if (toolCall && allowedDirectToolNames.has(toolCall.name)) {
           toolCalls.push(toolCall);
           break; // 只取第一个匹配
         }

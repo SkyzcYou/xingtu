@@ -15,6 +15,7 @@ import {
   ImageGenerationProgressDisplay,
   type ImageGenerationProgressTone,
 } from '../shared/ImageGenerationProgressDisplay';
+import { RetryImage } from '../retry-image';
 import { getImageTaskProgressStatusText } from '../../utils/image-task-progress';
 import { buildImageGenerationAnchorPresentationPatch } from '../../utils/image-generation-anchor-state';
 import {
@@ -70,11 +71,6 @@ export const ImageGenerationAnchorContent: React.FC<
     : showDeterminateProgress
     ? getImageTaskProgressStatusText(progressValue)
     : PHASE_CENTER_LABELS[viewModel.phase];
-  const previewImageStyle = viewModel.previewImageUrl
-    ? {
-        backgroundImage: `url("${viewModel.previewImageUrl}")`,
-      }
-    : undefined;
   const progressTone: ImageGenerationProgressTone =
     viewModel.phase === 'failed'
       ? 'danger'
@@ -240,12 +236,6 @@ export const ImageGenerationAnchorContent: React.FC<
   const renderSurfacePreview = () => {
     if (isStack && batchPreview) {
       const slots = batchPreview.slots.map((slot, index) => {
-        const slotPreviewStyle = slot.previewImageUrl
-          ? {
-              backgroundImage: `url("${slot.previewImageUrl}")`,
-            }
-          : undefined;
-
         return (
           <div
             key={slot.id}
@@ -262,9 +252,12 @@ export const ImageGenerationAnchorContent: React.FC<
           >
             <span className="image-generation-anchor__stack-slot-noise" />
             {slot.previewImageUrl ? (
-              <span
+              <RetryImage
                 className="image-generation-anchor__stack-slot-image"
-                style={slotPreviewStyle}
+                src={slot.previewImageUrl}
+                alt={`生成预览 ${index + 1}`}
+                showSkeleton={false}
+                eager
               />
             ) : null}
             <span className="image-generation-anchor__stack-slot-meta">
@@ -315,9 +308,12 @@ export const ImageGenerationAnchorContent: React.FC<
         >
           <span className="image-generation-anchor__surface-image-noise" />
           {viewModel.previewImageUrl ? (
-            <span
+            <RetryImage
               className="image-generation-anchor__surface-image-actual"
-              style={previewImageStyle}
+              src={viewModel.previewImageUrl}
+              alt="图片生成预览"
+              showSkeleton={false}
+              eager
             />
           ) : null}
           <span className="image-generation-anchor__surface-image-sheen" />

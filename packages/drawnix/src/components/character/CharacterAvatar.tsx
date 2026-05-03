@@ -8,6 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserIcon } from 'tdesign-icons-react';
 import { characterAvatarCacheService } from '../../services/character-avatar-cache-service';
+import { RetryImage } from '../retry-image';
 
 export interface CharacterAvatarProps {
   /** Character ID for cache lookup */
@@ -104,17 +105,19 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   }
 
   return (
-    <img
+    <RetryImage
       src={imageUrl}
       alt={alt}
       className={className}
-      onError={handleError}
+      onLoadFailure={() => void handleError()}
       onLoad={handleLoad}
       onClick={onClick}
       style={{
         display: isLoading ? 'none' : 'block',
         cursor: onClick ? 'pointer' : undefined,
       }}
+      showSkeleton={false}
+      eager
     />
   );
 };

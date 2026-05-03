@@ -21,6 +21,11 @@ import { isTaskTimeout } from '../utils/task-utils';
 import { isAsyncImageModel } from '../constants/model-config';
 import { AI_GENERATION_CONCURRENCY_LIMIT } from '../constants/TASK_CONSTANTS';
 import { classifyApiCredentialError } from '../utils/api-auth-error-event';
+import {
+  assertTaskInvocationRouteAvailable,
+  resolveTaskInvocationRouteModel,
+  shouldUseStrictTaskInvocationRoute,
+} from '../services/task-invocation-route';
 
 /**
  * 从 API 错误体中提取原始错误消息
@@ -231,10 +236,13 @@ export function useTaskExecutor(): void {
       executingTasksRef.current.add(taskId);
 
       try {
+        if (shouldUseStrictTaskInvocationRoute(task)) {
+          assertTaskInvocationRouteAvailable('audio', task);
+        }
         const result = await generationAPIService.resumeAudioGeneration(
           taskId,
           remoteId,
-          task.params.modelRef || task.params.model || null
+          resolveTaskInvocationRouteModel(task)
         );
 
         if (!isActive) return;
@@ -282,10 +290,13 @@ export function useTaskExecutor(): void {
       executingTasksRef.current.add(taskId);
 
       try {
+        if (shouldUseStrictTaskInvocationRoute(task)) {
+          assertTaskInvocationRouteAvailable('image', task);
+        }
         const result = await generationAPIService.resumeAsyncImageGeneration(
           taskId,
           remoteId,
-          task.params.modelRef || task.params.model || null
+          resolveTaskInvocationRouteModel(task)
         );
 
         if (!isActive) return;

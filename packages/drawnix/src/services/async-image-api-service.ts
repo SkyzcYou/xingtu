@@ -9,6 +9,7 @@ import {
   resolveInvocationRoute,
   type ModelRef,
 } from '../utils/settings-manager';
+import { normalizeImageDataUrl } from '@aitu/utils';
 import {
   providerTransport,
   resolveInvocationPlanFromRoute,
@@ -28,7 +29,7 @@ export interface AsyncImageGenerationParams {
   modelRef?: ModelRef | null;
   prompt: string;
   size?: string; // 接口的尺寸/比例字段（枚举 1:1、4:5 等）
-  // TODO: 支持参考图/多图提交，如有需求可补充 input_reference
+  referenceImages?: string[];
 }
 
 export interface AsyncImageSubmitResponse {
@@ -89,6 +90,35 @@ function resolveProviderContext(
   };
 }
 
+function appendReferenceImage(
+  formData: FormData,
+  value: string,
+  index: number
+): void {
+  const normalized = normalizeImageDataUrl(value);
+  try {
+    const match = normalized.match(/^data:([^;,]+)?;base64,(.*)$/);
+    if (match) {
+      const mimeType = match[1] || 'image/png';
+      const binary = atob(match[2]);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      formData.append(
+        'input_reference',
+        new Blob([bytes], { type: mimeType }),
+        `reference-${index + 1}.png`
+      );
+      return;
+    }
+  } catch {
+    // Fall back to raw value below; provider gateway can still resolve URLs.
+  }
+
+  formData.append('input_reference', normalized);
+}
+
 class AsyncImageAPIService {
   private async submit(
     params: AsyncImageGenerationParams,
@@ -105,6 +135,11 @@ class AsyncImageAPIService {
     formData.append('prompt', params.prompt);
     if (params.size) {
       formData.append('size', params.size);
+    }
+    if (params.referenceImages?.length) {
+      params.referenceImages.forEach((referenceImage, index) => {
+        appendReferenceImage(formData, referenceImage, index);
+      });
     }
 
     const response = await providerTransport.send(providerContext, {

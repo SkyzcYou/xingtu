@@ -166,6 +166,7 @@ describe('settings-manager', () => {
       LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
       LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
       TUZI_CODEX_PROVIDER_PROFILE_ID,
+      TUZI_BUSINESS_PROVIDER_PROFILE_ID,
       TUZI_ORIGINAL_PROVIDER_PROFILE_ID,
     } = await import('../settings-manager');
 
@@ -178,6 +179,9 @@ describe('settings-manager', () => {
     );
     const tuziCodexProfile = profiles.find(
       (profile) => profile.id === TUZI_CODEX_PROVIDER_PROFILE_ID
+    );
+    const tuziBusinessProfile = profiles.find(
+      (profile) => profile.id === TUZI_BUSINESS_PROVIDER_PROFILE_ID
     );
 
     expect(legacyProfile).toMatchObject({
@@ -194,6 +198,13 @@ describe('settings-manager', () => {
     expect(tuziCodexProfile).toMatchObject({
       pricingGroup: 'codex',
       imageApiCompatibility: DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+    });
+    expect(tuziBusinessProfile).toMatchObject({
+      name: 'Business',
+      baseUrl: 'https://business.tu-zi.com/v1',
+      homepageUrl: 'https://business.tu-zi.com/',
+      pricingUrl: 'https://business.tu-zi.com/api/pricing',
+      imageApiCompatibility: LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
     });
     expect(
       profiles.find((profile) => profile.id === 'custom-auto')
@@ -382,6 +393,7 @@ describe('settings-manager', () => {
       TUZI_CODEX_PROVIDER_PROFILE_ID,
       TUZI_MIX_PROVIDER_PROFILE_ID,
       TUZI_ORIGINAL_PROVIDER_PROFILE_ID,
+      TUZI_BUSINESS_PROVIDER_PROFILE_ID,
     } = await import('../settings-manager');
 
     const profiles = providerProfilesSettings.get();
@@ -413,6 +425,15 @@ describe('settings-manager', () => {
           return {
             ...profile,
             imageApiCompatibility: 'tuzi-gpt-image' as const,
+          };
+        }
+
+        if (profile.id === TUZI_BUSINESS_PROVIDER_PROFILE_ID) {
+          return {
+            ...profile,
+            homepageUrl: 'business.tu-zi.com/dashboard',
+            pricingUrl: 'https://business.tu-zi.com/api/pricing?group=vip',
+            imageApiCompatibility: 'auto' as const,
           };
         }
 
@@ -453,6 +474,15 @@ describe('settings-manager', () => {
       )
     ).toMatchObject({
       imageApiCompatibility: 'tuzi-gpt-image',
+    });
+    expect(
+      reloadedProfiles.find(
+        (profile) => profile.id === TUZI_BUSINESS_PROVIDER_PROFILE_ID
+      )
+    ).toMatchObject({
+      homepageUrl: 'https://business.tu-zi.com/dashboard',
+      pricingUrl: 'https://business.tu-zi.com/api/pricing?group=vip',
+      imageApiCompatibility: 'auto',
     });
   });
 });

@@ -26,6 +26,7 @@ import {
 import {
   downloadVideoContentToLocalUrl,
   extractInlineVideoUrl,
+  resolveVideoPollPath,
   resolveVideoSubmission,
   shouldDownloadVideoContent,
 } from './video-binding-utils';
@@ -95,6 +96,7 @@ interface PollingOptions {
   onProgress?: (progress: number, status: string) => void;
   onSubmitted?: (videoId: string) => void; // Callback when video is submitted (for saving remoteId)
   routeModel?: string | ModelRef | null;
+  params?: Record<string, unknown>;
 }
 
 function inferAuthType(route: ReturnType<typeof resolveInvocationRoute>): ProviderAuthStrategy {
@@ -348,7 +350,8 @@ class VideoAPIService {
    */
   async queryVideoStatus(
     videoId: string,
-    routeModel?: string | ModelRef | null
+    routeModel?: string | ModelRef | null,
+    params?: Record<string, unknown>
   ): Promise<VideoQueryResponse> {
     const { providerContext, binding } = resolveVideoPlanContext(routeModel);
 
@@ -357,7 +360,7 @@ class VideoAPIService {
     }
 
     const response = await providerTransport.send(providerContext, {
-      path: `/videos/${videoId}`,
+      path: resolveVideoPollPath(videoId, binding, params),
       baseUrlStrategy: binding?.baseUrlStrategy,
       method: 'GET',
     });
@@ -429,6 +432,7 @@ class VideoAPIService {
       maxAttempts,
       onProgress,
       routeModel: params.modelRef || params.model,
+      params: params.params,
     });
   }
 
@@ -448,7 +452,8 @@ class VideoAPIService {
     // console.log('[VideoAPI] Checking status immediately for resumed task...');
     const immediateStatus = await this.queryVideoStatus(
       videoId,
-      options.routeModel
+      options.routeModel,
+      options.params
     );
     const immediateProgress =
       immediateStatus.progress ??
@@ -515,7 +520,11 @@ class VideoAPIService {
       let isBusinessFailure = false;
 
       try {
-        const status = await this.queryVideoStatus(videoId, options.routeModel);
+        const status = await this.queryVideoStatus(
+          videoId,
+          options.routeModel,
+          options.params
+        );
 
         // 请求成功，重置连续错误计数
         consecutiveErrors = 0;

@@ -153,8 +153,28 @@ export function resetGeneratedShots<T extends VideoShot>(shots: T[]): T[] {
     generated_first_frame_url: undefined,
     generated_last_frame_url: undefined,
     generated_video_url: undefined,
-    suppressed_generated_urls: undefined,
+    suppressed_generated_urls: getResetSuppressedGeneratedUrls(shot),
   }));
+}
+
+function getResetSuppressedGeneratedUrls<T extends VideoShot>(
+  shot: T
+): T['suppressed_generated_urls'] {
+  const suppressed = {
+    ...(shot.suppressed_generated_urls || {}),
+  } as NonNullable<T['suppressed_generated_urls']>;
+
+  if (shot.generated_first_frame_url) {
+    suppressed.first = shot.generated_first_frame_url;
+  }
+  if (shot.generated_last_frame_url) {
+    suppressed.last = shot.generated_last_frame_url;
+  }
+  if (shot.generated_video_url) {
+    suppressed.video = shot.generated_video_url;
+  }
+
+  return Object.keys(suppressed).length > 0 ? suppressed : undefined;
 }
 
 export function resetCharacterReferenceImages<T extends VideoCharacter>(characters: T[]): T[] {

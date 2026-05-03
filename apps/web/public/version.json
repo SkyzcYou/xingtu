@@ -1,9 +1,13 @@
 {
-  "version": "0.6.96",
-  "buildTime": "2026-05-01T15:15:12.754Z",
+  "version": "0.6.99",
+  "buildTime": "2026-05-03T01:25:02.756Z",
   "gitCommit": "unknown",
   "changelog": [
-    "enhance audio asset handling in workflow export and improve caching logic",
-    "优化视频工作流批量生成"
+    "为视频生成 prompt 添加参考图用途说明",
+    "添加目标总时长配置并优化UI与错误处理",
+    "移除生成视频时重复的提示词构建逻辑",
+    "支持异步图片生成和生成素材重置",
+    "强化爆款视频首尾帧角色一致性",
+    "绑定异步任务供应商路由"
   ]
 }

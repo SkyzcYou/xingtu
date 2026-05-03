@@ -22,6 +22,7 @@ import {
   TaskResult,
   TaskError,
   TaskExecutionPhase,
+  TaskInvocationRouteSnapshot,
 } from '../../../../../packages/drawnix/src/types/shared/core.types';
 
 export * from '../../../../../packages/drawnix/src/types/shared/core.types';
@@ -75,6 +76,8 @@ export interface SWTask {
   progress?: number;
   /** Remote task ID from API (e.g., videoId for video generation) */
   remoteId?: string;
+  /** Provider/model route snapshot used to resume async tasks with the original supplier */
+  invocationRoute?: TaskInvocationRouteSnapshot;
   /** Current execution phase for recovery support */
   executionPhase?: TaskExecutionPhase;
   /** Whether the task result has been saved to the media library */

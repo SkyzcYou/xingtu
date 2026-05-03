@@ -4,7 +4,7 @@
 
 import type { Folder, BoardMetadata, Board } from '../../types/workspace.types';
 import type { PromptHistoryItem, VideoPromptHistoryItem, ImagePromptHistoryItem } from '../prompt-storage-service';
-import type { Task } from '../../types/task.types';
+import type { Task, TaskInvocationRouteSnapshot } from '../../types/task.types';
 import type { KBExportData } from '../kb-import-export-service';
 
 // ====================================
@@ -307,6 +307,8 @@ export interface CompactTask {
   progress?: number;
   /** 远程任务 ID */
   remoteId?: string;
+  /** 异步任务原始供应商/模型绑定快照 */
+  invocationRoute?: TaskInvocationRouteSnapshot;
   /** 执行阶段 */
   executionPhase?: string;
   /** 是否已保存到媒体库 */

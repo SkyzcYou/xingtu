@@ -48,7 +48,7 @@ import { AI_GENERATION_CONCURRENCY_LIMIT } from '../../constants/TASK_CONSTANTS'
 import { useConfirmDialog } from '../dialog/ConfirmDialog';
 import './model-benchmark-workbench.scss';
 import { HoverTip } from '../shared/hover';
-import { KnowledgeNoteContextSelector } from '../shared';
+import { KnowledgeNoteContextSelector, RetryImage } from '../shared';
 
 interface ModelBenchmarkWorkbenchProps {
   // props reserved for future use
@@ -1495,11 +1495,11 @@ function ModelBenchmarkWorkbench({}: ModelBenchmarkWorkbenchProps) {
     if (entry.modality === 'image' && entry.preview.url) {
       return (
         <div className="model-benchmark__preview-content">
-          <img
+          <RetryImage
             className="model-benchmark__preview-image"
             src={entry.preview.url}
             alt={entry.modelLabel}
-            loading="lazy"
+            showSkeleton={false}
           />
           {rawDataBlock}
         </div>

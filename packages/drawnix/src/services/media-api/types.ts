@@ -16,6 +16,8 @@ import type {
 export interface ApiConfig {
   apiKey: string;
   baseUrl: string;
+  /** Optional provider-specific template variables for async query/download paths */
+  params?: Record<string, unknown>;
   /** 可选：自定义 fetch 实现（用于 SW 中注入 debugFetch） */
   fetchImpl?: typeof fetch;
   /** 可选：统一供应商上下文 */

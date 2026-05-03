@@ -107,6 +107,10 @@ export interface ScriptVersion {
   prompt?: string;
   /** 该版本的镜头列表（深拷贝，各版本独立） */
   shots: VideoShot[];
+  /** 该版本同步生成的角色快照 */
+  characters?: VideoCharacter[];
+  /** 该版本同步生成的创作参数快照 */
+  productInfo?: ProductInfo;
 }
 
 /** 分析记录（持久化到 IndexedDB） */
@@ -139,6 +143,8 @@ export interface AnalysisRecord {
   activeVersionId?: string;
   /** 最近一次生成/改编脚本的时间戳（用于过滤旧任务结果，防止污染新脚本） */
   storyboardGeneratedAt?: number;
+  /** 最近一次重置生成素材的时间戳（用于过滤旧图片/视频/角色参考图任务） */
+  generatedAssetsResetAt?: number;
 }
 
 /** 镜头类型颜色映射 */
@@ -188,8 +194,10 @@ export function formatShotsMarkdown(
   if (productInfo?.prompt) headerParts.push(`\n**提示词：** ${productInfo.prompt}`);
   const dur = productInfo?.targetDuration || analysis.totalDuration;
   headerParts.push(`\n**时长：** ${dur}s | **画面比例：** ${analysis.aspect_ratio || '16x9'}`);
-  if (analysis.video_style) headerParts.push(` | **风格：** ${analysis.video_style}`);
-  if (analysis.bgm_mood) headerParts.push(` | **BGM：** ${analysis.bgm_mood}`);
+  const videoStyle = productInfo?.videoStyle || analysis.video_style;
+  const bgmMood = productInfo?.bgmMood || analysis.bgm_mood;
+  if (videoStyle) headerParts.push(` | **风格：** ${videoStyle}`);
+  if (bgmMood) headerParts.push(` | **BGM：** ${bgmMood}`);
   const creativeBrief = formatCreativeBriefSummary(productInfo?.creativeBrief);
   if (creativeBrief) headerParts.push(`\n\n## 创作 Brief\n\n${creativeBrief}`);
   if (analysis.suggestion) headerParts.push(`\n\n> ${analysis.suggestion}`);

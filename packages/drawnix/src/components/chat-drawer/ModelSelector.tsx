@@ -26,7 +26,8 @@ import { ModelVendorMark } from '../shared/ModelVendorBrand';
 import { VendorTabPanel, type VendorTab } from '../shared/VendorTabPanel';
 import { ModelHealthBadge } from '../shared/ModelHealthBadge';
 import { ModelBenchmarkBadge } from '../shared/ModelBenchmarkBadge';
-import { useModelMeta } from '../../hooks/use-model-pricing';
+import { HoverTip } from '../shared/hover';
+import { useModelPriceText, useModelMeta } from '../../hooks/use-model-pricing';
 import { Z_INDEX } from '../../constants/z-index';
 import { useSelectableModels } from '../../hooks/use-runtime-models';
 import {
@@ -52,6 +53,21 @@ export interface ModelSelectorProps {
 function getProviderLabel(model: ModelConfig): string {
   return model.sourceProfileName || VENDOR_NAMES[model.vendor] || model.id;
 }
+
+const ModelSelectorPriceTag: React.FC<{ model: ModelConfig }> = React.memo(
+  ({ model }) => {
+    const { summary, detail } = useModelPriceText(
+      model.sourceProfileId,
+      model.id
+    );
+    if (!summary) return null;
+    return (
+      <HoverTip content={detail} placement="top" disabled={detail === summary}>
+        <span className="model-selector__item-price">{summary}</span>
+      </HoverTip>
+    );
+  }
+);
 
 const ModelDescFallback: React.FC<{ model: ModelConfig }> = React.memo(
   ({ model }) => {
@@ -382,6 +398,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
                             profileId={model.sourceProfileId || null}
                           />
                           <ModelBenchmarkBadge modelId={model.id} />
+                          <ModelSelectorPriceTag model={model} />
                         </div>
                         {itemDescription ? (
                           <div className="model-selector__item-desc">

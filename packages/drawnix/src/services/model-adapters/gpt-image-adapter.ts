@@ -383,7 +383,7 @@ export const gptImageAdapter: ImageModelAdapter = {
     'openai.image.gpt-generation-json',
     'openai.image.gpt-edit-form',
   ],
-  defaultModel: 'gpt-image-1',
+  defaultModel: 'gpt-image-2',
   async generateImage(context, request) {
     const isEditRequest = isGPTImageEditRequest(
       request,

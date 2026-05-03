@@ -8,6 +8,7 @@ import { subscribeAssetMap, getAssetMapSnapshot } from '../../../stores/asset-ma
 import { AssetType } from '../../../types/asset.types';
 import { extractAssetIdFromUrl } from '../../../utils/markdown-asset-embeds';
 import { parseMarkdownImageAlt } from '../../../utils/markdown-image-blocks';
+import { RetryImage } from '../../retry-image';
 import {
   clamp,
   clampSizeByHeight,
@@ -326,12 +327,14 @@ function RenderedImageBlock({
       data-asset-id={assetId || undefined}
     >
       <div ref={frameRef} className="collimind-markdown-image-block__frame" style={frameStyle}>
-        <img
+        <RetryImage
           className="collimind-markdown-image-block__image"
           src={resolvedSrc}
           alt={displayAlt}
           draggable={false}
           style={imageStyle}
+          showSkeleton={false}
+          eager
         />
         {!readonly && selected && (
           <>

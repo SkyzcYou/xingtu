@@ -1,3 +1,56 @@
+## 0.6.99 (2026-05-03)
+
+### 🚀 Features
+
+- 为视频生成 prompt 添加参考图用途说明 ([95b7722d](https://github.com/ljquan/aitu/commit/95b7722d))
+- 支持异步图片生成和生成素材重置 ([d5fdb613](https://github.com/ljquan/aitu/commit/d5fdb613))
+- 添加目标总时长配置并优化UI与错误处理 ([abff6536](https://github.com/ljquan/aitu/commit/abff6536))
+
+### 🩹 Fixes
+
+- 移除生成视频时重复的提示词构建逻辑 ([7edd47d9](https://github.com/ljquan/aitu/commit/7edd47d9))
+- 强化爆款视频首尾帧角色一致性 ([743a7afa](https://github.com/ljquan/aitu/commit/743a7afa))
+- 绑定异步任务供应商路由 ([3a56d795](https://github.com/ljquan/aitu/commit/3a56d795))
+- unify generated image retry rendering ([70acfa65](https://github.com/ljquan/aitu/commit/70acfa65))
+
+### 🔧 Chores
+
+- 更新应用版本至0.6.98并同步构建时间 ([a09a6a0e](https://github.com/ljquan/aitu/commit/a09a6a0e))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.98 (2026-05-02)
+
+### 🔧 Chores
+
+- 更新应用版本至0.6.97 ([dc254677](https://github.com/ljquan/aitu/commit/dc254677))
+- refactor(settings-dialog): 提取 MessagePlugin 工具并移除供应商域名字段 ([47708bb2](https://github.com/ljquan/aitu/commit/47708bb2))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.6.97 (2026-05-02)
+
+### 🚀 Features
+
+- 优化价格展示增加Bussiness ([a2ba39ae](https://github.com/ljquan/aitu/commit/a2ba39ae))
+- update app version to 0.6.96 and add image generation message type ([65b5cf71](https://github.com/ljquan/aitu/commit/65b5cf71))
+
+### 🩹 Fixes
+
+- parallelize character reference generation ([1b17f80a](https://github.com/ljquan/aitu/commit/1b17f80a))
+
+### 🔧 Chores
+
+- refactor: 统一 AI JSON 响应解析并优化样式与功能 ([dc91f938](https://github.com/ljquan/aitu/commit/dc91f938))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
 ## 0.6.96 (2026-05-01)
 
 ### 🚀 Features

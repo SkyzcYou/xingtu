@@ -89,6 +89,36 @@ describe('music-analysis-service', () => {
     });
   });
 
+  it('parses music analysis JSON after model thinking text', async () => {
+    callGoogleGenerateContentRaw.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: `<think>{"summary":"草稿"}</think>
+最终：
+{
+  "summary": "副歌旋律适合短视频传播。",
+  "genreTags": ["pop"],
+  "structure": ["Chorus"],
+  "lyricRewriteBrief": "强化 hook",
+  "titleSuggestions": ["星河"],
+  "sunoTitle": "星河",
+  "sunoLyricsDraft": "[Chorus]\\n向星河奔跑"
+}`,
+          },
+        },
+      ],
+    });
+
+    const result = await executeMusicAnalysis({
+      audioData: 'ZmFrZQ==',
+      mimeType: 'audio/mpeg',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.analysis.sunoTitle).toBe('星河');
+  });
+
   it('fails gracefully when Gemini response contains no valid JSON', async () => {
     callGoogleGenerateContentRaw.mockResolvedValue({
       choices: [{ message: { content: 'not-json-response' } }],

@@ -11,6 +11,7 @@ export function createProviderProfileDraft(
     id,
     name: `供应商 ${index}`,
     iconUrl: '',
+    homepageUrl: '',
     providerType: 'openai-compatible',
     baseUrl: '',
     apiKey: '',

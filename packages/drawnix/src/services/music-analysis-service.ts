@@ -4,7 +4,8 @@ import {
 } from '../utils/settings-manager';
 import { callGoogleGenerateContentWithLog } from '../utils/gemini-api/logged-calls';
 import type { GeminiMessage } from '../utils/gemini-api/types';
-import { buildGenerateContentConfig, extractJsonObjects } from './analysis-core';
+import { collectJsonObjects } from '../utils/llm-json-extractor';
+import { buildGenerateContentConfig } from './analysis-core';
 
 export interface MusicAnalysisData {
   summary: string;
@@ -151,14 +152,14 @@ export async function executeMusicAnalysis(
       return { success: false, error: 'API 未返回有效响应', type: 'error' };
     }
 
-    const jsonObjects = extractJsonObjects(text);
+    const jsonObjects = collectJsonObjects(text);
     if (jsonObjects.length === 0) {
       return { success: false, error: '响应中未找到有效 JSON', type: 'error' };
     }
 
-    for (const jsonStr of jsonObjects) {
+    for (const jsonObject of jsonObjects) {
       try {
-        const parsed = normalizeMusicAnalysisData(JSON.parse(jsonStr));
+        const parsed = normalizeMusicAnalysisData(jsonObject);
         if (
           parsed.summary ||
           parsed.genreTags.length > 0 ||

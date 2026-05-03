@@ -2028,6 +2028,9 @@ $drawer-input-height: 160px;
     font-size: 11px;
     color: var(--td-text-color-placeholder);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
     margin-left: auto;
   }
 

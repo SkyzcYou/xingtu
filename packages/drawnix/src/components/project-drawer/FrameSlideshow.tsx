@@ -46,6 +46,10 @@ import {
   getPPTSlideTransition,
   type PPTSlideTransition,
 } from '../../services/ppt';
+import {
+  exitFullscreenIfActive,
+  requestFullscreenIfAllowed,
+} from '../../utils/runtime-helpers';
 
 interface FrameSlideshowProps {
   visible: boolean;
@@ -395,9 +399,11 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
     goToFrame(startIndex, { animate: false });
 
     // 尝试请求全屏，成功后重新定位
-    document.documentElement
-      .requestFullscreen?.()
-      .then(() => {
+    const fullscreenRequest = requestFullscreenIfAllowed(
+      document.documentElement
+    );
+    fullscreenRequest
+      ?.then(() => {
         setTimeout(() => goToFrame(startIndex, { animate: false }), 300);
       })
       .catch(() => undefined);
@@ -431,9 +437,7 @@ export const FrameSlideshow: React.FC<FrameSlideshowProps> = ({
       BoardTransforms.updatePointerType(board, savedPointerRef.current);
       setPointer(savedPointerRef.current as Parameters<typeof setPointer>[0]);
     }
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => undefined);
-    }
+    exitFullscreenIfActive()?.catch(() => undefined);
     setFrameRect(null);
     setActiveTransition(null);
     setActiveTool('select');

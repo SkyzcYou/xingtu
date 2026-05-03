@@ -1,5 +1,9 @@
 import { useSyncExternalStore } from 'react';
-import { modelPricingService, formatModelPrice } from '../utils/model-pricing-service';
+import {
+  modelPricingService,
+  formatModelPriceDetail,
+  formatModelPriceSummary,
+} from '../utils/model-pricing-service';
 import type { ModelPrice, PricingGroup } from '../utils/model-pricing-types';
 
 export function useModelPrice(
@@ -19,7 +23,21 @@ export function useFormattedModelPrice(
   modelId: string
 ): string {
   const price = useModelPrice(profileId, modelId);
-  return price ? formatModelPrice(price) : '';
+  return price ? formatModelPriceSummary(price) : '';
+}
+
+export function useModelPriceText(
+  profileId: string | undefined | null,
+  modelId: string
+): { summary: string; detail: string } {
+  const price = useModelPrice(profileId, modelId);
+  if (!price) {
+    return { summary: '', detail: '' };
+  }
+  return {
+    summary: formatModelPriceSummary(price),
+    detail: formatModelPriceDetail(price),
+  };
 }
 
 export function usePricingGroups(profileId: string | undefined): PricingGroup[] {

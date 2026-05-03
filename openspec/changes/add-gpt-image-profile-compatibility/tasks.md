@@ -58,14 +58,14 @@ Note: `openspec` CLI is not available in the current shell, so 1.2 remains unche
 
 ## 8. Manual Verification
 
-- [ ] 8.1 Create one `tuzi-compatible` profile and one `openai-gpt-image` profile that both select `gpt-image-2`.
+- [ ] 8.1 Create one `tuzi-gpt-image` profile and one `openai-gpt-image` profile that both select `gpt-image-2`.
 - [ ] 8.2 Verify text-to-image produces different schema/body/adapter paths for those profiles.
 - [ ] 8.3 Verify generated results still enter task history, media library, and canvas insertion normally.
-- [ ] 8.4 Verify switching an affected profile back to `tuzi-compatible` restores the default adapter path.
+- [ ] 8.4 Verify switching an affected profile to `openai-compatible-basic` restores the default adapter path.
 
 ## 9. Rollout And Rollback
 
 - [ ] 9.1 Release with existing profiles defaulting to `auto`.
-- [ ] 9.2 Confirm Tuzi `auto` resolves to the existing default adapter path.
-- [ ] 9.3 Document that users can manually switch a profile back to `兔子兼容格式` or `通用 OpenAI 兼容格式`.
+- [ ] 9.2 Confirm Tuzi `auto` resolves to the dedicated Tuzi GPT Image adapter path.
+- [ ] 9.3 Document that users can manually switch a profile back to `通用 OpenAI 兼容格式`.
 - [ ] 9.4 Keep the default adapter path available as the first rollback option.

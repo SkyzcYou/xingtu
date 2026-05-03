@@ -1,4 +1,5 @@
 import type { Task } from '../../../types/task.types';
+import { extractJsonValue } from '../../../utils/llm-json-extractor';
 
 export function readTaskAction<TAction extends string>(
   task: Task,
@@ -60,6 +61,6 @@ export function parseStructuredOrChatJson<T>(
     throw new Error(options.missingMessage);
   }
 
-  const parsed = JSON.parse(raw);
+  const parsed = extractJsonValue(raw);
   return options.fromParsedJson ? options.fromParsedJson(parsed) : options.fromStructured(parsed as object);
 }

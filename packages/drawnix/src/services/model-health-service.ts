@@ -38,6 +38,18 @@ export interface ModelHealthStatus {
     timeBucket: number;
 }
 
+export interface ModelHealthProviderSource {
+    id: string;
+    baseUrl?: string | null;
+    enabled?: boolean;
+}
+
+export interface ModelHealthSelection {
+    modelId?: string | null;
+    profileId?: string | null;
+    baseUrl?: string | null;
+}
+
 // API 端点
 const API_STATUS_BASE_URL = 'https://apistatus.tu-zi.com';
 
@@ -260,5 +272,57 @@ export function buildHealthMap(
  * 检查 baseUrl 是否为 tu-zi.com
  */
 export function isTuziApiUrl(baseUrl: string): boolean {
-    return baseUrl.includes('api.tu-zi.com');
+    const trimmed = baseUrl.trim();
+    if (!trimmed) {
+        return false;
+    }
+
+    try {
+        const url = new URL(
+            /^[a-z][a-z\d+\-.]*:\/\//i.test(trimmed)
+                ? trimmed
+                : `https://${trimmed}`
+        );
+        const hostname = url.hostname.toLowerCase();
+        return hostname === 'tu-zi.com' || hostname.endsWith('.tu-zi.com');
+    } catch {
+        return false;
+    }
+}
+
+export function shouldFetchModelHealthForSelections(
+    selections: ModelHealthSelection[],
+    providers: ModelHealthProviderSource[],
+    legacyBaseUrl?: string | null
+): boolean {
+    if (selections.length === 0) {
+        return false;
+    }
+
+    const providerById = new Map(
+        providers
+            .filter((provider) => provider.enabled !== false)
+            .map((provider) => [provider.id, provider])
+    );
+
+    return selections.some((selection) => {
+        const modelId =
+            typeof selection.modelId === 'string' ? selection.modelId.trim() : '';
+        if (!modelId) {
+            return false;
+        }
+
+        const profileId =
+            typeof selection.profileId === 'string'
+                ? selection.profileId.trim()
+                : '';
+        const provider = profileId ? providerById.get(profileId) : null;
+        const baseUrl =
+            provider?.baseUrl ||
+            selection.baseUrl ||
+            (!profileId ? legacyBaseUrl : '') ||
+            '';
+
+        return isTuziApiUrl(baseUrl);
+    });
 }

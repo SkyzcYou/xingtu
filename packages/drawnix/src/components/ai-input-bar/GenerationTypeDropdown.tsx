@@ -95,7 +95,7 @@ export const GenerationTypeDropdown: React.FC<GenerationTypeDropdownProps> = ({
       openKeys={['Enter', ' ', 'ArrowDown', 'ArrowUp']}
       onOpenKey={handleOpenKey}
     >
-      {({ containerRef, menuRef, portalPosition, handleTriggerKeyDown }) => (
+      {({ containerRef, menuRef, menuStyle, handleTriggerKeyDown }) => (
         <div className="generation-type-dropdown" ref={containerRef}>
           <HoverTip
             content={`${language === 'zh' ? '生成类型' : 'Type'}: ${language === 'zh' ? selectedOption.zh : selectedOption.en} (↑↓ Tab)`}
@@ -120,10 +120,8 @@ export const GenerationTypeDropdown: React.FC<GenerationTypeDropdownProps> = ({
               ref={menuRef}
               className={`generation-type-dropdown__menu ${ATTACHED_ELEMENT_CLASS_NAME}`}
               style={{
-                position: 'fixed',
+                ...menuStyle,
                 zIndex: Z_INDEX.DROPDOWN_PORTAL,
-                left: portalPosition.left,
-                bottom: window.innerHeight - portalPosition.top + 8,
               }}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}

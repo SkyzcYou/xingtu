@@ -7,7 +7,7 @@ The system SHALL resolve image API compatibility from the selected provider prof
 #### Scenario: Same GPT Image model uses different contracts by profile
 
 - **GIVEN** two enabled provider profiles both expose `gpt-image-2`
-- **AND** the first profile has image API compatibility `tuzi-compatible`
+- **AND** the first profile has image API compatibility `tuzi-gpt-image`
 - **AND** the second profile has image API compatibility `openai-gpt-image`
 - **WHEN** the user invokes image generation with a `ModelRef` pointing to either profile
 - **THEN** the system SHALL resolve the image compatibility from that profile
@@ -32,13 +32,13 @@ The system SHALL support an `auto` image API compatibility mode that infers a co
 - **WHEN** the system infers image compatibility
 - **THEN** it SHALL resolve to the OpenAI GPT Image format
 
-#### Scenario: Tuzi auto inference preserves existing behavior
+#### Scenario: Tuzi auto inference selects dedicated Tuzi GPT mode
 
 - **GIVEN** a provider profile uses an `api.tu-zi.com` base URL
 - **AND** the profile image API compatibility is `auto`
 - **WHEN** the system infers image compatibility
-- **THEN** it SHALL resolve to the Tuzi-compatible image format
-- **AND** SHALL preserve the existing default adapter compatibility path
+- **THEN** it SHALL resolve to the Tuzi GPT image format
+- **AND** SHALL keep the request eligible for the dedicated Tuzi GPT Image adapter path
 
 #### Scenario: Generic OpenAI-compatible auto inference
 
@@ -61,7 +61,7 @@ The system SHALL map the resolved image API compatibility mode to the request sc
 
 #### Scenario: Basic compatibility selects existing schema
 
-- **GIVEN** a GPT Image model invocation resolves to Tuzi-compatible or generic OpenAI-compatible image compatibility
+- **GIVEN** a GPT Image model invocation resolves to generic OpenAI-compatible image compatibility
 - **WHEN** the provider binding is inferred
 - **THEN** the binding SHALL use `openai.image.basic-json`
 - **AND** SHALL be eligible for the existing default image adapter

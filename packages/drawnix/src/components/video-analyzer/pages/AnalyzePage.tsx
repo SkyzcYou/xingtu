@@ -18,6 +18,7 @@ import { ModelDropdown } from '../../ai-input-bar/ModelDropdown';
 import { KnowledgeNoteContextSelector } from '../../shared';
 import {
   CreativeBriefEditor,
+  VideoParametersRow,
   normalizeCreativeBrief,
   type CreativeBrief,
 } from '../../shared/workflow';
@@ -33,6 +34,7 @@ import {
   getSelectionKey,
 } from '../../../utils/model-selection';
 import { ModelVendor, type ModelConfig } from '../../../constants/model-config';
+import { getVideoModelConfig } from '../../../constants/video-model-config';
 import {
   TUZI_MIX_PROVIDER_PROFILE_ID,
   type ModelRef,
@@ -68,6 +70,9 @@ interface PromptPdfAttachment {
 
 const DEFAULT_ANALYSIS_MODEL = 'gemini-3.1-pro-preview';
 const STORAGE_KEY_MODEL = 'video-analyzer:model';
+const STORAGE_KEY_VIDEO_MODEL = 'video-analyzer:video-model';
+const DEFAULT_VIDEO_MODEL = 'veo3';
+const DEFAULT_PROMPT_TARGET_DURATION = 30;
 const SETTINGS_PROVIDER_NAV_EVENT = 'aitu:settings:provider-nav';
 const MAX_PROMPT_PDF_SIZE = 20 * 1024 * 1024;
 
@@ -104,6 +109,18 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
   const { setAppState } = useDrawnix();
   const [inputMode, setInputMode] = useState<InputMode>('prompt');
   const [promptText, setPromptText] = useState('');
+  const [videoStyle, setVideoStyle] = useState(
+    () =>
+      existingRecord?.productInfo?.videoStyle ||
+      existingRecord?.analysis.video_style ||
+      ''
+  );
+  const [targetDuration, setTargetDuration] = useState<number>(
+    () =>
+      existingRecord?.productInfo?.targetDuration ||
+      existingRecord?.analysis.totalDuration ||
+      DEFAULT_PROMPT_TARGET_DURATION
+  );
   const [creativeBrief, setCreativeBrief] = useState<CreativeBrief>({});
   const [knowledgeContextRefs, setKnowledgeContextRefs] = useState<
     KnowledgeContextRef[]
@@ -129,6 +146,55 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       setSelectedModelState(model);
       setSelectedModelRef(modelRef || null);
       writeStoredModelSelection(STORAGE_KEY_MODEL, model, modelRef);
+    },
+    []
+  );
+  const videoModels = useSelectableModels('video');
+  const [videoModel, setVideoModelState] = useState(
+    () =>
+      existingRecord?.productInfo?.videoModel ||
+      readStoredModelSelection(STORAGE_KEY_VIDEO_MODEL, DEFAULT_VIDEO_MODEL)
+        .modelId
+  );
+  const [videoModelRef, setVideoModelRef] = useState<ModelRef | null>(
+    () =>
+      existingRecord?.productInfo?.videoModelRef ||
+      readStoredModelSelection(
+        STORAGE_KEY_VIDEO_MODEL,
+        existingRecord?.productInfo?.videoModel || DEFAULT_VIDEO_MODEL
+      ).modelRef
+  );
+  const videoConfig = useMemo(
+    () => getVideoModelConfig(videoModel),
+    [videoModel]
+  );
+  const [segmentDuration, setSegmentDuration] = useState<number>(() => {
+    const initialModel =
+      existingRecord?.productInfo?.videoModel ||
+      readStoredModelSelection(STORAGE_KEY_VIDEO_MODEL, DEFAULT_VIDEO_MODEL)
+        .modelId;
+    const cfg = getVideoModelConfig(initialModel);
+    return (
+      existingRecord?.productInfo?.segmentDuration ||
+      parseInt(cfg.defaultDuration, 10) ||
+      8
+    );
+  });
+  const durationOptions = useMemo(
+    () =>
+      (videoConfig.durationOptions || []).map((option) => ({
+        value: parseInt(option.value, 10),
+        label: option.label,
+      })),
+    [videoConfig]
+  );
+  const setVideoModel = useCallback(
+    (model: string, modelRef?: ModelRef | null) => {
+      setVideoModelState(model);
+      setVideoModelRef(modelRef || null);
+      writeStoredModelSelection(STORAGE_KEY_VIDEO_MODEL, model, modelRef);
+      const cfg = getVideoModelConfig(model);
+      setSegmentDuration(parseInt(cfg.defaultDuration, 10) || 8);
     },
     []
   );
@@ -178,6 +244,8 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
         setAnalysis(null);
         setInputMode('prompt');
         setPromptText('');
+        setVideoStyle('');
+        setTargetDuration(DEFAULT_PROMPT_TARGET_DURATION);
         setCreativeBrief({});
         setPdfAttachment(null);
         setYoutubeUrl('');
@@ -190,6 +258,26 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
       setSelectedModelState(existingRecord.model || DEFAULT_ANALYSIS_MODEL);
       setSelectedModelRef(existingRecord.modelRef || null);
       setError('');
+      setVideoStyle(
+        existingRecord.productInfo?.videoStyle ||
+          existingRecord.analysis.video_style ||
+          ''
+      );
+      setTargetDuration(
+        existingRecord.productInfo?.targetDuration ||
+          existingRecord.analysis.totalDuration ||
+          DEFAULT_PROMPT_TARGET_DURATION
+      );
+      if (existingRecord.productInfo?.videoModel) {
+        setVideoModelState(existingRecord.productInfo.videoModel);
+        setVideoModelRef(existingRecord.productInfo.videoModelRef || null);
+        const cfg = getVideoModelConfig(existingRecord.productInfo.videoModel);
+        setSegmentDuration(
+          existingRecord.productInfo.segmentDuration ||
+            parseInt(cfg.defaultDuration, 10) ||
+            8
+        );
+      }
 
       const snapshot = existingRecord.sourceSnapshot;
       if (snapshot?.type === 'prompt') {
@@ -487,6 +575,10 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
           userPrompt: sourcePrompt,
           pdfAttachmentName: pdfAttachment?.name,
           creativeBrief: normalizedCreativeBrief,
+          videoStyle,
+          videoModel,
+          segmentDuration,
+          targetDuration,
         });
         params = {
           prompt,
@@ -511,6 +603,11 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
           },
           videoAnalyzerProductInfo: {
             prompt: sourcePrompt,
+            videoModel,
+            videoModelRef,
+            targetDuration,
+            segmentDuration,
+            videoStyle,
             creativeBrief: normalizedCreativeBrief,
           },
           knowledgeContextRefs,
@@ -597,6 +694,11 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
     videoFile,
     youtubeUrl,
     promptText,
+    videoStyle,
+    videoModel,
+    videoModelRef,
+    targetDuration,
+    segmentDuration,
     creativeBrief,
     knowledgeContextRefs,
     pdfAttachment,
@@ -775,6 +877,26 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
                 value={creativeBrief}
                 onChange={setCreativeBrief}
                 workflow="popular_video"
+                videoStyle={videoStyle}
+                onVideoStyleChange={setVideoStyle}
+              />
+              <VideoParametersRow
+                selectedModel={videoModel}
+                selectedSelectionKey={getSelectionKey(videoModel, videoModelRef)}
+                onSelectModel={setVideoModel}
+                models={videoModels}
+                segmentDuration={segmentDuration}
+                durationOptions={durationOptions}
+                onSegmentDurationChange={setSegmentDuration}
+                targetDuration={targetDuration}
+                onTargetDurationChange={(value) =>
+                  setTargetDuration(
+                    Number.isFinite(value) && value > 0
+                      ? value
+                      : DEFAULT_PROMPT_TARGET_DURATION
+                  )
+                }
+                disabled={analyzing || !!pendingAnalyzeTaskId}
               />
               <textarea
                 className="va-prompt-textarea"
@@ -859,7 +981,7 @@ export const AnalyzePage: React.FC<AnalyzePageProps> = ({
                 )}
                 onSelect={setSelectedModel}
                 models={selectableAnalysisModels}
-                placement="down"
+                placement="auto"
                 disabled={analyzing}
                 placeholder={
                   isGeminiRequiredForAnalysis ? '选择 Gemini 模型' : '选择文本模型'

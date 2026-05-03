@@ -29,6 +29,7 @@ describe('createProviderProfileDraft', () => {
     expect(createProviderProfileDraft(3, 'profile-3')).toMatchObject({
       id: 'profile-3',
       name: '供应商 3',
+      homepageUrl: '',
       providerType: 'openai-compatible',
       authType: 'bearer',
       imageApiCompatibility: 'openai-gpt-image',

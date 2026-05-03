@@ -51,6 +51,7 @@ import {
 import { useTextSelection } from '../../hooks/useTextSelection';
 import { useChatDrawerControl } from '../../contexts/ChatDrawerContext';
 import { useAssets } from '../../contexts/AssetContext';
+import { useModelHealthContext } from '../../contexts/ModelHealthContext';
 import {
   AssetType,
   AssetSource,
@@ -709,6 +710,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
     const chatDrawerControl = useChatDrawerControl();
     const workflowControl = useWorkflowControl();
+    const { setActiveSelections: setActiveHealthSelections } =
+      useModelHealthContext();
     const {
       addHistory: addPromptHistory,
       history: promptHistory,
@@ -2618,6 +2621,51 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         selectedAgentVideoModelRef,
       ]
     );
+
+    useEffect(() => {
+      const selections = [
+        {
+          modelId: selectedModel,
+          profileId: selectedModelRef?.profileId || null,
+        },
+      ];
+
+      if (generationType === 'agent' && selectedSkillId !== SKILL_AUTO_ID) {
+        if (selectedSkillMediaTypes.includes('image')) {
+          selections.push({
+            modelId: selectedAgentImageModel,
+            profileId: selectedAgentImageModelRef?.profileId || null,
+          });
+        }
+        if (selectedSkillMediaTypes.includes('video')) {
+          selections.push({
+            modelId: selectedAgentVideoModel,
+            profileId: selectedAgentVideoModelRef?.profileId || null,
+          });
+        }
+        if (selectedSkillMediaTypes.includes('audio')) {
+          selections.push({
+            modelId: selectedAgentAudioModel,
+            profileId: selectedAgentAudioModelRef?.profileId || null,
+          });
+        }
+      }
+
+      setActiveHealthSelections(selections);
+    }, [
+      generationType,
+      selectedAgentAudioModel,
+      selectedAgentAudioModelRef,
+      selectedAgentImageModel,
+      selectedAgentImageModelRef,
+      selectedAgentVideoModel,
+      selectedAgentVideoModelRef,
+      selectedModel,
+      selectedModelRef,
+      selectedSkillId,
+      selectedSkillMediaTypes,
+      setActiveHealthSelections,
+    ]);
 
     // 当 selectedModel 被外部逻辑更新时（如生成类型切换、设置变更），重新对齐参数
     // 避免无限循环：只有在参数实际变化时才更新 state

@@ -68,6 +68,7 @@ import {
 import { PromptOptimizeButton } from '../shared/PromptOptimizeButton';
 import { KnowledgeNoteContextSelector } from '../shared/KnowledgeNoteContextSelector';
 import { HoverTip } from '../shared/hover';
+import { RetryImage } from '../retry-image';
 import { useWorkflowTaskSync } from '../shared/workflow/useWorkflowTaskSync';
 import { useMediaViewer } from '../../hooks/useMediaViewer';
 import { MediaLibraryModal } from '../media-library';
@@ -2705,10 +2706,11 @@ const ComicCreator: React.FC = () => {
                           onClick={() => handlePreviewPageImage(pageItem.id)}
                           aria-label={`预览第 ${pageItem.pageNumber} 页`}
                         >
-                          <img
+                          <RetryImage
                             src={currentImageVariant.url}
                             alt={pageItem.title}
-                            referrerPolicy="no-referrer"
+                            showSkeleton={false}
+                            eager
                           />
                         </button>
                       ) : (
@@ -2764,12 +2766,13 @@ const ComicCreator: React.FC = () => {
                                     pageItem.pageNumber
                                   } 页第 ${variantIndex + 1} 张图片`}
                                 >
-                                  <img
+                                  <RetryImage
                                     src={variant.url}
                                     alt={`${pageItem.title} ${
                                       variantIndex + 1
                                     }`}
-                                    referrerPolicy="no-referrer"
+                                    showSkeleton={false}
+                                    eager
                                   />
                                   <span>{variantIndex + 1}</span>
                                 </button>

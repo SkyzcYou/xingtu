@@ -11,7 +11,14 @@
  * - Graceful degradation for virtual paths when SW is unavailable
  */
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, {
+  forwardRef,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from 'react';
 import { unifiedCacheService } from '../services/unified-cache-service';
 import { normalizeImageDataUrl } from '@aitu/utils';
 
@@ -36,6 +43,10 @@ export interface RetryImageProps extends React.ImgHTMLAttributes<HTMLImageElemen
   bypassSWAfterRetries?: number;
   /** Use eager loading for cached images (default: auto-detect from URL) */
   eager?: boolean;
+  /** Optional wrapper class name */
+  wrapperClassName?: string;
+  /** Optional wrapper style */
+  wrapperStyle?: React.CSSProperties;
 }
 
 /**
@@ -121,7 +132,7 @@ function isSWAvailable(): boolean {
          !!navigator.serviceWorker.controller;
 }
 
-export const RetryImage: React.FC<RetryImageProps> = ({
+export const RetryImage = forwardRef<HTMLImageElement, RetryImageProps>(({
   src,
   alt,
   maxRetries = 5,
@@ -132,8 +143,12 @@ export const RetryImage: React.FC<RetryImageProps> = ({
   showSkeleton = true,
   bypassSWAfterRetries = 2,
   eager,
+  wrapperClassName,
+  wrapperStyle,
+  onLoad,
+  onError,
   ...imgProps
-}) => {
+}, ref) => {
   // 存量数据可能存有原始 base64，先统一转为 data URL
   const normalizedSrc = useMemo(() => normalizeImageDataUrl(src), [src]);
   // 自动检测是否应该 eager 加载
@@ -179,17 +194,22 @@ export const RetryImage: React.FC<RetryImageProps> = ({
   );
 
   // Handle image load success
-  const handleLoad = useCallback(() => {
+  const handleLoad = useCallback(
+    (event: React.SyntheticEvent<HTMLImageElement, Event>) => {
     setIsLoading(false);
     setHasError(false);
+      onLoad?.(event);
     onLoadSuccess?.();
-  }, [onLoadSuccess]);
+    },
+    [onLoad, onLoadSuccess]
+  );
 
   // Handle image load error with retry logic
-  const handleError = useCallback(async () => {
+  const handleError = useCallback(async (event: React.SyntheticEvent<HTMLImageElement, Event>) => {
     if (normalizedSrc.startsWith('data:')) {
       setIsLoading(false);
       setHasError(true);
+      onError?.(event);
       onLoadFailure?.(new Error('Failed to load inline data image'));
       return;
     }
@@ -245,10 +265,11 @@ export const RetryImage: React.FC<RetryImageProps> = ({
       // All retries exhausted
       setIsLoading(false);
       setHasError(true);
+      onError?.(event);
       const error = new Error(`Failed to load image after ${maxRetries} retries`);
       onLoadFailure?.(error);
     }
-  }, [retryCount, maxRetries, normalizedSrc, getRetryDelay, onLoadFailure, bypassSW, bypassSWAfterRetries, tryFallbackToBlobUrl]);
+  }, [retryCount, maxRetries, normalizedSrc, getRetryDelay, onError, onLoadFailure, bypassSW, bypassSWAfterRetries, tryFallbackToBlobUrl]);
 
   // Reset state when src changes and handle virtual path fallback
   useEffect(() => {
@@ -307,9 +328,37 @@ export const RetryImage: React.FC<RetryImageProps> = ({
     return <>{fallback}</>;
   }
 
+  const needsWrapper = showSkeleton || Boolean(wrapperClassName) || Boolean(wrapperStyle);
+  const imageElement = (
+    <img
+      {...imgProps}
+      ref={ref}
+      src={imageSrc}
+      alt={alt}
+      loading={shouldEagerLoad ? 'eager' : 'lazy'}
+      decoding={shouldEagerLoad ? 'sync' : 'async'}
+      referrerPolicy="no-referrer"
+      onLoad={handleLoad}
+      onError={handleError}
+      style={{
+        ...imgProps.style,
+        opacity: shouldHideWhileLoading ? 0 : 1,
+        transition: 'opacity 0.3s ease-out',
+        ...(needsWrapper ? { width: '100%', height: '100%' } : null),
+      }}
+    />
+  );
+
+  if (!needsWrapper) {
+    return imageElement;
+  }
+
   // Render image with skeleton loading state
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div
+      className={wrapperClassName}
+      style={{ position: 'relative', width: '100%', height: '100%', ...wrapperStyle }}
+    >
       {/* Skeleton shown while loading */}
       {isLoading && showSkeleton && (
         <ImageSkeleton
@@ -325,23 +374,9 @@ export const RetryImage: React.FC<RetryImageProps> = ({
         />
       )}
       {/* Actual image with fade-in effect */}
-      <img
-        {...imgProps}
-        src={imageSrc}
-        alt={alt}
-        loading={shouldEagerLoad ? 'eager' : 'lazy'}
-        decoding={shouldEagerLoad ? 'sync' : 'async'}
-        referrerPolicy="no-referrer"
-        onLoad={handleLoad}
-        onError={handleError}
-        style={{
-          ...imgProps.style,
-          opacity: shouldHideWhileLoading ? 0 : 1,
-          transition: 'opacity 0.3s ease-out',
-          width: '100%',
-          height: '100%'
-        }}
-      />
+      {imageElement}
     </div>
   );
-};
+});
+
+RetryImage.displayName = 'RetryImage';

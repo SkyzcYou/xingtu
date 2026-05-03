@@ -352,7 +352,14 @@ describe('Media Executor Module', () => {
         { onProgress }
       );
 
-      expect(updateRemoteId).toHaveBeenCalledWith('task-1', 'video-task-1');
+      expect(updateRemoteId).toHaveBeenCalledWith(
+        'task-1',
+        'video-task-1',
+        expect.objectContaining({
+          operation: 'video',
+          modelId: 'happyhorse-1.0-t2v',
+        })
+      );
       expect(onProgress).toHaveBeenCalledWith({
         progress: 30,
         phase: 'polling',

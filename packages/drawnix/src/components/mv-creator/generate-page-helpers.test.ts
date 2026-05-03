@@ -101,6 +101,7 @@ describe('mv-creator generate helpers', () => {
     );
 
     expect(payload.shots[0].generated_first_frame_url).toBeUndefined();
+    expect(payload.shots[0].suppressed_generated_urls?.first).toBe('first-url');
     expect(payload.characters[0].description).toBe('mv-char');
     expect(payload.characters[0].referenceImageUrl).toBeUndefined();
   });

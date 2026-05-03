@@ -80,8 +80,7 @@ function isGeminiFamilyModel(model: ModelConfig): boolean {
 }
 
 function isTuziProviderProfile(profile: ProviderProfileSnapshot): boolean {
-  const baseUrl = profile.baseUrl.toLowerCase();
-  return baseUrl.includes('api.tu-zi.com');
+  return isTuziBaseUrl(profile.baseUrl);
 }
 
 function isMidjourneyModel(model: ModelConfig): boolean {
@@ -197,7 +196,26 @@ function isOfficialOpenAIProfile(profile: ProviderProfileSnapshot): boolean {
 }
 
 function isTuziProfile(profile: ProviderProfileSnapshot): boolean {
-  return profile.baseUrl.toLowerCase().includes('api.tu-zi.com');
+  return isTuziBaseUrl(profile.baseUrl);
+}
+
+function isTuziBaseUrl(baseUrl: string): boolean {
+  const normalizedBaseUrl = baseUrl.trim().toLowerCase();
+  if (!normalizedBaseUrl) {
+    return false;
+  }
+
+  try {
+    const url = new URL(
+      /^[a-z][a-z\d+\-.]*:\/\//i.test(normalizedBaseUrl)
+        ? normalizedBaseUrl
+        : `https://${normalizedBaseUrl}`
+    );
+    const hostname = url.hostname.toLowerCase();
+    return hostname === 'tu-zi.com' || hostname.endsWith('.tu-zi.com');
+  } catch {
+    return false;
+  }
 }
 
 function normalizeImageApiCompatibilityMode(
@@ -760,6 +778,40 @@ function dedupeBindings(
   return Array.from(deduped.values());
 }
 
+function shouldUseDiscoveredEndpointHintForModel(
+  hint: ReturnType<typeof inferAllBindingHintsFromEndpoints>[number],
+  profile: ProviderProfileSnapshot,
+  model: ModelConfig
+): boolean {
+  if (hint.protocol === 'openai.images.edits') {
+    return (
+      isGptImageModel(model) &&
+      resolveImageApiCompatibility(profile, model) === 'openai-gpt-image'
+    );
+  }
+
+  if (hint.protocol === 'openai.async.media') {
+    return model.type === 'image';
+  }
+
+  if (hint.protocol === 'openai.async.video') {
+    return model.type === 'video';
+  }
+
+  return true;
+}
+
+function getDiscoveredEndpointPriority(
+  hint: ReturnType<typeof inferAllBindingHintsFromEndpoints>[number],
+  model: ModelConfig
+): number {
+  if (hint.protocol === 'openai.async.media' && model.type === 'image') {
+    return 700;
+  }
+
+  return 140;
+}
+
 export function inferBindingsForProviderModel(
   profile: ProviderProfileSnapshot,
   model: ModelConfig,
@@ -786,11 +838,7 @@ export function inferBindingsForProviderModel(
   if (endpointHints) {
     const hints = inferAllBindingHintsFromEndpoints(endpointHints);
     for (const hint of hints) {
-      if (
-        hint.protocol === 'openai.images.edits' &&
-        (!isGptImageModel(model) ||
-          resolveImageApiCompatibility(profile, model) !== 'openai-gpt-image')
-      ) {
+      if (!shouldUseDiscoveredEndpointHintForModel(hint, profile, model)) {
         continue;
       }
 
@@ -804,8 +852,7 @@ export function inferBindingsForProviderModel(
         bindings.push(
           buildBinding(profile, model, {
             ...hint,
-            // discovered endpoint 只补充候选，不应抢过现有模板绑定
-            priority: 140,
+            priority: getDiscoveredEndpointPriority(hint, model),
             confidence: 'medium',
             source: 'discovered',
           })

@@ -35,6 +35,11 @@ import {
 import { GPT_IMAGE_EDIT_REQUEST_SCHEMAS } from './model-adapters';
 import type { ModelRef } from '../utils/settings-manager';
 import type { AdapterContext, ImageModelAdapter } from './model-adapters/types';
+import {
+  assertTaskInvocationRouteAvailable,
+  createTaskInvocationRouteSnapshot,
+  shouldUseStrictTaskInvocationRoute,
+} from './task-invocation-route';
 
 type ImageGenerationMode = 'text_to_image' | 'image_to_image' | 'image_edit';
 type ImageOutputFormat = 'png' | 'jpeg' | 'webp';
@@ -57,6 +62,16 @@ function resolveAnalyticsModelName(
     return routeModel.modelId;
   }
   return fallback;
+}
+
+function assertStoredTaskInvocationRouteAvailable(
+  taskId: string,
+  operation: 'image' | 'video' | 'audio'
+): void {
+  const task = taskQueueService.getTask(taskId);
+  if (task && shouldUseStrictTaskInvocationRoute(task)) {
+    assertTaskInvocationRouteAvailable(operation, task);
+  }
 }
 
 function logImageAdapterSelection(
@@ -485,6 +500,10 @@ class GenerationAPIService {
           onSubmitted: (remoteId: string) => {
             taskQueueService.updateTaskStatus(taskId, TaskStatus.PROCESSING, {
               remoteId,
+              invocationRoute: createTaskInvocationRouteSnapshot(
+                'image',
+                requestedModelRef || requestedModel || DEFAULT_IMAGE_MODEL_ID
+              ),
               executionPhase: TaskExecutionPhase.POLLING,
             });
           },
@@ -534,6 +553,7 @@ class GenerationAPIService {
     });
 
     try {
+      assertStoredTaskInvocationRouteAvailable(taskId, 'image');
       const result = await Promise.race([
         asyncImageAPIService.resumePolling(remoteId, {
           interval: 5000,
@@ -626,6 +646,10 @@ class GenerationAPIService {
             onSubmitted: (videoId: string) => {
               taskQueueService.updateTaskStatus(taskId, 'processing' as any, {
                 remoteId: videoId,
+                invocationRoute: createTaskInvocationRouteSnapshot(
+                  'video',
+                  requestedModelRef || requestedModel
+                ),
                 executionPhase: TaskExecutionPhase.POLLING,
               });
             },
@@ -712,6 +736,10 @@ class GenerationAPIService {
             onSubmitted: (remoteId: string) => {
               taskQueueService.updateTaskStatus(taskId, TaskStatus.PROCESSING, {
                 remoteId,
+                invocationRoute: createTaskInvocationRouteSnapshot(
+                  'audio',
+                  requestedModelRef || requestedModel
+                ),
                 executionPhase: TaskExecutionPhase.POLLING,
               });
             },
@@ -777,6 +805,7 @@ class GenerationAPIService {
     });
 
     try {
+      assertStoredTaskInvocationRouteAvailable(taskId, 'video');
       // console.log(`[GenerationAPI] Resuming video generation for task ${taskId}, remoteId: ${remoteId}`);
 
       // Get timeout for video
@@ -793,6 +822,9 @@ class GenerationAPIService {
       const pollingPromise = videoAPIService.resumePolling(remoteId, {
         interval: 5000,
         routeModel,
+        params: taskQueueService.getTask(taskId)?.params.params as
+          | Record<string, unknown>
+          | undefined,
         onProgress: (progress, status) => {
           // console.log(`[GenerationAPI] Resumed video progress: ${progress}% (${status})`);
           taskQueueService.updateTaskProgress(taskId, progress);
@@ -870,6 +902,7 @@ class GenerationAPIService {
     });
 
     try {
+      assertStoredTaskInvocationRouteAvailable(taskId, 'audio');
       const timeout = TASK_TIMEOUT.AUDIO;
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {

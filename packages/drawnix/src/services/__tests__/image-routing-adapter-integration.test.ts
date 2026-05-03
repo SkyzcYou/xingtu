@@ -19,8 +19,8 @@ const defaultBasicImageAdapter: ImageModelAdapter = {
   id: 'gemini-image-adapter',
   label: 'Default Image',
   kind: 'image',
-  matchProtocols: ['openai.images.generations'],
-  matchRequestSchemas: ['openai.image.basic-json'],
+  matchProtocols: ['openai.images.generations', 'openai.async.media'],
+  matchRequestSchemas: ['openai.image.basic-json', 'openai.async.image.form'],
   async generateImage() {
     throw new Error('not implemented');
   },
@@ -171,6 +171,30 @@ describe('image routing to default registered adapters', () => {
 
     expect(binding.requestSchema).toBe('openai.image.basic-json');
     expect(resolveAdapterForBinding(binding, 'image')?.id).toBe(
+      'gemini-image-adapter'
+    );
+  });
+
+  it('routes pricing async-image bindings to the default image adapter', () => {
+    const binding = inferBindingsForProviderModel(
+      tuziProfile,
+      {
+        id: 'gpt-image-1-vip',
+        label: 'GPT Image 1 VIP',
+        type: 'image',
+        vendor: ModelVendor.GPT,
+      },
+      {
+        'openai-video': {
+          path: '/v1/videos',
+          method: 'POST',
+          scenario: 'async-image',
+        },
+      }
+    ).find((entry) => entry.requestSchema === 'openai.async.image.form');
+
+    expect(binding?.protocol).toBe('openai.async.media');
+    expect(resolveAdapterForBinding(binding!, 'image')?.id).toBe(
       'gemini-image-adapter'
     );
   });

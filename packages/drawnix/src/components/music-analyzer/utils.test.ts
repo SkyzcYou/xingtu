@@ -175,6 +175,22 @@ describe('music-analyzer utils', () => {
     });
   });
 
+  it('extracts lyrics rewrite payload after model thinking text', () => {
+    const result = parseLyricsRewriteResult(`<think>{"title": 123}</think>
+最终 JSON：
+{
+  "title": "星河",
+  "styleTags": ["synth pop"],
+  "lyricsDraft": "[Chorus]\\n向星河奔跑"
+}`);
+
+    expect(result).toEqual({
+      title: '星河',
+      styleTags: ['synth pop'],
+      lyricsDraft: '[Chorus]\n向星河奔跑',
+    });
+  });
+
   it('merges text models and Suno models without duplicates', () => {
     const models = collectLyricsDraftModels(
       [

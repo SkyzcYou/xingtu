@@ -37,6 +37,7 @@ export {
   type ContextMenuSubmenuEntry,
   type ContextMenuDividerEntry,
 } from './ContextMenu';
+export { RetryImage, type RetryImageProps } from '../retry-image';
 
 // 统一媒体预览系统
 export {

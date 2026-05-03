@@ -12,6 +12,7 @@ import React from 'react';
 import { Pin, PinOff, X, Lightbulb } from 'lucide-react';
 import type { PromptPreviewExample } from '../../constants/prompts';
 import { HoverTip } from './hover';
+import { RetryImage } from '../retry-image';
 import './prompt-list-item.scss';
 
 export interface PromptPreviewRequest {
@@ -259,25 +260,25 @@ export const PromptListItem: React.FC<PromptListItemProps> = ({
                 onClick={handlePreviewClick}
                 onKeyDown={handlePreviewKeyDown(index)}
               >
-                <img
+                <RetryImage
                   src={
                     example.kind === 'video'
                       ? example.posterSrc || example.src
                       : example.src
                   }
                   alt={example.alt}
-                  loading="lazy"
+                  showSkeleton={false}
                 />
               </button>
             ) : (
-              <img
+              <RetryImage
                 src={
                   example.kind === 'video'
                     ? example.posterSrc || example.src
                     : example.src
                 }
                 alt={example.alt}
-                loading="lazy"
+                showSkeleton={false}
               />
             )}
           </div>
@@ -295,24 +296,24 @@ export const PromptListItem: React.FC<PromptListItemProps> = ({
     <div className="prompt-list-item__result-preview">
       {(resultPreview.kind === 'image' || resultPreview.kind === 'video') && (
         <div className="prompt-list-item__result-media">
-          <img
+          <RetryImage
             src={
               resultPreview.kind === 'video'
                 ? resultPreview.posterUrl || resultPreview.url
                 : resultPreview.url
             }
             alt={resultPreview.title || displayTitle}
-            loading="lazy"
+            showSkeleton={false}
           />
         </div>
       )}
       {resultPreview.kind === 'audio' && (
         <div className="prompt-list-item__result-audio">
           {resultPreview.coverUrl && (
-            <img
+            <RetryImage
               src={resultPreview.coverUrl}
               alt={resultPreview.title || displayTitle}
-              loading="lazy"
+              showSkeleton={false}
             />
           )}
           <div>

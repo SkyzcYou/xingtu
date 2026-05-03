@@ -14,7 +14,7 @@ const isDevelopment =
   typeof location !== 'undefined' &&
   (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 
-export type CDNName = 'jsdelivr' | 'unpkg' | 'local';
+export type CDNName = 'jsdelivr' | 'local';
 
 export interface CDNPreference {
   cdn: CDNName;
@@ -81,10 +81,6 @@ const CDN_DEGRADE_POLICIES: Record<
     baseTimeout: 60 * 1000,
     maxTimeout: 5 * 60 * 1000,
   },
-  unpkg: {
-    baseTimeout: 10 * 60 * 1000,
-    maxTimeout: 60 * 60 * 1000,
-  },
 };
 
 // CDN 源列表（按默认优先级排序）
@@ -123,7 +119,7 @@ function initHealthStatus(forceReset = false): void {
 initHealthStatus();
 
 function isCDNName(value: unknown): value is CDNName {
-  return value === 'jsdelivr' || value === 'unpkg' || value === 'local';
+  return value === 'jsdelivr' || value === 'local';
 }
 
 function sanitizeCDNPreference(value: unknown): CDNPreference | null {
@@ -431,10 +427,6 @@ function buildThirdPartyCDNUrl(
 
   if (source.name === 'jsdelivr') {
     return `https://cdn.jsdelivr.net${packagePath}`;
-  }
-
-  if (source.name === 'unpkg') {
-    return `https://unpkg.com/${packagePath.replace(/^\/npm\//, '')}`;
   }
 
   return null;

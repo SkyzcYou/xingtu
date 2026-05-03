@@ -15,6 +15,7 @@ import type {
 } from './provider-routing/types';
 
 const FIXED_SORA_DURATION_MODEL_PATTERN = /^sora-2-(\d+)s$/i;
+const DEFAULT_VIDEO_POLL_PATH = '/videos/{taskId}';
 const DEFAULT_VIDEO_DOWNLOAD_PATH = '/videos/{taskId}/content';
 const SORA_API_ALLOWED_DURATIONS = ['4', '8', '12'] as const;
 const SORA_MODE_VALUES = new Set(['api', 'web']);
@@ -472,6 +473,30 @@ export function extractInlineVideoUrl(
   return payload?.video_url || payload?.url || payload?.output?.url;
 }
 
+function resolveTemplatePath(
+  template: string,
+  taskId: string,
+  params?: Record<string, unknown> | null
+): string {
+  return template.replace(/\{([^}]+)\}/g, (placeholder, key) => {
+    const value = key === 'taskId' || key === 'id' ? taskId : params?.[key];
+    if (value === undefined || value === null || value === '') {
+      return placeholder;
+    }
+
+    return encodeURIComponent(String(value));
+  });
+}
+
+export function resolveVideoPollPath(
+  videoId: string,
+  binding?: ProviderModelBinding | null,
+  params?: Record<string, unknown> | null
+): string {
+  const template = binding?.pollPathTemplate || DEFAULT_VIDEO_POLL_PATH;
+  return resolveTemplatePath(template, videoId, params);
+}
+
 export function shouldDownloadVideoContent(
   modelId?: string | null,
   binding?: ProviderModelBinding | null,
@@ -502,7 +527,7 @@ export function resolveVideoDownloadPath(
 ): string {
   const metadata = getResolvedVideoBindingMetadata(modelId, binding);
   const template = metadata?.downloadPathTemplate || DEFAULT_VIDEO_DOWNLOAD_PATH;
-  return template.replace(/\{taskId\}/g, encodeURIComponent(videoId));
+  return resolveTemplatePath(template, videoId);
 }
 
 export async function downloadVideoContentToLocalUrl(params: {

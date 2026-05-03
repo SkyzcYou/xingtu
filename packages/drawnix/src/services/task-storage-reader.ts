@@ -9,7 +9,13 @@
  * 注意：这个模块只负责读取操作，写操作仍然通过 SW 进行以确保数据一致性
  */
 
-import { Task, TaskStatus, TaskType, GenerationParams } from '../types/task.types';
+import {
+  Task,
+  TaskStatus,
+  TaskType,
+  GenerationParams,
+  type TaskInvocationRouteSnapshot,
+} from '../types/task.types';
 import { BaseStorageReader } from './base-storage-reader';
 import { normalizeImageDataUrl } from '@aitu/utils';
 import { STORAGE_LIMITS } from '../constants/TASK_CONSTANTS';
@@ -77,9 +83,11 @@ interface SWTask {
   };
   progress?: number;
   remoteId?: string;
+  invocationRoute?: TaskInvocationRouteSnapshot;
   executionPhase?: string;
   savedToLibrary?: boolean;
   insertedToCanvas?: boolean;
+  syncedFromRemote?: boolean;
   archived?: boolean;
 }
 
@@ -205,8 +213,12 @@ function convertSWTaskToTask(swTask: SWTask): Task {
     error: swTask.error,
     progress: swTask.progress,
     remoteId: swTask.remoteId,
+    invocationRoute: swTask.invocationRoute,
+    executionPhase: swTask.executionPhase as Task['executionPhase'],
     savedToLibrary: swTask.savedToLibrary,
     insertedToCanvas: swTask.insertedToCanvas,
+    syncedFromRemote: swTask.syncedFromRemote,
+    archived: swTask.archived,
   };
 }
 

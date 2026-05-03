@@ -16,6 +16,8 @@ import {
     modelHealthFetcher,
     buildHealthMap,
     isTuziApiUrl,
+    shouldFetchModelHealthForSelections,
+    type ModelHealthSelection,
     type ModelHealthStatus,
 } from '../services/model-health-service';
 
@@ -28,6 +30,8 @@ export interface UseModelHealthResult {
     error: string | null;
     /** 是否应该显示健康状态（baseUrl 为 tu-zi.com 时为 true） */
     shouldShowHealth: boolean;
+    /** 更新当前已选择的模型，用于决定是否请求健康状态 */
+    setActiveSelections: (selections: ModelHealthSelection[]) => void;
     /** 手动刷新数据 */
     refresh: () => Promise<void>;
     /** 根据模型 ID 和供应商获取健康状态 */
@@ -37,10 +41,6 @@ export interface UseModelHealthResult {
 // UI 刷新间隔（5 分钟）- 用于定时器
 // 注意：实际 API 调用频率由 modelHealthFetcher 单例控制（最小 1 分钟）
 const UI_REFRESH_INTERVAL = 5 * 60 * 1000;
-
-function hasTuziProvider(profiles: ProviderProfile[]): boolean {
-    return profiles.some((profile) => profile.enabled && isTuziApiUrl(profile.baseUrl || ''));
-}
 
 /**
  * 模型健康状态 Hook
@@ -58,12 +58,17 @@ export function useModelHealth(): UseModelHealthResult {
     const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(
         () => providerProfilesSettings.get()
     );
+    const activeSelectionsRef = useRef<ModelHealthSelection[]>([]);
 
     // 检查是否应该显示健康状态
     const checkShouldShow = useCallback(() => {
         const settings = geminiSettings.get();
         const profiles = providerProfilesSettings.get();
-        const show = isTuziApiUrl(settings.baseUrl || '') || hasTuziProvider(profiles);
+        const show = shouldFetchModelHealthForSelections(
+            activeSelectionsRef.current,
+            profiles,
+            settings.baseUrl || ''
+        );
         setShouldShowHealth(show);
         setProviderProfiles(profiles);
         return show;
@@ -97,6 +102,27 @@ export function useModelHealth(): UseModelHealthResult {
     const refresh = useCallback(async () => {
         await fetchData(true);
     }, [fetchData]);
+
+    const setActiveSelections = useCallback(
+        (selections: ModelHealthSelection[]) => {
+            activeSelectionsRef.current = selections;
+            const show = checkShouldShow();
+
+            if (show && !intervalRef.current) {
+                fetchData();
+                intervalRef.current = setInterval(() => {
+                    fetchData(true);
+                }, UI_REFRESH_INTERVAL);
+            } else if (!show && intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+                setHealthMap(new Map());
+            } else if (!show) {
+                setHealthMap(new Map());
+            }
+        },
+        [checkShouldShow, fetchData]
+    );
 
     // 获取特定模型的健康状态
     const getHealthStatus = useCallback((modelId: string, profileId?: string | null): ModelHealthStatus | undefined => {
@@ -170,6 +196,7 @@ export function useModelHealth(): UseModelHealthResult {
         loading,
         error,
         shouldShowHealth,
+        setActiveSelections,
         refresh,
         getHealthStatus,
     };

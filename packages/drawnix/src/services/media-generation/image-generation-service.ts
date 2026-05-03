@@ -26,6 +26,7 @@ import {
   TaskStatus as QueueTaskStatus,
   TaskExecutionPhase,
 } from '../../types/task.types';
+import { createTaskInvocationRouteSnapshot } from '../task-invocation-route';
 
 function buildStoredImageAdapterParams(
   options: ImageGenerationOptions
@@ -122,7 +123,16 @@ export async function generateImage(
     sanitizedParams.prompt,
     options
   );
-  await taskStorageWriter.createTask(taskId, 'image', persistedTaskParams);
+  const invocationRoute = createTaskInvocationRouteSnapshot(
+    'image',
+    options.modelRef || options.model || null
+  );
+  await taskStorageWriter.createTask(
+    taskId,
+    'image',
+    persistedTaskParams,
+    invocationRoute
+  );
 
   // 注册到 TaskQueueService 内存 Map，确保任务队列 UI 和重试功能可用
   taskQueueService.trackExternalTask({
@@ -133,6 +143,7 @@ export async function generateImage(
     createdAt: now,
     updatedAt: now,
     startedAt: now,
+    invocationRoute,
     executionPhase: TaskExecutionPhase.SUBMITTING,
   });
 

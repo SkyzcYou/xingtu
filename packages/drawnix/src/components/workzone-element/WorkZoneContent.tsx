@@ -311,6 +311,20 @@ export const WorkZoneContent: React.FC<WorkZoneContentProps> = ({
     onHideForever?.();
   }, [onHideForever]);
 
+  const stopWorkZonePressEvent = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement> | React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+    },
+    []
+  );
+  const handleWorkZoneButtonClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      event.preventDefault();
+    },
+    []
+  );
+
   return (
     <div
       className={`workzone-content workzone-content--${workflowStatus.status} ${className}`}
@@ -328,23 +342,17 @@ export const WorkZoneContent: React.FC<WorkZoneContentProps> = ({
         {onHideForever && (
           <HoverTip content="不再显示" showArrow={false}>
             <button
+              type="button"
+              aria-label="不再显示"
               className="workzone-content__hide-btn"
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-              }}
-              onPointerUp={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
+              onPointerDownCapture={stopWorkZonePressEvent}
+              onPointerDown={stopWorkZonePressEvent}
+              onPointerUp={stopWorkZonePressEvent}
+              onMouseDownCapture={stopWorkZonePressEvent}
+              onMouseDown={stopWorkZonePressEvent}
+              onClick={(event) => {
+                handleWorkZoneButtonClick(event);
                 handleHideForeverClick();
-              }}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
               }}
             >
               <EyeOff size={14} />
@@ -355,24 +363,17 @@ export const WorkZoneContent: React.FC<WorkZoneContentProps> = ({
         {onDelete && (
           <HoverTip content="删除" showArrow={false}>
             <button
+              type="button"
+              aria-label="删除"
               className="workzone-content__delete-btn"
-              onPointerDown={(e) => {
-                // 必须在 pointerdown 阶段阻止事件冒泡，否则 Plait 会拦截
-                e.stopPropagation();
-                e.preventDefault();
-              }}
-              onPointerUp={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
+              onPointerDownCapture={stopWorkZonePressEvent}
+              onPointerDown={stopWorkZonePressEvent}
+              onPointerUp={stopWorkZonePressEvent}
+              onMouseDownCapture={stopWorkZonePressEvent}
+              onMouseDown={stopWorkZonePressEvent}
+              onClick={(event) => {
+                handleWorkZoneButtonClick(event);
                 onDelete();
-              }}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
               }}
             >
               <Trash2 size={14} />
@@ -432,24 +433,17 @@ export const WorkZoneContent: React.FC<WorkZoneContentProps> = ({
           </span>
           {canRetry && (
             <button
+              type="button"
               className="workzone-content__retry-btn"
               disabled={isRetrying}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-              }}
-              onPointerUp={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                handleRetry();
-              }}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
+              onPointerDownCapture={stopWorkZonePressEvent}
+              onPointerDown={stopWorkZonePressEvent}
+              onPointerUp={stopWorkZonePressEvent}
+              onMouseDownCapture={stopWorkZonePressEvent}
+              onMouseDown={stopWorkZonePressEvent}
+              onClick={(event) => {
+                handleWorkZoneButtonClick(event);
+                void handleRetry();
               }}
             >
               <RotateCcw size={12} />

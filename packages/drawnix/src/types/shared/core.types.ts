@@ -86,6 +86,28 @@ export enum TaskExecutionPhase {
   DOWNLOADING = 'downloading',
 }
 
+export type TaskInvocationOperation = 'image' | 'video' | 'audio' | 'text';
+
+export interface TaskInvocationBindingSnapshot {
+  id?: string;
+  protocol?: string;
+  requestSchema?: string;
+  responseSchema?: string;
+  submitPath?: string;
+  pollPathTemplate?: string;
+  baseUrlStrategy?: 'preserve' | 'trim-v1';
+  metadata?: Record<string, unknown>;
+}
+
+export interface TaskInvocationRouteSnapshot {
+  operation: TaskInvocationOperation;
+  modelRef?: ModelRef | null;
+  providerProfileId?: string | null;
+  providerType?: string | null;
+  modelId?: string | null;
+  binding?: TaskInvocationBindingSnapshot | null;
+}
+
 // ============================================================================
 // Generation Parameters
 // ============================================================================
@@ -373,6 +395,8 @@ export interface Task {
   progress?: number;
   /** Remote task ID from API (e.g., videoId for video generation) */
   remoteId?: string;
+  /** Provider/model route snapshot used to resume async tasks with the original supplier */
+  invocationRoute?: TaskInvocationRouteSnapshot;
   /** Current execution phase for recovery support */
   executionPhase?: TaskExecutionPhase;
   /** Whether the task result has been saved to the media library */

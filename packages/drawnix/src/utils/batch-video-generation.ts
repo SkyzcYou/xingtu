@@ -24,6 +24,7 @@ const NON_RETRYABLE_VIDEO_ERROR_PATTERNS = [
   /未返回(?:任务\s*)?ID|未返回有效的视频 URL/,
   /(?:校验|验证)失败|格式错误|字段错误/,
   /内容(?:政策|审核|安全)|安全策略|违规|敏感内容|policy|safety/i,
+  /(?:ip|intellectual\s+property|copyright|trademark)\s*(?:infringement|violation)|涉嫌(?:知识产权|版权|商标|IP)(?:侵权|违规)|知识产权侵权/i,
 ];
 
 interface BuildBatchVideoReferenceImagesParams {
@@ -38,6 +39,8 @@ interface BuildBatchVideoReferenceImagesParams {
 export interface BatchVideoReferenceResult {
   /** 传给视频生成 API 的参考图列表 */
   referenceImages?: string[];
+  /** 与 referenceImages 一一对应的图片用途说明，用于注入视频 prompt */
+  referenceImageDescriptions?: string[];
   /**
    * frames 模式下无法在 referenceImages 中传角色参考图（槽位被首尾帧占满），
    * 调用方应将此字段注入 prompt（如 "The same [characterDescription]"）
@@ -102,34 +105,42 @@ export function buildBatchVideoReferenceImages(
   const { model, firstFrameUrl, lastFrameUrl, extraReferenceUrls = [], characterReferenceUrls = [] } = params;
   const config = getVideoModelConfig(model);
   const urls: string[] = [];
-  const append = (url?: string) => {
+  const descriptions: string[] = [];
+  const append = (url: string | undefined, description: string) => {
     if (!url || urls.includes(url)) {
       return;
     }
     urls.push(url);
+    descriptions.push(description);
   };
 
   if (config.imageUpload.mode === 'frames') {
-    append(firstFrameUrl);
-    append(lastFrameUrl);
+    append(firstFrameUrl, '首帧图：视频必须从这张图的画面状态开始。');
+    append(lastFrameUrl, '尾帧图：视频应自然过渡到这张图的画面状态。');
     const referenceImages = urls.length > 0 ? urls.slice(0, config.imageUpload.maxCount) : undefined;
+    const referenceImageDescriptions = referenceImages
+      ? descriptions.slice(0, referenceImages.length)
+      : undefined;
     // frames 模式槽位被首尾帧占满，角色参考图只能通过 prompt 注入
     const unusedCharacterReferenceUrls = characterReferenceUrls.length > 0 ? characterReferenceUrls : undefined;
-    return { referenceImages, unusedCharacterReferenceUrls };
+    return { referenceImages, referenceImageDescriptions, unusedCharacterReferenceUrls };
   }
 
   // 非 frames 模式：角色参考图优先，然后是首帧，再是额外参考图
   for (const url of characterReferenceUrls) {
-    append(url);
+    append(url, '角色参考图：仅用于锁定人物身份、脸型、发型、服装、材质和气质，不表示时间顺序。');
     if (urls.length >= config.imageUpload.maxCount) break;
   }
-  append(firstFrameUrl);
+  append(firstFrameUrl, '首帧图：视频必须从这张图的画面状态开始。');
   for (const url of extraReferenceUrls) {
-    append(url);
+    append(url, '全局/补充参考图：仅用于主体、产品、场景、风格或色彩一致性，不表示时间顺序。');
     if (urls.length >= config.imageUpload.maxCount) break;
   }
 
-  return { referenceImages: urls.length > 0 ? urls : undefined };
+  return {
+    referenceImages: urls.length > 0 ? urls : undefined,
+    referenceImageDescriptions: descriptions.length > 0 ? descriptions : undefined,
+  };
 }
 
 export async function waitForBatchVideoTask(

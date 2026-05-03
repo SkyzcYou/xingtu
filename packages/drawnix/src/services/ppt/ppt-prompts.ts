@@ -12,6 +12,7 @@ import type {
   PPTPageSpec,
   PPTStyleSpec,
 } from './ppt.types';
+import { collectJsonSources } from '../../utils/llm-json-extractor';
 
 /** 页数范围映射 */
 const PAGE_COUNT_RANGES: Record<string, { min: number; max: number }> = {
@@ -812,68 +813,6 @@ function parseAndNormalizeOutline(
   return null;
 }
 
-function extractFencedJsonBlocks(text: string): string[] {
-  const blocks: string[] = [];
-  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
-  let match: RegExpExecArray | null;
-
-  while ((match = fenceRegex.exec(text))) {
-    const block = match[1]?.trim();
-    if (block) {
-      blocks.push(block);
-    }
-  }
-
-  return blocks;
-}
-
-/**
- * 从文本中提取所有完整 JSON 对象候选。
- */
-function extractJsonObjectCandidates(text: string): string[] {
-  const candidates: string[] = [];
-  let start = -1;
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-
-    if (escape) {
-      escape = false;
-      continue;
-    }
-
-    if (ch === '\\' && inString) {
-      escape = true;
-      continue;
-    }
-
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-
-    if (inString) continue;
-
-    if (ch === '{') {
-      if (depth === 0) {
-        start = i;
-      }
-      depth++;
-    } else if (ch === '}') {
-      depth--;
-      if (depth === 0 && start !== -1) {
-        candidates.push(text.slice(start, i + 1));
-        start = -1;
-      }
-    }
-  }
-
-  return candidates;
-}
-
 /**
  * 解析 AI 返回的大纲 JSON
  */
@@ -903,8 +842,14 @@ export function parseOutlineResponse(
   };
 
   addCandidate(jsonStr);
-  extractFencedJsonBlocks(jsonStr).forEach(addCandidate);
-  extractJsonObjectCandidates(jsonStr).forEach(addCandidate);
+  try {
+    collectJsonSources(jsonStr, {
+      kinds: ['object'],
+      allowInvalid: true,
+    }).forEach(addCandidate);
+  } catch {
+    // 继续使用原始候选和修复 fallback。
+  }
 
   // 策略1: 直接解析候选 JSON
   for (const candidate of candidates) {

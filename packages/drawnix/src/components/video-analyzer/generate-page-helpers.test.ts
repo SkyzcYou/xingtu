@@ -99,6 +99,7 @@ describe('video-analyzer generate helpers', () => {
     );
 
     expect(payload.shots[0].generated_video_url).toBeUndefined();
+    expect(payload.shots[0].suppressed_generated_urls?.video).toBe('video-url');
     expect(payload.characters[0].description).toBe('persisted');
     expect(payload.characters[0].referenceImageUrl).toBeUndefined();
   });

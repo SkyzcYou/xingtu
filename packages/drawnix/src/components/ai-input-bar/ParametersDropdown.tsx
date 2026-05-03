@@ -22,7 +22,7 @@ import {
 import { Z_INDEX } from '../../constants/z-index';
 import { useControllableState } from '../../hooks/useControllableState';
 import './parameters-dropdown.scss';
-import { KeyboardDropdown } from './KeyboardDropdown';
+import { KeyboardDropdown, type DropdownPlacement } from './KeyboardDropdown';
 import { HoverTip } from '../shared/hover';
 
 function getCompactEnumSummaryLabel(
@@ -93,8 +93,8 @@ export interface ParametersDropdownProps {
   onOpenChange?: (open: boolean) => void;
   /** 排除的参数 ID 列表（已有专用 UI 的参数，如 size、duration） */
   excludeParamIds?: string[];
-  /** 菜单展开方向；底部输入栏默认向上，弹窗内可向下 */
-  placement?: 'up' | 'down' | 'auto';
+  /** 菜单展开方向；默认自动判断 */
+  placement?: DropdownPlacement;
 }
 
 /**
@@ -110,7 +110,7 @@ export const ParametersDropdown: React.FC<ParametersDropdownProps> = ({
   isOpen: controlledIsOpen,
   onOpenChange,
   excludeParamIds,
-  placement = 'up',
+  placement = 'auto',
 }) => {
   const { value: isOpen, setValue: setIsOpen } = useControllableState({
     controlledValue: controlledIsOpen,
@@ -294,35 +294,11 @@ export const ParametersDropdown: React.FC<ParametersDropdownProps> = ({
       disabled={disabled}
       openKeys={['Enter', ' ', 'ArrowDown', 'ArrowUp']}
       onOpenKey={handleOpenKey}
+      placement={placement}
+      minMenuHeight={240}
+      maxMenuHeight={420}
     >
-      {({ containerRef, menuRef, portalPosition, handleTriggerKeyDown }) => {
-        const spaceAbove = portalPosition.top - 12;
-        const spaceBelow = window.innerHeight - portalPosition.bottom - 12;
-        const resolvedPlacement =
-          placement === 'auto'
-            ? spaceBelow >= 240 || spaceBelow >= spaceAbove
-              ? 'down'
-              : 'up'
-            : placement;
-        const menuPositionStyle: React.CSSProperties =
-          resolvedPlacement === 'down'
-            ? {
-                position: 'fixed',
-                zIndex: Z_INDEX.DROPDOWN_PORTAL,
-                left: portalPosition.left,
-                top: portalPosition.bottom + 8,
-                maxHeight: Math.max(240, Math.min(420, spaceBelow)),
-                overflowY: 'auto',
-              }
-            : {
-                position: 'fixed',
-                zIndex: Z_INDEX.DROPDOWN_PORTAL,
-                left: portalPosition.left,
-                bottom: window.innerHeight - portalPosition.top + 8,
-                maxHeight: Math.max(240, Math.min(420, spaceAbove)),
-                overflowY: 'auto',
-              };
-
+      {({ containerRef, menuRef, menuStyle, handleTriggerKeyDown }) => {
         return (
           <div className="parameters-dropdown" ref={containerRef}>
             <HoverTip content={`${triggerLabel} (↑↓ Tab)`} showArrow={false}>
@@ -349,7 +325,10 @@ export const ParametersDropdown: React.FC<ParametersDropdownProps> = ({
                 <div
                   ref={menuRef}
                   className={`parameters-dropdown__menu parameters-dropdown__menu--flat ${ATTACHED_ELEMENT_CLASS_NAME}`}
-                  style={menuPositionStyle}
+                  style={{
+                    ...menuStyle,
+                    zIndex: Z_INDEX.DROPDOWN_PORTAL,
+                  }}
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
                 >

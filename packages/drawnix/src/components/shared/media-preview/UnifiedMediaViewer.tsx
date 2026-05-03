@@ -13,6 +13,10 @@ import { MediaViewport } from './MediaViewport';
 import { ThumbnailQueue } from './ThumbnailQueue';
 import { ViewerToolbar } from './ViewerToolbar';
 import { ImageEditorContent, ImageEditorContentRef, ImageEditState } from './ImageEditorContent';
+import {
+  exitFullscreenIfActive,
+  requestFullscreenIfAllowed,
+} from '../../../utils/runtime-helpers';
 import './UnifiedMediaViewer.scss';
 
 export const UnifiedMediaViewer: React.FC<UnifiedMediaViewerProps> = ({
@@ -309,10 +313,10 @@ export const UnifiedMediaViewer: React.FC<UnifiedMediaViewerProps> = ({
     if (!containerRef.current) return;
 
     if (!isFullscreen) {
-      const request = containerRef.current.requestFullscreen?.();
+      const request = requestFullscreenIfAllowed(containerRef.current);
       request?.catch(() => undefined);
     } else {
-      const request = document.exitFullscreen?.();
+      const request = exitFullscreenIfActive();
       request?.catch(() => undefined);
     }
   }, [isFullscreen]);

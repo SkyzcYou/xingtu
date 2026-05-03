@@ -3,7 +3,7 @@ import { ChevronRight, Plus } from 'lucide-react';
 import type { AnalysisRecord } from '../types';
 import type { Task } from '../../../types/task.types';
 import { TaskStatus, TaskType } from '../../../types/task.types';
-import { HoverTip } from '../../shared';
+import { HoverTip, RetryImage } from '../../shared';
 import { VideoPosterPreview } from '../../shared/VideoPosterPreview';
 
 export interface RelatedTasks {
@@ -268,10 +268,11 @@ const RelatedTaskItem: React.FC<{
                 }}
               />
             ) : (
-              <img
+              <RetryImage
                 src={thumbnailUrl || primaryUrl}
                 alt=""
-                referrerPolicy="no-referrer"
+                showSkeleton={false}
+                eager
               />
             )}
             {task.type === TaskType.VIDEO && (

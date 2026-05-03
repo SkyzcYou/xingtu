@@ -6,6 +6,7 @@ import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { Play, CheckCircle, Music4 } from 'lucide-react';
 import { isDataURL, normalizeImageDataUrl } from '@aitu/utils';
 import { AudioCover } from '../AudioCover';
+import { RetryImage } from '../../retry-image';
 import { VideoPosterPreview } from '../VideoPosterPreview';
 import type { ThumbnailQueueProps, MediaItem } from './types';
 import './ThumbnailQueue.scss';
@@ -32,11 +33,11 @@ const ThumbnailImage: React.FC<{
   }
 
   return (
-    <img
+    <RetryImage
       src={currentSrc}
       alt={alt}
       className="thumbnail-queue__image"
-      loading="lazy"
+      showSkeleton={false}
       onError={() => {
         if (fallbackSrc && currentSrc !== fallbackSrc) {
           setCurrentSrc(fallbackSrc);

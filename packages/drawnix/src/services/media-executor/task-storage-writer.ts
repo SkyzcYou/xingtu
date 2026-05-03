@@ -10,6 +10,7 @@
 
 import { normalizeImageDataUrl } from '@aitu/utils';
 import { APP_DB_NAME, APP_DB_STORES } from '../app-database';
+import type { TaskInvocationRouteSnapshot } from '../../types/task.types';
 
 // 使用主线程专用数据库
 const DB_NAME = APP_DB_NAME;
@@ -83,6 +84,7 @@ export interface SWTask {
   };
   progress?: number;
   remoteId?: string;
+  invocationRoute?: TaskInvocationRouteSnapshot;
   executionPhase?: string;
   savedToLibrary?: boolean;
   insertedToCanvas?: boolean;
@@ -189,7 +191,8 @@ class TaskStorageWriter {
   async createTask(
     taskId: string,
     type: SWTaskType,
-    params: SWTask['params']
+    params: SWTask['params'],
+    invocationRoute?: TaskInvocationRouteSnapshot
   ): Promise<SWTask> {
     const now = Date.now();
     const task: SWTask = {
@@ -197,6 +200,7 @@ class TaskStorageWriter {
       type,
       status: 'pending',
       params,
+      invocationRoute,
       createdAt: now,
       updatedAt: now,
     };
@@ -284,10 +288,17 @@ class TaskStorageWriter {
   /**
    * 更新任务的 remoteId（用于异步任务恢复）
    */
-  async updateRemoteId(taskId: string, remoteId: string): Promise<void> {
+  async updateRemoteId(
+    taskId: string,
+    remoteId: string,
+    invocationRoute?: TaskInvocationRouteSnapshot
+  ): Promise<void> {
     const task = await this.getTask(taskId);
     if (task) {
       task.remoteId = remoteId;
+      if (invocationRoute) {
+        task.invocationRoute = invocationRoute;
+      }
       task.updatedAt = Date.now();
       task.executionPhase = 'polling';
       await this.saveTask(task);

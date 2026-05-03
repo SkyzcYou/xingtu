@@ -39,7 +39,6 @@ import { getSafeErrorMessage } from './task-queue/utils/sanitize-utils';
 import {
   shouldBypassAppShellCacheForLazyChunkRecovery,
   shouldUseCDNFirstPreload,
-  shouldMirrorToAppShellAliases,
   shouldUseOriginFirstPreload,
   shouldUseAppShellStrategy,
 } from './app-shell-routing';
@@ -3149,8 +3148,7 @@ function isSuspiciousStaticCacheResponse(
   if (
     sourceHeader !== 'server' &&
     sourceHeader !== 'local' &&
-    sourceHeader !== 'jsdelivr' &&
-    sourceHeader !== 'unpkg'
+    sourceHeader !== 'jsdelivr'
   ) {
     return true;
   }
@@ -5696,18 +5694,6 @@ async function handleStaticRequest(request: Request): Promise<Response> {
         ) {
           cache.put(request, response.clone());
 
-          const reqUrl = new URL(request.url);
-          if (
-            shouldMirrorToAppShellAliases(
-              getScopeRelativePathname(reqUrl.pathname)
-            )
-          ) {
-            const rootUrl = createScopeUrl('/').href;
-            const indexUrl = createScopeUrl('index.html').href;
-            if (request.url !== rootUrl) cache.put(rootUrl, response.clone());
-            if (request.url !== indexUrl) cache.put(indexUrl, response.clone());
-          }
-
           logSWDebug('handleStaticRequest: refreshed app shell for recovery', {
             requestUrl: request.url,
             committedVersion,
@@ -5789,18 +5775,6 @@ async function handleStaticRequest(request: Request): Promise<Response> {
         committedVersion === APP_VERSION
       ) {
         cache.put(request, response.clone());
-        // 同时存 '/' 和 '/index.html'，确保后续导航请求直接命中
-        const reqUrl = new URL(request.url);
-        if (
-          shouldMirrorToAppShellAliases(
-            getScopeRelativePathname(reqUrl.pathname)
-          )
-        ) {
-          const rootUrl = createScopeUrl('/').href;
-          const indexUrl = createScopeUrl('index.html').href;
-          if (request.url !== rootUrl) cache.put(rootUrl, response.clone());
-          if (request.url !== indexUrl) cache.put(indexUrl, response.clone());
-        }
         return response;
       }
 

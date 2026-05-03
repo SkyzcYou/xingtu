@@ -25,6 +25,8 @@ import type { WorkflowMessageData } from '../types/chat.types';
 import { WorkZoneContent } from '../components/workzone-element/WorkZoneContent';
 import { ToolProviderWrapper } from '../components/startup/ToolProviderWrapper';
 import {
+  getWorkZoneRenderScale,
+  getWorkZoneVisualRectangle,
   isWorkZoneElement,
   WorkZoneTransforms,
 } from './workzone-transforms';
@@ -59,15 +61,7 @@ export class WorkZoneComponent extends CommonElementFlavour<PlaitWorkZone, Plait
     // 创建选中状态生成器
     this.activeGenerator = createActiveGenerator(this.board, {
       getRectangle: (element: PlaitWorkZone) => {
-        const rect = RectangleClient.getRectangleByPoints(element.points);
-        // 根据 zoom 调整选中框大小，使其与缩放后的内容匹配
-        const scale = 1 / element.zoom;
-        return {
-          x: rect.x,
-          y: rect.y,
-          width: rect.width * scale,
-          height: rect.height * scale,
-        };
+        return getWorkZoneVisualRectangle(element);
       },
       getStrokeWidth: () => 2,
       getStrokeOpacity: () => 1,
@@ -89,6 +83,7 @@ export class WorkZoneComponent extends CommonElementFlavour<PlaitWorkZone, Plait
    */
   private createSVGStructure(): void {
     const rect = RectangleClient.getRectangleByPoints(this.element.points);
+    const visualRect = getWorkZoneVisualRectangle(this.element);
 
     // 创建 SVG group
     this.g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -103,8 +98,8 @@ export class WorkZoneComponent extends CommonElementFlavour<PlaitWorkZone, Plait
     );
     foreignObject.setAttribute('x', String(rect.x));
     foreignObject.setAttribute('y', String(rect.y));
-    foreignObject.setAttribute('width', String(rect.width));
-    foreignObject.setAttribute('height', String(rect.height));
+    foreignObject.setAttribute('width', String(visualRect.width));
+    foreignObject.setAttribute('height', String(visualRect.height));
     foreignObject.style.overflow = 'visible';
     foreignObject.style.pointerEvents = 'auto';
 
@@ -115,10 +110,12 @@ export class WorkZoneComponent extends CommonElementFlavour<PlaitWorkZone, Plait
     this.container.style.pointerEvents = 'auto';
     this.container.style.cursor = 'default';
     this.container.style.position = 'relative';
+    this.container.classList.add('plait-workzone-container');
 
     // 应用缩放以保持内容视觉大小恒定
-    const scale = 1 / this.element.zoom;
-    this.container.style.transform = `scale(${scale})`;
+    this.container.style.width = `${rect.width}px`;
+    this.container.style.height = `${rect.height}px`;
+    this.container.style.transform = `scale(${getWorkZoneRenderScale(this.element)})`;
     this.container.style.transformOrigin = 'top left';
 
     foreignObject.appendChild(this.container);
@@ -192,6 +189,27 @@ export class WorkZoneComponent extends CommonElementFlavour<PlaitWorkZone, Plait
     }
   };
 
+  private updateForeignObjectLayout(element: PlaitWorkZone): void {
+    if (!this.g) return;
+
+    const rect = RectangleClient.getRectangleByPoints(element.points);
+    const visualRect = getWorkZoneVisualRectangle(element);
+    const foreignObject = this.g.querySelector('foreignObject');
+
+    if (foreignObject) {
+      foreignObject.setAttribute('x', String(rect.x));
+      foreignObject.setAttribute('y', String(rect.y));
+      foreignObject.setAttribute('width', String(visualRect.width));
+      foreignObject.setAttribute('height', String(visualRect.height));
+    }
+
+    if (this.container) {
+      this.container.style.width = `${rect.width}px`;
+      this.container.style.height = `${rect.height}px`;
+      this.container.style.transform = `scale(${getWorkZoneRenderScale(element)})`;
+    }
+  }
+
   /**
    * 使用 React 渲染内容
    */
@@ -225,20 +243,7 @@ export class WorkZoneComponent extends CommonElementFlavour<PlaitWorkZone, Plait
   ): void {
     // 更新位置和大小
     if (value.element !== previous.element && this.g) {
-      const rect = RectangleClient.getRectangleByPoints(value.element.points);
-      const foreignObject = this.g.querySelector('foreignObject');
-      if (foreignObject) {
-        foreignObject.setAttribute('x', String(rect.x));
-        foreignObject.setAttribute('y', String(rect.y));
-        foreignObject.setAttribute('width', String(rect.width));
-        foreignObject.setAttribute('height', String(rect.height));
-      }
-
-      // 更新容器缩放
-      if (this.container && value.element.zoom !== previous.element.zoom) {
-        const scale = 1 / value.element.zoom;
-        this.container.style.transform = `scale(${scale})`;
-      }
+      this.updateForeignObjectLayout(value.element);
 
       // 重新渲染 React 内容（workflow 数据可能变化）
       if (this.reactRoot) {
@@ -319,7 +324,7 @@ export const withWorkZone: PlaitPlugin = (board: PlaitBoard) => {
   // 注册 getRectangle
   board.getRectangle = (element: PlaitElement) => {
     if (isWorkZoneElement(element)) {
-      return RectangleClient.getRectangleByPoints(element.points);
+      return getWorkZoneVisualRectangle(element);
     }
     return getRectangle(element);
   };
@@ -327,7 +332,7 @@ export const withWorkZone: PlaitPlugin = (board: PlaitBoard) => {
   // 注册 isHit
   board.isHit = (element: PlaitElement, point: Point) => {
     if (isWorkZoneElement(element)) {
-      const rect = RectangleClient.getRectangleByPoints(element.points);
+      const rect = getWorkZoneVisualRectangle(element);
       const [x, y] = point;
       return (
         x >= rect.x &&
@@ -342,9 +347,7 @@ export const withWorkZone: PlaitPlugin = (board: PlaitBoard) => {
   // 注册 isRectangleHit
   board.isRectangleHit = (element: PlaitElement, selection: Selection) => {
     if (isWorkZoneElement(element)) {
-      const rect = RectangleClient.getRectangleByPoints(
-        (element as PlaitWorkZone).points
-      );
+      const rect = getWorkZoneVisualRectangle(element as PlaitWorkZone);
       const selectionRect = RectangleClient.getRectangleByPoints([
         selection.anchor,
         selection.focus,

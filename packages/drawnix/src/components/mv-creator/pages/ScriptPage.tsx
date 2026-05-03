@@ -10,10 +10,9 @@ import {
   ComboInput,
   CharacterDescriptionList,
   CreativeBriefEditor,
+  VideoParametersRow,
   normalizeCreativeBrief,
   type CreativeBrief,
-  VISUAL_STYLE_OPTIONS,
-  VISUAL_STYLE_PLACEHOLDER,
 } from '../../shared/workflow';
 import { ModelDropdown } from '../../ai-input-bar/ModelDropdown';
 import { useSelectableModels } from '../../../hooks/use-runtime-models';
@@ -49,6 +48,14 @@ function estimateRows(text: string | undefined, charsPerLine = 30): number {
     total += Math.max(1, Math.ceil(line.length / charsPerLine));
   }
   return Math.max(1, total);
+}
+
+function findUpdatedRecord(
+  records: MVRecord[],
+  id: string,
+  fallback: MVRecord
+): MVRecord {
+  return records.find(item => item.id === id) || fallback;
 }
 
 const CAMERA_MOVEMENT_OPTIONS = [
@@ -137,7 +144,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
   const saveRecordField = useCallback(async (patch: Partial<MVRecord>) => {
     const updated = await updateRecord(record.id, patch);
     onRecordsChange(updated);
-    onRecordUpdate({ ...record, ...patch });
+    onRecordUpdate(findUpdatedRecord(updated, record.id, { ...record, ...patch }));
   }, [record, onRecordUpdate, onRecordsChange]);
 
   // 角色描述编辑
@@ -175,7 +182,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
         creativeBrief,
       });
       onRecordsChange(updated);
-      onRecordUpdate({
+      onRecordUpdate(findUpdatedRecord(updated, record.id, {
         ...record,
         rewritePrompt,
         videoModel,
@@ -183,7 +190,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
         segmentDuration: selectedSegmentDuration,
         videoStyle,
         creativeBrief,
-      });
+      }));
     }, 500);
     return () => clearTimeout(saveTimerRef.current);
   }, [rewritePrompt, videoModel, videoModelRef, selectedSegmentDuration, videoStyle, creativeBrief]);
@@ -205,7 +212,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
     const patch = updateActiveShotsInRecord(record, updatedShots);
     const updated = await updateRecord(record.id, patch);
     onRecordsChange(updated);
-    onRecordUpdate({ ...record, ...patch });
+    onRecordUpdate(findUpdatedRecord(updated, record.id, { ...record, ...patch }));
   }, [record, onRecordUpdate, onRecordsChange]);
 
   const handleShotEdit = useCallback((shotId: string, field: string, value: string) => {
@@ -256,7 +263,10 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
       setPendingRewriteTaskId(task.id);
       const updated = await updateRecord(record.id, { pendingRewriteTaskId: task.id });
       onRecordsChange(updated);
-      onRecordUpdate({ ...record, pendingRewriteTaskId: task.id });
+      onRecordUpdate(findUpdatedRecord(updated, record.id, {
+        ...record,
+        pendingRewriteTaskId: task.id,
+      }));
       setRewriteProgress('AI 改编中...');
     } catch (err: any) {
       setError(err.message || '提交失败');
@@ -287,6 +297,13 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
       setPendingRewriteTaskId(null);
       setRewriteProgress('');
       setError(currentTask.error?.message || '改编失败');
+      void updateRecord(record.id, { pendingRewriteTaskId: null }).then(updated => {
+        onRecordsChange(updated);
+        onRecordUpdate(findUpdatedRecord(updated, record.id, {
+          ...record,
+          pendingRewriteTaskId: null,
+        }));
+      });
       return;
     }
     if (currentTask?.status === 'completed') {
@@ -295,6 +312,9 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
           onRecordsChange(synced.records);
           onRecordUpdate(synced.record);
           setShots(synced.record.editedShots || []);
+          setVideoStyle(synced.record.videoStyle || '');
+        } else {
+          setError('改编任务已完成，但未找到可回填的记录');
         }
       }).finally(() => { setPendingRewriteTaskId(null); setRewriteProgress(''); });
       return;
@@ -310,7 +330,10 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
         setError(event.task.error?.message || '改编失败');
         void updateRecord(record.id, { pendingRewriteTaskId: null }).then(updated => {
           onRecordsChange(updated);
-          onRecordUpdate({ ...record, pendingRewriteTaskId: null });
+          onRecordUpdate(findUpdatedRecord(updated, record.id, {
+            ...record,
+            pendingRewriteTaskId: null,
+          }));
         });
         return;
       }
@@ -320,6 +343,9 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
             onRecordsChange(synced.records);
             onRecordUpdate(synced.record);
             setShots(synced.record.editedShots || []);
+            setVideoStyle(synced.record.videoStyle || '');
+          } else {
+            setError('改编任务已完成，但未找到可回填的记录');
           }
         }).catch((err: any) => {
           setError(err.message || '改编结果同步失败');
@@ -341,7 +367,7 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
     setShots(patch.editedShots!);
     const updated = await updateRecord(record.id, patch);
     onRecordsChange(updated);
-    onRecordUpdate({ ...record, ...patch });
+    onRecordUpdate(findUpdatedRecord(updated, record.id, { ...record, ...patch }));
   }, [record, onRecordUpdate, onRecordsChange]);
 
   useEffect(() => {
@@ -379,6 +405,8 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
           value={creativeBrief}
           onChange={setCreativeBrief}
           workflow="mv"
+          videoStyle={videoStyle}
+          onVideoStyleChange={setVideoStyle}
         />
         <div className="va-model-select">
           <label className="va-model-label">改编模型</label>
@@ -393,50 +421,22 @@ export const ScriptPage: React.FC<ScriptPageProps> = ({
             placeholder="选择文本模型"
           />
         </div>
-        <div className="va-model-select">
-          <label className="va-model-label">视频模型</label>
-          <ModelDropdown
-            variant="form"
-            selectedModel={videoModel}
-            selectedSelectionKey={getSelectionKey(videoModel, videoModelRef)}
-            onSelect={setVideoModel}
-            models={videoModels}
-            placement="down"
-            disabled={!!pendingRewriteTaskId}
-            placeholder="选择视频模型"
-          />
-          <div className="va-segment-duration-select">
-            <label className="va-model-label">单段</label>
-            <select
-              className="va-form-select"
-              value={String(selectedSegmentDuration)}
-              onChange={e => setSelectedSegmentDuration(parseInt(e.target.value, 10))}
-              disabled={durationOptions.length <= 1}
-            >
-              {durationOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-          {segmentPlan.overflow > 0 && (
-            <span className="va-duration-overflow">
-              实际 {segmentPlan.actualTotal}s（+{parseFloat(segmentPlan.overflow.toFixed(2))}s）
-            </span>
-          )}
-        </div>
-        {/* 画面风格 */}
-        <div className="va-form-row">
-          <div style={{ flex: 1 }}>
-            <label className="va-edit-label">画面风格</label>
-            <ComboInput
-              className="va-style-combo"
-              value={videoStyle}
-              onChange={setVideoStyle}
-              options={VISUAL_STYLE_OPTIONS}
-              placeholder={VISUAL_STYLE_PLACEHOLDER}
-            />
-          </div>
-        </div>
+        <VideoParametersRow
+          selectedModel={videoModel}
+          selectedSelectionKey={getSelectionKey(videoModel, videoModelRef)}
+          onSelectModel={setVideoModel}
+          models={videoModels}
+          segmentDuration={selectedSegmentDuration}
+          durationOptions={durationOptions}
+          onSegmentDurationChange={setSelectedSegmentDuration}
+          disabled={!!pendingRewriteTaskId}
+          placement="down"
+          overflowText={
+            segmentPlan.overflow > 0
+              ? `实际 ${segmentPlan.actualTotal}s（+${parseFloat(segmentPlan.overflow.toFixed(2))}s）`
+              : undefined
+          }
+        />
         <div className="va-version-row">
           <button
             className="va-analyze-btn"

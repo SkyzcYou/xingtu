@@ -44,9 +44,10 @@ import {
 import './model-dropdown.scss';
 import { ModelHealthBadge } from '../shared/ModelHealthBadge';
 import { ModelBenchmarkBadge } from '../shared/ModelBenchmarkBadge';
-import { useModelMeta } from '../../hooks/use-model-pricing';
+import { HoverTip } from '../shared/hover';
+import { useModelPriceText, useModelMeta } from '../../hooks/use-model-pricing';
 import { modelPricingService } from '../../utils/model-pricing-service';
-import { KeyboardDropdown } from './KeyboardDropdown';
+import { KeyboardDropdown, type DropdownPlacement } from './KeyboardDropdown';
 import {
   groupModelsByProvider,
   DEFAULT_PROVIDER_ID,
@@ -69,6 +70,21 @@ type ProviderSettingsIntent =
 function normalizeSearchText(value?: string | null): string {
   return (value || '').toLowerCase().replace(/[\s\-_.:/]+/g, '').trim();
 }
+
+const ModelDropdownPriceTag: React.FC<{ model: ModelConfig }> = React.memo(
+  ({ model }) => {
+    const { summary, detail } = useModelPriceText(
+      model.sourceProfileId,
+      model.id
+    );
+    if (!summary) return null;
+    return (
+      <HoverTip content={detail} placement="top" disabled={detail === summary}>
+        <span className="model-dropdown__item-price">{summary}</span>
+      </HoverTip>
+    );
+  }
+);
 
 const ModelDropdownDescFallback: React.FC<{ model: ModelConfig }> = React.memo(
   ({ model }) => {
@@ -149,8 +165,8 @@ export interface ModelDropdownProps {
   language?: 'zh' | 'en';
   /** 模型列表（可选，默认为图片模型） */
   models?: ModelConfig[];
-  /** 下拉菜单弹出方向（可选，默认为 up） */
-  placement?: 'up' | 'down';
+  /** 下拉菜单弹出方向（可选，默认自动判断） */
+  placement?: DropdownPlacement;
   /** 自定义标题（可选，仅用于 minimal 变体） */
   header?: string;
   /** 是否禁用 */
@@ -181,7 +197,7 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
   onSelectModel,
   language = 'zh',
   models = IMAGE_MODELS,
-  placement = 'up',
+  placement = 'auto',
   header,
   disabled = false,
   variant = 'minimal',
@@ -883,16 +899,31 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
       openKeys={['Enter', ' ']}
       onOpenKey={handleOpenKey}
       trackPosition={
-        variant === 'form' || placement === 'down' || placement === 'up'
+        variant === 'form' ||
+        placement === 'down' ||
+        placement === 'up' ||
+        placement === 'auto'
       }
+      placement={placement}
+      offset={4}
     >
-      {({ containerRef, menuRef, portalPosition, handleTriggerKeyDown }) => {
+      {({
+        containerRef,
+        menuRef,
+        portalPosition,
+        menuStyle,
+        resolvedPlacement,
+        handleTriggerKeyDown,
+      }) => {
         const isPortalled =
-          variant === 'form' || placement === 'down' || placement === 'up';
+          variant === 'form' ||
+          placement === 'down' ||
+          placement === 'up' ||
+          placement === 'auto';
 
         const menu = (
           <div
-            className={`model-dropdown__menu model-dropdown__menu--${placement} ${
+            className={`model-dropdown__menu model-dropdown__menu--${resolvedPlacement} ${
               variant === 'form' ? 'model-dropdown__menu--form' : ''
             } ${
               isPortalled ? 'model-dropdown__menu--portalled' : ''
@@ -905,21 +936,14 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
             style={
               isPortalled
                 ? {
-                    position: 'fixed',
+                    ...menuStyle,
                     zIndex: Z_INDEX.DROPDOWN_PORTAL,
-                    left: portalPosition.left,
                     width:
                       variant === 'form'
                         ? Math.max(
                             portalPosition.width,
                             providerGroups.length > 1 ? 620 : 520
                           )
-                        : 'auto',
-                    top:
-                      placement === 'down' ? portalPosition.bottom + 4 : 'auto',
-                    bottom:
-                      placement === 'up'
-                        ? window.innerHeight - portalPosition.top + 4
                         : 'auto',
                     visibility:
                       portalPosition.width === 0 ? 'hidden' : 'visible',
@@ -1057,6 +1081,7 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
                                 profileId={model.sourceProfileId || null}
                               />
                               <ModelBenchmarkBadge modelId={model.id} />
+                              <ModelDropdownPriceTag model={model} />
                             </div>
                             {model.description ? (
                               <div className="model-dropdown__item-desc">

@@ -266,6 +266,7 @@ export interface VideoAPIConfig {
   apiKey: string;
   baseUrl: string;
   model?: string;
+  params?: Record<string, unknown>;
   authType?: ProviderAuthStrategy;
   providerType?: string;
   extraHeaders?: Record<string, string>;

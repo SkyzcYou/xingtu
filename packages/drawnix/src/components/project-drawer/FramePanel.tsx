@@ -117,6 +117,7 @@ import {
   HoverCard,
   HoverTip,
   PromptListPanel,
+  RetryImage,
   useContextMenuState,
   type ContextMenuEntry,
   type PromptItem,
@@ -750,11 +751,11 @@ const PPTSlideHistoryMenuLabel: React.FC<{
         'frame-panel__history-menu-item--active': isCurrent,
       })}
     >
-      <img
+      <RetryImage
         src={item.imageUrl}
         alt={`图片 ${index + 1}`}
-        loading="lazy"
         className="frame-panel__history-menu-thumb"
+        showSkeleton={false}
       />
       <span className="frame-panel__history-menu-text">
         <span className="frame-panel__history-menu-title">
@@ -774,11 +775,10 @@ const PPTSlideHistoryMenuLabel: React.FC<{
         ) : null}
       </span>
       <span className="frame-panel__history-menu-preview">
-        <img
+        <RetryImage
           src={item.imageUrl}
           alt={`图片 ${index + 1} 预览`}
-          loading="lazy"
-          decoding="async"
+          showSkeleton={false}
         />
       </span>
     </span>
@@ -845,11 +845,11 @@ const PPTSlidePreview: React.FC<{
   return (
     <div className="frame-panel__slide-preview">
       {thumbnailUrl ? (
-        <img
+        <RetryImage
           src={thumbnailUrl}
           alt={title}
-          loading="lazy"
           className="frame-panel__slide-preview-img"
+          showSkeleton={false}
         />
       ) : (
         <div className="frame-panel__slide-preview-empty">{emptyText}</div>
@@ -892,12 +892,11 @@ const PPTOutlineSlideImageAction: React.FC<{
       }}
     >
       {thumbnailUrl ? (
-        <img
+        <RetryImage
           src={thumbnailUrl}
           alt={`${title} 当前图片`}
-          loading="lazy"
-          decoding="async"
           className="frame-panel__outline-image-thumb"
+          showSkeleton={false}
         />
       ) : (
         <AIImageIcon size={16} />
@@ -917,11 +916,11 @@ const PPTOutlineSlideImageAction: React.FC<{
     <HoverCard
       content={
         <div className="frame-panel__outline-image-preview">
-          <img
+          <RetryImage
             src={imageUrl}
             alt={`${title} 大图预览`}
-            loading="lazy"
-            decoding="async"
+            showSkeleton={false}
+            eager
           />
         </div>
       }

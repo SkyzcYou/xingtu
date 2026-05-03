@@ -84,6 +84,17 @@ function buildProviderContext(
   };
 }
 
+function findPriorityBinding(
+  bindings: ProviderModelBinding[]
+): ProviderModelBinding | undefined {
+  return bindings.find(
+    (candidate) =>
+      candidate.operation === 'image' &&
+      candidate.protocol === 'openai.async.media' &&
+      candidate.requestSchema === 'openai.async.image.form'
+  );
+}
+
 export class InvocationPlanningError extends Error {
   constructor(message: string) {
     super(message);
@@ -139,8 +150,13 @@ export class InvocationPlanner {
     const preferredSchemas = normalizePreferredRequestSchemas(
       request.preferredRequestSchema
     );
+    const priorityBinding = request.bindingId
+      ? undefined
+      : findPriorityBinding(bindings);
     const binding = request.bindingId
       ? bindings.find((candidate) => candidate.id === request.bindingId)
+      : priorityBinding
+      ? priorityBinding
       : preferredSchemas.length > 0
       ? bindings.find((candidate) =>
           preferredSchemas.includes(candidate.requestSchema)

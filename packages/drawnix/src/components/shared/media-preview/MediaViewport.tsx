@@ -20,6 +20,7 @@ import { MessagePlugin } from 'tdesign-react';
 import { normalizeImageDataUrl } from '@aitu/utils';
 import { quickInsertCanvasMedia } from '../../../services/canvas-operations/media-quick-insert';
 import { AudioCover } from '../AudioCover';
+import { RetryImage } from '../../retry-image';
 import type { MediaViewportProps, MediaViewportRef } from './types';
 import { HoverPopover } from './HoverPopover';
 import './MediaViewport.scss';
@@ -737,13 +738,14 @@ export const MediaViewport = forwardRef<MediaViewportRef, MediaViewportProps>(({
             onMouseEnter={handleMediaHoverStart}
             onMouseLeave={handleMediaHoverEnd}
           >
-            <img
+            <RetryImage
               ref={imageRef}
               src={mediaUrl}
               alt={item.alt || item.title || ''}
               className="media-viewport__image"
               draggable={false}
-              referrerPolicy="no-referrer"
+              showSkeleton={false}
+              eager
               onLoad={scheduleAutoFit}
               onError={() => {
                 setImageLoadFailed(true);

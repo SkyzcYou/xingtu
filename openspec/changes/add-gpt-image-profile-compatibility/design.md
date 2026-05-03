@@ -1,5 +1,11 @@
 ## Context
 
+> Superseded note: the later `update-image-api-compatibility-modes` change
+> refines this design. In current implementation guidance, the legacy
+> `tuzi-compatible` value is accepted only as an alias for `tuzi-gpt-image`,
+> Tuzi GPT Image routes through the dedicated Tuzi GPT Image adapter, and
+> `openai-compatible-basic` remains the generic fallback/default adapter path.
+
 The project already has multi-provider concepts:
 
 - `ProviderProfile` stores the API key, base URL, provider type, and auth mode.
@@ -139,20 +145,20 @@ Recommended `auto` inference:
 - `openai-gpt-image` + GPT Image model:
   - `requestSchema: openai.image.gpt-generation-json`
   - adapter: `gpt-image-adapter`
-- `tuzi-compatible`:
-  - `requestSchema: openai.image.basic-json`
-  - adapter: existing default image adapter
+- `tuzi-gpt-image`:
+  - `requestSchema: tuzi.image.gpt-generation-json`
+  - adapter: `tuzi-gpt-image-adapter`
 - `openai-compatible-basic`:
   - `requestSchema: openai.image.basic-json`
   - adapter: existing default image adapter
 
-Future image edit support may add:
+Official edit support uses:
 
-- `openai.image.gpt-edit-json`
+- `openai.image.gpt-edit-form`
 
 ## Adapter Boundaries
 
-The existing default adapter remains the compatibility path for Tuzi/basic and generic OpenAI-compatible image providers. Its current GPT Image compatibility is not removed.
+The existing default adapter remains the compatibility path for generic OpenAI-compatible image providers. Tuzi GPT Image-specific behavior belongs to the dedicated Tuzi GPT Image adapter.
 
 The new GPT Image adapter only handles official GPT Image request schemas. It should not match every `gpt-image-*` model by model ID alone.
 

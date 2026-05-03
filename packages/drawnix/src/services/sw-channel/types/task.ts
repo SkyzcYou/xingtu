@@ -5,6 +5,7 @@
  */
 
 import type { CacheWarning } from '../../../types/cache-warning.types';
+import type { TaskInvocationRouteSnapshot } from '../../../types/task.types';
 
 // ============================================================================
 // 基础类型
@@ -88,6 +89,7 @@ export interface SWTask {
   error?: TaskError;
   progress?: number;
   remoteId?: string;
+  invocationRoute?: TaskInvocationRouteSnapshot;
   executionPhase?: TaskExecutionPhase;
   insertedToCanvas?: boolean;
 }

@@ -16,6 +16,7 @@ import { VIDEO_MODEL_CONFIGS } from '../../constants/video-model-config';
 import { defaultGeminiClient } from '../../utils/gemini-api';
 import { geminiSettings } from '../../utils/settings-manager';
 import type { GeminiMessage } from '../../utils/gemini-api/types';
+import { extractJsonObject } from '../../utils/llm-json-extractor';
 
 /** 默认片段时长（秒） */
 const DEFAULT_SEGMENT_DURATION = 8;
@@ -141,16 +142,10 @@ ${characterRule}
  */
 function parseVideoScript(response: string): VideoSegmentScript[] {
   try {
-    const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) ||
-                      response.match(/\{[\s\S]*"segments"[\s\S]*\}/);
-
-    if (!jsonMatch) {
-      console.error('[LongVideo] Failed to find JSON in response');
-      return [];
-    }
-
-    const jsonStr = jsonMatch[1] || jsonMatch[0];
-    const parsed = JSON.parse(jsonStr);
+    const parsed = extractJsonObject<{ segments?: any[] }>(
+      response,
+      value => Array.isArray((value as { segments?: unknown }).segments)
+    );
 
     if (!Array.isArray(parsed.segments)) {
       console.error('[LongVideo] Invalid script format: segments is not an array');

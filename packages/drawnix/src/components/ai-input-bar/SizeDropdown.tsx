@@ -137,7 +137,7 @@ export const SizeDropdown: React.FC<SizeDropdownProps> = ({
       openKeys={['Enter', ' ', 'ArrowDown', 'ArrowUp']}
       onOpenKey={handleOpenKey}
     >
-      {({ containerRef, menuRef, portalPosition, handleTriggerKeyDown }) => (
+      {({ containerRef, menuRef, menuStyle, handleTriggerKeyDown }) => (
         <div className="size-dropdown" ref={containerRef}>
           {/* 触发按钮 */}
           <HoverTip content={`${fullLabel} (↑↓ Tab)`} showArrow={false}>
@@ -158,10 +158,8 @@ export const SizeDropdown: React.FC<SizeDropdownProps> = ({
               ref={menuRef}
               className="size-dropdown__menu"
               style={{
-                position: 'fixed',
+                ...menuStyle,
                 zIndex: Z_INDEX.DROPDOWN_PORTAL,
-                left: portalPosition.left,
-                bottom: window.innerHeight - portalPosition.top + 8,
               }}
               onClick={(e) => e.stopPropagation()}
             >

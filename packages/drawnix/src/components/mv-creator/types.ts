@@ -18,6 +18,10 @@ export interface StoryboardVersion {
   label: string;
   prompt?: string;
   shots: VideoShot[];
+  /** 该版本同步生成的角色快照 */
+  characters?: VideoCharacter[];
+  /** 该版本同步生成的画面风格快照 */
+  videoStyle?: string;
 }
 
 /** MV 创作记录 */
@@ -73,4 +77,6 @@ export interface MVRecord {
   characterReferenceUrls?: string[];
   /** 最近一次生成分镜的时间戳（用于过滤旧任务结果，防止污染新脚本） */
   storyboardGeneratedAt?: number;
+  /** 最近一次重置生成素材的时间戳（用于过滤旧图片/视频/角色参考图任务） */
+  generatedAssetsResetAt?: number;
 }

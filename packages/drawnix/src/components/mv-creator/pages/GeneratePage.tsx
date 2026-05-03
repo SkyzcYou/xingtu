@@ -26,6 +26,7 @@ import { quickInsert, setCanvasBoard } from '../../../mcp/tools/canvas-insertion
 import {
   ShotCard,
   buildCharacterReferencePrompt,
+  buildVideoReferenceImageDescriptions,
   buildVideoPrompt,
   buildFramePrompt,
   readStoredModelSelection,
@@ -52,7 +53,7 @@ import {
 } from '../../../utils/batch-video-generation';
 import { MediaLibraryModal } from '../../media-library';
 import { VideoPosterPreview } from '../../shared/VideoPosterPreview';
-import { HoverTip, KnowledgeNoteContextSelector } from '../../shared';
+import { HoverTip, KnowledgeNoteContextSelector, RetryImage } from '../../shared';
 import { buildMVResetPayload, buildMVWorkflowExportOptions } from '../generate-page-helpers';
 import {
   AssetCategory,
@@ -452,7 +453,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   }), [record, shots, aspectRatio]);
 
   const pseudoProductInfo = useMemo(() => ({
-    prompt: '',
+    generationTopic: record.musicTitle || record.sourceLabel || '',
     videoStyle: record.videoStyle || '',
     bgmMood: record.musicStyleTags?.filter(Boolean).join(', ') || '',
     creativeBrief: record.creativeBrief,
@@ -461,7 +462,6 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       record.musicStyleTags?.length ? `音乐风格：${record.musicStyleTags.join(', ')}` : '',
       record.selectedClipDuration ? `音乐时长：${record.selectedClipDuration}秒` : '',
       record.musicLyrics?.trim() ? `歌词/意象：${record.musicLyrics.trim()}` : '',
-      record.rewritePrompt?.trim() ? `改编要求：${record.rewritePrompt.trim()}` : '',
     ].filter(Boolean).join('\n'),
   }), [record]);
 
@@ -615,6 +615,9 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     const charPrefix = `mv_${record.id}_char`;
     let hasUpdate = false;
     const currentRecord = record;
+    const generatedAssetsResetAt =
+      latestRecordRef.current.generatedAssetsResetAt ||
+      currentRecord.generatedAssetsResetAt;
     let currentShots = currentRecord.editedShots || [];
     const newVideoShots: Array<{ shotId: string; videoUrl: string }> = [];
 
@@ -626,6 +629,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
 
       // 角色参考图任务回填
       if (taskBatchId.startsWith(charPrefix)) {
+        if (
+          generatedAssetsResetAt &&
+          task.createdAt <= generatedAssetsResetAt
+        ) {
+          processedTaskIdsRef.current.add(task.id);
+          continue;
+        }
         const resultUrl = task.result?.url;
         processedTaskIdsRef.current.add(task.id);
         if (resultUrl) {
@@ -642,6 +652,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       }
 
       if (!taskBatchId.startsWith(prefix)) continue;
+      if (
+        generatedAssetsResetAt &&
+        task.createdAt <= generatedAssetsResetAt
+      ) {
+        processedTaskIdsRef.current.add(task.id);
+        continue;
+      }
       // 跳过在当前分镜生成之前创建的任务，防止旧任务结果污染新脚本
       if (record.storyboardGeneratedAt && task.createdAt < record.storyboardGeneratedAt) {
         processedTaskIdsRef.current.add(task.id);
@@ -1009,7 +1026,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   }, [shots]);
 
   const handleShotGenerateLastFrame = useCallback((shot: VideoShot, index: number) => {
-    const rawPrompt = shot.last_frame_prompt || shot.description || '';
+    const rawPrompt = shot.last_frame_prompt || '';
     if (!rawPrompt) return;
     analytics.trackUIInteraction({
       area: 'popular_mv_tool',
@@ -1023,8 +1040,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       characters,
     });
     const draft = shot.last_frame_draft;
+    const draftImages = draft ? toDraftImages(draft.images || []) : undefined;
     const shotBatchId = `mv_${record.id}_shot${shot.id}_last`;
     const lastFrameUrl = getLastFrameUrl(shot, index);
+    const existingFrameImages = !draft && lastFrameUrl
+      ? [{ url: lastFrameUrl, name: '尾帧' }]
+      : undefined;
+    const characterReferenceImages = getShotCharacterReferenceImages(shot);
     openDialog(DialogType.aiImageGeneration, {
       initialPrompt: draft?.prompt || prompt,
       initialKnowledgeContextRefs: knowledgeContextRefs,
@@ -1033,22 +1055,20 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       initialModel: imageModel || undefined,
       initialModelRef: imageModelRef,
       autoInsertToCanvas: false,
-      initialImages: draft
-        ? toDraftImages(draft.images || [])
-        : lastFrameUrl
-          ? [{ url: lastFrameUrl, name: '尾帧' }]
-          : undefined,
+      initialImages: mergeReferenceImages(
+        draftImages,
+        existingFrameImages,
+        characterReferenceImages
+      ),
       onDraftChange: (nextDraft: {
         prompt: string;
         images: Array<{ url: string; name: string }>;
         aspectRatio?: string;
       }) => saveShotDraft(shot.id, 'last', nextDraft),
     });
-  }, [record.id, pseudoAnalysis, pseudoProductInfo, characters, knowledgeContextRefs, openDialog, getLastFrameUrl, imageModel, imageModelRef, saveShotDraft, selectedImageAspectRatio, toDraftImages]);
+  }, [record.id, pseudoAnalysis, pseudoProductInfo, characters, knowledgeContextRefs, openDialog, getLastFrameUrl, imageModel, imageModelRef, mergeReferenceImages, getShotCharacterReferenceImages, saveShotDraft, selectedImageAspectRatio, toDraftImages]);
 
   const handleShotGenerateVideo = useCallback(async (shot: VideoShot, index: number) => {
-    const prompt = buildVideoPrompt(shot, pseudoAnalysis, pseudoProductInfo);
-    if (!prompt) return;
     analytics.trackUIInteraction({
       area: 'popular_mv_tool',
       action: 'shot_video_generation_opened',
@@ -1072,6 +1092,10 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       : initialImages.length > 0
         ? initialImages
         : undefined;
+    const prompt = buildVideoPrompt(shot, pseudoAnalysis, pseudoProductInfo, {
+      referenceImageDescriptions: buildVideoReferenceImageDescriptions(resolvedInitialImages),
+    });
+    if (!prompt) return;
 
     const durationStr = String(draft?.duration ?? segmentDuration);
     const validDuration = videoModelConfig.durationOptions.some(o => o.value === durationStr)
@@ -1165,11 +1189,46 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     return updatedShots;
   }, [applyUpdatedShots]);
 
-  const generateFirstFrameForShot = useCallback(async (
+  const writeShotFirstFrameResult = useCallback(async (
+    shotId: string,
+    firstFrameUrl: string
+  ) => {
+    const latestShots = latestShotsRef.current;
+    const shot = latestShots.find(item => item.id === shotId);
+    if (!shot || shot.generated_first_frame_url === firstFrameUrl) {
+      return latestShots;
+    }
+    const updatedShots = latestShots.map(item =>
+      item.id === shotId ? { ...item, generated_first_frame_url: firstFrameUrl } : item
+    );
+    await applyUpdatedShots(updatedShots);
+    return updatedShots;
+  }, [applyUpdatedShots]);
+
+  const writeShotLastFrameResult = useCallback(async (
+    shotId: string,
+    lastFrameUrl: string
+  ) => {
+    const latestShots = latestShotsRef.current;
+    const shot = latestShots.find(item => item.id === shotId);
+    if (!shot || shot.generated_last_frame_url === lastFrameUrl) {
+      return latestShots;
+    }
+    const updatedShots = latestShots.map(item =>
+      item.id === shotId ? { ...item, generated_last_frame_url: lastFrameUrl } : item
+    );
+    await applyUpdatedShots(updatedShots);
+    return updatedShots;
+  }, [applyUpdatedShots]);
+
+  const generateFrameForShot = useCallback(async (
     shot: VideoShot,
-    currentCharacters: VideoCharacter[]
+    currentCharacters: VideoCharacter[],
+    frameType: 'first' | 'last'
   ): Promise<string | null> => {
-    const rawPrompt = shot.first_frame_prompt || shot.description || '';
+    const rawPrompt = frameType === 'first'
+      ? shot.first_frame_prompt || shot.description || ''
+      : shot.last_frame_prompt || '';
     if (!rawPrompt) return null;
 
     const prompt = buildFramePrompt(rawPrompt, pseudoAnalysis, pseudoProductInfo, {
@@ -1187,7 +1246,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       }
     }
 
-    const shotBatchId = `mv_${record.id}_shot${shot.id}_first`;
+    const shotBatchId = `mv_${record.id}_shot${shot.id}_${frameType}`;
     const result = await mcpRegistry.executeTool(
       { name: 'generate_image', arguments: {
         prompt: prompt.trim(), count: 1, size: imageGenerationSize,
@@ -1218,33 +1277,45 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     return task?.result?.url || null;
   }, [record.id, pseudoAnalysis, pseudoProductInfo, knowledgeContextRefs, imageGenerationExtraParams, imageGenerationSize, imageModel, imageModelRef, refImageUrls]);
 
+  const generateFirstFrameForShot = useCallback((
+    shot: VideoShot,
+    currentCharacters: VideoCharacter[]
+  ) => generateFrameForShot(shot, currentCharacters, 'first'), [generateFrameForShot]);
+
+  const generateLastFrameForShot = useCallback((
+    shot: VideoShot,
+    currentCharacters: VideoCharacter[]
+  ) => generateFrameForShot(shot, currentCharacters, 'last'), [generateFrameForShot]);
+
   const createBatchVideoTask = useCallback(async (
     shot: VideoShot,
     index: number,
     currentShots: VideoShot[],
-    currentCharacters: VideoCharacter[]
+    currentCharacters: VideoCharacter[],
+    resolvedLastFrameUrl?: string
   ) => {
-    const prompt = buildVideoPrompt(shot, pseudoAnalysis, pseudoProductInfo);
-    if (!prompt) {
-      return null;
-    }
-
     const currentShot = currentShots.find((item) => item.id === shot.id) || currentShots[index] || shot;
     const firstFrameUrl = currentShot.generated_first_frame_url;
-    const lastFrameUrl = currentShot.generated_last_frame_url;
+    const lastFrameUrl = resolvedLastFrameUrl || currentShot.generated_last_frame_url;
     const characterReferenceUrls = (currentShot.character_ids || [])
       .map((charId) => currentCharacters.find((char) => char.id === charId)?.referenceImageUrl)
       .filter((url): url is string => !!url);
     const extraReferenceUrls = Array.from(new Set([
       ...refImageUrls,
-      ...characterReferenceUrls,
     ]));
-    const { referenceImages } = buildBatchVideoReferenceImages({
+    const { referenceImages, referenceImageDescriptions } = buildBatchVideoReferenceImages({
       model: videoModel,
       firstFrameUrl,
       lastFrameUrl,
       extraReferenceUrls,
+      characterReferenceUrls,
     });
+    const prompt = buildVideoPrompt(currentShot, pseudoAnalysis, pseudoProductInfo, {
+      referenceImageDescriptions,
+    });
+    if (!prompt) {
+      return null;
+    }
 
     const shotBatchId = `mv_${record.id}_shot${shot.id}_video`;
     const videoExtraParams = {
@@ -1354,56 +1425,86 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       const currentCharacters = latestRecordRef.current.characters || [];
       const charsNeedingRef = currentCharacters.filter(c => !c.referenceImageUrl);
       if (charsNeedingRef.length > 0 && !batchStopRef.current) {
-        for (const char of charsNeedingRef) {
-          if (batchStopRef.current) break;
+        const characterRefResults = await Promise.all(charsNeedingRef.map(async (char) => {
+          if (batchStopRef.current) return null;
           const charBatchId = `mv_${record.id}_char${char.id}_ref`;
           const charPrompt = buildCharacterReferencePrompt(
             char,
             pseudoAnalysis,
             pseudoProductInfo
           );
-          const result = await mcpRegistry.executeTool(
-            { name: 'generate_image', arguments: {
-              prompt: charPrompt,
-              count: 1,
-              size: imageGenerationSize,
-              knowledgeContextRefs,
-              batchId: charBatchId,
-              autoInsertToCanvas: false,
-              assetMetadata: {
-                category: AssetCategory.CHARACTER,
-                characterName: char.name,
-                characterPrompt: charPrompt,
-              },
-              ...(imageModel ? { model: imageModel, modelRef: imageModelRef } : {}),
-              ...(imageGenerationExtraParams ? { params: imageGenerationExtraParams } : {}),
-            }},
-            { mode: 'queue' }
-          );
-          const taskId = (result as { taskId?: string; data?: { taskId?: string } }).taskId
-            || (result.data as { taskId?: string } | undefined)?.taskId;
-          if (taskId) {
+          try {
+            const result = await mcpRegistry.executeTool(
+              { name: 'generate_image', arguments: {
+                prompt: charPrompt,
+                count: 1,
+                size: imageGenerationSize,
+                knowledgeContextRefs,
+                batchId: charBatchId,
+                autoInsertToCanvas: false,
+                assetMetadata: {
+                  category: AssetCategory.CHARACTER,
+                  characterName: char.name,
+                  characterPrompt: charPrompt,
+                },
+                ...(imageModel ? { model: imageModel, modelRef: imageModelRef } : {}),
+                ...(imageGenerationExtraParams ? { params: imageGenerationExtraParams } : {}),
+              }},
+              { mode: 'queue' }
+            );
+            const taskId = (result as { taskId?: string; data?: { taskId?: string } }).taskId
+              || (result.data as { taskId?: string } | undefined)?.taskId;
+            if (!taskId) {
+              return null;
+            }
+
             activeBatchTaskIdsRef.current.add(taskId);
+
             let waitResult: Awaited<ReturnType<typeof waitForBatchVideoTask>> | null = null;
             try {
+              if (batchStopRef.current) {
+                taskQueueService.cancelTask(taskId);
+                return null;
+              }
               waitResult = await waitForBatchVideoTask(taskId, batchAbortControllerRef.current?.signal);
             } finally {
               activeBatchTaskIdsRef.current.delete(taskId);
             }
-            if (waitResult?.success) {
-              const task = waitResult.task || taskQueueService.getTask(taskId);
-              const url = task?.result?.url;
-              if (url) {
-                const base = latestRecordRef.current.characters || [];
-                const updated = base.map(c => c.id === char.id ? { ...c, referenceImageUrl: url } : c);
-                await applyRecordPatch({ characters: updated });
-              }
+            if (!waitResult?.success) {
+              return null;
             }
+
+            const task = waitResult.task || taskQueueService.getTask(taskId);
+            const url = task?.result?.url;
+            return url ? { charId: char.id, url } : null;
+          } catch (error) {
+            if (!batchStopRef.current) {
+              console.error('[MVCreator] Character reference generation failed:', {
+                characterId: char.id,
+                error,
+              });
+            }
+            return null;
           }
+        }));
+
+        const characterRefUpdates = characterRefResults.filter(
+          (item): item is { charId: string; url: string } => !!item?.url
+        );
+        if (characterRefUpdates.length > 0) {
+          const urlByCharacterId = new Map(
+            characterRefUpdates.map(item => [item.charId, item.url])
+          );
+          const base = latestRecordRef.current.characters || [];
+          const updated = base.map(c => {
+            const url = urlByCharacterId.get(c.id);
+            return url ? { ...c, referenceImageUrl: url } : c;
+          });
+          await applyRecordPatch({ characters: updated });
         }
       }
 
-      // ── Step 1: 镜头级并行生成。每个镜头内部仍保持：首帧 -> 视频。 ──
+      // ── Step 1: 先并行准备关键帧，再按每段依赖就绪启动视频。 ──
       let completedCount = 0;
       const completedShotIndexes = new Set<number>();
       const markShotDone = (index: number, retryCount = 0) => {
@@ -1419,15 +1520,101 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
           retryCount,
         }));
       };
+      const batchShots = latestShotsRef.current;
+      const framePromises = new Map<
+        string,
+        {
+          first?: Promise<string | null>;
+          last?: Promise<string | null>;
+        }
+      >();
+      const ensureFirstFrame = (shot: VideoShot) => {
+        const latestShot = latestShotsRef.current.find((item) => item.id === shot.id) || shot;
+        if (latestShot.generated_first_frame_url) {
+          return Promise.resolve(latestShot.generated_first_frame_url);
+        }
+        const cached = framePromises.get(shot.id)?.first;
+        if (cached) {
+          return cached;
+        }
+        const promise = (async () => {
+          const shotCharacters = latestRecordRef.current.characters || [];
+          const firstFrameUrl = await generateFirstFrameForShot(latestShot, shotCharacters);
+          if (firstFrameUrl && !batchStopRef.current) {
+            await writeShotFirstFrameResult(latestShot.id, firstFrameUrl);
+          }
+          return firstFrameUrl;
+        })();
+        framePromises.set(shot.id, {
+          ...(framePromises.get(shot.id) || {}),
+          first: promise,
+        });
+        return promise;
+      };
+      const ensureOwnLastFrame = (shot: VideoShot) => {
+        const latestShot = latestShotsRef.current.find((item) => item.id === shot.id) || shot;
+        if (latestShot.generated_last_frame_url) {
+          return Promise.resolve(latestShot.generated_last_frame_url);
+        }
+        if (!latestShot.last_frame_prompt?.trim()) {
+          return Promise.resolve(null);
+        }
+        const cached = framePromises.get(shot.id)?.last;
+        if (cached) {
+          return cached;
+        }
+        const promise = (async () => {
+          const shotCharacters = latestRecordRef.current.characters || [];
+          const lastFrameUrl = await generateLastFrameForShot(latestShot, shotCharacters);
+          if (lastFrameUrl && !batchStopRef.current) {
+            await writeShotLastFrameResult(latestShot.id, lastFrameUrl);
+          }
+          return lastFrameUrl;
+        })();
+        framePromises.set(shot.id, {
+          ...(framePromises.get(shot.id) || {}),
+          last: promise,
+        });
+        return promise;
+      };
+
+      for (let index = 0; index < batchShots.length; index += 1) {
+        const shot = batchShots[index];
+        const nextShot = batchShots[index + 1];
+        void ensureFirstFrame(shot).catch((error) => {
+          if (!batchStopRef.current) {
+            console.error('[MVCreator] Batch first frame generation failed:', {
+              shotId: shot.id,
+              error,
+            });
+          }
+          return null;
+        });
+        if (nextShot && !shot.generated_last_frame_url && !shot.last_frame_prompt?.trim()) {
+          void ensureFirstFrame(nextShot).catch((error) => {
+            if (!batchStopRef.current) {
+              console.error('[MVCreator] Batch next first frame generation failed:', {
+                shotId: nextShot.id,
+                error,
+              });
+            }
+            return null;
+          });
+        } else if (shot.last_frame_prompt?.trim()) {
+          void ensureOwnLastFrame(shot).catch((error) => {
+            if (!batchStopRef.current) {
+              console.error('[MVCreator] Batch last frame generation failed:', {
+                shotId: shot.id,
+                error,
+              });
+            }
+            return null;
+          });
+        }
+      }
 
       const runShotPipeline = async (initialShot: VideoShot, index: number) => {
         if (batchStopRef.current) {
-          return;
-        }
-
-        const prompt = buildVideoPrompt(initialShot, pseudoAnalysis, pseudoProductInfo);
-        if (!prompt) {
-          markShotDone(index);
           return;
         }
 
@@ -1446,21 +1633,30 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
           return;
         }
 
-        const shotCharacters = latestRecordRef.current.characters || [];
-        if (!shot.generated_first_frame_url && !batchStopRef.current) {
-          const firstFrameUrl = await generateFirstFrameForShot(shot, shotCharacters);
-          if (firstFrameUrl && !batchStopRef.current) {
-            const updatedShots = latestShotsRef.current.map((item) =>
-              item.id === shot.id ? { ...item, generated_first_frame_url: firstFrameUrl } : item
-            );
-            await applyUpdatedShots(updatedShots);
-            shot = { ...shot, generated_first_frame_url: firstFrameUrl };
-          }
+        const firstFrameUrl = await ensureFirstFrame(shot);
+        if (firstFrameUrl) {
+          shot = { ...shot, generated_first_frame_url: firstFrameUrl };
         }
 
         shot = latestShotsRef.current.find((item) => item.id === shot.id) || shot;
         if (!shot.generated_first_frame_url) {
           markShotDone(index);
+          return;
+        }
+
+        let resolvedLastFrameUrl = shot.generated_last_frame_url;
+        if (!resolvedLastFrameUrl) {
+          if (shot.last_frame_prompt?.trim()) {
+            resolvedLastFrameUrl = (await ensureOwnLastFrame(shot)) || undefined;
+          } else {
+            const nextShot = batchShots[index + 1];
+            resolvedLastFrameUrl = nextShot
+              ? (await ensureFirstFrame(nextShot)) || undefined
+              : undefined;
+          }
+        }
+
+        if (batchStopRef.current) {
           return;
         }
 
@@ -1475,7 +1671,8 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
               snapshotShots.find((item) => item.id === shot.id) || shot,
               index,
               snapshotShots,
-              snapshotCharacters
+              snapshotCharacters,
+              resolvedLastFrameUrl
             );
           }
 
@@ -1556,7 +1753,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       };
 
       await Promise.allSettled(
-        latestShotsRef.current.map((shot, index) =>
+        batchShots.map((shot, index) =>
           runShotPipeline(shot, index)
             .catch((error) => {
               if (!batchStopRef.current) {
@@ -1586,6 +1783,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     createBatchVideoTask,
     ensureBatchId,
     generateFirstFrameForShot,
+    generateLastFrameForShot,
     pseudoAnalysis,
     pseudoProductInfo,
     applyUpdatedShots,
@@ -1598,6 +1796,8 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     imageModelRef,
     insertGeneratedVideoToCanvas,
     insertGeneratedVideosToCanvas,
+    writeShotFirstFrameResult,
+    writeShotLastFrameResult,
     writeShotVideoResult,
     board,
   ]);
@@ -1607,15 +1807,21 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       latestRecordRef.current,
       latestShotsRef.current
     );
-    await applyUpdatedShots(resetResult.shots);
-    await applyRecordPatch({ characters: resetResult.characters });
-  }, [applyUpdatedShots, applyRecordPatch]);
+    await applyRecordPatch({
+      ...updateActiveShotsInRecord(latestRecordRef.current, resetResult.shots),
+      characters: resetResult.characters,
+      generatedAssetsResetAt: Date.now(),
+    });
+  }, [applyRecordPatch]);
 
   const thumbStyle = useMemo(() => {
     const [w, h] = selectedVideoAspectRatio.split(':').map(Number);
     if (!w || !h) return {};
     const computedW = Math.round(54 * w / h);
-    return { width: Math.max(computedW, 48), height: computedW < 48 ? Math.round(48 * h / w) : 54 };
+    return {
+      width: Math.max(computedW, 48),
+      height: computedW < 48 ? Math.round(48 * h / w) : 54,
+    };
   }, [selectedVideoAspectRatio]);
 
   return (
@@ -1641,7 +1847,12 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
                 <div className="va-character-ref">
                   {char.referenceImageUrl ? (
                     <div className="va-character-ref-thumb">
-                      <img src={char.referenceImageUrl} alt={char.name} referrerPolicy="no-referrer" />
+                      <RetryImage
+                        src={char.referenceImageUrl}
+                        alt={char.name}
+                        showSkeleton={false}
+                        eager
+                      />
                       <button className="va-shot-frame-delete" onClick={() => void handleCharacterRefImageChange(char.id, undefined)}>×</button>
                     </div>
                   ) : (
@@ -1720,8 +1931,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
                 <div className="va-shot-frame-thumb" style={thumbStyle}
                   onMouseEnter={e => handleThumbEnter(shot.generated_first_frame_url!, 'image', e)}
                   onMouseLeave={handleThumbLeave}>
-                  <img src={shot.generated_first_frame_url} alt="首帧" referrerPolicy="no-referrer"
-                    onClick={() => handleShotGenerateFirstFrame(shot)} />
+                  <RetryImage
+                    src={shot.generated_first_frame_url}
+                    alt="首帧"
+                    showSkeleton={false}
+                    eager
+                    onClick={() => handleShotGenerateFirstFrame(shot)}
+                  />
                   <button className="va-shot-frame-delete" onClick={() => handleDeleteFrame(shot.id, 'first')}>×</button>
                   <button className="va-shot-frame-regen" onClick={() => handleShotGenerateFirstFrame(shot)}>↻</button>
                 </div>
@@ -1747,8 +1963,13 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
                     <div className="va-shot-frame-thumb" style={thumbStyle}
                       onMouseEnter={e => handleThumbEnter(shot.generated_last_frame_url!, 'image', e)}
                       onMouseLeave={handleThumbLeave}>
-                      <img src={shot.generated_last_frame_url} alt="尾帧" referrerPolicy="no-referrer"
-                        onClick={() => handleShotGenerateLastFrame(shot, i)} />
+                      <RetryImage
+                        src={shot.generated_last_frame_url}
+                        alt="尾帧"
+                        showSkeleton={false}
+                        eager
+                        onClick={() => handleShotGenerateLastFrame(shot, i)}
+                      />
                       <button className="va-shot-frame-delete" onClick={() => handleDeleteFrame(shot.id, 'last')}>×</button>
                       <button className="va-shot-frame-regen" onClick={() => handleShotGenerateLastFrame(shot, i)}>↻</button>
                     </div>
@@ -1759,13 +1980,18 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
                     <div className="va-shot-frame-thumb va-shot-frame-thumb--borrowed" style={thumbStyle}
                       onMouseEnter={e => handleThumbEnter(lastFrameUrl!, 'image', e)}
                       onMouseLeave={handleThumbLeave}>
-                      <img src={lastFrameUrl} alt="尾帧(下一镜头首帧)" referrerPolicy="no-referrer"
-                        onClick={() => handleShotGenerateLastFrame(shot, i)} />
+                      <RetryImage
+                        src={lastFrameUrl}
+                        alt="尾帧(下一镜头首帧)"
+                        showSkeleton={false}
+                        eager
+                        onClick={() => handleShotGenerateLastFrame(shot, i)}
+                      />
                       <span className="va-shot-frame-label">下一镜头首帧</span>
                     </div>
                   );
                 }
-                if (shot.last_frame_prompt || shot.description) {
+                if (shot.last_frame_prompt?.trim()) {
                   return (
                     <span className="va-shot-frame-btn-group">
                       <button onClick={() => handleShotGenerateLastFrame(shot, i)}>生成尾帧</button>
@@ -1908,7 +2134,12 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
           onMouseLeave={handleHoverPreviewLeave}
         >
           {hoverPreview.type === 'image' ? (
-            <img src={hoverPreview.url} alt="Preview" referrerPolicy="no-referrer" />
+            <RetryImage
+              src={hoverPreview.url}
+              alt="Preview"
+              showSkeleton={false}
+              eager
+            />
           ) : (
             <video src={hoverPreview.url} controls muted preload="metadata" />
           )}

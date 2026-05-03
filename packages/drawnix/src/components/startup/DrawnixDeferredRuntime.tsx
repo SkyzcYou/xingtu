@@ -91,11 +91,26 @@ export function DrawnixDeferredRuntime({
     }
 
     return runWhenIdle(() => {
-      import('../../services/video-recovery-service').then(
-        ({ initVideoRecoveryService }) => {
+      import('../../services/video-recovery-service')
+        .then((videoRecoveryService) => {
+          const initVideoRecoveryService =
+            videoRecoveryService?.initVideoRecoveryService;
+
+          if (typeof initVideoRecoveryService !== 'function') {
+            console.warn(
+              '[DrawnixDeferredRuntime] Video recovery service unavailable.'
+            );
+            return;
+          }
+
           initVideoRecoveryService(board);
-        }
-      );
+        })
+        .catch((error) => {
+          console.warn(
+            '[DrawnixDeferredRuntime] Failed to load video recovery service:',
+            error
+          );
+        });
     }, 3000);
   }, [board]);
 

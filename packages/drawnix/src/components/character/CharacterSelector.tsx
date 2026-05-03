@@ -11,7 +11,7 @@ import { UserIcon, InfoCircleIcon } from 'tdesign-icons-react';
 import { useCharacters } from '../../hooks/useCharacters';
 import type { SoraCharacter } from '../../types/character.types';
 import './character.scss';
-import { HoverTip } from '../shared';
+import { HoverTip, RetryImage } from '../shared';
 
 export interface CharacterSelectorProps {
   /** Currently selected character IDs */
@@ -129,9 +129,11 @@ export const CharacterSelector: React.FC<CharacterSelectorProps> = ({
             >
               <div className="character-selector__chip-avatar">
                 {character.profilePictureUrl ? (
-                  <img
+                  <RetryImage
                     src={character.profilePictureUrl}
                     alt={character.username}
+                    showSkeleton={false}
+                    eager
                   />
                 ) : (
                   <UserIcon />

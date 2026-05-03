@@ -6,16 +6,6 @@
 
 // 从公共配置导入模型相关定义
 export type { ModelType, ModelConfig } from '../constants/model-config';
-export {
-  IMAGE_MODELS,
-  VIDEO_MODELS,
-  ALL_MODELS,
-  getModelsByType,
-  getModelConfig,
-  getModelType,
-  getModelIds,
-  supportsTools,
-} from '../constants/model-config';
 import type { ModelRef } from '../utils/settings-manager';
 import type { GeminiMessagePart } from '../utils/gemini-api/types';
 import type { KnowledgeContextRef } from '../types/task.types';

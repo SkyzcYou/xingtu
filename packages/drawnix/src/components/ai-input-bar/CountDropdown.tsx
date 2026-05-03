@@ -98,7 +98,7 @@ export const CountDropdown: React.FC<CountDropdownProps> = ({
       openKeys={['Enter', ' ', 'ArrowDown', 'ArrowUp']}
       onOpenKey={handleOpenKey}
     >
-      {({ containerRef, menuRef, portalPosition, handleTriggerKeyDown }) => (
+      {({ containerRef, menuRef, menuStyle, handleTriggerKeyDown }) => (
         <div className="count-dropdown" ref={containerRef}>
           <HoverTip
             content={`${language === 'zh' ? '生成数量' : 'Count'}: ${value} (↑↓ Tab)`}
@@ -122,10 +122,8 @@ export const CountDropdown: React.FC<CountDropdownProps> = ({
               ref={menuRef}
               className={`count-dropdown__menu ${ATTACHED_ELEMENT_CLASS_NAME}`}
               style={{
-                position: 'fixed',
+                ...menuStyle,
                 zIndex: Z_INDEX.DROPDOWN_PORTAL,
-                left: portalPosition.left,
-                bottom: window.innerHeight - portalPosition.top + 8,
               }}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}

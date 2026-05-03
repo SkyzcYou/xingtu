@@ -18,11 +18,17 @@ import {
 // ── 分镜版本管理 ──
 
 const MAX_STORYBOARD_VERSIONS = 10;
+const ORIGINAL_CONTENT_GUARDRAIL =
+  '原创性与合规要求：若音乐、歌词、创作 Brief 或用户提示词包含知名影视、动画、游戏、音乐、品牌、角色、商标、Logo、台词、歌词或受保护作品名称，不要复刻或仿写，不要使用原名称、标志性造型、独特服装、台词、歌词、镜头或世界观；请改写为原创的泛化角色、场景、音乐情绪和视觉元素，并保持商业可用。';
 
 export function createStoryboardVersion(
   shots: VideoShot[],
   label: string,
-  prompt?: string
+  prompt?: string,
+  snapshot?: {
+    characters?: VideoCharacter[];
+    videoStyle?: string;
+  }
 ): StoryboardVersion {
   return {
     id: generateUUID(),
@@ -30,6 +36,8 @@ export function createStoryboardVersion(
     label,
     prompt,
     shots: structuredClone(shots),
+    ...(snapshot?.characters ? { characters: structuredClone(snapshot.characters) } : {}),
+    ...(snapshot?.videoStyle ? { videoStyle: snapshot.videoStyle } : {}),
   };
 }
 
@@ -49,7 +57,11 @@ export function switchToVersion(
   versionId: string
 ): Partial<MVRecord> | null {
   return switchVersionInRecord(record, 'storyboardVersions', versionId, {
-    getVersionPatch: (version) => ({ editedShots: version.shots }),
+    getVersionPatch: (version) => ({
+      editedShots: version.shots,
+      ...(version.characters ? { characters: structuredClone(version.characters) } : {}),
+      ...(version.videoStyle ? { videoStyle: version.videoStyle } : {}),
+    }),
     getOriginalPatch: (currentRecord) => {
       const firstVersion = currentRecord.storyboardVersions?.[currentRecord.storyboardVersions.length - 1];
       return firstVersion ? { editedShots: [...firstVersion.shots] } : null;
@@ -196,6 +208,8 @@ export function buildStoryboardPrompt(params: {
 音乐信息：
 ${musicInfo}
 
+${ORIGINAL_CONTENT_GUARDRAIL}
+
 视频生成约束：
 - 视频模型：${videoModel}
 - ${durationInfo}
@@ -209,7 +223,7 @@ ${formatCreativeBriefPromptBlock(creativeBrief, 'mv')}
 1. 分析音乐信息和创作 Brief 中涉及的角色（人物、动物等有外貌特征的主体），无角色则 characters 为空数组
 2. 为每个角色生成：id（"char_1", "char_2"...）、name（展示名）、description（英文外貌描述，包含发型、服装、体型、肤色等，可直接用于文生图）
 3. 每个镜头标注 character_ids（该镜头涉及的角色 ID 列表，无角色则为空数组）
-4. first_frame_prompt 和 last_frame_prompt 中若有角色，必须包含对应角色的完整外貌描述
+4. first_frame_prompt 中若有角色，必须包含对应角色的完整外貌描述，并明确沿用同一人物身份、脸型五官、发型、体型、年龄感、完整服装款式、服装颜色、材质和配饰，不得重新设计衣服；同时每个镜头必须写入本镜头独有的视觉锚点（动作阶段、主体位置、角色关系、道具状态、镜头角度或情绪节奏），避免不同片段只复用相同场景/角色/风格描述；last_frame_prompt 可为空，只有确实需要独立尾帧图时才填写，非空时必须保持同一人物、同一发型、同一套衣服和同一配饰
 
 分镜规划步骤（请严格按顺序执行）：
 ${audioInstruction}
@@ -232,6 +246,7 @@ ${audioInstruction}
 2. startTime 从 0 开始，每个镜头的 startTime = 上一个镜头的 endTime
 3. 镜头之间要有视觉连贯性（共同视觉元素、运镜方向延续、色调一致）
 4. 所有字段使用与音乐信息或创作 Brief 一致的语言
+5. 视频模型单段通常只有 8-15 秒；连续超过单段时长的内容必须拆成多个连续镜头。连续拆分时，第 N+1 段的 first_frame_prompt 就是第 N 段的尾帧状态，第 N 段 last_frame_prompt 留空字符串；只有最后一段、非连续转场、明确需要独立结束定格时才填写 last_frame_prompt
 
 每个镜头输出字段：
 - id: 镜头ID（如 "shot_1"）
@@ -243,8 +258,8 @@ ${audioInstruction}
 - description: 画面描述（详细描述场景、人物、动作、光线、色调，必须与该时间段的音乐节奏和歌词内容呼应）
 - narration: 旁白（MV 通常为空字符串）
 - camera_movement: 运镜方式（必须匹配该段音乐的节奏感）
-- first_frame_prompt: 首帧图片提示词（精确描述主体位置、动作起始状态、构图、光线与背景；若该镜头有角色，必须包含对应角色的完整外貌描述）
-- last_frame_prompt: 尾帧图片提示词（精确描述主体位置、动作定格状态、构图、光线与背景；若该镜头有角色，必须包含对应角色的完整外貌描述）
+- first_frame_prompt: 首帧图片提示词（精确描述主体位置、动作起始状态、构图、光线与背景；必须写入本镜头独有的视觉锚点、差异化动作起点、构图角度和角色关系，避免只复用同一角色外貌、同一场景和同一泛化风格；若该镜头有角色，必须包含对应角色的完整外貌、发型、脸部特征、体型、年龄感、服装款式、服装颜色、材质和配饰）
+- last_frame_prompt: 尾帧图片提示词，可为空字符串（只有需要独立尾帧图时才填写；若下一段首帧自然承接为本段尾帧，则填 ""；非空时必须沿用同一人物和同一套服装，只改变结尾姿态、表情、动作定格、构图、光线或背景）
 - transition_hint: 转场方式（cut/dissolve/match_cut/fade_to_black）
 - character_ids: 该镜头涉及的角色 ID 列表（无角色则为空数组 []）
 
@@ -315,6 +330,8 @@ ${characters.map((c: VideoCharacter) => `- ${c.id}（${c.name}）：${c.descript
 ${shotsJson}
 ${rewritePrompt ? `\n用户改编提示词：\n${rewritePrompt}` : ''}
 
+${ORIGINAL_CONTENT_GUARDRAIL}
+
 视频生成约束：
 - 视频模型：${videoModel}
 - ${durationInfo}
@@ -323,10 +340,11 @@ ${rewritePrompt ? `\n用户改编提示词：\n${rewritePrompt}` : ''}
 改编要求（所有字段必须使用与用户提示词相同的语言）：
 1. description（画面描述）：根据用户提示词改编画面内容，必须与该时间段的音乐节奏和歌词内容呼应${effectiveStyle ? `，画面风格统一为"${effectiveStyle}"` : ''}
 2. narration（旁白）：MV 通常为空字符串
-3. first_frame_prompt（首帧图片提示词）：精确描述主体位置、动作起始状态、构图、光线与背景${hasCharacters ? '；若该镜头有角色，必须包含对应角色的完整外貌描述' : ''}
-4. last_frame_prompt（尾帧图片提示词）：精确描述主体位置、动作定格状态、构图、光线与背景${hasCharacters ? '；若该镜头有角色，必须包含对应角色的完整外貌描述' : ''}
+3. first_frame_prompt（首帧图片提示词）：精确描述主体位置、动作起始状态、构图、光线与背景，并写入本镜头独有的视觉锚点、差异化动作起点、构图角度和角色关系，避免只复用同一角色外貌、同一场景和同一泛化风格${hasCharacters ? '；若该镜头有角色，必须包含对应角色的完整外貌描述，并明确沿用同一人物身份、脸型五官、发型、体型、年龄感、完整服装款式、服装颜色、材质和配饰，不得重新设计衣服' : ''}
+4. last_frame_prompt（尾帧图片提示词，可为空）：只有该镜头必须独立生成结尾关键帧时才填写，精确描述主体位置、动作定格状态、构图、光线与背景${hasCharacters ? '；若该镜头有角色，必须包含对应角色的完整外貌与服装锚点，和首帧保持同一人物、同一发型、同一套衣服、同一配饰，只改变结尾姿态、表情、动作、镜头角度或环境' : ''}；若下一段首帧自然就是本段尾帧，则填空字符串
 5. camera_movement（运镜方式）：根据新内容和音乐节奏适当调整
 6. character_ids（角色 ID 列表）：保留或调整角色出场
+7. video_style（画面风格）：如果改编后视觉方向变化，必须同步返回新的整体画面风格；如果用户指定了画面风格，则以用户指定为准
 
 角色调整规则（极其重要！）：
 - 如果用户提示词要求修改角色（如更换性别、年龄、外貌、服装等），必须在 characters 数组中更新对应角色的 description
@@ -334,14 +352,22 @@ ${rewritePrompt ? `\n用户改编提示词：\n${rewritePrompt}` : ''}
 - 如果用户提示词要求删除角色，从 characters 数组中移除，并清理相关镜头的 character_ids
 - 角色的 description 必须是英文外貌描述，可直接用于文生图
 
+步骤衔接要求：
+- 第3步生成首帧/视频时不会继续读取“用户改编提示词”原文；必须把改编意图落实到 description、first_frame_prompt、必要时的 last_frame_prompt、characters 和 video_style 中。
+- 不要依赖后续生成步骤再理解“改编要求”，每个镜头字段本身要可直接生成。
+- 改编后逐镜头检查 first_frame_prompt，不得高度相似；相邻镜头可以共享连续性元素，但必须有清晰不同的动作阶段、构图或角色关系。
+
 拼接衔接要求：
 1. 相邻镜头之间必须有共同的视觉元素，确保画面连贯
 2. 运镜方向延续，不能突然反向
 3. 所有镜头统一色调和光线风格
 4. 动作连贯，上一镜头结尾动作延续到下一镜头开头
+5. 单段视频模型通常只能生成 8-15 秒；连续超过单段时长的内容应拆成多个连续片段，并把“上一段结尾状态”写进下一段 first_frame_prompt。此时上一段 last_frame_prompt 必须留空字符串，生成页会直接复用下一段首帧作为上一段尾帧。
+6. 只有最后一段、非连续转场、明确需要独立结束定格或与下一段首帧不一致时，才填写 last_frame_prompt；不要为每段都强行生成尾帧图。
 
 返回 JSON 对象（不要 markdown 格式），格式如下：
 {
+  "video_style": "改编后的整体画面风格",
   "characters": [
     { "id": "char_1", "name": "角色名", "description": "English appearance description for text-to-image" }
   ],

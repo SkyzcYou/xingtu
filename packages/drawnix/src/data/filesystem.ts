@@ -8,6 +8,56 @@ import { MIME_TYPES } from '../constants';
 
 type FILE_EXTENSION = Exclude<keyof typeof MIME_TYPES, 'binary'>;
 
+function getErrorName(error: unknown): string {
+  if (error && typeof error === 'object' && 'name' in error) {
+    const name = (error as { name?: unknown }).name;
+    return typeof name === 'string' ? name : '';
+  }
+  return '';
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    return typeof message === 'string' ? message : '';
+  }
+  return typeof error === 'string' ? error : '';
+}
+
+export function isFileSystemAbortError(error: unknown): boolean {
+  const name = getErrorName(error);
+  const message = getErrorMessage(error);
+
+  if (name === 'AbortError' || message.startsWith('AbortError:')) {
+    return true;
+  }
+
+  return (
+    message.includes('The user aborted a request') &&
+    (message.includes("Failed to execute 'showOpenFilePicker'") ||
+      message.includes("Failed to execute 'showSaveFilePicker'") ||
+      message.trim() === 'The user aborted a request.')
+  );
+}
+
+function normalizeFileSystemError(error: unknown): never {
+  if (!isFileSystemAbortError(error)) {
+    throw error;
+  }
+
+  const message =
+    getErrorMessage(error).replace(/^AbortError:\s*/, '') ||
+    'The user aborted a request.';
+
+  if (typeof DOMException === 'function') {
+    throw new DOMException(message, 'AbortError');
+  }
+
+  const normalized = new Error(message);
+  normalized.name = 'AbortError';
+  throw normalized;
+}
+
 export const fileOpen = <M extends boolean | undefined = false>(opts: {
   extensions?: FILE_EXTENSION[];
   description: string;
@@ -29,12 +79,16 @@ export const fileOpen = <M extends boolean | undefined = false>(opts: {
     return acc.concat(`.${ext}`);
   }, [] as string[]);
 
-  return _fileOpen({
-    description: opts.description,
-    extensions,
-    mimeTypes,
-    multiple: opts.multiple ?? false,
-  }) as Promise<RetType>;
+  try {
+    return _fileOpen({
+      description: opts.description,
+      extensions,
+      mimeTypes,
+      multiple: opts.multiple ?? false,
+    }).catch(normalizeFileSystemError) as Promise<RetType>;
+  } catch (error) {
+    normalizeFileSystemError(error);
+  }
 };
 
 export const fileSave = (
@@ -49,15 +103,19 @@ export const fileSave = (
     fileHandle?: FileSystemHandle | null;
   }
 ) => {
-  return _fileSave(
-    blob,
-    {
-      fileName: `${opts.name}.${opts.extension}`,
-      description: opts.description,
-      extensions: [`.${opts.extension}`],
-    },
-    opts.fileHandle as any
-  );
+  try {
+    return _fileSave(
+      blob,
+      {
+        fileName: `${opts.name}.${opts.extension}`,
+        description: opts.description,
+        extensions: [`.${opts.extension}`],
+      },
+      opts.fileHandle as any
+    ).catch(normalizeFileSystemError);
+  } catch (error) {
+    normalizeFileSystemError(error);
+  }
 };
 
 export type { FileSystemHandle };

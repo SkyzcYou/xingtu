@@ -1,6 +1,6 @@
 import { PlaitBoard } from '@plait/core';
 import { MIME_TYPES, VERSIONS } from '../constants';
-import { fileOpen, fileSave } from './filesystem';
+import { fileOpen, fileSave, isFileSystemAbortError } from './filesystem';
 import { DrawnixExportedData, DrawnixExportedType } from './types';
 import { loadFromBlob, normalizeFile } from './blob';
 import { collectEmbeddedMediaFromElements } from './embedded-media';
@@ -29,7 +29,7 @@ export const saveAsJSON = async (
     });
     return { fileHandle };
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (isFileSystemAbortError(error)) {
       return { fileHandle: null };
     }
     throw error;
@@ -46,7 +46,7 @@ export const loadFromJSON = async (board: PlaitBoard) => {
     });
     return loadFromBlob(board, await normalizeFile(file));
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (isFileSystemAbortError(error)) {
       return null;
     }
     throw error;

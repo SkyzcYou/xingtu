@@ -1,24 +1,24 @@
 ## ADDED Requirements
 
-### Requirement: Preserve Existing GPT Image Basic Compatibility
+### Requirement: Preserve Generic GPT Image Basic Compatibility
 
-The system SHALL preserve the existing default image adapter path for GPT Image models when the selected provider profile resolves to a basic image compatibility mode.
+The system SHALL preserve the existing default image adapter path only for GPT Image requests that resolve to the generic basic image compatibility mode.
 
-#### Scenario: Tuzi-compatible GPT Image generation stays on default adapter
+#### Scenario: Generic GPT Image generation stays on default adapter
 
-- **GIVEN** a provider profile resolves image API compatibility to `tuzi-compatible`
+- **GIVEN** a provider profile resolves image API compatibility to `openai-compatible-basic`
 - **AND** the selected model is `gpt-image-2`
 - **WHEN** the user submits a text-to-image request
 - **THEN** the request SHALL use the `openai.image.basic-json` schema
 - **AND** SHALL continue to use the existing default image adapter compatibility behavior
 
-#### Scenario: Reference images stay compatible on the basic path
+#### Scenario: Tuzi GPT Image uses dedicated adapter ownership
 
-- **GIVEN** a provider profile resolves image API compatibility to `tuzi-compatible` or `openai-compatible-basic`
+- **GIVEN** a provider profile resolves image API compatibility to `tuzi-gpt-image`
 - **AND** the user submits an image generation request with reference images
 - **WHEN** the request is serialized
-- **THEN** the system SHALL keep the existing basic compatibility request shape
-- **AND** SHALL NOT silently switch to official GPT Image edit fields such as `images[]` or `mask`
+- **THEN** the system SHALL route through the dedicated Tuzi GPT Image adapter boundary
+- **AND** SHALL NOT hide Tuzi GPT-specific request translation inside the generic default adapter
 
 ### Requirement: Support Official GPT Image Generation Adapter
 

@@ -37,6 +37,7 @@ export interface ProviderProfile {
   id: string;
   name: string;
   iconUrl?: string;
+  homepageUrl?: string;
   providerType: ProviderType;
   baseUrl: string;
   apiKey: string;

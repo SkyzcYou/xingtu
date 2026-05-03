@@ -526,6 +526,37 @@ describe('provider routing', () => {
     );
   });
 
+  it('routes business tuzi GPT Image models with Tuzi compatibility in auto mode', () => {
+    const model: ModelConfig = {
+      id: 'gpt-image-2',
+      label: 'GPT Image 2',
+      type: 'image',
+      vendor: ModelVendor.GPT,
+    };
+
+    const bindings = inferBindingsForProviderModel(
+      {
+        id: 'provider-business',
+        name: 'Business',
+        providerType: 'openai-compatible',
+        baseUrl: 'https://business.tu-zi.com/v1',
+        apiKey: 'business-key',
+        authType: 'bearer',
+        imageApiCompatibility: 'auto',
+      },
+      model
+    );
+
+    expect(bindings.map((binding) => binding.requestSchema)).toEqual([
+      'tuzi.image.gpt-generation-json',
+      'tuzi.image.gpt-edit-json',
+    ]);
+    expect(bindings[0]?.metadata?.image).toMatchObject({
+      imageApiCompatibility: 'auto',
+      resolvedImageApiCompatibility: 'tuzi-gpt-image',
+    });
+  });
+
   it('keeps discovered generateContent bindings below template image bindings for tuzi-gpt-image endpoints', () => {
     const profile = {
       id: 'provider-b',
@@ -597,6 +628,103 @@ describe('provider routing', () => {
     ]);
   });
 
+  it('prefers pricing async-image /v1/videos binding for image models', () => {
+    const profile = {
+      id: 'provider-business',
+      name: 'Business Provider',
+      providerType: 'openai-compatible' as const,
+      baseUrl: 'https://test-business.tu-zi.com/v1',
+      apiKey: 'key-a',
+      authType: 'bearer' as const,
+    };
+    const model: ModelConfig = {
+      id: 'gpt-image-1-vip',
+      label: 'GPT Image',
+      type: 'image',
+      vendor: ModelVendor.GPT,
+    };
+    const bindings = inferBindingsForProviderModel(profile, model, {
+      generate: {
+        path: '/v1/images/generations',
+        method: 'POST',
+      },
+      'openai-video': {
+        path: '/v1/videos',
+        method: 'POST',
+        scenario: 'async-image',
+      },
+    });
+    const planner = new InvocationPlanner(
+      createRepositories({
+        profiles: [profile],
+        bindings,
+      })
+    );
+
+    const plan = planner.plan({
+      operation: 'image',
+      modelRef: {
+        profileId: profile.id,
+        modelId: model.id,
+      },
+    });
+
+    expect(bindings.map((binding) => binding.protocol)).toContain(
+      'openai.async.media'
+    );
+    expect(plan.binding.protocol).toBe('openai.async.media');
+    expect(plan.binding.requestSchema).toBe('openai.async.image.form');
+    expect(plan.binding.submitPath).toBe('/videos');
+    expect(plan.binding.pollPathTemplate).toBe('/videos/{taskId}');
+  });
+
+  it('keeps async-image binding ahead of GPT edit preference for reference images', () => {
+    const profile = {
+      id: 'provider-business',
+      name: 'Business Provider',
+      providerType: 'openai-compatible' as const,
+      baseUrl: 'https://test-business.tu-zi.com/v1',
+      apiKey: 'key-a',
+      authType: 'bearer' as const,
+      imageApiCompatibility: 'openai-gpt-image' as const,
+    };
+    const model: ModelConfig = {
+      id: 'gpt-image-2',
+      label: 'GPT Image 2',
+      type: 'image',
+      vendor: ModelVendor.GPT,
+    };
+    const bindings = inferBindingsForProviderModel(profile, model, {
+      'openai-video': {
+        path: '/v1/videos',
+        method: 'POST',
+        scenario: 'async-image',
+      },
+    });
+    const planner = new InvocationPlanner(
+      createRepositories({
+        profiles: [profile],
+        bindings,
+      })
+    );
+
+    const plan = planner.plan({
+      operation: 'image',
+      modelRef: {
+        profileId: profile.id,
+        modelId: model.id,
+      },
+      preferredRequestSchema: 'openai.image.gpt-edit-form',
+    });
+
+    expect(bindings.map((binding) => binding.requestSchema)).toContain(
+      'openai.image.gpt-edit-form'
+    );
+    expect(plan.binding.protocol).toBe('openai.async.media');
+    expect(plan.binding.requestSchema).toBe('openai.async.image.form');
+    expect(plan.binding.submitPath).toBe('/videos');
+  });
+
   it('infers multiple candidate bindings for multi-interface video models', () => {
     const bindings = inferBindingsForProviderModel(
       {
@@ -623,6 +751,39 @@ describe('provider routing', () => {
       'seedance.video.form-auto',
       'openai.video.form-input-reference',
     ]);
+  });
+
+  it('keeps pricing /v1/videos binding as video when scenario is not async-image', () => {
+    const bindings = inferBindingsForProviderModel(
+      {
+        id: 'provider-a',
+        name: 'Provider A',
+        providerType: 'openai-compatible',
+        baseUrl: 'https://api-a.example.com/v1',
+        apiKey: 'key-a',
+        authType: 'bearer',
+      },
+      {
+        id: 'sora-2-pro',
+        label: 'Sora',
+        type: 'video',
+        vendor: ModelVendor.GPT,
+      },
+      {
+        'openai-video': {
+          path: '/v1/videos',
+          method: 'POST',
+          scenario: 'video',
+        },
+      }
+    );
+
+    expect(bindings.map((binding) => binding.protocol)).toContain(
+      'openai.async.video'
+    );
+    expect(bindings.map((binding) => binding.protocol)).not.toContain(
+      'openai.async.media'
+    );
   });
 
   it('infers HappyHorse video JSON bindings before generic video routing', () => {

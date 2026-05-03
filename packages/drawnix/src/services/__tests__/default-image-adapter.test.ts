@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   generateImage: vi.fn(),
+  generateWithPolling: vi.fn(),
+  extractUrlAndFormat: vi.fn(),
 }));
 
 vi.mock('../../utils/gemini-api', () => ({
@@ -12,8 +14,8 @@ vi.mock('../../utils/gemini-api', () => ({
 
 vi.mock('../async-image-api-service', () => ({
   asyncImageAPIService: {
-    generateWithPolling: vi.fn(),
-    extractUrlAndFormat: vi.fn(),
+    generateWithPolling: mocks.generateWithPolling,
+    extractUrlAndFormat: mocks.extractUrlAndFormat,
   },
 }));
 
@@ -35,6 +37,8 @@ import { geminiImageAdapter } from '../model-adapters/default-adapters';
 describe('default image adapter compatibility', () => {
   afterEach(() => {
     mocks.generateImage.mockReset();
+    mocks.generateWithPolling.mockReset();
+    mocks.extractUrlAndFormat.mockReset();
   });
 
   it('keeps generic GPT image fallback on the basic compatibility request shape', async () => {
@@ -114,5 +118,70 @@ describe('default image adapter compatibility', () => {
         quality: '1k',
       })
     );
+  });
+
+  it('uses async image polling when provider binding comes from pricing async-image endpoint', async () => {
+    mocks.generateWithPolling.mockResolvedValue({
+      id: 'task-1',
+      status: 'completed',
+      video_url: 'https://example.com/async.png',
+    });
+    mocks.extractUrlAndFormat.mockReturnValue({
+      url: 'https://example.com/async.png',
+      format: 'png',
+    });
+
+    const result = await geminiImageAdapter.generateImage(
+      {
+        baseUrl: 'https://gateway.example.com/v1',
+        apiKey: 'test-key',
+        authType: 'bearer',
+        binding: {
+          id: 'binding',
+          profileId: 'provider',
+          modelId: 'gpt-image-1-vip',
+          operation: 'image',
+          protocol: 'openai.async.media',
+          requestSchema: 'openai.async.image.form',
+          responseSchema: 'openai.async.task',
+          submitPath: '/videos',
+          pollPathTemplate: '/videos/{taskId}',
+          priority: 700,
+          confidence: 'medium',
+          source: 'discovered',
+        },
+      },
+      {
+        model: 'gpt-image-1-vip',
+        modelRef: {
+          profileId: 'provider',
+          modelId: 'gpt-image-1-vip',
+        },
+        prompt: 'Draw async',
+        size: '1:1',
+        referenceImages: ['data:image/png;base64,abc123'],
+      }
+    );
+
+    expect(mocks.generateWithPolling).toHaveBeenCalledWith(
+      {
+        model: 'gpt-image-1-vip',
+        modelRef: {
+          profileId: 'provider',
+          modelId: 'gpt-image-1-vip',
+        },
+        prompt: 'Draw async',
+        size: '1:1',
+        referenceImages: ['data:image/png;base64,abc123'],
+      },
+      expect.objectContaining({
+        interval: 5000,
+      })
+    );
+    expect(mocks.generateImage).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      url: 'https://example.com/async.png',
+      format: 'png',
+    });
   });
 });

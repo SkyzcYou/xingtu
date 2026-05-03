@@ -25,16 +25,24 @@ The system SHALL send official GPT Image edit requests to `/images/edits` when a
 - **WHEN** the image task is executed
 - **THEN** the GPT Image adapter SHALL send the request to `/images/generations`
 
-### Requirement: Preserve Basic Reference-Image Compatibility
+### Requirement: Route Tuzi GPT Image Through Dedicated Adapter
 
-The system SHALL preserve the existing default adapter behavior for reference-image requests when the selected profile resolves to a basic compatibility mode.
+The system SHALL route Tuzi GPT Image generation and edit requests through the dedicated Tuzi GPT Image adapter when the selected profile resolves to Tuzi GPT Image compatibility.
 
-#### Scenario: Tuzi reference-image request stays basic
+#### Scenario: Tuzi GPT request uses Tuzi adapter
 
-- **GIVEN** a provider profile resolves image API compatibility to `tuzi-compatible`
+- **GIVEN** a provider profile resolves image API compatibility to `tuzi-gpt-image`
 - **AND** the selected model is a GPT Image model
-- **AND** the request includes reference images
+- **WHEN** the image task is executed
+- **THEN** the request SHALL be handled by the dedicated Tuzi GPT Image adapter
+- **AND** SHALL NOT rely on GPT-specific translation logic inside the generic default adapter
+
+### Requirement: Preserve Generic Basic Compatibility
+
+The system SHALL preserve the default adapter behavior only for generic OpenAI-compatible image gateways that resolve to the basic compatibility mode.
+
+#### Scenario: Generic compatibility stays basic
+
+- **GIVEN** a provider profile resolves image API compatibility to `openai-compatible-basic`
 - **WHEN** the image task is executed
 - **THEN** the request SHALL remain eligible for the default adapter
-- **AND** SHALL NOT require the official GPT Image edit schema
-

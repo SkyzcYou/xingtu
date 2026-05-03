@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TaskStatus, TaskType } from '../../types/task.types';
+import {
+  TaskExecutionPhase,
+  TaskStatus,
+  TaskType,
+} from '../../types/task.types';
 import type { Task } from '../../types/task.types';
 
 function clone<T>(value: T): T {
@@ -109,10 +113,79 @@ async function setupTaskQueueServiceHarness(statusSequence: TaskStatus[]) {
 
   vi.doMock('../../utils/settings-manager', () => ({
     hasInvocationRouteCredentials: vi.fn(() => true),
+    createModelRef: (profileId?: string | null, modelId?: string | null) =>
+      profileId || modelId
+        ? {
+            profileId: profileId || null,
+            modelId: modelId || null,
+          }
+        : null,
+    resolveInvocationRoute: vi.fn((operation: string, routeModel?: any) => ({
+      routeType: operation,
+      modelId:
+        typeof routeModel === 'string'
+          ? routeModel
+          : routeModel?.modelId || 'default-model',
+      profileId:
+        typeof routeModel === 'object' ? routeModel?.profileId || null : null,
+      profileName: null,
+      providerType: null,
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'test-key',
+      source: 'legacy',
+    })),
+    providerProfilesSettings: {
+      get: vi.fn(() => []),
+    },
     providerPricingCacheSettings: {
       get: vi.fn(() => []),
       set: vi.fn(),
     },
+  }));
+
+  vi.doMock('../provider-routing', () => ({
+    resolveInvocationPlanFromRoute: vi.fn(
+      (operation: string, routeModel?: any) => {
+        const profileId =
+          typeof routeModel === 'object' ? routeModel?.profileId : null;
+        if (!profileId) {
+          return null;
+        }
+
+        const modelId =
+          typeof routeModel === 'string'
+            ? routeModel
+            : routeModel?.modelId || 'default-model';
+        return {
+          provider: {
+            profileId,
+            profileName: profileId,
+            providerType: 'custom',
+            baseUrl: 'https://api.example.com/v1',
+            apiKey: 'test-key',
+            authType: 'bearer',
+          },
+          modelRef: {
+            profileId,
+            modelId,
+          },
+          binding: {
+            id: `${profileId}:${modelId}:${operation}`,
+            profileId,
+            modelId,
+            operation,
+            protocol: 'openai.async.video',
+            requestSchema: 'openai.video.form-input-reference',
+            responseSchema: 'openai.async.task',
+            submitPath: '/videos',
+            pollPathTemplate: '/videos/{taskId}',
+            priority: 100,
+            confidence: 'high',
+            source: 'template',
+          },
+        };
+      }
+    ),
   }));
 
   vi.doMock('../../utils/posthog-analytics', () => ({
@@ -446,6 +519,93 @@ describe('task-queue-service image edit retry persistence', () => {
       'https://example.com/storage-result.png'
     );
     expect(taskQueueService.getTask(task.id)?.insertedToCanvas).toBe(true);
+
+    subscription.unsubscribe();
+  });
+
+  it('persists invocation route for externally tracked video tasks', async () => {
+    const { taskQueueService, storedTasks } =
+      await setupTaskQueueServiceHarness([TaskStatus.COMPLETED]);
+    const task: Task = {
+      id: 'task-video-route-1',
+      type: TaskType.VIDEO,
+      status: TaskStatus.PROCESSING,
+      remoteId: 'remote-video-1',
+      executionPhase: TaskExecutionPhase.POLLING,
+      params: {
+        prompt: 'Resume original provider',
+        model: 'happyhorse-1.0-t2v',
+        modelRef: {
+          profileId: 'happyhorse-profile',
+          modelId: 'happyhorse-1.0-t2v',
+        },
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    taskQueueService.trackExternalTask(clone(task));
+    await flushAsyncWork();
+
+    const stored = storedTasks.get(task.id);
+    expect(stored?.remoteId).toBe('remote-video-1');
+    expect(stored?.executionPhase).toBe('polling');
+    expect(stored?.params.modelRef).toEqual({
+      profileId: 'happyhorse-profile',
+      modelId: 'happyhorse-1.0-t2v',
+    });
+    expect(stored?.invocationRoute).toMatchObject({
+      operation: 'video',
+      providerProfileId: 'happyhorse-profile',
+      modelId: 'happyhorse-1.0-t2v',
+      binding: {
+        id: 'happyhorse-profile:happyhorse-1.0-t2v:video',
+        pollPathTemplate: '/videos/{taskId}',
+      },
+    });
+  });
+
+  it('emits storage sync updates when invocation route changes', async () => {
+    const { taskQueueService } =
+      await setupTaskQueueServiceHarness([TaskStatus.COMPLETED]);
+    const task: Task = {
+      id: 'task-video-route-sync-1',
+      type: TaskType.VIDEO,
+      status: TaskStatus.PROCESSING,
+      params: {
+        prompt: 'Sync route',
+        model: 'happyhorse-1.0-t2v',
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const updatedTasks: Task[] = [];
+
+    taskQueueService.trackExternalTask(clone(task));
+    const subscription = taskQueueService
+      .observeTaskUpdates()
+      .subscribe((event) => {
+        if (event.type === 'taskUpdated') {
+          updatedTasks.push(event.task);
+        }
+      });
+
+    taskQueueService.syncTaskFromStorage(task.id, {
+      invocationRoute: {
+        operation: 'video',
+        providerProfileId: 'happyhorse-profile',
+        modelId: 'happyhorse-1.0-t2v',
+        binding: {
+          id: 'happyhorse-profile:happyhorse-1.0-t2v:video',
+          pollPathTemplate: '/videos/{taskId}',
+        },
+      },
+    });
+
+    expect(updatedTasks).toHaveLength(1);
+    expect(
+      taskQueueService.getTask(task.id)?.invocationRoute?.providerProfileId
+    ).toBe('happyhorse-profile');
 
     subscription.unsubscribe();
   });

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { HistoryIcon } from 'tdesign-icons-react';
 import { useI18n } from '../../i18n';
 import { HoverTip } from '../shared/hover';
+import { RetryImage } from '../retry-image';
 import './generation-history.scss';
 
 // 通用历史记录项接口
@@ -73,21 +74,21 @@ export const GenerationHistory: React.FC<GenerationHistoryProps> = ({
       >
         <div className="history-item-media">
           {item.type === 'image' ? (
-            <img
+            <RetryImage
               src={item.imageUrl}
               alt="History item"
               className="history-item-image"
-              loading="lazy"
+              showSkeleton={false}
             />
           ) : (
             // 视频类型，使用统一的 imageUrl 字段
             item.imageUrl ? (
               <div className="history-video-thumbnail">
-                <img
+                <RetryImage
                   src={item.imageUrl}
                   alt="Video history thumbnail"
                   className="history-item-image"
-                  loading="lazy"
+                  showSkeleton={false}
                 />
               </div>
 

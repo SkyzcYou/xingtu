@@ -858,9 +858,11 @@ export const PromptHistoryTool: React.FC<PromptHistoryToolProps> = ({
                                   preload="metadata"
                                 />
                               ) : (
-                                <img
+                                <RetryImage
                                   src={item.posterUrl || item.url}
                                   alt={item.title || record.title}
+                                  showSkeleton={false}
+                                  eager
                                 />
                               )
                             }

@@ -757,7 +757,7 @@ function renderBoardFilePreview(data, decryptFailed) {
  * Render tasks file preview (tasks.json)
  */
 function renderTasksFilePreview(data, decryptFailed) {
-  const tasks = data.completedTasks || (Array.isArray(data) ? data : []);
+  const tasks = Array.isArray(data?.completedTasks) ? data.completedTasks : [];
   const taskCount = tasks.length;
 
   // Count by type
@@ -1278,9 +1278,6 @@ async function compareTasksData(gist) {
       const tasksData = await parseGistFile(gist.files['tasks.json']); // TasksData 结构: { completedTasks: Task[] }
       if (tasksData && Array.isArray(tasksData.completedTasks)) {
         remoteTasks = tasksData.completedTasks;
-      } else if (Array.isArray(tasksData)) {
-        // 兼容旧格式（直接数组）
-        remoteTasks = tasksData;
       }
     }
     const remoteTaskMap = new Map(remoteTasks.map((t) => [t.id, t]));
@@ -1997,9 +1994,6 @@ async function debugPreviewTaskMerge() {
       );
       if (tasksData && Array.isArray(tasksData.completedTasks)) {
         remoteTasks = tasksData.completedTasks;
-      } else if (Array.isArray(tasksData)) {
-        // 兼容旧格式
-        remoteTasks = tasksData;
       }
     }
     debugLog('info', `远程任务: ${remoteTasks.length} 个`);
@@ -2086,9 +2080,6 @@ async function debugImportRemoteTasks() {
       // TasksData 结构: { completedTasks: Task[] }
       if (tasksData && Array.isArray(tasksData.completedTasks)) {
         remoteTasks = tasksData.completedTasks;
-      } else if (Array.isArray(tasksData)) {
-        // 兼容旧格式
-        remoteTasks = tasksData;
       }
     }
 

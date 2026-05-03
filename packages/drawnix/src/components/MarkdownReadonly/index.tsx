@@ -9,6 +9,7 @@ import {
   parseMarkdownImageAlt,
   parseMarkdownImageTitle,
 } from '../../utils/markdown-image-blocks';
+import { RetryImage } from '../retry-image';
 import './MarkdownReadonly.css';
 
 export interface MarkdownReadonlyProps {
@@ -1071,14 +1072,13 @@ function MarkdownReadonlyImage({
   }
 
   return (
-    <img
+    <RetryImage
       className="markdown-readonly__image"
       src={safeSrc}
       alt={normalizedAlt}
       title={titleText}
-      loading="lazy"
-      decoding="async"
       style={style}
+      showSkeleton={false}
     />
   );
 }
@@ -1129,14 +1129,13 @@ function MarkdownReadonlyAssetImage({
   }
 
   return (
-    <img
+    <RetryImage
       className="markdown-readonly__image"
       src={safeSrc}
       alt={alt || asset.name || '素材图片'}
       title={title}
-      loading="lazy"
-      decoding="async"
       style={style}
+      showSkeleton={false}
     />
   );
 }

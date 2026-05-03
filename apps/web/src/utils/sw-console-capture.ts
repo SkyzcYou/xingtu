@@ -52,6 +52,16 @@ const originalConsole = {
   debug: console.debug,
 };
 
+function isExpectedFilePickerAbortMessage(message: string): boolean {
+  return (
+    (message.includes('AbortError') ||
+      message.includes('The user aborted a request')) &&
+    (message.includes("Failed to execute 'showOpenFilePicker'") ||
+      message.includes("Failed to execute 'showSaveFilePicker'") ||
+      message.includes('The user aborted a request'))
+  );
+}
+
 /**
  * 发送日志到 Service Worker
  */
@@ -70,6 +80,10 @@ function sendToSW(level: string, message: string, stack?: string) {
 
   // 过滤监控服务相关的错误（PostHog）
   if (message.includes('posthog.com') || (stack && stack.includes('posthog'))) {
+    return;
+  }
+
+  if (isExpectedFilePickerAbortMessage(message)) {
     return;
   }
 
@@ -303,6 +317,9 @@ export function initSWConsoleCapture(): void {
   // 监听全局错误
   window.addEventListener('error', (event) => {
     const message = `${event.message} at ${event.filename}:${event.lineno}:${event.colno}`;
+    if (isExpectedFilePickerAbortMessage(message)) {
+      return;
+    }
     sendToSW('error', message, event.error?.stack || '');
   });
 
@@ -314,6 +331,9 @@ export function initSWConsoleCapture(): void {
         ? reason.message
         : `Unhandled Promise: ${String(reason)}`;
     const stack = reason instanceof Error ? reason.stack || '' : '';
+    if (isExpectedFilePickerAbortMessage(message)) {
+      return;
+    }
     sendToSW('error', message, stack);
   });
 

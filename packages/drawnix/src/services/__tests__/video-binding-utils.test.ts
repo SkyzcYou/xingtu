@@ -3,6 +3,7 @@ import { inferBindingsForProviderModel } from '../provider-routing';
 import {
   getEffectiveVideoCompatibleParams,
   getEffectiveVideoModelConfig,
+  resolveVideoPollPath,
   resolveVideoSubmission,
   shouldDownloadVideoContent,
 } from '../video-binding-utils';
@@ -57,6 +58,29 @@ describe('video binding utils', () => {
     expect(submission.model).toBe('sora-2-4s');
     expect(submission.duration).toBeUndefined();
     expect(submission.durationField).toBe('seconds');
+  });
+
+  it('resolves provider poll path templates with task id and params', () => {
+    expect(
+      resolveVideoPollPath(
+        'remote/task 1',
+        {
+          id: 'provider-kling:kling_video:video',
+          profileId: 'provider-kling',
+          modelId: 'kling_video',
+          operation: 'video',
+          protocol: 'kling.video',
+          requestSchema: 'kling.video.json',
+          responseSchema: 'kling.video.task',
+          submitPath: '/kling/v1/videos/{action}',
+          pollPathTemplate: '/kling/v1/videos/{action}/{taskId}',
+          priority: 100,
+          confidence: 'high',
+          source: 'template',
+        },
+        { action: 'text2video' }
+      )
+    ).toBe('/kling/v1/videos/text2video/remote%2Ftask%201');
   });
 
   it('rejects unsupported Sora durations for official OpenAI bindings', () => {

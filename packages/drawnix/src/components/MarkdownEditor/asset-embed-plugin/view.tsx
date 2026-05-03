@@ -30,6 +30,7 @@ import {
   clampSizeByWidth,
   normalizeDimension,
 } from '../media-size-utils';
+import { RetryImage } from '../../retry-image';
 import { VideoPosterPreview } from '../../shared/VideoPosterPreview';
 import { assetEmbedSchema } from './schema';
 
@@ -287,10 +288,12 @@ const AssetEmbedView: React.FC<AssetEmbedViewProps> = ({
 
   if (asset.type === AssetType.IMAGE) {
     return (
-      <img
+      <RetryImage
         className="collimind-asset-embed__image"
         src={normalizeImageDataUrl(asset.url)}
         alt={label || asset.name || '素材图片'}
+        showSkeleton={false}
+        eager
       />
     );
   }

@@ -58,6 +58,7 @@ function executeQueue(params: VideoAnalyzeParams): MCPResult & { taskId?: string
       videoAnalyzerSource: params.videoAnalyzerSource,
       videoAnalyzerSourceLabel: params.videoAnalyzerSourceLabel,
       videoAnalyzerSourceSnapshot: params.videoAnalyzerSourceSnapshot,
+      videoAnalyzerProductInfo: params.videoAnalyzerProductInfo,
       knowledgeContextRefs: params.knowledgeContextRefs,
       autoInsertToCanvas: false,
     },
@@ -125,6 +126,10 @@ export const videoAnalyzeTool: MCPTool = {
       videoAnalyzerAction: {
         type: 'string',
         description: '视频工具动作：analyze 或 prompt-generate',
+      },
+      videoAnalyzerProductInfo: {
+        type: 'object',
+        description: '提示词生成时的画面风格、视频模型、单段时长等表单参数',
       },
       model: {
         type: 'string',

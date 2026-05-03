@@ -1,7 +1,7 @@
 import { getSelectedElements, PlaitBoard } from '@plait/core';
 import { base64ToBlob, download } from '@aitu/utils';
 import { boardToImage } from './common';
-import { fileOpen } from '../data/filesystem';
+import { fileOpen, isFileSystemAbortError } from '../data/filesystem';
 import { IMAGE_MIME_TYPES } from '../constants';
 import { insertImage } from '../data/image';
 import { MessagePlugin } from './message-plugin';
@@ -127,7 +127,7 @@ export const addImage = async (board: PlaitBoard) => {
     });
     insertImage(board, imageFile);
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (isFileSystemAbortError(error)) {
       return;
     }
     throw error;

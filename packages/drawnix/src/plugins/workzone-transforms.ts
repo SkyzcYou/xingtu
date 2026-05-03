@@ -1,5 +1,5 @@
 import type { PlaitBoard } from '@plait/core';
-import { PlaitHistoryBoard, Transforms } from '@plait/core';
+import { PlaitHistoryBoard, RectangleClient, Transforms } from '@plait/core';
 import type {
   PlaitWorkZone,
   WorkZoneCreateOptions,
@@ -8,6 +8,22 @@ import { DEFAULT_WORKZONE_SIZE } from '../types/workzone.types';
 
 export function isWorkZoneElement(element: any): element is PlaitWorkZone {
   return element && element.type === 'workzone';
+}
+
+export function getWorkZoneRenderScale(element: PlaitWorkZone): number {
+  return Number.isFinite(element.zoom) && element.zoom > 0
+    ? 1 / element.zoom
+    : 1;
+}
+
+export function getWorkZoneVisualRectangle(element: PlaitWorkZone) {
+  const rect = RectangleClient.getRectangleByPoints(element.points);
+  const scale = getWorkZoneRenderScale(element);
+  return {
+    ...rect,
+    width: rect.width * scale,
+    height: rect.height * scale,
+  };
 }
 
 function generateId(): string {

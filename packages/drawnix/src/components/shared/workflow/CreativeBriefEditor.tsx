@@ -8,17 +8,25 @@ import {
   type CreativeBrief,
   type CreativeBriefWorkflow,
 } from './creative-brief';
+import {
+  VISUAL_STYLE_OPTIONS,
+  VISUAL_STYLE_PLACEHOLDER,
+} from './style-presets';
 
 export interface CreativeBriefEditorProps {
   value?: CreativeBrief | null;
   onChange: (value: CreativeBrief) => void;
   workflow?: CreativeBriefWorkflow;
+  videoStyle?: string;
+  onVideoStyleChange?: (value: string) => void;
 }
 
 export const CreativeBriefEditor: React.FC<CreativeBriefEditorProps> = ({
   value,
   onChange,
   workflow = 'popular_video',
+  videoStyle,
+  onVideoStyleChange,
 }) => {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const brief = useMemo(() => value || {}, [value]);
@@ -82,6 +90,18 @@ export const CreativeBriefEditor: React.FC<CreativeBriefEditorProps> = ({
           placeholder="选择叙事结构或编剧风格"
         />
       </div>
+      {onVideoStyleChange && (
+        <div className="va-brief-field">
+          <label className="va-edit-label">画面风格</label>
+          <ComboInput
+            className="va-style-combo"
+            value={videoStyle || ''}
+            onChange={onVideoStyleChange}
+            options={VISUAL_STYLE_OPTIONS}
+            placeholder={VISUAL_STYLE_PLACEHOLDER}
+          />
+        </div>
+      )}
       {advancedOpen && (
         <div className="va-creative-brief-advanced">
           <div className="va-form-row">

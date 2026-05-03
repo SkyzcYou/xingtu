@@ -37,9 +37,17 @@ describe('mv-creator utils', () => {
     expect(prompt).toContain('创作 Brief');
     expect(prompt).toContain('视频用途/场景：品牌广告');
     expect(prompt).toContain('歌词画面化和段落推进');
+    expect(prompt).toContain('完整服装款式、服装颜色、材质和配饰');
+    expect(prompt).toContain('不得重新设计衣服');
+    expect(prompt).toContain('非空时必须沿用同一人物和同一套服装');
+    expect(prompt).toContain('原创性与合规要求');
   });
 
   it('injects creative brief into MV rewrite prompt', () => {
+    const characterShot: VideoShot = {
+      ...shot,
+      character_ids: ['char_1'],
+    };
     const record: MVRecord = {
       id: 'mv_1',
       createdAt: 1,
@@ -47,6 +55,13 @@ describe('mv-creator utils', () => {
       starred: false,
       selectedClipDuration: 8,
       videoStyle: '霓虹',
+      characters: [
+        {
+          id: 'char_1',
+          name: '主角',
+          description: 'young woman with short black hair, wearing a silver jacket',
+        },
+      ],
       creativeBrief: {
         directorStyle: 'MV 视觉导演',
         narrativeStyle: '歌词画面化',
@@ -56,7 +71,7 @@ describe('mv-creator utils', () => {
 
     const prompt = buildMVScriptRewritePrompt({
       record,
-      currentShots: [shot],
+      currentShots: [characterShot],
       rewritePrompt: '更强烈一点',
       videoModel: 'veo3',
       segmentDuration: 8,
@@ -65,6 +80,10 @@ describe('mv-creator utils', () => {
     expect(prompt).toContain('创作 Brief');
     expect(prompt).toContain('导演风格：MV 视觉导演');
     expect(prompt).toContain('节奏策略：音乐驱动，随节拍切镜');
+    expect(prompt).toContain('同一人物、同一发型、同一套衣服');
+    expect(prompt).toContain('只改变结尾姿态、表情、动作、镜头角度或环境');
+    expect(prompt).toContain('"video_style"');
+    expect(prompt).toContain('原创性与合规要求');
   });
 
   it('formats creative brief in MV markdown', () => {

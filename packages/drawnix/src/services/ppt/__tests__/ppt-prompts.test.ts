@@ -108,6 +108,21 @@ describe('ppt prompts style consistency', () => {
     expect(outline.pages[0].layout).toBe('cover');
   });
 
+  it('skips thinking JSON before the real outline', () => {
+    const outline = parseOutlineResponse(`<think>{"title":"草稿","pages":"not array"}</think>
+最终：
+{
+  "title": "发布计划",
+  "pages": [
+    { "layout": "cover", "title": "发布计划" },
+    { "layout": "ending", "title": "谢谢" }
+  ]
+}`);
+
+    expect(outline.title).toBe('发布计划');
+    expect(outline.pages).toHaveLength(2);
+  });
+
   it('normalizes common AI outline aliases from PPT generation responses', () => {
     const outline = parseOutlineResponse(
       JSON.stringify({

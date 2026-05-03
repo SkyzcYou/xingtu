@@ -11,6 +11,7 @@ import {
 } from '../utils/settings-manager';
 import { validateAndEnsureConfig } from '../utils/gemini-api/auth';
 import type { GeminiConfig } from '../utils/gemini-api/types';
+import { collectJsonSources } from '../utils/llm-json-extractor';
 import { resolveInvocationPlanFromRoute } from './provider-routing';
 
 /**
@@ -50,21 +51,9 @@ export async function buildGenerateContentConfig(
  * 从文本中提取顶层 JSON 对象
  */
 export function extractJsonObjects(text: string): string[] {
-  const results: string[] = [];
-  let depth = 0;
-  let start = -1;
-
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === '{') {
-      if (depth === 0) start = i;
-      depth++;
-    } else if (text[i] === '}') {
-      depth--;
-      if (depth === 0 && start >= 0) {
-        results.push(text.slice(start, i + 1));
-        start = -1;
-      }
-    }
+  try {
+    return collectJsonSources(text, { kinds: ['object'] });
+  } catch {
+    return [];
   }
-  return results;
 }

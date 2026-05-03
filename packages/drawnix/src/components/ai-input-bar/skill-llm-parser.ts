@@ -14,7 +14,7 @@ import type { SkillDSLVariables, SkillParseResult } from './skill-dsl.types';
 import { defaultGeminiClient } from '../../utils/gemini-api';
 import { geminiSettings } from '../../utils/settings-manager';
 import { mcpRegistry } from '../../mcp/registry';
-import { cleanLLMResponse } from '../../services/agent/tool-parser';
+import { extractJsonObject } from '../../utils/llm-json-extractor';
 
 /**
  * 构建 LLM 解析的 System Prompt
@@ -141,27 +141,19 @@ export class SkillLLMParser {
         return null;
       }
 
-      // 清理 LLM 响应（去除 markdown 代码块等）
-      const cleaned = cleanLLMResponse(fullResponse);
-
       // 尝试解析 JSON
-      let parsed: unknown;
+      let parsed: { steps?: unknown[] };
       try {
-        // 先尝试直接解析
-        parsed = JSON.parse(cleaned);
+        parsed = extractJsonObject<{ steps?: unknown[] }>(
+          fullResponse,
+          value => {
+            const steps = (value as { steps?: unknown }).steps;
+            return Array.isArray(steps) && validateSteps(steps);
+          }
+        );
       } catch {
-        // 尝试提取 JSON 块
-        const jsonMatch = cleaned.match(/\{[\s\S]*"steps"[\s\S]*\}/);
-        if (!jsonMatch) {
-          console.warn('[SkillLLMParser] 无法从 LLM 响应中提取 JSON');
-          return null;
-        }
-        try {
-          parsed = JSON.parse(jsonMatch[0]);
-        } catch {
-          console.warn('[SkillLLMParser] JSON 解析失败');
-          return null;
-        }
+        console.warn('[SkillLLMParser] 无法从 LLM 响应中提取 JSON');
+        return null;
       }
 
       // 验证格式

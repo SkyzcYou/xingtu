@@ -4,10 +4,15 @@
 
 import type { Task } from '../../types/task.types';
 import { TaskType } from '../../types/task.types';
+import {
+  collectJsonObjects,
+  extractJsonArray,
+  extractJsonObject,
+} from '../../utils/llm-json-extractor';
 import type { MVRecord, VideoShot, VideoCharacter } from './types';
 import { loadRecords, updateRecord } from './storage';
 import { addStoryboardVersionToRecord, createStoryboardVersion } from './utils';
-import { parseRewriteShotUpdates, applyRewriteShotUpdates } from '../video-analyzer/utils';
+import { parseScriptRewriteResponse } from '../video-analyzer/utils';
 import {
   extractBatchRecordId,
   readTaskAction,
@@ -28,62 +33,80 @@ export function isMVCreatorTask(task: Task): boolean {
 }
 
 function parseStoryboardResult(task: Task): { shots: VideoShot[]; characters: VideoCharacter[] } {
-  let chatResponse = readTaskChatResponse(task);
+  const chatResponse = readTaskChatResponse(task);
   if (!chatResponse) throw new Error('分镜任务缺少结果内容');
 
-  const codeBlockMatch = chatResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (codeBlockMatch) {
-    chatResponse = codeBlockMatch[1].trim();
-  }
-
   // 尝试新格式：{ characters: [...], shots: [...] }
-  const objMatch = chatResponse.match(/\{[\s\S]*\}/);
-  if (objMatch) {
-    try {
-      const parsed = JSON.parse(objMatch[0]);
-      if (Array.isArray(parsed.shots)) {
-        const shots = (parsed.shots as VideoShot[]).map((s, i) => ({
-          ...s,
-          id: s.id || `shot_${i + 1}`,
-        }));
-        const characters = Array.isArray(parsed.characters) ? parsed.characters as VideoCharacter[] : [];
-        return { shots, characters };
-      }
-    } catch { /* fall through */ }
+  try {
+    const parsed = extractJsonObject<{
+      shots?: VideoShot[];
+      characters?: VideoCharacter[];
+    }>(
+      chatResponse,
+      value => Array.isArray((value as { shots?: unknown }).shots)
+    );
+    const shots = (parsed.shots || []).map((s, i) => ({
+      ...s,
+      id: s.id || `shot_${i + 1}`,
+    }));
+    const characters = Array.isArray(parsed.characters) ? parsed.characters : [];
+    return { shots, characters };
+  } catch {
+    // Fall through to legacy array-only contract.
   }
 
   // 纯 JSON 数组
-  const arrMatch = chatResponse.match(/\[[\s\S]*\]/);
-  if (arrMatch) {
-    try {
-      const shots = (JSON.parse(arrMatch[0]) as VideoShot[]).map((s, i) => ({
-        ...s,
-        id: s.id || `shot_${i + 1}`,
-      }));
-      return { shots, characters: [] };
-    } catch { /* fall through to partial extraction */ }
+  try {
+    const shots = extractJsonArray<VideoShot>(
+      chatResponse,
+      value => Array.isArray(value) && value.some(item => item && typeof item === 'object')
+    ).map((s, i) => ({
+      ...s,
+      id: s.id || `shot_${i + 1}`,
+    }));
+    return { shots, characters: [] };
+  } catch {
+    // Fall through to partial extraction.
   }
 
   // 截断兜底：逐个提取完整的 JSON 对象
   const objects: VideoShot[] = [];
   const characters: VideoCharacter[] = [];
-  const objectPattern = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
-  let match: RegExpExecArray | null;
-  while ((match = objectPattern.exec(chatResponse)) !== null) {
-    try {
-      const obj = JSON.parse(match[0]);
-      if (obj && typeof obj === 'object') {
-        if (obj.id?.startsWith('char_') && obj.name && obj.description) {
-          characters.push(obj as VideoCharacter);
-        } else if (obj.id?.startsWith('shot_') || obj.startTime !== undefined) {
-          objects.push({ ...obj, id: obj.id || `shot_${objects.length + 1}` } as VideoShot);
-        }
-      }
-    } catch { /* skip */ }
+  const partialObjects = collectJsonObjects<Record<string, unknown>>(
+    chatResponse,
+    value => {
+      const obj = value as Record<string, unknown>;
+      return typeof obj.id === 'string' || obj.startTime !== undefined;
+    }
+  );
+  for (const obj of partialObjects) {
+    const id = typeof obj.id === 'string' ? obj.id : '';
+    if (id.startsWith('char_') && obj.name && obj.description) {
+      characters.push(obj as unknown as VideoCharacter);
+    } else if (id.startsWith('shot_') || obj.startTime !== undefined) {
+      objects.push({
+        ...obj,
+        id: id || `shot_${objects.length + 1}`,
+      } as unknown as VideoShot);
+    }
   }
 
   if (objects.length > 0) return { shots: objects, characters };
   throw new Error('响应中未找到有效 JSON（可能因输出过长被截断）');
+}
+
+function mergeCharactersPreservingReferences(
+  base: VideoCharacter[],
+  next: VideoCharacter[]
+): VideoCharacter[] {
+  const baseById = new Map(base.map(character => [character.id, character]));
+  return next.map(character => {
+    const previous = baseById.get(character.id);
+    return {
+      ...character,
+      referenceImageUrl: character.referenceImageUrl || previous?.referenceImageUrl,
+    };
+  });
 }
 
 export async function syncMVStoryboardTask(task: Task): Promise<{
@@ -106,7 +129,11 @@ export async function syncMVStoryboardTask(task: Task): Promise<{
   const version = createStoryboardVersion(
     shots,
     `AI 分镜 #${versionCount + 1}`,
-    (task.params as { prompt?: string }).prompt
+    (task.params as { prompt?: string }).prompt,
+    {
+      characters,
+      videoStyle: target.videoStyle,
+    }
   );
   const versionPatch = addStoryboardVersionToRecord(target, version);
 
@@ -134,56 +161,53 @@ export async function syncMVRewriteTask(task: Task): Promise<{
 
   const records = await loadRecords();
   const target = records.find(r => r.id === recordId);
-  if (!target || target.pendingRewriteTaskId !== task.id) return null;
+  if (!target) return null;
+  if (target.pendingRewriteTaskId !== task.id) {
+    if (
+      !target.pendingRewriteTaskId &&
+      target.storyboardGeneratedAt &&
+      (!task.completedAt || target.storyboardGeneratedAt >= task.completedAt)
+    ) {
+      return { records, record: target };
+    }
+    return null;
+  }
 
   const chatResponse = readTaskChatResponse(task);
-  if (!chatResponse) return null;
-
-  // 尝试解析 { characters, shots } 格式（改编可能同时更新角色）
-  let newShots: VideoShot[];
-  let updatedCharacters: VideoCharacter[] | null = null;
-
-  const objMatch = chatResponse.match(/\{[\s\S]*\}/);
-  if (objMatch) {
-    try {
-      const parsed = JSON.parse(objMatch[0]);
-      if (Array.isArray(parsed.shots)) {
-        newShots = parsed.shots.map((s: VideoShot, i: number) => ({
-          ...s,
-          id: s.id || `shot_${i + 1}`,
-        }));
-        if (Array.isArray(parsed.characters) && parsed.characters.length > 0) {
-          updatedCharacters = parsed.characters as VideoCharacter[];
-        }
-      } else {
-        const updates = parseRewriteShotUpdates(chatResponse);
-        const currentShots = target.editedShots || [];
-        newShots = applyRewriteShotUpdates(currentShots, updates);
-      }
-    } catch {
-      const updates = parseRewriteShotUpdates(chatResponse);
-      const currentShots = target.editedShots || [];
-      newShots = applyRewriteShotUpdates(currentShots, updates);
-    }
-  } else {
-    const updates = parseRewriteShotUpdates(chatResponse);
-    const currentShots = target.editedShots || [];
-    newShots = applyRewriteShotUpdates(currentShots, updates);
+  if (!chatResponse) {
+    return null;
   }
+
+  const currentShots = target.editedShots || [];
+  const rewriteResult = parseScriptRewriteResponse(chatResponse, currentShots);
+  const newShots = rewriteResult.shots;
+  const updatedCharacters = rewriteResult.characters;
+  const hasCharacters = rewriteResult.hasCharacters;
+  const updatedVideoStyle = rewriteResult.videoStyle;
 
   const versionCount = (target.storyboardVersions || []).length;
   const version = createStoryboardVersion(
     newShots,
     `AI 改编 #${versionCount + 1}`,
-    (task.params as { prompt?: string }).prompt
+    (task.params as { prompt?: string }).prompt,
+    {
+      characters: hasCharacters
+        ? mergeCharactersPreservingReferences(target.characters || [], updatedCharacters || [])
+        : target.characters || [],
+      videoStyle: updatedVideoStyle || target.videoStyle,
+    }
   );
   const versionPatch = addStoryboardVersionToRecord(target, version);
+  const nextCharacters = hasCharacters
+    ? mergeCharactersPreservingReferences(target.characters || [], updatedCharacters || [])
+    : undefined;
 
   return updateWorkflowRecord(target, {
     editedShots: newShots,
     pendingRewriteTaskId: null,
     storyboardGeneratedAt: Date.now(),
-    ...(updatedCharacters ? { characters: updatedCharacters } : {}),
+    ...(nextCharacters !== undefined ? { characters: nextCharacters } : {}),
+    ...(updatedVideoStyle ? { videoStyle: updatedVideoStyle } : {}),
     ...versionPatch,
   }, updateRecord);
 }

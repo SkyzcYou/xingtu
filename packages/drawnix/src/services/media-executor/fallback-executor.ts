@@ -67,6 +67,12 @@ import {
   executeVideoViaAdapter,
 } from './fallback-adapter-routes';
 import { IMAGE_GENERATION_TIMEOUT_MS } from '../../constants/TASK_CONSTANTS';
+import {
+  assertTaskInvocationRouteAvailable,
+  createTaskInvocationRouteSnapshot,
+  resolveLegacyTaskInvocationRouteModel,
+  shouldUseStrictTaskInvocationRoute,
+} from '../task-invocation-route';
 
 function inferAuthTypeFromRoute(
   route: ReturnType<typeof resolveInvocationRoute>
@@ -248,6 +254,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         {
           prompt,
           model: modelName,
+          modelRef: modelRef || null,
           size,
           referenceImages,
           assetMetadata: params.assetMetadata,
@@ -409,6 +416,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
     params: {
       prompt: string;
       model: string;
+      modelRef?: ImageGenerationParams['modelRef'];
       size?: string;
       referenceImages?: string[];
       assetMetadata?: ImageGenerationParams['assetMetadata'];
@@ -465,7 +473,14 @@ export class FallbackMediaExecutor implements IMediaExecutor {
           },
           onSubmitted: async (remoteId) => {
             // 保存 remoteId，用于页面刷新后恢复轮询
-            await taskStorageWriter.updateRemoteId(taskId, remoteId);
+            await taskStorageWriter.updateRemoteId(
+              taskId,
+              remoteId,
+              createTaskInvocationRouteSnapshot(
+                'image',
+                params.modelRef || params.model
+              )
+            );
           },
           signal: options?.signal,
         }
@@ -546,6 +561,10 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       duration,
       size = '1280x720',
     } = params;
+    const invocationRoute = createTaskInvocationRouteSnapshot(
+      'video',
+      modelRef || model
+    );
     const config = this.getConfig({ videoModel: modelRef || model });
     const startTime = Date.now();
     const durationEncodedInModel = (m?: string | null) =>
@@ -626,6 +645,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
 
       const videoApiConfig = {
         ...config.videoConfig,
+        params: params.params,
         defaultModel: 'veo3' as const,
       };
       const videoId = await submitVideoGeneration(
@@ -657,7 +677,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       });
 
       // 保存 remoteId，用于页面刷新后恢复轮询
-      await taskStorageWriter.updateRemoteId(taskId, videoId);
+      await taskStorageWriter.updateRemoteId(taskId, videoId, invocationRoute);
 
       options?.onProgress?.({ progress: 10, phase: 'polling' });
 
@@ -1144,7 +1164,12 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       return;
     }
 
-    const config = this.getConfig();
+    if (shouldUseStrictTaskInvocationRoute(task)) {
+      assertTaskInvocationRouteAvailable('video', task);
+    }
+    const routeModel = resolveLegacyTaskInvocationRouteModel('video', task);
+    const config = this.getConfig({ videoModel: routeModel });
+    config.videoConfig.params = (task.params as any).params;
     const videoId = task.remoteId!;
 
     // 标记为正在轮询

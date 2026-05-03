@@ -142,6 +142,24 @@ describe('comic-creator utils', () => {
     expect(payload.pages[2].title).toBe('第 3 页（待补全）');
   });
 
+  it('parses comic script JSON after model thinking text', () => {
+    const payload = parseComicScriptResponse(
+      `<think>{"pages":"draft"}</think>
+最终：
+{
+  "title": "原创科普漫画",
+  "commonPrompt": "明亮配色",
+  "pages": [
+    {"title": "第1页：开场", "script": "介绍主题", "prompt": "主角出现"}
+  ]
+}`,
+      1
+    );
+
+    expect(payload.title).toBe('原创科普漫画');
+    expect(payload.pages[0].title).toBe('开场');
+  });
+
   it('keeps structured prompt objects returned by the model', () => {
     const payload = parseComicScriptResponse(
       JSON.stringify({

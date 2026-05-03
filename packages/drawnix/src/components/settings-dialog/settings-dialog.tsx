@@ -11,7 +11,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
-import { MessagePlugin, Switch } from 'tdesign-react';
+import { Switch } from 'tdesign-react';
 import { InfoCircleIcon } from 'tdesign-icons-react';
 import {
   AlertTriangle,
@@ -29,7 +29,11 @@ import {
 } from 'lucide-react';
 import { LS_KEYS } from '../../constants/storage-keys';
 import { ModelDiscoveryDialog } from './model-discovery-dialog';
-import { useModelMeta } from '../../hooks/use-model-pricing';
+import { PricingFieldGroup } from './pricing-field-group';
+import {
+  useModelPriceText,
+  useModelMeta,
+} from '../../hooks/use-model-pricing';
 import {
   getDefaultAudioModel,
   getDefaultImageModel,
@@ -59,6 +63,7 @@ import {
   invocationPresetsSettings,
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
   providerProfilesSettings,
+  TUZI_BUSINESS_PROVIDER_PROFILE_ID,
   settingsManager,
   TUZI_MIX_PROVIDER_PROFILE_ID,
   TUZI_CODEX_PROVIDER_PROFILE_ID,
@@ -93,6 +98,7 @@ import {
 import { modelBenchmarkService } from '../../services/model-benchmark-service';
 import { HoverTip } from '../shared/hover';
 import { createProviderProfileDraft } from './provider-profile-draft';
+import { MessagePlugin } from '../../utils/message-plugin';
 
 export { IMAGE_MODEL_GROUPED_SELECT_OPTIONS as IMAGE_MODEL_GROUPED_OPTIONS } from '../../constants/model-config';
 export { VIDEO_MODEL_SELECT_OPTIONS as VIDEO_MODEL_OPTIONS } from '../../constants/model-config';
@@ -146,6 +152,22 @@ const MODEL_GROUP_LABELS: Record<ModelType, string> = {
   audio: '音频模型',
   text: '文本模型',
 };
+
+const ModelPriceLabel = memo(function ModelPriceLabel({
+  profileId,
+  modelId,
+}: {
+  profileId: string;
+  modelId: string;
+}) {
+  const { summary, detail } = useModelPriceText(profileId, modelId);
+  if (!summary) return null;
+  return (
+    <HoverTip content={detail} placement="top" disabled={detail === summary}>
+      <span className="settings-dialog__model-price">{summary}</span>
+    </HoverTip>
+  );
+});
 
 const ModelIdWithDesc = memo(function ModelIdWithDesc({
   profileId,
@@ -275,7 +297,7 @@ function resolveAutoImageApiCompatibilityForDisplay(
     return 'openai-gpt-image';
   }
 
-  if (normalizedBaseUrl.includes('api.tu-zi.com')) {
+  if (normalizedBaseUrl.includes('.tu-zi.com')) {
     return 'tuzi-gpt-image';
   }
 
@@ -402,6 +424,38 @@ function getProviderIconUrl(
   return trimmed || null;
 }
 
+function getProviderHomepageUrl(
+  profile: Pick<ProviderProfile, 'homepageUrl' | 'baseUrl'>
+): string | null {
+  const homepageUrl = normalizeOpenableUrl(profile.homepageUrl);
+  if (homepageUrl) {
+    return homepageUrl;
+  }
+
+  try {
+    const baseUrl = normalizeOpenableUrl(profile.baseUrl);
+    return baseUrl ? new URL(baseUrl).origin : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeOpenableUrl(value?: string | null): string | null {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const url = new URL(
+      /^[a-z][a-z\d+\-.]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+    );
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 function getProviderAvatarLabel(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) {
@@ -470,7 +524,8 @@ function isManagedProviderProfile(profileId: string): boolean {
     profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID ||
     profileId === TUZI_ORIGINAL_PROVIDER_PROFILE_ID ||
     profileId === TUZI_MIX_PROVIDER_PROFILE_ID ||
-    profileId === TUZI_CODEX_PROVIDER_PROFILE_ID
+    profileId === TUZI_CODEX_PROVIDER_PROFILE_ID ||
+    profileId === TUZI_BUSINESS_PROVIDER_PROFILE_ID
   );
 }
 
@@ -1377,13 +1432,7 @@ export const SettingsDialog = ({
     }
 
     if (hasPendingChanges) {
-      const savingMessage = MessagePlugin.loading('正在保存当前配置...', 0);
-      let saved = false;
-      try {
-        saved = await persistDrafts(false);
-      } finally {
-        MessagePlugin.close(savingMessage);
-      }
+      const saved = await persistDrafts(false);
       if (!saved) {
         return;
       }
@@ -1555,6 +1604,7 @@ export const SettingsDialog = ({
           ...profile,
           name: profile.name.trim() || '未命名供应商',
           iconUrl: profile.iconUrl?.trim() || undefined,
+          homepageUrl: profile.homepageUrl?.trim() || undefined,
           baseUrl: normalizedBaseUrl,
           apiKey: profile.apiKey.trim(),
         };
@@ -1759,13 +1809,7 @@ export const SettingsDialog = ({
     }
 
     void (async () => {
-      const savingMessage = MessagePlugin.loading('正在保存设置...', 0);
-      let saved = false;
-      try {
-        saved = await persistDrafts(true);
-      } finally {
-        MessagePlugin.close(savingMessage);
-      }
+      const saved = await persistDrafts(true);
 
       if (!saved) {
         MessagePlugin.warning('设置尚未保存，请检查后重试');
@@ -2002,6 +2046,7 @@ export const SettingsDialog = ({
     const draftState = getProviderDraftState(selectedProfile, initialProfiles);
     const totalModels =
       selectedCounts.image + selectedCounts.video + selectedCounts.text;
+    const selectedProfileHomepageUrl = getProviderHomepageUrl(selectedProfile);
 
     return (
       <div
@@ -2032,7 +2077,26 @@ export const SettingsDialog = ({
         ) : null}
         <div className="settings-dialog__section settings-dialog__section--compact">
           <div className="settings-dialog__panel-header">
-            <div className="settings-dialog__profile-hero">
+            <a
+              className={`settings-dialog__profile-hero ${
+                selectedProfileHomepageUrl
+                  ? 'settings-dialog__profile-hero--link'
+                  : ''
+              }`}
+              href={selectedProfileHomepageUrl || undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={
+                selectedProfileHomepageUrl
+                  ? `打开 ${selectedProfile.name} 域名页面`
+                  : undefined
+              }
+              onClick={(event) => {
+                if (!selectedProfileHomepageUrl) {
+                  event.preventDefault();
+                }
+              }}
+            >
               <ProviderAvatar profile={selectedProfile} size="large" />
               <div>
                 <h3 className="settings-dialog__section-title">
@@ -2047,7 +2111,7 @@ export const SettingsDialog = ({
                   <span>{draftState === 'saved' ? '已保存' : '未保存'}</span>
                 </div>
               </div>
-            </div>
+            </a>
             {!isManagedProviderProfile(selectedProfile.id) ? (
               <button
                 type="button"
@@ -2347,6 +2411,13 @@ export const SettingsDialog = ({
         </div>
 
 
+        <PricingFieldGroup
+          profile={selectedProfile}
+          onUpdateProfile={(updater) =>
+            updateProfile(selectedProfile.id, updater)
+          }
+        />
+
         {selectedProfile.id === LEGACY_DEFAULT_PROVIDER_PROFILE_ID ? (
           <div className="settings-dialog__section settings-dialog__section--compact">
             <div className="settings-dialog__compat-card">
@@ -2584,6 +2655,10 @@ export const SettingsDialog = ({
                               <span className="settings-dialog__model-type-item-vendor">
                                 {getDiscoveryVendorLabel(model.vendor)}
                               </span>
+                              <ModelPriceLabel
+                                profileId={selectedProfile!.id}
+                                modelId={model.id}
+                              />
                             </div>
                             <div className="settings-dialog__model-type-item-btns">
                               {(() => {

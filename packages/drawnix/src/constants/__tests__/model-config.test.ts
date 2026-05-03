@@ -30,12 +30,6 @@ describe('model-config image size options', () => {
     ).toEqual(expected);
   });
 
-  it('保留 gpt-image-1.5 的有限比例', () => {
-    expect(
-      getSizeOptionsForModel('gpt-image-1.5').map((option) => option.value)
-    ).toEqual(['auto', '1x1', '3x2', '2x3']);
-  });
-
   it('为 gpt-image-2 暴露分辨率和官方画质参数', () => {
     const params = getCompatibleParams('gpt-image-2');
     const qualityParams = params.filter((param) => param.id === 'quality');
@@ -54,10 +48,11 @@ describe('model-config image size options', () => {
     ]);
   });
 
-  it('将 gpt-image-1 归入旧版 GPT 尺寸集合', () => {
-    expect(
-      getSizeOptionsForModel('gpt-image-1').map((option) => option.value)
-    ).toEqual(['auto', '1x1', '3x2', '2x3']);
+  it('不再内置已下架的 GPT Image 旧模型', () => {
+    expect(getStaticModelConfig('gpt-image-1')).toBeUndefined();
+    expect(getStaticModelConfig('gpt-image-1.5')).toBeUndefined();
+    expect(getCompatibleParams('gpt-image-1')).toEqual([]);
+    expect(getCompatibleParams('gpt-image-1.5')).toEqual([]);
   });
 
   it('保留 Gemini preview 的旧 quality 档位参数', () => {

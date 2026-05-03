@@ -92,6 +92,22 @@ describe('task-sync-utils', () => {
     })).toEqual({ value: 'chat' });
   });
 
+  it('extracts chat json from model thinking text', () => {
+    const task = createTask({
+      result: {
+        url: '',
+        format: 'json',
+        size: 1,
+        chatResponse: '<think>{"value":"draft"}</think>\n最终：{"value":"chat"}',
+      },
+    });
+
+    expect(parseStructuredOrChatJson(task, {
+      missingMessage: 'missing',
+      fromStructured: (structured) => structured as { value: string },
+    })).toEqual({ value: 'chat' });
+  });
+
   it('throws when both structured and chat json are missing', () => {
     expect(() => parseStructuredOrChatJson(createTask(), {
       missingMessage: '缺少结果',

@@ -54,7 +54,11 @@ describe('workflow-generation-utils', () => {
       generated_first_frame_url: undefined,
       generated_last_frame_url: undefined,
       generated_video_url: undefined,
-      suppressed_generated_urls: undefined,
+      suppressed_generated_urls: {
+        first: 'first-url',
+        last: 'last-url',
+        video: 'video-url',
+      },
     }]);
   });
 
@@ -95,7 +99,9 @@ describe('workflow-generation-utils', () => {
         generated_first_frame_url: undefined,
         generated_last_frame_url: undefined,
         generated_video_url: undefined,
-        suppressed_generated_urls: undefined,
+        suppressed_generated_urls: {
+          video: 'video-url',
+        },
       }],
       characters: [{
         ...characters[0],

@@ -21,6 +21,7 @@ import { providerTransport } from '../provider-routing/provider-transport';
 import {
   downloadVideoContentToLocalUrl,
   extractInlineVideoUrl,
+  resolveVideoPollPath,
   resolveVideoSubmission,
   shouldDownloadVideoContent,
 } from '../video-binding-utils';
@@ -147,7 +148,7 @@ export async function queryVideoStatus(
   const providerContext = buildProviderContextFromApiConfig(config, baseUrl);
 
   const response = await providerTransport.send(providerContext, {
-    path: `/v1/videos/${videoId}`,
+    path: resolveVideoPollPath(videoId, config.binding, config.params),
     baseUrlStrategy: config.binding?.baseUrlStrategy,
     method: 'GET',
     signal,
@@ -194,7 +195,7 @@ export async function pollVideoUntilComplete(
 
     try {
       const response = await providerTransport.send(providerContext, {
-        path: `/v1/videos/${videoId}`,
+        path: resolveVideoPollPath(videoId, config.binding, config.params),
         baseUrlStrategy: config.binding?.baseUrlStrategy,
         signal,
         fetcher: fetchFn,

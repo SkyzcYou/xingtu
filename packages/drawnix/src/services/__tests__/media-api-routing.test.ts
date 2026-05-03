@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  generateImageAsync,
   generateImageSync,
   resumeAsyncImagePolling,
   submitVideoGeneration,
@@ -73,6 +74,73 @@ describe('media-api provider routing', () => {
 
     expect(result.url).toBe('https://cdn.example.com/final.png');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('submits async image reference images to /v1/videos as input_reference', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === 'data:image/png;base64,abc123') {
+        return new Response(new Blob(['ref'], { type: 'image/png' }), {
+          status: 200,
+        });
+      }
+
+      if (String(input) === 'https://gateway.example.com/v1/videos') {
+        expect(init?.body).toBeInstanceOf(FormData);
+        const formData = init?.body as FormData;
+        expect(formData.get('model')).toBe('gpt-image-2');
+        expect(formData.get('prompt')).toBe('edit with reference');
+        expect(formData.get('size')).toBe('1:1');
+        expect(formData.get('input_reference')).toBeInstanceOf(Blob);
+
+        return new Response(
+          JSON.stringify({
+            id: 'task-1',
+            status: 'completed',
+            progress: 100,
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      expect(String(input)).toBe('https://gateway.example.com/v1/videos/task-1');
+      return new Response(
+        JSON.stringify({
+          id: 'task-1',
+          status: 'completed',
+          url: 'https://cdn.example.com/final.png',
+          progress: 100,
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    });
+
+    const result = await generateImageAsync(
+      {
+        prompt: 'edit with reference',
+        model: 'gpt-image-2',
+        size: '1:1',
+        referenceImages: ['data:image/png;base64,abc123'],
+      },
+      {
+        apiKey: 'secret',
+        baseUrl: 'https://gateway.example.com/v1',
+        authType: 'bearer',
+        fetchImpl,
+      },
+      {
+        interval: 1,
+        maxAttempts: 1,
+      }
+    );
+
+    expect(result.url).toBe('https://cdn.example.com/final.png');
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
   it('uses bearer auth for shared video submission', async () => {

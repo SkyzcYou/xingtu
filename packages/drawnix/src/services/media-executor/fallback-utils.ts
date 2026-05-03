@@ -23,6 +23,7 @@ import {
 import {
   downloadVideoContentToLocalUrl,
   extractInlineVideoUrl,
+  resolveVideoPollPath,
   shouldDownloadVideoContent,
 } from '../video-binding-utils';
 
@@ -100,6 +101,11 @@ export async function pollVideoStatus(
     }
     let data: any;
     try {
+      const statusPath = resolveVideoPollPath(
+        videoId,
+        config.binding,
+        config.params
+      );
       const response = await providerTransport.send(
         config.provider || {
           profileId: 'runtime',
@@ -111,7 +117,7 @@ export async function pollVideoStatus(
           extraHeaders: config.extraHeaders,
         },
         {
-          path: '/videos/' + videoId,
+          path: statusPath,
           baseUrlStrategy: config.binding?.baseUrlStrategy,
           method: 'GET',
           signal,

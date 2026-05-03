@@ -75,6 +75,10 @@ function createPromptGenerateTask(
       },
       videoAnalyzerProductInfo: {
         prompt: '防滑拖鞋小红书爆款视频',
+        videoStyle: '电影感光影',
+        videoModel: 'happy-horse-1.0-r2v',
+        targetDuration: 30,
+        segmentDuration: 5,
         creativeBrief: {
           purpose: '口播种草',
         },
@@ -121,6 +125,10 @@ describe('video-analyzer task sync', () => {
       },
       productInfo: {
         prompt: '防滑拖鞋小红书爆款视频',
+        videoStyle: '电影感光影',
+        videoModel: 'happy-horse-1.0-r2v',
+        targetDuration: 30,
+        segmentDuration: 5,
         creativeBrief: {
           purpose: '口播种草',
         },
@@ -139,5 +147,205 @@ describe('video-analyzer task sync', () => {
 
     expect(syncedAgain?.records).toHaveLength(1);
     expect(syncedAgain?.record.id).toBe('record-prompt');
+  });
+
+  it('syncs rewritten shots with characters and bgm into the record', async () => {
+    const analysis = createAnalysis();
+    mockStore.records = [{
+      id: 'record-1',
+      createdAt: 1,
+      source: 'prompt',
+      sourceLabel: '旧脚本',
+      model: 'gemini',
+      analysis,
+      editedShots: analysis.shots,
+      productInfo: {
+        prompt: '改成原创追逐短片',
+        targetDuration: 8,
+        videoStyle: '旧风格',
+        bgmMood: '旧 BGM',
+      },
+      characters: [{
+        id: 'char_1',
+        name: '旧角色',
+        description: 'Old character',
+        referenceImageUrl: 'https://example.com/ref.png',
+      }],
+      pendingRewriteTaskId: 'task-rewrite',
+      starred: false,
+    }];
+
+    const task: Task = {
+      id: 'task-rewrite',
+      type: TaskType.CHAT,
+      status: TaskStatus.COMPLETED,
+      params: {
+        prompt: '改编脚本',
+        model: 'gemini',
+        videoAnalyzerAction: 'rewrite',
+        videoAnalyzerRecordId: 'record-1',
+      },
+      createdAt: 1,
+      updatedAt: 2,
+      completedAt: 3,
+      result: {
+        url: '',
+        format: 'md',
+        size: 10,
+        resultKind: 'chat',
+        chatResponse: JSON.stringify({
+          video_style: '原创 3D 动画',
+          bgm_mood: '紧张滑稽',
+          suggestion: '第3步保持原创角色和高速堵车视觉锚点',
+          characters: [{
+            id: 'char_1',
+            name: '原创角色',
+            description: 'A small original blue traveler with a red scarf.',
+          }],
+          shots: [{
+            ...analysis.shots[0],
+            description: '原创角色遇到堵车',
+            character_ids: ['char_1'],
+          }],
+        }),
+      },
+    };
+
+    const synced = await syncVideoAnalyzerTask(task);
+
+    expect(synced?.record.pendingRewriteTaskId).toBeNull();
+    expect(synced?.record.editedShots?.[0].description).toBe('原创角色遇到堵车');
+    expect(synced?.record.analysis.suggestion).toBe('第3步保持原创角色和高速堵车视觉锚点');
+    expect(synced?.record.characters).toEqual([{
+      id: 'char_1',
+      name: '原创角色',
+      description: 'A small original blue traveler with a red scarf.',
+      referenceImageUrl: 'https://example.com/ref.png',
+    }]);
+    expect(synced?.record.productInfo).toMatchObject({
+      videoStyle: '原创 3D 动画',
+      bgmMood: '紧张滑稽',
+    });
+    expect(synced?.record.scriptVersions?.[0]).toMatchObject({
+      label: 'AI 改编 #1',
+      characters: synced?.record.characters,
+      productInfo: expect.objectContaining({
+        bgmMood: '紧张滑稽',
+      }),
+    });
+  });
+
+  it('syncs structured rewrite analysis data with characters and style', async () => {
+    const analysis = createAnalysis();
+    mockStore.records = [{
+      id: 'record-1',
+      createdAt: 1,
+      source: 'prompt',
+      sourceLabel: '旧脚本',
+      model: 'gemini',
+      analysis,
+      editedShots: analysis.shots,
+      productInfo: {
+        prompt: '改成原创追逐短片',
+        targetDuration: 8,
+      },
+      pendingRewriteTaskId: 'task-rewrite',
+      starred: false,
+    }];
+
+    const task: Task = {
+      id: 'task-rewrite',
+      type: TaskType.CHAT,
+      status: TaskStatus.COMPLETED,
+      params: {
+        prompt: '改编脚本',
+        model: 'gemini',
+        videoAnalyzerAction: 'rewrite',
+        videoAnalyzerRecordId: 'record-1',
+      },
+      createdAt: 1,
+      updatedAt: 2,
+      completedAt: 3,
+      result: {
+        url: '',
+        format: 'md',
+        size: 10,
+        resultKind: 'chat',
+        chatResponse: '模型原文',
+        analysisData: {
+          editedShots: [{
+            ...analysis.shots[0],
+            description: '结构化改编镜头',
+            character_ids: ['char_1'],
+          }],
+          characters: [{
+            id: 'char_1',
+            name: '笨笨',
+            description: 'A chubby original creature.',
+          }],
+          video_style: '友好3D动画风格',
+          bgm_mood: '轻快滑稽',
+        },
+      },
+    };
+
+    const synced = await syncVideoAnalyzerTask(task);
+
+    expect(synced?.record.editedShots?.[0].description).toBe('结构化改编镜头');
+    expect(synced?.record.analysis.suggestion).toBe('');
+    expect(synced?.record.characters?.[0].name).toBe('笨笨');
+    expect(synced?.record.productInfo).toMatchObject({
+      videoStyle: '友好3D动画风格',
+      bgmMood: '轻快滑稽',
+    });
+  });
+
+  it('returns the already-synced rewrite record when another listener consumed the task first', async () => {
+    const analysis = createAnalysis();
+    mockStore.records = [{
+      id: 'record-1',
+      createdAt: 1,
+      source: 'prompt',
+      sourceLabel: '已同步脚本',
+      model: 'gemini',
+      analysis,
+      editedShots: [{
+        ...analysis.shots[0],
+        description: '已同步的新脚本',
+      }],
+      productInfo: {
+        prompt: '改成原创追逐短片',
+        targetDuration: 8,
+      },
+      pendingRewriteTaskId: null,
+      storyboardGeneratedAt: 5,
+      starred: false,
+    }];
+
+    const task: Task = {
+      id: 'task-rewrite',
+      type: TaskType.CHAT,
+      status: TaskStatus.COMPLETED,
+      params: {
+        prompt: '改编脚本',
+        model: 'gemini',
+        videoAnalyzerAction: 'rewrite',
+        videoAnalyzerRecordId: 'record-1',
+      },
+      createdAt: 1,
+      updatedAt: 2,
+      completedAt: 3,
+      result: {
+        url: '',
+        format: 'md',
+        size: 10,
+        resultKind: 'chat',
+        chatResponse: '{}',
+      },
+    };
+
+    const synced = await syncVideoAnalyzerTask(task);
+
+    expect(synced?.record.editedShots?.[0].description).toBe('已同步的新脚本');
   });
 });

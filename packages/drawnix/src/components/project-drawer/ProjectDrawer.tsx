@@ -750,8 +750,6 @@ const ProjectDrawerContent: React.FC<{
             handleContextMenu(e, 'board', board.id, board.name, board.folderId)
           }
         >
-          <span className="project-drawer-node__expand"></span>
-
           <span className="project-drawer-node__icon">
             <ArtboardIcon />
           </span>

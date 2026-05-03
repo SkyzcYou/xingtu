@@ -12,6 +12,7 @@ import {
   type ComicScriptPayload,
 } from './types';
 import { buildVisualStructuredPromptSchemaInstruction } from '../../utils/visual-structured-prompt-schema';
+import { extractJsonObject } from '../../utils/llm-json-extractor';
 
 export function sanitizeComicPageCount(value: unknown): number {
   const numericValue =
@@ -119,24 +120,6 @@ export function normalizeStructuredComicPrompt(value: string): string {
   return JSON.stringify(parseStructuredComicPrompt(value), null, 2);
 }
 
-function extractJsonObject(text: string): string {
-  const trimmed = String(text || '').trim();
-  if (!trimmed) {
-    throw new Error('响应为空，未找到有效 JSON');
-  }
-
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fencedMatch?.[1] || trimmed;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-
-  if (start < 0 || end <= start) {
-    throw new Error('响应中未找到有效 JSON');
-  }
-
-  return candidate.slice(start, end + 1);
-}
-
 function toCleanString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -193,9 +176,10 @@ export function parseComicScriptResponse(
   text: string,
   expectedPageCount?: unknown
 ): ComicScriptPayload {
-  const parsed = JSON.parse(
-    extractJsonObject(text)
-  ) as Partial<ComicScriptPayload>;
+  const parsed = extractJsonObject<Partial<ComicScriptPayload>>(
+    text,
+    value => Array.isArray((value as Partial<ComicScriptPayload>).pages)
+  );
   const requestedCount = sanitizeComicPageCount(expectedPageCount);
   const rawPages = Array.isArray(parsed.pages) ? parsed.pages : [];
   const pages = rawPages.slice(0, requestedCount).map((page, index) => ({

@@ -199,7 +199,7 @@ export const SkillDropdown: React.FC<SkillDropdownProps> = ({
       openKeys={['Enter', ' ', 'ArrowDown', 'ArrowUp']}
       onOpenKey={handleOpenKey}
     >
-      {({ containerRef, menuRef, portalPosition, handleTriggerKeyDown }) => (
+      {({ containerRef, menuRef, menuStyle, handleTriggerKeyDown }) => (
         <div className="skill-dropdown" ref={containerRef}>
           <HoverTip content={`Skill: ${selectedOption.name}`} showArrow={false}>
             <button
@@ -225,10 +225,8 @@ export const SkillDropdown: React.FC<SkillDropdownProps> = ({
                 ref={menuRef}
                 className={`skill-dropdown__menu ${ATTACHED_ELEMENT_CLASS_NAME}`}
                 style={{
-                  position: 'fixed',
+                  ...menuStyle,
                   zIndex: Z_INDEX.DROPDOWN_PORTAL,
-                  left: portalPosition.left,
-                  bottom: window.innerHeight - portalPosition.top + 8,
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}

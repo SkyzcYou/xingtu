@@ -21,6 +21,7 @@ import type { UploadedVideoImage } from '../../types/video.types';
 import type {
   AudioModelAdapter,
   AudioGenerationRequest,
+  AdapterContext,
   ImageModelAdapter,
   VideoModelAdapter,
   ImageGenerationRequest,
@@ -123,6 +124,17 @@ const toUploadedVideoImages = (
   }));
 };
 
+function shouldUseAsyncImageEndpoint(
+  context: AdapterContext,
+  model: string
+): boolean {
+  return (
+    isAsyncImageModel(model) ||
+    context.binding?.protocol === 'openai.async.media' ||
+    context.binding?.requestSchema === 'openai.async.image.form'
+  );
+}
+
 export const geminiImageAdapter: ImageModelAdapter = {
   id: 'gemini-image-adapter',
   label: 'Gemini Image',
@@ -141,16 +153,17 @@ export const geminiImageAdapter: ImageModelAdapter = {
   matchVendors: [ModelVendor.GEMINI],
   supportedModels: imageModelIds,
   defaultModel: DEFAULT_IMAGE_MODEL_ID,
-  async generateImage(_context, request: ImageGenerationRequest) {
+  async generateImage(context, request: ImageGenerationRequest) {
     const model = request.model || DEFAULT_IMAGE_MODEL_ID;
 
-    if (isAsyncImageModel(model)) {
+    if (shouldUseAsyncImageEndpoint(context, model)) {
       const result = await asyncImageAPIService.generateWithPolling(
         {
           model,
           modelRef: request.modelRef || null,
           prompt: request.prompt,
           size: request.size,
+          referenceImages: request.referenceImages,
         },
         {
           interval: 5000,

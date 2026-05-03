@@ -58,12 +58,31 @@ function inferProviderTypeFromBaseUrl(
     normalizedBaseUrl.includes('/openai') ||
     normalizedBaseUrl.endsWith('/v1') ||
     normalizedBaseUrl.includes('api.openai.com') ||
-    normalizedBaseUrl.includes('api.tu-zi.com')
+    isTuziBaseUrl(normalizedBaseUrl)
   ) {
     return 'openai-compatible';
   }
 
   return 'custom';
+}
+
+function isTuziBaseUrl(baseUrl: string): boolean {
+  const normalizedBaseUrl = baseUrl.trim().toLowerCase();
+  if (!normalizedBaseUrl) {
+    return false;
+  }
+
+  try {
+    const url = new URL(
+      /^[a-z][a-z\d+\-.]*:\/\//i.test(normalizedBaseUrl)
+        ? normalizedBaseUrl
+        : `https://${normalizedBaseUrl}`
+    );
+    const hostname = url.hostname.toLowerCase();
+    return hostname === 'tu-zi.com' || hostname.endsWith('.tu-zi.com');
+  } catch {
+    return false;
+  }
 }
 
 function inferAuthType(
@@ -167,9 +186,7 @@ function buildLegacyProfileSnapshot(): ProviderProfileSnapshot {
     .get()
     .find((profile) => profile.id === LEGACY_DEFAULT_PROVIDER_PROFILE_ID);
   const baseUrl = gemini.baseUrl?.trim() || TUZI_PROVIDER_DEFAULT_BASE_URL;
-  const legacyImageApiCompatibilityFallback = baseUrl
-    .toLowerCase()
-    .includes('api.tu-zi.com')
+  const legacyImageApiCompatibilityFallback = isTuziBaseUrl(baseUrl)
     ? LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY
     : DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY;
   const providerType =

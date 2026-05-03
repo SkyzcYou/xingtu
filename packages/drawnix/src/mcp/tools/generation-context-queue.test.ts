@@ -119,6 +119,12 @@ describe('generation queue knowledge context passthrough', () => {
       {
         prompt: '为新品生成爆款视频提示词',
         videoAnalyzerAction: 'prompt-generate',
+        videoAnalyzerProductInfo: {
+          prompt: '为新品生成爆款视频提示词',
+          videoStyle: '电影感光影',
+          videoModel: 'happy-horse-1.0-r2v',
+          segmentDuration: 5,
+        },
         knowledgeContextRefs: refs,
       },
       { mode: 'queue' }
@@ -129,6 +135,12 @@ describe('generation queue knowledge context passthrough', () => {
       params: {
         videoAnalyzerAction: 'prompt-generate',
         videoAnalyzerPrompt: '为新品生成爆款视频提示词',
+        videoAnalyzerProductInfo: {
+          prompt: '为新品生成爆款视频提示词',
+          videoStyle: '电影感光影',
+          videoModel: 'happy-horse-1.0-r2v',
+          segmentDuration: 5,
+        },
         knowledgeContextRefs: refs,
       },
     });

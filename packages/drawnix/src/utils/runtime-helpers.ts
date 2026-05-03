@@ -58,6 +58,50 @@ function canUseClipboardWrite(): boolean {
   }
 }
 
+function canUseFullscreen(): boolean {
+  if (document.fullscreenEnabled === false) {
+    return false;
+  }
+
+  const policyDocument = document as Document & {
+    permissionsPolicy?: { allowsFeature?: (feature: string) => boolean };
+    featurePolicy?: { allowsFeature?: (feature: string) => boolean };
+  };
+  const policy = policyDocument.permissionsPolicy || policyDocument.featurePolicy;
+
+  try {
+    return policy?.allowsFeature?.('fullscreen') !== false;
+  } catch {
+    return true;
+  }
+}
+
+export function requestFullscreenIfAllowed(
+  element: Element | null | undefined
+): Promise<void> | undefined {
+  if (!element || !canUseFullscreen()) {
+    return undefined;
+  }
+
+  try {
+    return element.requestFullscreen?.();
+  } catch {
+    return undefined;
+  }
+}
+
+export function exitFullscreenIfActive(): Promise<void> | undefined {
+  if (!document.fullscreenElement) {
+    return undefined;
+  }
+
+  try {
+    return document.exitFullscreen?.();
+  } catch {
+    return undefined;
+  }
+}
+
 export async function readFromClipboard(): Promise<string> {
   if (navigator.clipboard && navigator.clipboard.readText) {
     try {
