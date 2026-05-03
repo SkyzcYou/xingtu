@@ -66,6 +66,8 @@ export interface InspirationBoardProps {
   onOpenPromptTool?: () => void;
   /** 外部控制显示（可选） */
   visible?: boolean;
+  /** 可见状态变化回调 */
+  onVisibleChange?: (visible: boolean) => void;
   /** 自定义类名 */
   className?: string;
 }

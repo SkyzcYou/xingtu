@@ -26,21 +26,20 @@ export const InspirationBoard: React.FC<InspirationBoardProps> = ({
   onSelectPrompt,
   onOpenPromptTool,
   visible = true,
+  onVisibleChange,
   className = '',
 }) => {
   const [currentPage, setCurrentPage] = useState(0);
-  const [isHidden, setIsHidden] = useState(false);
+  const [isHidden, setIsHidden] = useState(
+    () => localStorage.getItem(HIDE_INSPIRATION_KEY) === 'true'
+  );
   const [viewMode, setViewMode] = useState<InspirationBoardView>('board');
   const [selectedTemplate, setSelectedTemplate] =
     useState<InspirationTemplate | null>(null);
 
-  // 组件加载时从 localStorage 读取用户设置
   useEffect(() => {
-    const hidePreference = localStorage.getItem(HIDE_INSPIRATION_KEY);
-    if (hidePreference === 'true') {
-      setIsHidden(true);
-    }
-  }, []);
+    onVisibleChange?.(isCanvasEmpty && visible && !isHidden);
+  }, [isCanvasEmpty, isHidden, onVisibleChange, visible]);
 
   // 计算总页数
   const totalPages = Math.ceil(INSPIRATION_TEMPLATES.length / ITEMS_PER_PAGE);
@@ -96,14 +95,18 @@ export const InspirationBoard: React.FC<InspirationBoardProps> = ({
   }, []);
 
   // 处理"不再提示"按钮点击
-  const handleHide = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setViewMode('board');
-    setSelectedTemplate(null);
-    setIsHidden(true);
-    localStorage.setItem(HIDE_INSPIRATION_KEY, 'true');
-  }, []);
+  const handleHide = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setViewMode('board');
+      setSelectedTemplate(null);
+      setIsHidden(true);
+      onVisibleChange?.(false);
+      localStorage.setItem(HIDE_INSPIRATION_KEY, 'true');
+    },
+    [onVisibleChange]
+  );
 
   const handleGuidePreviewClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

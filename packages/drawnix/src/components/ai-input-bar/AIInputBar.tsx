@@ -1043,6 +1043,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       useState(false);
     const [canPromptManuallyExpand, setCanPromptManuallyExpand] = useState(false);
     const [isCanvasEmpty, setIsCanvasEmpty] = useState<boolean | null>(null); // null=加载中, true=空, false=有内容
+    const [isInspirationBoardVisible, setIsInspirationBoardVisible] =
+      useState(false);
     // 当前选中的生成类型（图片、视频、Agent）
     const [generationType, setGenerationType] = useState<GenerationType>(
       initialGenerationType
@@ -4495,7 +4497,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             ATTACHED_ELEMENT_CLASS_NAME,
             className,
             {
-              'ai-input-bar--with-inspiration': showInspirationBoard,
+              'ai-input-bar--with-inspiration': isInspirationBoardVisible,
             }
           )}
           data-testid="ai-input-bar"
@@ -4513,6 +4515,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           isCanvasEmpty={showInspirationBoard}
           onSelectPrompt={handleSelectInspirationPrompt}
           onOpenPromptTool={handleOpenPromptToolFromInspiration}
+          onVisibleChange={setIsInspirationBoardVisible}
         />
 
         <div
