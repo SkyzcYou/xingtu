@@ -9,7 +9,10 @@ import { useBeforeUnload } from '../../hooks/useBeforeUnload';
 import { useProviderProfiles } from '../../hooks/use-provider-profiles';
 import { initializeAssetIntegration } from '../../services/asset-integration-service';
 import { fontManagerService } from '../../services/font-manager-service';
-import { modelPricingService } from '../../utils/model-pricing-service';
+import {
+  MODEL_PRICING_FEATURE_ENABLED,
+  modelPricingService,
+} from '../../utils/model-pricing-service';
 
 export interface DrawnixDeferredRuntimeProps {
   board: DrawnixBoard | null;
@@ -52,7 +55,7 @@ export function DrawnixDeferredRuntime({
   const providerProfiles = useProviderProfiles();
 
   useEffect(() => {
-    if (providerProfiles.length === 0) {
+    if (!MODEL_PRICING_FEATURE_ENABLED || providerProfiles.length === 0) {
       return;
     }
 

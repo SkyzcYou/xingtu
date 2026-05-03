@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import {
+  MODEL_PRICING_FEATURE_ENABLED,
   modelPricingService,
   formatModelPriceDetail,
   formatModelPriceSummary,
@@ -15,6 +16,9 @@ export function useModelPrice(
     () => modelPricingService.getVersion()
   );
   void version;
+  if (!MODEL_PRICING_FEATURE_ENABLED) {
+    return null;
+  }
   return modelPricingService.getModelPrice(profileId, modelId);
 }
 
@@ -46,6 +50,9 @@ export function usePricingGroups(profileId: string | undefined): PricingGroup[] 
     () => modelPricingService.getVersion()
   );
   void version;
+  if (!MODEL_PRICING_FEATURE_ENABLED) {
+    return [];
+  }
   return profileId ? modelPricingService.getGroups(profileId) : [];
 }
 

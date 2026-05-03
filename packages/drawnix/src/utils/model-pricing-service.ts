@@ -36,6 +36,7 @@ type SharedPricingResponseCacheEntry = {
 const TUZI_ROOT_HOST = 'tu-zi.com';
 const TUZI_API_HOST = 'api.tu-zi.com';
 const DEFAULT_GROUP_NAME = 'default';
+export const MODEL_PRICING_FEATURE_ENABLED = false;
 export const DEFAULT_TUZI_CNY_PER_USD = 0.7;
 export const MODEL_PRICING_CACHE_TTL_MS = 5 * 60 * 1000;
 export const TUZI_PRICING_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -56,15 +57,6 @@ function stripPricingUrlSearch(pricingUrl: string): string {
     return `${url.origin}${url.pathname}`;
   } catch {
     return normalized.split('?')[0];
-  }
-}
-
-export function derivePricingUrl(baseUrl: string): string {
-  try {
-    const origin = new URL(baseUrl).origin;
-    return `${origin}/api/pricing`;
-  } catch {
-    return '';
   }
 }
 
@@ -136,10 +128,11 @@ export function resolveProviderPricingConfig(
     'baseUrl' | 'pricingUrl' | 'pricingGroup' | 'cnyPerUsd'
   >
 ): ResolvedProviderPricingConfig | null {
-  const explicitPricingUrl = normalizePricingUrl(profile.pricingUrl || '');
-  const pricingUrl =
-    explicitPricingUrl ||
-    (profile.baseUrl ? derivePricingUrl(profile.baseUrl) : '');
+  if (!MODEL_PRICING_FEATURE_ENABLED) {
+    return null;
+  }
+
+  const pricingUrl = normalizePricingUrl(profile.pricingUrl || '');
 
   if (!pricingUrl) {
     return null;
@@ -888,11 +881,12 @@ class ModelPricingService {
   }
 
   getCache(profileId: string): ProviderPricingCache | null {
+    if (!MODEL_PRICING_FEATURE_ENABLED) return null;
     return this.cacheMap.get(profileId) ?? null;
   }
 
   getModelPrice(profileId: string | undefined | null, modelId: string): ModelPrice | null {
-    if (!profileId) return null;
+    if (!MODEL_PRICING_FEATURE_ENABLED || !profileId) return null;
     return this.cacheMap.get(profileId)?.prices[modelId] ?? null;
   }
 
@@ -900,11 +894,12 @@ class ModelPricingService {
     profileId: string | undefined | null,
     modelId: string
   ): Record<string, PricingEndpointInfo> | null {
-    if (!profileId) return null;
+    if (!MODEL_PRICING_FEATURE_ENABLED || !profileId) return null;
     return this.cacheMap.get(profileId)?.modelEndpoints?.[modelId] ?? null;
   }
 
   getGroups(profileId: string): PricingGroup[] {
+    if (!MODEL_PRICING_FEATURE_ENABLED) return [];
     return this.cacheMap.get(profileId)?.groups ?? [];
   }
 
@@ -920,6 +915,10 @@ class ModelPricingService {
   }
 
   warmupProfiles(profiles: ProviderProfile[]): void {
+    if (!MODEL_PRICING_FEATURE_ENABLED) {
+      return;
+    }
+
     profiles
       .filter((profile) => profile.enabled !== false)
       .forEach((profile) => {

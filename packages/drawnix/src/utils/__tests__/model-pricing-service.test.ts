@@ -5,6 +5,7 @@ import {
   getPricingCacheTtlMs,
   isPricingCacheEligibleForWarmup,
   MODEL_PRICING_CACHE_TTL_MS,
+  resolveProviderPricingConfig,
   TUZI_PRICING_CACHE_TTL_MS,
   modelPricingService,
 } from '../model-pricing-service';
@@ -59,6 +60,21 @@ describe('model-pricing-service', () => {
     expect(getPricingCacheTtlMs('https://example.com/api/pricing')).toBe(
       MODEL_PRICING_CACHE_TTL_MS
     );
+  });
+
+  it('默认关闭价格配置，即使显式配置 pricingUrl 也不启用', () => {
+    expect(
+      resolveProviderPricingConfig({
+        baseUrl: 'https://api.tu-zi.com/v1',
+      })
+    ).toBeNull();
+
+    expect(
+      resolveProviderPricingConfig({
+        baseUrl: 'https://api.tu-zi.com/v1',
+        pricingUrl: 'https://api.tu-zi.com/api/pricing',
+      })
+    ).toBeNull();
   });
 
   it('仅允许手动成功或旧版已缓存签名参与自动更新', () => {

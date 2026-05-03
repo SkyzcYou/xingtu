@@ -34,6 +34,7 @@ import {
   useModelPriceText,
   useModelMeta,
 } from '../../hooks/use-model-pricing';
+import { MODEL_PRICING_FEATURE_ENABLED } from '../../utils/model-pricing-service';
 import {
   getDefaultAudioModel,
   getDefaultImageModel,
@@ -63,7 +64,6 @@ import {
   invocationPresetsSettings,
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
   providerProfilesSettings,
-  TUZI_BUSINESS_PROVIDER_PROFILE_ID,
   settingsManager,
   TUZI_MIX_PROVIDER_PROFILE_ID,
   TUZI_CODEX_PROVIDER_PROFILE_ID,
@@ -524,8 +524,7 @@ function isManagedProviderProfile(profileId: string): boolean {
     profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID ||
     profileId === TUZI_ORIGINAL_PROVIDER_PROFILE_ID ||
     profileId === TUZI_MIX_PROVIDER_PROFILE_ID ||
-    profileId === TUZI_CODEX_PROVIDER_PROFILE_ID ||
-    profileId === TUZI_BUSINESS_PROVIDER_PROFILE_ID
+    profileId === TUZI_CODEX_PROVIDER_PROFILE_ID
   );
 }
 
@@ -2411,12 +2410,14 @@ export const SettingsDialog = ({
         </div>
 
 
-        <PricingFieldGroup
-          profile={selectedProfile}
-          onUpdateProfile={(updater) =>
-            updateProfile(selectedProfile.id, updater)
-          }
-        />
+        {MODEL_PRICING_FEATURE_ENABLED ? (
+          <PricingFieldGroup
+            profile={selectedProfile}
+            onUpdateProfile={(updater) =>
+              updateProfile(selectedProfile.id, updater)
+            }
+          />
+        ) : null}
 
         {selectedProfile.id === LEGACY_DEFAULT_PROVIDER_PROFILE_ID ? (
           <div className="settings-dialog__section settings-dialog__section--compact">
