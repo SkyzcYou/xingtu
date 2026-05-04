@@ -1,5 +1,6 @@
 import { isPencilEvent, PlaitBoard } from '@plait/core';
 import { DrawnixState } from '../hooks/use-drawnix';
+import { shouldDelegateToHandPointer } from './hand-mode';
 
 const IS_PENCIL_MODE = new WeakMap<PlaitBoard, boolean>();
 
@@ -22,7 +23,11 @@ export const buildPencilPlugin = (
         setIsPencilMode(board, true);
         updateAppState({ isPencilMode: true });
       }
-      if (isPencilMode(board) && !isPencilEvent(event)) {
+      if (
+        isPencilMode(board) &&
+        !isPencilEvent(event) &&
+        !shouldDelegateToHandPointer(board, event)
+      ) {
         return;
       }
       pointerDown(event);

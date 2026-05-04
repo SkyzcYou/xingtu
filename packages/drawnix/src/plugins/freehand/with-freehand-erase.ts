@@ -19,11 +19,13 @@ import {
     findElementsInEraserPath,
     findUnsupportedElementsInEraserPath,
 } from '../../transforms/precise-erase';
+import { shouldDelegateToHandPointer } from '../hand-mode';
 
 export const withFreehandErase = (board: PlaitBoard) => {
     const { pointerDown, pointerMove, pointerUp, globalPointerUp } = board;
 
     let isErasing = false;
+    let isTemporaryHandPanning = false;
     const elementsToDelete = new Set<string>();
     let eraserPath: Point[] = [];
 
@@ -95,6 +97,12 @@ export const withFreehandErase = (board: PlaitBoard) => {
     };
 
     board.pointerDown = (event: PointerEvent) => {
+        if (shouldDelegateToHandPointer(board, event)) {
+            isTemporaryHandPanning = true;
+            pointerDown(event);
+            return;
+        }
+
         const isEraserPointer = PlaitBoard.isInPointer(board, [FreehandShape.eraser]);
 
         if (isEraserPointer && isDrawingMode(board)) {
@@ -114,6 +122,11 @@ export const withFreehandErase = (board: PlaitBoard) => {
     };
 
     board.pointerMove = (event: PointerEvent) => {
+        if (isTemporaryHandPanning) {
+            pointerMove(event);
+            return;
+        }
+
         if (isErasing) {
             throttleRAF(board, 'with-freehand-erase', () => {
                 const currentPoint: Point = [event.x, event.y];
@@ -129,6 +142,12 @@ export const withFreehandErase = (board: PlaitBoard) => {
     };
 
     board.pointerUp = (event: PointerEvent) => {
+        if (isTemporaryHandPanning) {
+            isTemporaryHandPanning = false;
+            pointerUp(event);
+            return;
+        }
+
         if (isErasing) {
             complete();
             return;
@@ -138,6 +157,8 @@ export const withFreehandErase = (board: PlaitBoard) => {
     };
 
     board.globalPointerUp = (event: PointerEvent) => {
+        isTemporaryHandPanning = false;
+
         if (isErasing) {
             complete();
             return;

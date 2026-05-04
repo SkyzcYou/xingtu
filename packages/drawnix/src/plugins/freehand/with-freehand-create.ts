@@ -12,12 +12,7 @@ import { Freehand, FreehandShape } from './type';
 import { FreehandGenerator } from './freehand.generator';
 import { FreehandSmoother } from './smoother';
 import { BrushShape, getFreehandSettings, FreehandStrokeStyle } from './freehand-settings';
-
-const isTemporaryHandMode = (board: PlaitBoard) => {
-  return PlaitBoard.getBoardContainer(board).classList.contains(
-    'viewport-moving'
-  );
-};
+import { shouldDelegateToHandPointer } from '../hand-mode';
 
 export const withFreehandCreate = (board: PlaitBoard) => {
   const { pointerDown, pointerMove, pointerUp, globalPointerUp } = board;
@@ -161,7 +156,7 @@ export const withFreehandCreate = (board: PlaitBoard) => {
   };
 
   board.pointerDown = (event: PointerEvent) => {
-    if (isTemporaryHandMode(board)) {
+    if (shouldDelegateToHandPointer(board, event)) {
       isTemporaryHandPanning = true;
       pointerDown(event);
       return;

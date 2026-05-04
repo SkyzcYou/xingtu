@@ -4470,6 +4470,13 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       : shouldKeepExpanded
       ? 'expanded'
       : 'collapsed';
+    const promptExpandLabel = isPromptManuallyExpanded
+      ? language === 'zh'
+        ? '收起提示词输入框'
+        : 'Collapse prompt input'
+      : language === 'zh'
+      ? '展开提示词输入框'
+      : 'Expand prompt input';
 
     useLayoutEffect(() => {
       const textarea = inputRef.current;
@@ -4760,43 +4767,28 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             <div className="ai-input-bar__prompt-row">
               <div className="ai-input-bar__rich-input">
                 {canPromptManuallyExpand ? (
-                  <button
-                    type="button"
-                    className={classNames('ai-input-bar__prompt-expand-btn', {
-                      'ai-input-bar__prompt-expand-btn--active':
-                        isPromptManuallyExpanded,
-                    })}
-                    aria-label={
-                      isPromptManuallyExpanded
-                        ? language === 'zh'
-                          ? '收起提示词输入框'
-                          : 'Collapse prompt input'
-                        : language === 'zh'
-                        ? '展开提示词输入框'
-                        : 'Expand prompt input'
-                    }
-                    title={
-                      isPromptManuallyExpanded
-                        ? language === 'zh'
-                          ? '收起提示词输入框'
-                          : 'Collapse prompt input'
-                        : language === 'zh'
-                        ? '展开提示词输入框'
-                        : 'Expand prompt input'
-                    }
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                    onClick={handleTogglePromptExpanded}
-                    disabled={isSubmitting}
-                  >
-                    {isPromptManuallyExpanded ? (
-                      <Minimize2 size={13} aria-hidden="true" />
-                    ) : (
-                      <Maximize2 size={13} aria-hidden="true" />
-                    )}
-                  </button>
+                  <HoverTip content={promptExpandLabel} showArrow={false}>
+                    <button
+                      type="button"
+                      className={classNames('ai-input-bar__prompt-expand-btn', {
+                        'ai-input-bar__prompt-expand-btn--active':
+                          isPromptManuallyExpanded,
+                      })}
+                      aria-label={promptExpandLabel}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onClick={handleTogglePromptExpanded}
+                      disabled={isSubmitting}
+                    >
+                      {isPromptManuallyExpanded ? (
+                        <Minimize2 size={13} aria-hidden="true" />
+                      ) : (
+                        <Maximize2 size={13} aria-hidden="true" />
+                      )}
+                    </button>
+                  </HoverTip>
                 ) : null}
                 <textarea
                   ref={inputRef}

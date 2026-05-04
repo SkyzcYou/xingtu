@@ -13,7 +13,7 @@ test.describe('@smoke 核心功能验证', () => {
     await page.goto('/');
     
     // 1. 验证页面加载（必须通过）
-    await expect(page).toHaveTitle(/AI图片视频创作/);
+    await expect(page).toHaveTitle(/Opentu/);
     const drawnix = page.locator('.drawnix');
     await expect(drawnix).toBeVisible({ timeout: 10000 });
     await page.waitForTimeout(2000);
@@ -87,7 +87,11 @@ test.describe('@smoke 核心功能验证', () => {
     expect(maxRowsMetrics.overflowY).toBe('auto');
     
     // 5. 模型选择器（必须通过）
-    const modelSelector = page.getByRole('button', { name: /#/ }).first();
+    const modelSelector = page
+      .getByTestId('ai-input-bar')
+      .getByTestId('model-selector')
+      .first()
+      .locator('button[aria-haspopup="listbox"]');
     await expect(modelSelector).toBeVisible();
     await modelSelector.click();
     await page.waitForTimeout(300);

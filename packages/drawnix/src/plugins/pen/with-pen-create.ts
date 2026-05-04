@@ -14,6 +14,7 @@ import { createPenPath, isHitStartAnchor, updatePenPathPoints } from './utils';
 import { createSymmetricHandles, distanceBetweenPoints } from './bezier-utils';
 import { drawPenPreview } from './pen.generator';
 import { getPenSettings } from './pen-settings';
+import { shouldDelegateToHandPointer } from '../hand-mode';
 
 /** 最小拖拽距离，小于此值视为点击 */
 const MIN_DRAG_DISTANCE = 3;
@@ -270,12 +271,6 @@ export function isPenPointerType(board: PlaitBoard): boolean {
   return (pointerType as string) === PenShape.pen;
 }
 
-const isTemporaryHandMode = (board: PlaitBoard) => {
-  return PlaitBoard.getBoardContainer(board).classList.contains(
-    'viewport-moving'
-  );
-};
-
 /**
  * 检测并处理工具切换
  * 如果正在创建路径且切换到其他工具，完成或取消创建
@@ -366,7 +361,7 @@ export const withPenCreate = (board: PlaitBoard) => {
   };
 
   board.pointerDown = (event: PointerEvent) => {
-    if (isTemporaryHandMode(board)) {
+    if (shouldDelegateToHandPointer(board, event)) {
       isTemporaryHandPanning = true;
       pointerDown(event);
       return;

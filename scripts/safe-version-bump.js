@@ -29,6 +29,22 @@ function getNextVersion(currentVersion, type = 'patch') {
   return parts.join('.');
 }
 
+function isValidVersion(version) {
+  return /^\d+\.\d+\.\d+$/.test(version);
+}
+
+function compareVersions(a, b) {
+  const aParts = a.split('.').map(Number);
+  const bParts = b.split('.').map(Number);
+
+  for (let i = 0; i < 3; i++) {
+    if (aParts[i] > bParts[i]) return 1;
+    if (aParts[i] < bParts[i]) return -1;
+  }
+
+  return 0;
+}
+
 function tagExists(version) {
   try {
     execSync(`git tag -l | grep -q "^v${version}$"`, { stdio: 'pipe' });
@@ -278,12 +294,21 @@ function updateChangelog(version, commits) {
 
 function main() {
   const versionType = process.argv[2] || 'patch';
+  const targetArg = process.argv.find(arg => arg.startsWith('--target='));
+  const targetVersion = targetArg ? targetArg.slice('--target='.length) : null;
   
   try {
     const currentVersion = getCurrentVersion();
     console.log(`📦 当前版本: ${currentVersion}`);
     
-    const nextVersion = findNextAvailableVersion(currentVersion, versionType);
+    if (targetVersion && !isValidVersion(targetVersion)) {
+      throw new Error(`目标版本格式无效: ${targetVersion}`);
+    }
+    if (targetVersion && compareVersions(targetVersion, currentVersion) <= 0) {
+      throw new Error(`目标版本必须大于当前版本: ${currentVersion} → ${targetVersion}`);
+    }
+
+    const nextVersion = targetVersion || findNextAvailableVersion(currentVersion, versionType);
     console.log(`🚀 升级到版本: ${nextVersion}`);
     
     // 更新 package.json

@@ -1688,11 +1688,13 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     &__highlight-layer {
       font-size: 14px;
       padding: 4px 8px;
+      padding-right: 36px;
     }
 
     &__input {
       font-size: $ai-input-mobile-font-size;
       padding: 2px 8px;
+      padding-right: 36px;
       min-height: $ai-input-mobile-collapsed-min-height;
 
       &--focused {
@@ -1700,6 +1702,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
         padding-bottom: 4px;
         min-height: $ai-input-mobile-expanded-min-height;
         max-height: $ai-input-mobile-expanded-max-height;
+      }
+
+      &--long-text {
+        min-height: $ai-input-mobile-line-height * 8 +
+          $ai-input-mobile-vertical-padding;
+        max-height: clamp(320px, 65vh, 680px);
       }
     }
 
@@ -1778,6 +1786,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       &--focused {
         min-height: $ai-input-small-expanded-min-height;
         max-height: $ai-input-small-expanded-max-height;
+      }
+
+      &--long-text {
+        min-height: $ai-input-small-line-height * 8 +
+          $ai-input-mobile-vertical-padding;
+        max-height: clamp(320px, 65vh, 680px);
       }
     }
 

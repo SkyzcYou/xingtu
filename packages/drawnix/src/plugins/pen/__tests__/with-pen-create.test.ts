@@ -29,6 +29,7 @@ vi.mock('@plait/core', () => ({
     getElementHost: (board: TestBoard) => board.host,
     getBoardContainer: (board: TestBoard) => board.container,
   },
+  isWheelPointer: (event: PointerEvent) => event.button === 1,
   Transforms: {
     insertNode: insertNodeMock,
   },
@@ -119,11 +120,17 @@ function createBoard(): TestBoard {
   } as unknown as TestBoard;
 }
 
-function createPointerEvent(x: number, y: number, target: EventTarget | null): PointerEvent {
+function createPointerEvent(
+  x: number,
+  y: number,
+  target: EventTarget | null,
+  button = 0
+): PointerEvent {
   return {
     x,
     y,
     target,
+    button,
   } as PointerEvent;
 }
 
@@ -231,6 +238,33 @@ describe('withPenCreate', () => {
       pointerUpEvent
     );
     expect(getPreviewAnchorCount(board)).toBe(2);
+    expect(insertNodeMock).not.toHaveBeenCalled();
+  });
+
+  it('delegates middle mouse panning while the pen tool is active', () => {
+    const board = withPenCreate(createBoard()) as TestBoard;
+
+    addAnchor(board, 100, 100);
+    expect(getPreviewAnchorCount(board)).toBe(1);
+
+    const pointerDownEvent = createPointerEvent(300, 140, board.host, 1);
+    const pointerMoveEvent = createPointerEvent(320, 160, board.host, 1);
+    const pointerUpEvent = createPointerEvent(320, 160, board.host, 1);
+
+    board.pointerDown(pointerDownEvent);
+    board.pointerMove(pointerMoveEvent);
+    board.pointerUp(pointerUpEvent);
+
+    expect(board.baseHandlers.pointerDown).toHaveBeenLastCalledWith(
+      pointerDownEvent
+    );
+    expect(board.baseHandlers.pointerMove).toHaveBeenLastCalledWith(
+      pointerMoveEvent
+    );
+    expect(board.baseHandlers.pointerUp).toHaveBeenLastCalledWith(
+      pointerUpEvent
+    );
+    expect(getPreviewAnchorCount(board)).toBe(1);
     expect(insertNodeMock).not.toHaveBeenCalled();
   });
 });

@@ -83,8 +83,8 @@ describe('buildBatchVideoReferenceImages', () => {
 
     expect(result.referenceImages).toEqual(['first-url', 'last-url']);
     expect(result.referenceImageDescriptions).toEqual([
-      '首帧图：视频必须从这张图的画面状态开始。',
-      '尾帧图：视频应自然过渡到这张图的画面状态。',
+      '首帧图：只表示视频起始画面状态，视频必须从这张图开始，优先于故事上下文。',
+      '尾帧图：只表示视频结束画面状态，视频应自然过渡到这张图，优先于故事上下文。',
     ]);
     expect(result.unusedCharacterReferenceUrls).toEqual(['char-url']);
   });
@@ -99,5 +99,8 @@ describe('buildBatchVideoReferenceImages', () => {
 
     expect(result.referenceImages?.[0]).toBe('char-url');
     expect(result.referenceImageDescriptions?.[0]).toContain('角色参考图');
+    expect(result.referenceImageDescriptions?.[0]).toContain('不表示时间顺序、动作或剧情');
+    expect(result.referenceImageDescriptions?.[1]).toContain('优先于故事上下文');
+    expect(result.referenceImageDescriptions?.[2]).toContain('全局/补充参考图');
   });
 });

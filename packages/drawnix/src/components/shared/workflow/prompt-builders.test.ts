@@ -70,12 +70,15 @@ describe('prompt-builders', () => {
       },
       {
         referenceImageDescriptions: [
-          '参考图1：首帧图，视频必须从这张图的画面状态开始。',
-          '参考图2：尾帧图，视频应自然过渡到这张图的画面状态。',
+          '参考图1：首帧图，只表示视频起始画面状态，视频必须从这张图开始，优先于故事上下文。',
+          '参考图2：尾帧图，只表示视频结束画面状态，视频应自然过渡到这张图，优先于故事上下文。',
         ],
       }
     );
 
+    expect(prompt).toContain('优先级协议');
+    expect(prompt).toContain('当前镜头任务/首尾关键帧 > 参考图说明 > 角色一致性 > 用户要求');
+    expect(prompt).toContain('故事情节、相似案例、歌词意象或全局剧情只作低权重背景');
     expect(prompt).toContain('上下文内容');
     expect(prompt).toContain('用户要求');
     expect(prompt).toContain('参考图说明');
@@ -85,6 +88,7 @@ describe('prompt-builders', () => {
     expect(prompt).toContain('镜头身份：ID shot_2 · 二女儿加入 · 5s-10s');
     expect(prompt).toContain('突出二女儿加入这个动作');
     expect(prompt).toContain('参考图使用方式');
+    expect(prompt).toContain('参考图优先级');
   });
 
   it('describes manual video reference images by their names', () => {
@@ -96,10 +100,10 @@ describe('prompt-builders', () => {
         { url: 'style-url', name: '风格参考' },
       ])
     ).toEqual([
-      '参考图1：首帧图，视频必须从这张图的画面状态开始。',
-      '参考图2：尾帧图，视频应自然过渡到这张图的画面状态。',
-      '参考图3：角色参考图（角色-妈妈），仅用于锁定人物身份、发型、服装、材质和气质，不表示时间顺序。',
-      '参考图4：风格参考，仅用于主体、产品、场景、风格或色彩一致性，不表示时间顺序。',
+      '参考图1：首帧图，只表示视频起始画面状态，视频必须从这张图开始，优先于故事上下文。',
+      '参考图2：尾帧图，只表示视频结束画面状态，视频应自然过渡到这张图，优先于故事上下文。',
+      '参考图3：角色参考图（角色-妈妈），仅用于锁定人物身份、发型、服装、材质和气质，不表示时间顺序、动作或剧情。',
+      '参考图4：风格参考，仅用于主体、产品、场景、风格或色彩一致性，不表示时间顺序、动作或剧情。',
     ]);
   });
 
@@ -109,6 +113,7 @@ describe('prompt-builders', () => {
     });
 
     expect(prompt).toContain('当前关键帧（最高优先级）：角色站在雨夜街头');
+    expect(prompt).toContain('关键帧优先级：当前关键帧优先于故事/剧情上下文');
     expect(prompt).toContain('电影感光影');
   });
 
@@ -185,6 +190,7 @@ describe('prompt-builders', () => {
     expect(prompt).toContain('禁止：换脸、换发型、换发色');
     expect(prompt).toContain('重设计服装');
     expect(prompt).toContain('连续性要求');
+    expect(prompt).toContain('不要复述上一镜头剧情经过');
   });
 
   it('injects shot identity into frame prompts to separate similar shots', () => {
@@ -254,7 +260,8 @@ describe('prompt-builders', () => {
     expect(prompt).toContain('镜头主题：核心镜头画面');
     expect(prompt).toContain('开场关键帧：核心首帧');
     expect(prompt).toContain('结束关键帧：核心尾帧');
-    expect(prompt).not.toContain('创作 Brief');
+    expect(prompt).not.toContain('视频用途/场景：');
+    expect(prompt).not.toContain('导演风格：');
   });
 
   it('keeps empty frame prompt empty when only creative brief exists', () => {
@@ -273,6 +280,8 @@ describe('prompt-builders', () => {
     });
 
     expect(prompt).toContain('可复用的角色参考图');
+    expect(prompt).toContain('角色参考图优先级');
+    expect(prompt).toContain('故事/MV剧情/歌词意象仅用于微调情绪与风格');
     expect(prompt).toContain('中性站姿或半身展示');
     expect(prompt).toContain('不要演绎具体镜头动作');
   });

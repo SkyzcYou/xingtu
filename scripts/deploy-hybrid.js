@@ -22,6 +22,7 @@
  *   --skip-manual    跳过手册生成
  *   --dry-run        预览模式，不实际执行
  *   --otp=123456     npm 2FA 验证码
+ *   --bump-if-published=minor  当前版本已发布时才升级版本
  */
 
 const fs = require('fs');
@@ -69,6 +70,20 @@ const skipManual = args.includes('--skip-manual');
 const isDryRun = args.includes('--dry-run');
 const otpArg = args.find((arg) => arg.startsWith('--otp='));
 const otp = otpArg ? otpArg.split('=')[1] : null;
+const bumpIfPublishedArg = args.find((arg) =>
+  arg.startsWith('--bump-if-published=')
+);
+const bumpIfPublished = bumpIfPublishedArg
+  ? bumpIfPublishedArg.split('=')[1]
+  : 'patch';
+const validBumpTypes = new Set(['patch', 'minor', 'major']);
+
+if (!validBumpTypes.has(bumpIfPublished)) {
+  console.error(
+    `Invalid --bump-if-published value: ${bumpIfPublished}. Use patch, minor, or major.`
+  );
+  process.exit(1);
+}
 const cdnProvider = 'unpkg';
 
 // ============================================
@@ -599,6 +614,51 @@ function checkNpmVersionExists(packageName, version) {
     checked: false,
     error: 'npm 版本检查失败，已达到最大重试次数',
   };
+}
+
+function getNextVersion(currentVersion, type = 'patch') {
+  const parts = currentVersion.split('.').map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part))) {
+    throw new Error(`版本格式无效: ${currentVersion}`);
+  }
+
+  switch (type) {
+    case 'major':
+      parts[0]++;
+      parts[1] = 0;
+      parts[2] = 0;
+      break;
+    case 'minor':
+      parts[1]++;
+      parts[2] = 0;
+      break;
+    case 'patch':
+    default:
+      parts[2]++;
+      break;
+  }
+
+  return parts.join('.');
+}
+
+function findNextUnpublishedVersion(currentVersion, bumpType) {
+  let nextVersion = getNextVersion(currentVersion, bumpType);
+
+  while (true) {
+    const versionCheck = checkNpmVersionExists(CONFIG.packageName, nextVersion);
+    if (!versionCheck.checked) {
+      throw new Error(versionCheck.error || `无法检查 npm 版本 ${nextVersion}`);
+    }
+    if (!versionCheck.exists) {
+      return nextVersion;
+    }
+
+    log(
+      `    npm 已存在 ${CONFIG.packageName}@${nextVersion}，尝试下一个 patch...`,
+      'yellow'
+    );
+    nextVersion = getNextVersion(nextVersion, 'patch');
+  }
 }
 
 /**
@@ -1411,11 +1471,23 @@ async function main() {
       process.exit(1);
     }
 
-    if (versionCheck.exists) {
+    if (versionCheck.exists && isDryRun) {
+      log(
+        `    [DRY RUN] 版本 ${version} 已存在，将执行 ${bumpIfPublished} 版本升级`,
+        'yellow'
+      );
+    } else if (versionCheck.exists) {
       // 版本已存在，需要升级版本
-      log(`    版本 ${version} 已存在，需要升级版本`, 'yellow');
       try {
-        execSync('pnpm run version:patch', {
+        const nextVersion = findNextUnpublishedVersion(
+          version,
+          bumpIfPublished
+        );
+        log(
+          `    版本 ${version} 已存在，升级到 npm 未发布版本 ${nextVersion}`,
+          'yellow'
+        );
+        execSync(`node scripts/safe-version-bump.js ${bumpIfPublished} --target=${nextVersion}`, {
           cwd: path.resolve(__dirname, '..'),
           stdio: 'inherit',
         });

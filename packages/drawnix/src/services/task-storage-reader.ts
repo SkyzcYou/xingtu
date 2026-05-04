@@ -222,6 +222,50 @@ function convertSWTaskToTask(swTask: SWTask): Task {
   };
 }
 
+function normalizeComparableImageTaskUrl(value: string): string {
+  const normalized = normalizeImageDataUrl(value);
+
+  if (typeof window === 'undefined') {
+    return normalized;
+  }
+
+  try {
+    const parsed = new URL(normalized, window.location.origin);
+    if (parsed.origin !== window.location.origin) {
+      return parsed.toString();
+    }
+
+    parsed.searchParams.delete('_retry');
+    parsed.searchParams.delete('bypass_sw');
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return normalized.trim();
+  }
+}
+
+function getSWTaskResultUrls(swTask: SWTask): string[] {
+  const urls = new Set<string>();
+  if (swTask.result?.url) {
+    urls.add(swTask.result.url);
+  }
+  swTask.result?.urls?.forEach((url) => {
+    if (url) {
+      urls.add(url);
+    }
+  });
+  return Array.from(urls);
+}
+
+function swImageTaskMatchesUrl(swTask: SWTask, targetUrl: string): boolean {
+  if (swTask.type !== TaskType.IMAGE) {
+    return false;
+  }
+
+  return getSWTaskResultUrls(swTask).some(
+    (url) => normalizeComparableImageTaskUrl(url) === targetUrl
+  );
+}
+
 function convertSWTaskToAssetTask(swTask: SWTask): AssetTaskRecord | null {
   if (
     (swTask.type !== TaskType.IMAGE &&
@@ -752,6 +796,67 @@ class TaskStorageReader extends BaseStorageReader<TaskCache> {
       const swTask = await this.getById<SWTask>(TASKS_STORE, taskId);
       return swTask ? convertSWTaskToTask(swTask) : null;
     } catch {
+      return null;
+    }
+  }
+
+  async findImageTaskIdByResultUrl(
+    imageUrl: string,
+    options?: { includeArchived?: boolean; limit?: number }
+  ): Promise<string | null> {
+    const includeArchived = options?.includeArchived ?? true;
+    const limit = options?.limit ?? STORAGE_LIMITS.MAX_RETAINED_TASKS * 10;
+    const targetUrl = normalizeComparableImageTaskUrl(imageUrl);
+
+    try {
+      const db = await this.getDB();
+      if (!db.objectStoreNames.contains(TASKS_STORE)) {
+        return null;
+      }
+
+      return await new Promise<string | null>((resolve, reject) => {
+        const tx = db.transaction(TASKS_STORE, 'readonly');
+        const store = tx.objectStore(TASKS_STORE);
+        const index = store.index('createdAt');
+        let scannedImageTasks = 0;
+        const cursorReq = index.openCursor(null, 'prev');
+
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result;
+          if (!cursor || scannedImageTasks >= limit) {
+            resolve(null);
+            return;
+          }
+
+          const task = cursor.value as SWTask;
+          if (!includeArchived && task.archived) {
+            cursor.continue();
+            return;
+          }
+          if (task.type !== TaskType.IMAGE) {
+            cursor.continue();
+            return;
+          }
+
+          scannedImageTasks++;
+          if (swImageTaskMatchesUrl(task, targetUrl)) {
+            resolve(task.id);
+            return;
+          }
+
+          cursor.continue();
+        };
+
+        cursorReq.onerror = () => {
+          reject(
+            new Error(
+              `Failed to find image task by result URL: ${cursorReq.error?.message}`
+            )
+          );
+        };
+      });
+    } catch (error) {
+      console.error('[TaskStorageReader] Error finding image task:', error);
       return null;
     }
   }

@@ -50,6 +50,10 @@ describe('video-analyzer utils', () => {
     expect(prompt).toContain('画面风格：电影感光影');
     expect(prompt).toContain('BGM 情绪：轻快治愈');
     expect(prompt).toContain('整体画面风格必须统一为”电影感光影”');
+    expect(prompt).toContain('故事复盘、相邻剧情、剧情续写');
+    expect(prompt).toContain('用户提示词中的故事情节、相似案例或相似剧情只用于理解改编方向');
+    expect(prompt).toContain('只描述当前段起始画面');
+    expect(prompt).toContain('非空尾帧只写本镜头结束画面');
     expect(prompt).toContain('原创性与合规要求');
     expect(prompt).toContain('"bgm_mood"');
     expect(prompt).toContain('"characters"');
@@ -93,7 +97,13 @@ describe('video-analyzer utils', () => {
     expect(prompt).toContain('first_frame_prompt');
     expect(prompt).toContain('同一人物身份、发型、脸部特征、体型、年龄感、完整服装款式');
     expect(prompt).toContain('不得重新设计衣服');
+    expect(prompt).toContain('相似剧情和歌词意象只作为背景与风格参考');
+    expect(prompt).toContain('不要在 first_frame_prompt、last_frame_prompt 或 suggestion 中复述相似剧情');
+    expect(prompt).toContain('只描述当前段起始画面');
+    expect(prompt).toContain('不要写上一段剧情经过');
+    expect(prompt).toContain('suggestion 只写稳定生成约束');
     expect(prompt).toContain('非空 last_frame_prompt 若包含角色');
+    expect(prompt).toContain('不得写下一镜头剧情');
     expect(prompt).toContain('不得换脸、换发型、换衣服颜色或新增无关人物');
     expect(prompt).toContain('原创性与合规要求');
   });

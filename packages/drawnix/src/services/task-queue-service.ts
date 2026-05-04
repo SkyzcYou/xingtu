@@ -2089,12 +2089,14 @@ class TaskQueueService {
       return this.getCompleteTask(memoryMatch.id);
     }
 
-    const storedTasks = await taskStorageReader.getAllTasks({
-      type: TaskType.IMAGE,
-      includeArchived: true,
-      limit: STORAGE_LIMITS.MAX_RETAINED_TASKS * 10,
-    });
-    return storedTasks.find((task) => imageTaskMatchesUrl(task, imageUrl));
+    const storedTaskId = await taskStorageReader.findImageTaskIdByResultUrl(
+      imageUrl,
+      {
+        includeArchived: true,
+        limit: STORAGE_LIMITS.MAX_RETAINED_TASKS * 10,
+      }
+    );
+    return storedTaskId ? this.getCompleteTask(storedTaskId) : undefined;
   }
 
   /**

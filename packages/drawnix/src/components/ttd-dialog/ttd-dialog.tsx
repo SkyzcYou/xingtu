@@ -4,6 +4,7 @@ import AIImageGeneration from './ai-image-generation';
 import AIVideoGeneration from './ai-video-generation';
 import type { ReferenceImage } from './shared/ReferenceImageUpload';
 import { useI18n } from '../../i18n';
+import type { KnowledgeContextRef } from '../../types/task.types';
 import { useBoard } from '@plait-board/react-board';
 import React, {
   useState,
@@ -199,6 +200,7 @@ const TTDDialogComponent = ({
     initialPrompt: string;
     initialImages: ReferenceImage[];
     selectedElementIds: string[]; // 保存选中元素的IDs
+    initialKnowledgeContextRefs?: KnowledgeContextRef[];
     initialResultUrl?: string; // 初始结果URL,用于显示预览
     initialAspectRatio?: string; // 选中 Frame 时自动匹配的宽高比
     targetFrameId?: string; // 目标 Frame ID（用于将生成结果插入到 Frame 内部）
@@ -345,6 +347,10 @@ const TTDDialogComponent = ({
               imageDialogInitialData.initialImages ||
               imageDialogInitialData.uploadedImages ||
               [],
+            initialKnowledgeContextRefs:
+              imageDialogInitialData.initialKnowledgeContextRefs ||
+              imageDialogInitialData.knowledgeContextRefs ||
+              [],
             selectedElementIds: [],
             initialResultUrl:
               imageDialogInitialData.initialResultUrl ||
@@ -410,6 +416,7 @@ const TTDDialogComponent = ({
         setAiImageData({
           initialPrompt: processedContent.remainingText || '',
           initialImages: imageItems,
+          initialKnowledgeContextRefs: [],
           selectedElementIds,
           initialAspectRatio: frameAspectRatio,
           targetFrameId: detectedFrameId,
@@ -427,6 +434,7 @@ const TTDDialogComponent = ({
         setAiImageData({
           initialPrompt: selectedContent.text || '',
           initialImages: imageItems,
+          initialKnowledgeContextRefs: [],
           selectedElementIds: [],
         });
       } finally {
@@ -763,6 +771,7 @@ const TTDDialogComponent = ({
               initialPrompt={aiImageData.initialPrompt}
               initialImages={aiImageData.initialImages}
               initialKnowledgeContextRefs={
+                aiImageData.initialKnowledgeContextRefs ||
                 imageDialogInitialData?.initialKnowledgeContextRefs ||
                 imageDialogInitialData?.knowledgeContextRefs ||
                 []

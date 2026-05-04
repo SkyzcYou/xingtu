@@ -1,6 +1,6 @@
 {
   "name": "@aitu/source",
-  "version": "0.6.99",
+  "version": "0.9.2",
   "license": "MIT",
   "packageManager": "pnpm@10.21.0",
   "description": "Opentu - An open-source whiteboard tool with AI-powered image/video creation, mind mapping, flowcharts, and freehand drawing",
@@ -58,8 +58,8 @@
     "version:major": "node scripts/safe-version-bump.js major",
     "release:skip": "node scripts/deploy-hybrid.js --skip-build --skip-e2e --skip-npm --skip-manual",
     "release": "node scripts/deploy-hybrid.js --skip-e2e --skip-manual",
-    "release:minor": "pnpm version:minor && node scripts/deploy-hybrid.js",
-    "release:major": "pnpm version:major && node scripts/deploy-hybrid.js",
+    "release:minor": "node scripts/deploy-hybrid.js --bump-if-published=minor",
+    "release:major": "node scripts/deploy-hybrid.js --bump-if-published=major",
     "release:retry": "node scripts/deploy-hybrid.js --skip-e2e  --skip-manual",
     "release:force-bump": "pnpm version:patch && node scripts/deploy-hybrid.js --skip-e2e",
     "release:dry": "node scripts/deploy-hybrid.js --dry-run",

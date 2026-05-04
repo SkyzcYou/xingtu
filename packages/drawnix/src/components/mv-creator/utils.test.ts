@@ -39,7 +39,11 @@ describe('mv-creator utils', () => {
     expect(prompt).toContain('歌词画面化和段落推进');
     expect(prompt).toContain('完整服装款式、服装颜色、材质和配饰');
     expect(prompt).toContain('不得重新设计衣服');
+    expect(prompt).toContain('歌词意象、相似案例和相似剧情只作背景');
+    expect(prompt).toContain('只描述当前段起始画面');
+    expect(prompt).toContain('不要写上一段剧情经过');
     expect(prompt).toContain('非空时必须沿用同一人物和同一套服装');
+    expect(prompt).toContain('不写下一镜头剧情');
     expect(prompt).toContain('原创性与合规要求');
   });
 
@@ -82,6 +86,10 @@ describe('mv-creator utils', () => {
     expect(prompt).toContain('节奏策略：音乐驱动，随节拍切镜');
     expect(prompt).toContain('同一人物、同一发型、同一套衣服');
     expect(prompt).toContain('只改变结尾姿态、表情、动作、镜头角度或环境');
+    expect(prompt).toContain('故事、相似案例或相似剧情只作背景');
+    expect(prompt).toContain('不要复述到 first_frame_prompt/last_frame_prompt');
+    expect(prompt).toContain('只描述当前段起始画面');
+    expect(prompt).toContain('非空尾帧只写本镜头结束画面');
     expect(prompt).toContain('"video_style"');
     expect(prompt).toContain('原创性与合规要求');
   });
