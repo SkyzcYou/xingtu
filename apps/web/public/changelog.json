@@ -1,7 +1,7 @@
 {
   "versions": [
     {
-      "version": "0.9.2",
+      "version": "0.7.0",
       "date": "2026-05-04",
       "changes": {
         "features": [
@@ -13,25 +13,12 @@
           "allow hand panning while drawing",
           "address regenerate prefill review findings"
         ],
-        "improvements": []
-      },
-      "type": "minor",
-      "highlights": "优化长提示词输入框展开体验"
-    },
-    {
-      "version": "0.7.0",
-      "date": "2026-05-03",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "allow hand panning while drawing"
-        ],
         "improvements": [
-          "更新应用版本号至0.6.99并同步构建时间"
+          "从上游 0.9.2 调整为星图本地 0.7.x 版本线"
         ]
       },
       "type": "minor",
-      "highlights": "allow hand panning while drawing"
+      "highlights": "优化长提示词输入框展开体验"
     },
     {
       "version": "0.6.99",
