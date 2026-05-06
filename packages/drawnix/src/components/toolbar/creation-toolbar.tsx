@@ -470,6 +470,7 @@ export const CreationToolbar: React.FC<ToolbarSectionProps> = ({
   const checkCurrentPointerIsFreehand = (board: PlaitBoard) => {
     return PlaitBoard.isInPointer(board, [
       FreehandShape.feltTipPen,
+      FreehandShape.mask,
       FreehandShape.eraser,
       FreehandShape.laserPointer,
       PenShape.pen,

@@ -60,6 +60,8 @@ export interface ImageGenerationParams {
   aspectRatio?: string;
   /** 参考图片 URL 或 base64 数组 */
   referenceImages?: string[];
+  /** 图片编辑蒙版 URL 或 base64 */
+  maskImage?: string;
   /** 质量设置 */
   quality?: '1k' | '2k' | '4k' | string;
   /** 生成数量 */

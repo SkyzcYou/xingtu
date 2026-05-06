@@ -160,6 +160,7 @@ describe('default image adapter compatibility', () => {
         prompt: 'Draw async',
         size: '1:1',
         referenceImages: ['data:image/png;base64,abc123'],
+        maskImage: 'data:image/png;base64,mask123',
       }
     );
 
@@ -173,6 +174,7 @@ describe('default image adapter compatibility', () => {
         prompt: 'Draw async',
         size: '1:1',
         referenceImages: ['data:image/png;base64,abc123'],
+        maskImage: 'data:image/png;base64,mask123',
       },
       expect.objectContaining({
         interval: 5000,

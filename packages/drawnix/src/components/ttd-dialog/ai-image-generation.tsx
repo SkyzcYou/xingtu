@@ -153,6 +153,23 @@ function applyAspectRatioToParams(
   return params.size === nextSize ? params : { ...params, size: nextSize };
 }
 
+function buildMaskEditTaskParams(images: ReferenceImage[]) {
+  const maskImage = images.length === 1 ? images[0].maskImage?.trim() : '';
+  if (!maskImage) {
+    return {};
+  }
+
+  return {
+    referenceImages: [images[0].url],
+    generationMode: 'image_edit' as const,
+    maskImage,
+  };
+}
+
+function stripMaskFromReferenceImages(images: ReferenceImage[]) {
+  return images.map(({ maskImage: _maskImage, ...image }) => image);
+}
+
 const AIImageGeneration = ({
   initialPrompt = '',
   initialImages = [],
@@ -653,22 +670,31 @@ const AIImageGeneration = ({
     return Promise.all(
       uploadedImages.map(async (img) => {
         if (img.file) {
-          return new Promise<{ type: 'url'; url: string; name: string }>(
-            (resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => {
-                resolve({
-                  type: 'url',
-                  url: reader.result as string,
-                  name: img.name,
-                });
-              };
-              reader.onerror = reject;
-              reader.readAsDataURL(img.file!);
-            }
-          );
+          return new Promise<{
+            type: 'url';
+            url: string;
+            name: string;
+            maskImage?: string;
+          }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              resolve({
+                type: 'url',
+                url: reader.result as string,
+                name: img.name,
+                maskImage: img.maskImage,
+              });
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(img.file!);
+          });
         } else if (img.url) {
-          return { type: 'url', url: img.url, name: img.name };
+          return {
+            type: 'url' as const,
+            url: img.url,
+            name: img.name,
+            maskImage: img.maskImage,
+          };
         }
         throw new Error('Invalid image data');
       })
@@ -716,6 +742,7 @@ const AIImageGeneration = ({
           typeof height === 'string' ? parseInt(height) || 1024 : height;
         // Convert File objects to base64 data URLs for serialization
         const convertedImages = await convertImagesToSerializable();
+        const uploadedImageParams = stripMaskFromReferenceImages(convertedImages);
 
         // 如果数量大于1，使用批量生成
         if (effectiveCount > 1) {
@@ -742,6 +769,7 @@ const AIImageGeneration = ({
           const finalSize = extraParams?.size
             ? extraParams.size
             : convertAspectRatioToSize(aspectRatio);
+          const maskEditParams = buildMaskEditTaskParams(convertedImages);
 
           for (let i = 0; i < effectiveCount; i++) {
             const taskParams = {
@@ -753,7 +781,7 @@ const AIImageGeneration = ({
               size: finalSize,
               model: currentImageModel,
               modelRef: currentModelRef || null,
-              uploadedImages: convertedImages,
+              uploadedImages: uploadedImageParams,
               batchId,
               batchIndex: i + 1,
               batchTotal: effectiveCount,
@@ -766,6 +794,7 @@ const AIImageGeneration = ({
               pptSlideImage,
               pptSlidePrompt,
               pptReplaceElementId,
+              ...maskEditParams,
               ...(extraParams ? { params: extraParams } : {}),
             };
 
@@ -820,6 +849,7 @@ const AIImageGeneration = ({
         const finalSize = extraParams?.size
           ? extraParams.size
           : convertAspectRatioToSize(aspectRatio);
+        const maskEditParams = buildMaskEditTaskParams(convertedImages);
 
         // 创建任务参数（单个任务也需要 batchId 以跳过 SW 重复检测）
         const taskParams = {
@@ -832,7 +862,7 @@ const AIImageGeneration = ({
           model: currentImageModel,
           modelRef: currentModelRef || null,
           // 保存上传的图片（已转换为可序列化的格式）
-          uploadedImages: convertedImages,
+          uploadedImages: uploadedImageParams,
           autoInsertToCanvas:
             initialAutoInsertToCanvas ??
             getAutoInsertValue(LS_KEYS.AI_IMAGE_AUTO_INSERT),
@@ -846,6 +876,7 @@ const AIImageGeneration = ({
           pptSlideImage,
           pptSlidePrompt,
           pptReplaceElementId,
+          ...maskEditParams,
           ...(extraParams ? { params: extraParams } : {}),
         };
 

@@ -1,24 +1,30 @@
 {
   "versions": [
     {
-      "version": "0.7.0",
-      "date": "2026-05-04",
+      "version": "0.7.1",
+      "date": "2026-05-06",
       "changes": {
         "features": [
+          "为绘图工具添加键盘快捷键调整大小功能",
+          "support AI image mask editing",
           "优化长提示词输入框展开体验",
           "add image generate-again prefill"
         ],
         "fixes": [
+          "修复蒙版画笔导出和预览样式问题",
+          "keep send button visible",
+          "resume async image tasks after reload",
           "优化参考图描述和提示词优先级协议",
           "allow hand panning while drawing",
           "address regenerate prefill review findings"
         ],
         "improvements": [
-          "从上游 0.9.2 调整为星图本地 0.7.x 版本线"
+          "Stop idle-prefetch retries from blocking SW updates",
+          "从上游 0.9.5 调整为星图本地 0.7.x 版本线"
         ]
       },
       "type": "minor",
-      "highlights": "优化长提示词输入框展开体验"
+      "highlights": "为绘图工具添加键盘快捷键调整大小功能"
     },
     {
       "version": "0.6.99",
@@ -731,49 +737,6 @@
       },
       "type": "patch",
       "highlights": "构建修复与稳定性改进"
-    },
-    {
-      "version": "0.6.41",
-      "date": "2026-04-21",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "修复版本更新后懒加载 chunk 失效白屏"
-        ],
-        "improvements": [
-          "补充 PostHog 埋点复盘并收紧模型解析保护"
-        ]
-      },
-      "type": "patch",
-      "highlights": "修复版本更新后懒加载 chunk 失效白屏"
-    },
-    {
-      "version": "0.6.40",
-      "date": "2026-04-21",
-      "changes": {
-        "features": [
-          "增强AI生成任务追踪与模型排序"
-        ],
-        "fixes": [],
-        "improvements": [
-          "Refine boot error handling and idle prefetch defaults"
-        ]
-      },
-      "type": "patch",
-      "highlights": "增强AI生成任务追踪与模型排序"
-    },
-    {
-      "version": "0.6.37",
-      "date": "2026-04-21",
-      "changes": {
-        "features": [
-          "优化启动加载与延迟功能挂载"
-        ],
-        "fixes": [],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "优化启动加载与延迟功能挂载"
     }
   ]
 }

@@ -109,7 +109,7 @@ export const PencilSettingsToolbar: React.FC = () => {
     setCurrentShape(newSettings.pencilShape);
     setPressureEnabled(newSettings.pressureEnabled);
     setInputValue(String(newSettings.strokeWidth));
-  }, [board, appState.pointer]);
+  }, [board, appState.pointer, appState.toolSettingsVersion]);
 
   // 处理输入框值变化
   const handleInputChange = useCallback(

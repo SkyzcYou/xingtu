@@ -295,7 +295,17 @@ export function convertDirectGenerationToWorkflow(
         imageArgs.size = size;
       }
       if (referenceImages.length > 0) {
-        imageArgs.referenceImages = referenceImages;
+        const hasMaskImage =
+          typeof selection?.maskImage === 'string' &&
+          selection.maskImage.trim().length > 0 &&
+          referenceImages.length === 1;
+        imageArgs.referenceImages = hasMaskImage
+          ? [referenceImages[0]]
+          : referenceImages;
+        if (hasMaskImage) {
+          imageArgs.generationMode = 'image_edit';
+          imageArgs.maskImage = selection.maskImage;
+        }
       }
       // 透传额外参数（如 seedream_quality）
       if (extraParams) {

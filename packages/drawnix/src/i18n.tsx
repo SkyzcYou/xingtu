@@ -12,6 +12,7 @@ export interface Translations {
   'toolbar.mind': string;
   'toolbar.text': string;
   'toolbar.pen': string;
+  'toolbar.maskBrush': string;
   'toolbar.vectorPen': string;
   'toolbar.eraser': string;
   'toolbar.arrow': string;
@@ -209,6 +210,7 @@ const translations: Record<Language, Translations> = {
     'toolbar.mind': '思维导图 — M',
     'toolbar.text': '文本 — T',
     'toolbar.pen': '画笔 — P',
+    'toolbar.maskBrush': '蒙版画笔 — Shift+M',
     'toolbar.vectorPen': '钢笔 — Shift+P',
     'toolbar.eraser': '橡皮擦 — E',
     'toolbar.anchorCorner': '角点',
@@ -225,11 +227,11 @@ const translations: Record<Language, Translations> = {
     'toolbar.theme': '主题色',
     'toolbar.stroke': '描边',
     'toolbar.strokeColor': '画笔颜色',
-    'toolbar.strokeWidth': '画笔大小',
+    'toolbar.strokeWidth': '画笔大小 — - / + / 方向键',
     'toolbar.pencilShape': '画笔形状',
     'toolbar.pencilShape.circle': '圆形',
     'toolbar.pencilShape.square': '方形',
-    'toolbar.eraserSize': '橡皮擦大小',
+    'toolbar.eraserSize': '橡皮擦大小 — - / + / 方向键',
     'toolbar.eraserShape': '橡皮擦形状',
     'toolbar.eraserShape.circle': '圆形',
     'toolbar.eraserShape.square': '方形',
@@ -403,6 +405,7 @@ const translations: Record<Language, Translations> = {
     'toolbar.mind': 'Mind — M',
     'toolbar.text': 'Text — T',
     'toolbar.pen': 'Pen — P',
+    'toolbar.maskBrush': 'Mask Brush — Shift+M',
     'toolbar.vectorPen': 'Vector Pen — Shift+P',
     'toolbar.eraser': 'Eraser — E',
     'toolbar.anchorCorner': 'Corner',
@@ -419,11 +422,11 @@ const translations: Record<Language, Translations> = {
     'toolbar.theme': 'Theme',
     'toolbar.stroke': 'Stroke',
     'toolbar.strokeColor': 'Pen Color',
-    'toolbar.strokeWidth': 'Pen Size',
+    'toolbar.strokeWidth': 'Pen Size — - / + / Arrow Keys',
     'toolbar.pencilShape': 'Pen Shape',
     'toolbar.pencilShape.circle': 'Circle',
     'toolbar.pencilShape.square': 'Square',
-    'toolbar.eraserSize': 'Eraser Size',
+    'toolbar.eraserSize': 'Eraser Size — - / + / Arrow Keys',
     'toolbar.eraserShape': 'Eraser Shape',
     'toolbar.eraserShape.circle': 'Circle',
     'toolbar.eraserShape.square': 'Square',

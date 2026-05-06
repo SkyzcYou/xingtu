@@ -217,10 +217,16 @@ export interface SelectedContentItem {
   type: 'image' | 'video' | 'graphics' | 'text';
   /** 媒体 URL（图片/视频/图形） */
   url?: string;
+  /** 局部编辑蒙版 URL */
+  maskImage?: string;
   /** 文字内容 */
   text?: string;
   /** 显示名称 */
   name: string;
+  /** 媒体自然宽度 */
+  width?: number;
+  /** 媒体自然高度 */
+  height?: number;
 }
 
 /** AI 输入上下文 - 完整的用户输入信息 */
@@ -278,6 +284,8 @@ export interface AIInputContext {
     videos: string[];
     /** 选中的图形转换为的图片 URL */
     graphics: string[];
+    /** 单张普通图片自动识别出的局部编辑蒙版 URL */
+    maskImage?: string;
   };
 
   /** 合并后的最终 prompt（文本元素 + 默认 prompt） */

@@ -17,8 +17,10 @@ import { characterStorageService } from '../services/character-storage-service';
 import { unifiedCacheService } from '../services/unified-cache-service';
 import { Task, TaskStatus, TaskType } from '../types/task.types';
 import { CharacterStatus } from '../types/character.types';
-import { isTaskTimeout } from '../utils/task-utils';
-import { isAsyncImageModel } from '../constants/model-config';
+import {
+  isResumableAsyncImageTask,
+  isTaskTimeout,
+} from '../utils/task-utils';
 import { AI_GENERATION_CONCURRENCY_LIMIT } from '../constants/TASK_CONSTANTS';
 import { classifyApiCredentialError } from '../utils/api-auth-error-event';
 import {
@@ -459,10 +461,8 @@ export function useTaskExecutor(): void {
 
       // Check if this is a resumable async image task
       if (
-        task.type === TaskType.IMAGE &&
-        task.remoteId &&
         task.status === TaskStatus.PROCESSING &&
-        isAsyncImageModel(task.params.model)
+        isResumableAsyncImageTask(task)
       ) {
         return resumeAsyncImageTask(task);
       }
@@ -589,10 +589,8 @@ export function useTaskExecutor(): void {
       // Process resumable tasks (processing with remoteId) — video tasks excluded, handled by FallbackMediaExecutor
       const resumableTasks = tasks.filter(
         (task) =>
-          task.type === TaskType.IMAGE &&
-          task.remoteId &&
           task.status === TaskStatus.PROCESSING &&
-          isAsyncImageModel(task.params.model)
+          isResumableAsyncImageTask(task)
       );
       const resumableAudioTasks = tasks.filter(
         (task) =>
@@ -666,9 +664,8 @@ export function useTaskExecutor(): void {
           else if (
             !executingTasksRef.current.has(task.id) &&
             task.remoteId &&
-            task.type === TaskType.IMAGE &&
             task.status === TaskStatus.PROCESSING &&
-            isAsyncImageModel(task.params.model)
+            isResumableAsyncImageTask(task)
           ) {
             enqueueTask(task);
           } else if (

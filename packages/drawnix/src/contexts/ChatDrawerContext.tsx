@@ -14,8 +14,11 @@ export type SelectedContentType = 'image' | 'video' | 'graphics' | 'text';
 export interface SelectedContentItem {
   type: SelectedContentType;
   url?: string;
+  maskImage?: string;
   text?: string;
   name: string;
+  width?: number;
+  height?: number;
 }
 
 /** 重试处理器类型 */

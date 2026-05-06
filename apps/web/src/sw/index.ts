@@ -1394,9 +1394,27 @@ let idlePrefetchManifestPromise: Promise<IdlePrefetchManifest | null> | null =
   null;
 let idlePrefetchManifestLastFailureAt = 0;
 let idlePrefetchManifestLastFailureReason: string | null = null;
+let idlePrefetchManifestTerminalFailureVersion: string | null = null;
+let idlePrefetchManifestTerminalFailureReason: string | null = null;
 
 function isIdlePrefetchManifestDisabled(): boolean {
   return isDevelopment;
+}
+
+function markIdlePrefetchManifestTerminalFailure(reason: string): void {
+  idlePrefetchManifestTerminalFailureVersion = APP_VERSION;
+  idlePrefetchManifestTerminalFailureReason = reason;
+  idlePrefetchManifestLastFailureAt = Date.now();
+  idlePrefetchManifestLastFailureReason = reason;
+}
+
+function clearIdlePrefetchManifestTerminalFailure(): void {
+  idlePrefetchManifestTerminalFailureVersion = null;
+  idlePrefetchManifestTerminalFailureReason = null;
+}
+
+function hasTerminalIdlePrefetchManifestFailure(): boolean {
+  return idlePrefetchManifestTerminalFailureVersion === APP_VERSION;
 }
 
 async function readResponsePreview(
@@ -1436,6 +1454,9 @@ async function loadIdlePrefetchManifest(): Promise<IdlePrefetchManifest | null> 
         contentType,
         preview,
       });
+      if (response.status === 404 || response.status === 410) {
+        markIdlePrefetchManifestTerminalFailure(`status:${response.status}`);
+      }
       return null;
     }
 
@@ -1452,6 +1473,7 @@ async function loadIdlePrefetchManifest(): Promise<IdlePrefetchManifest | null> 
         contentType,
         preview,
       });
+      markIdlePrefetchManifestTerminalFailure('html-fallback');
       return null;
     }
 
@@ -1465,6 +1487,7 @@ async function loadIdlePrefetchManifest(): Promise<IdlePrefetchManifest | null> 
         error: getSafeErrorMessage(error),
         preview,
       });
+      markIdlePrefetchManifestTerminalFailure('invalid-json');
       return null;
     }
 
@@ -1474,6 +1497,7 @@ async function loadIdlePrefetchManifest(): Promise<IdlePrefetchManifest | null> 
         contentType,
         preview,
       });
+      markIdlePrefetchManifestTerminalFailure('invalid-shape');
       return null;
     }
 
@@ -1483,9 +1507,13 @@ async function loadIdlePrefetchManifest(): Promise<IdlePrefetchManifest | null> 
         manifestVersion: manifest.version,
         workerVersion: APP_VERSION,
       });
+      markIdlePrefetchManifestTerminalFailure(
+        `version-mismatch:${manifest.version}`
+      );
       return null;
     }
 
+    clearIdlePrefetchManifestTerminalFailure();
     logSWDebug('loadIdlePrefetchManifest: loaded', {
       manifestUrl,
       version: manifest.version,
@@ -1513,10 +1541,18 @@ async function getIdlePrefetchManifest(): Promise<IdlePrefetchManifest | null> {
     idlePrefetchManifestLastFailureReason =
       IDLE_PREFETCH_MANIFEST_DISABLED_REASON;
     idlePrefetchManifestPromise = null;
+    clearIdlePrefetchManifestTerminalFailure();
     return null;
   }
 
   const now = Date.now();
+  if (hasTerminalIdlePrefetchManifestFailure()) {
+    logSWDebug('getIdlePrefetchManifest: terminal failure cached', {
+      version: APP_VERSION,
+      reason: idlePrefetchManifestTerminalFailureReason,
+    });
+    return null;
+  }
 
   if (!idlePrefetchManifestPromise) {
     if (
@@ -1537,14 +1573,20 @@ async function getIdlePrefetchManifest(): Promise<IdlePrefetchManifest | null> {
     idlePrefetchManifestPromise = loadIdlePrefetchManifest()
       .then((manifest) => {
         if (!manifest) {
+          const terminalFailure = hasTerminalIdlePrefetchManifestFailure();
           idlePrefetchManifestLastFailureAt = Date.now();
-          idlePrefetchManifestLastFailureReason = 'manifest-missing-or-invalid';
-          idlePrefetchManifestPromise = null;
+          idlePrefetchManifestLastFailureReason =
+            idlePrefetchManifestTerminalFailureReason ||
+            'manifest-missing-or-invalid';
+          idlePrefetchManifestPromise = terminalFailure
+            ? Promise.resolve(null)
+            : null;
           return null;
         }
 
         idlePrefetchManifestLastFailureAt = 0;
         idlePrefetchManifestLastFailureReason = null;
+        clearIdlePrefetchManifestTerminalFailure();
         return manifest;
       })
       .catch((error) => {
@@ -1809,6 +1851,10 @@ function waitForIdlePrefetchWindow(): Promise<void> {
 }
 
 function shouldKickIdlePrefetchFromFetch(event: FetchEvent, url: URL): boolean {
+  if (hasTerminalIdlePrefetchManifestFailure()) {
+    return false;
+  }
+
   const scopeRelativePathname = getScopeRelativePathname(url.pathname);
   if (
     event.request.method !== 'GET' ||
@@ -2567,14 +2613,19 @@ async function prefetchPendingIdleGroups(
 
   const manifest = await getIdlePrefetchManifest();
   if (!manifest) {
-    scheduleIdlePrefetchSweep(
-      `${reason}:manifest-missing`,
-      IDLE_PREFETCH_MANIFEST_RETRY_DELAY_MS
-    );
+    const isTerminalFailure = hasTerminalIdlePrefetchManifestFailure();
+    if (!isTerminalFailure) {
+      scheduleIdlePrefetchSweep(
+        `${reason}:manifest-missing`,
+        IDLE_PREFETCH_MANIFEST_RETRY_DELAY_MS
+      );
+    }
     logSWDebug('prefetchPendingIdleGroups skipped: manifest missing', {
       reason,
       preferredGroups,
-      retryDelayMs: IDLE_PREFETCH_MANIFEST_RETRY_DELAY_MS,
+      retryDelayMs: isTerminalFailure
+        ? null
+        : IDLE_PREFETCH_MANIFEST_RETRY_DELAY_MS,
       lastFailureReason: idlePrefetchManifestLastFailureReason,
     });
     return {
@@ -2582,7 +2633,9 @@ async function prefetchPendingIdleGroups(
       pendingGroups: [],
       queuedEntries: 0,
       coolingEntries: 0,
-      nextRetryDelayMs: IDLE_PREFETCH_MANIFEST_RETRY_DELAY_MS,
+      nextRetryDelayMs: isTerminalFailure
+        ? null
+        : IDLE_PREFETCH_MANIFEST_RETRY_DELAY_MS,
     };
   }
 
@@ -2640,12 +2693,17 @@ async function prefetchDefaultIdleGroups(): Promise<void> {
 
   const manifest = await getIdlePrefetchManifest();
   if (!manifest) {
-    scheduleIdlePrefetchSweep(
-      'default-groups:manifest-missing',
-      IDLE_PREFETCH_MANIFEST_RETRY_DELAY_MS
-    );
+    const isTerminalFailure = hasTerminalIdlePrefetchManifestFailure();
+    if (!isTerminalFailure) {
+      scheduleIdlePrefetchSweep(
+        'default-groups:manifest-missing',
+        IDLE_PREFETCH_MANIFEST_RETRY_DELAY_MS
+      );
+    }
     logSWDebug('prefetchDefaultIdleGroups skipped: manifest missing', {
-      retryDelayMs: IDLE_PREFETCH_MANIFEST_RETRY_DELAY_MS,
+      retryDelayMs: isTerminalFailure
+        ? null
+        : IDLE_PREFETCH_MANIFEST_RETRY_DELAY_MS,
       lastFailureReason: idlePrefetchManifestLastFailureReason,
     });
     return;
@@ -2800,10 +2858,12 @@ sw.addEventListener('install', (event: ExtendableEvent) => {
           });
         }
 
-        // 更新场景下，直到整包资源（含 idle-prefetch 静态资源）写入成功后
-        // 才通知主线程可以提示升级。否则用户会在只有首屏壳子 ready 时看到“立即更新”。
+        // 更新提示只依赖首屏必需资源。idle-prefetch 是增强能力，不能阻塞
+        // 新版本 ready，否则可选资源或旧 SW 的重试会让升级提示长期卡住。
         if (installingVersionIsUpdate) {
-          await prewarmAllIdlePrefetchGroupsForUpdateReady();
+          void enqueueIdlePrefetchTask('update-ready-follow-up', async () => {
+            await prewarmAllIdlePrefetchGroupsForUpdateReady();
+          });
         }
 
         await markNewVersionReady(installingVersionIsUpdate);

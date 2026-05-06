@@ -7,6 +7,7 @@
 
 import { Task, TaskStatus, TaskType } from '../types/task.types';
 import { TASK_TIMEOUT } from '../constants/TASK_CONSTANTS';
+import { isAsyncImageModel } from '../constants/model-config';
 import { generateUUID, formatDate } from '@aitu/utils';
 
 /**
@@ -34,6 +35,33 @@ export function generateTaskId(): string {
 export function isTaskActive(task: Task): boolean {
   return task.status === TaskStatus.PENDING || 
          task.status === TaskStatus.PROCESSING;
+}
+
+function hasAsyncImageInvocationRoute(
+  task: Pick<Task, 'invocationRoute'>
+): boolean {
+  const binding = task.invocationRoute?.binding;
+  return (
+    task.invocationRoute?.operation === 'image' &&
+    (binding?.protocol === 'openai.async.media' ||
+      binding?.requestSchema === 'openai.async.image.form')
+  );
+}
+
+/**
+ * Checks whether an image task can resume polling after page reload.
+ *
+ * Dynamic provider models may not be listed in ASYNC_IMAGE_MODEL_IDS, so the
+ * persisted invocation binding is the source of truth once a remoteId exists.
+ */
+export function isResumableAsyncImageTask(
+  task: Pick<Task, 'type' | 'remoteId' | 'params' | 'invocationRoute'>
+): boolean {
+  return (
+    task.type === TaskType.IMAGE &&
+    Boolean(task.remoteId) &&
+    (isAsyncImageModel(task.params?.model) || hasAsyncImageInvocationRoute(task))
+  );
 }
 
 /**

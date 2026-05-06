@@ -12,6 +12,7 @@ export interface AIInputPrefillImage {
   name: string;
   width?: number;
   height?: number;
+  maskImage?: string;
 }
 
 export type AIInputPrefillSource = 'canvas-toolbar' | 'task-queue' | 'dialog';

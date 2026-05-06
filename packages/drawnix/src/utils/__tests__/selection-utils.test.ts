@@ -1,11 +1,84 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   extractImagesFromElementForAI,
   extractTextFromElement,
   getImageTransformPromptContext,
+  isGraphicsElement,
+  processSelectedContentForAI,
 } from '../selection-utils';
+import { FreehandShape } from '../../plugins/freehand/type';
+
+const mocks = vi.hoisted(() => ({
+  cacheMediaFromBlob: vi.fn(async (url: string) => url),
+}));
+
+vi.mock('../../services/unified-cache-service', () => ({
+  unifiedCacheService: {
+    cacheMediaFromBlob: mocks.cacheMediaFromBlob,
+    getImageForAI: vi.fn(),
+  },
+}));
+
+function createMockMaskCanvas() {
+  const context = {
+    clearRect: vi.fn(),
+    fillRect: vi.fn(),
+    save: vi.fn(),
+    beginPath: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
+    restore: vi.fn(),
+    arc: vi.fn(),
+    fill: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    set fillStyle(_value: string) {},
+    set strokeStyle(_value: string) {},
+    set lineWidth(_value: number) {},
+    set lineCap(_value: CanvasLineCap) {},
+    set lineJoin(_value: CanvasLineJoin) {},
+    set globalCompositeOperation(_value: GlobalCompositeOperation) {},
+  } as unknown as CanvasRenderingContext2D;
+
+  return {
+    getContext: vi.fn(() => context),
+    toBlob: vi.fn((callback: BlobCallback) => {
+      callback(new Blob([new Uint8Array(128)], { type: 'image/png' }));
+    }),
+  } as unknown as HTMLCanvasElement;
+}
 
 describe('selection-utils', () => {
+  describe('isGraphicsElement', () => {
+    it('蒙版画笔不作为普通图形合成', () => {
+      const board = { children: [] };
+      expect(
+        isGraphicsElement(board as any, {
+          id: 'mask-1',
+          type: 'freehand',
+          shape: FreehandShape.mask,
+          points: [
+            [0, 0],
+            [10, 10],
+          ],
+        } as any)
+      ).toBe(false);
+
+      expect(
+        isGraphicsElement(board as any, {
+          id: 'pen-1',
+          type: 'freehand',
+          shape: FreehandShape.feltTipPen,
+          points: [
+            [0, 0],
+            [10, 10],
+          ],
+        } as any)
+      ).toBe(true);
+    });
+  });
+
   describe('extractTextFromElement', () => {
     it('应该将 markdown card 的标题和正文作为文本提取', () => {
       const result = extractTextFromElement({
@@ -42,6 +115,59 @@ describe('selection-utils', () => {
   });
 
   describe('extractImagesFromElementForAI', () => {
+    it('单选图片时应该导出相交的蒙版画笔', async () => {
+      const createElement = document.createElement.bind(document);
+      vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+        if (tagName === 'canvas') {
+          return createMockMaskCanvas() as unknown as HTMLElement;
+        }
+        return createElement(tagName);
+      });
+
+      const image = {
+        id: 'image-1',
+        type: 'image',
+        url: 'https://example.com/source.png',
+        angle: 0,
+        width: 100,
+        height: 50,
+        points: [
+          [0, 0],
+          [100, 50],
+        ],
+      };
+      const mask = {
+        id: 'mask-1',
+        type: 'freehand',
+        shape: FreehandShape.mask,
+        points: [
+          [10, 10],
+          [40, 20],
+        ],
+        strokeWidth: 8,
+      };
+      const board = {
+        children: [image, mask],
+        getRectangle: (element: { points: number[][] }) => ({
+          x: element.points[0][0],
+          y: element.points[0][1],
+          width: element.points[1][0] - element.points[0][0],
+          height: element.points[1][1] - element.points[0][1],
+        }),
+      };
+
+      const result = await processSelectedContentForAI(board as any, [
+        'image-1',
+      ]);
+
+      expect(result.remainingImages).toHaveLength(1);
+      expect(result.remainingImages[0].url).toBe('https://example.com/source.png');
+      expect(result.maskImage).toMatch(/^\/__aitu_cache__\/image\/ai-mask-/);
+      expect(result.graphicsImage).toBeUndefined();
+
+      vi.restoreAllMocks();
+    });
+
     it('应该保持 3D 变换图片发送给 AI 的参考图为原图 URL', async () => {
       const element = {
         id: 'image-1',

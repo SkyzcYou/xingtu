@@ -1,3 +1,42 @@
+## 0.9.5 (2026-05-06)
+
+### 🩹 Fixes
+
+- 修复蒙版画笔导出和预览样式问题 ([69f94d26](https://github.com/ljquan/aitu/commit/69f94d26))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.9.4 (2026-05-06)
+
+### 🔧 Chores
+
+- Stop idle-prefetch retries from blocking SW updates ([d2d51319](https://github.com/ljquan/aitu/commit/d2d51319))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
+## 0.9.3 (2026-05-06)
+
+### 🚀 Features
+
+- support AI image mask editing ([3a33e873](https://github.com/ljquan/aitu/commit/3a33e873))
+
+### 🩹 Fixes
+
+- keep send button visible ([ef75dadb](https://github.com/ljquan/aitu/commit/ef75dadb))
+- resume async image tasks after reload ([4ed9402f](https://github.com/ljquan/aitu/commit/4ed9402f))
+
+### 🔧 Chores
+
+- 更新版本号至0.9.2并刷新构建时间 ([0c4b383d](https://github.com/ljquan/aitu/commit/0c4b383d))
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+
 ## 0.9.2 (2026-05-04)
 
 ### 🚀 Features

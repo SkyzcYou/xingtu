@@ -161,6 +161,30 @@ describe('workflow-converter', () => {
         expect(workflow.steps[0].args.referenceImages).toEqual(referenceImages);
       });
 
+      it('单张图片带蒙版时应该创建 image_edit 请求参数', () => {
+        const params = createMockParams({
+          generationType: 'image',
+          prompt: '只修改涂抹区域',
+          selection: {
+            texts: [],
+            images: ['https://example.com/source.png'],
+            videos: [],
+            graphics: [],
+            maskImage: '/__aitu_cache__/image/mask.png',
+          },
+        });
+
+        const workflow = convertDirectGenerationToWorkflow(params, [
+          'https://example.com/source.png',
+        ]);
+
+        expect(workflow.steps[0].args).toMatchObject({
+          referenceImages: ['https://example.com/source.png'],
+          generationMode: 'image_edit',
+          maskImage: '/__aitu_cache__/image/mask.png',
+        });
+      });
+
       it('应该把知识库上下文 refs 传递到直接生成步骤和元数据', () => {
         const params = createMockParams({
           generationType: 'image',

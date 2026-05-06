@@ -232,6 +232,16 @@ export async function generateImageAsync(
       }
     }
   }
+  if (params.maskImage) {
+    try {
+      const response = await fetchFn(params.maskImage, { signal });
+      if (response.ok) {
+        formData.append('mask', await response.blob(), 'mask.png');
+      }
+    } catch (e) {
+      console.warn('[ImageAPI] Failed to fetch mask image:', e);
+    }
+  }
 
   onProgress?.(5);
   // 提交异步任务

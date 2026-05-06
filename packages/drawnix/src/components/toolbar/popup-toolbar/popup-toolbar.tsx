@@ -94,6 +94,7 @@ import {
   VolumeX,
   Scaling,
   RefreshCw,
+  PaintBucket,
 } from 'lucide-react';
 import { useDrawnix, DialogType } from '../../../hooks/use-drawnix';
 import { useI18n } from '../../../i18n';
@@ -167,6 +168,10 @@ import {
   type CanvasSpeechTextResult,
 } from './text-to-speech-utils';
 import { isOrdinary3DTransformImage } from '../../../utils/image-3d-transform';
+import {
+  findMaskBrushesForImage,
+  isMaskBrushEligibleImage,
+} from '../../../utils/ai-mask-brush';
 
 const ImageEditor = lazy(() =>
   import('../../image-editor').then((module) => ({
@@ -361,6 +366,8 @@ export const PopupToolbar = () => {
     hasTextToSpeech?: boolean; // 是否显示语音朗读按钮
     hasMediaFitPPT?: boolean; // 是否显示素材自适应 PPT 按钮
     hasImage3DTransform?: boolean; // 是否显示图片 3D 调节按钮
+    hasMaskInvert?: boolean; // 是否显示蒙版反选按钮
+    maskInverted?: boolean; // 当前蒙版是否反选
   } = {
     fill: 'red',
   };
@@ -626,6 +633,13 @@ export const PopupToolbar = () => {
       selectedElements.length === 1 &&
       !PlaitBoard.hasBeenTextEditing(board) &&
       isOrdinary3DTransformImage(selectedElements[0]);
+    const hasMaskInvert =
+      selectedElements.length === 1 &&
+      !PlaitBoard.hasBeenTextEditing(board) &&
+      isMaskBrushEligibleImage(selectedElements[0]) &&
+      findMaskBrushesForImage(board, selectedElements[0]).length > 0;
+    const maskInverted =
+      hasMaskInvert && !!(selectedElements[0] as any).aiMaskInverted;
 
     state = {
       ...getElementState(board),
@@ -662,6 +676,8 @@ export const PopupToolbar = () => {
       hasTextToSpeech,
       hasMediaFitPPT,
       hasImage3DTransform,
+      hasMaskInvert,
+      maskInverted,
     };
   }
 
@@ -908,6 +924,38 @@ export const PopupToolbar = () => {
       pptReplaceElementId: slideImage?.elementId,
     });
   }, [board, openDialog, selectedElements]);
+
+  const toggleMaskInvert = useCallback(() => {
+    const imageElement = selectedElements[0];
+    if (
+      selectedElements.length !== 1 ||
+      !isMaskBrushEligibleImage(imageElement)
+    ) {
+      return;
+    }
+    const elementIndex = board.children.findIndex(
+      (child) => child.id === imageElement.id
+    );
+    if (elementIndex < 0) {
+      return;
+    }
+    const nextInverted = !(imageElement as any).aiMaskInverted;
+    Transforms.setNode(
+      board,
+      { aiMaskInverted: nextInverted || undefined } as Partial<PlaitElement>,
+      [elementIndex]
+    );
+    MessagePlugin.success(
+      nextInverted
+        ? language === 'zh'
+          ? '已开启蒙层反选'
+          : 'Mask inverted'
+        : language === 'zh'
+        ? '已关闭蒙层反选'
+        : 'Mask inversion off',
+      1200
+    );
+  }, [board, language, selectedElements]);
 
   const updatePopupToolbarPosition = useCallback(() => {
     if (!open || movingOrDragging) {
@@ -1617,6 +1665,28 @@ export const PopupToolbar = () => {
                     setShowImageEditor(true);
                   }
                 }}
+              />
+            )}
+            {state.hasMaskInvert && (
+              <ToolButton
+                className="mask-invert"
+                key="mask-invert"
+                type="icon"
+                icon={<PaintBucket size={15} />}
+                visible={true}
+                selected={state.maskInverted}
+                tooltip={
+                  language === 'zh'
+                    ? '蒙层反选：反向填充图片'
+                    : 'Invert mask: fill the opposite area'
+                }
+                aria-label={
+                  language === 'zh'
+                    ? '蒙层反选'
+                    : 'Invert mask'
+                }
+                data-track="toolbar_click_mask_invert"
+                onPointerUp={toggleMaskInvert}
               />
             )}
             {state.hasDownloadable && (

@@ -19,7 +19,7 @@ import {
   TaskStatus,
   TaskExecutionPhase,
 } from '../types/task.types';
-import { isAsyncImageModel } from '../constants/model-config';
+import { isResumableAsyncImageTask } from '../utils/task-utils';
 
 // Global flag to prevent multiple initializations (persists across HMR)
 let initializationStarted = false;
@@ -125,9 +125,7 @@ export function useTaskStorage(): boolean {
 
             processingTasks.forEach((task) => {
               const isAsyncImageResumable =
-                task.type === TaskType.IMAGE &&
-                task.remoteId &&
-                isAsyncImageModel(task.params?.model);
+                isResumableAsyncImageTask(task);
 
               const isVideoResumable = task.type === TaskType.VIDEO && !!task.remoteId;
               const isAudioResumable =
@@ -191,8 +189,7 @@ export function useTaskStorage(): boolean {
               task.remoteId &&
               (task.type === TaskType.VIDEO ||
                 task.type === TaskType.AUDIO ||
-                (task.type === TaskType.IMAGE &&
-                  isAsyncImageModel(task.params?.model)))
+                isResumableAsyncImageTask(task))
           );
 
           // 无条件打印汇总，便于定位

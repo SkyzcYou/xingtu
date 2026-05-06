@@ -248,7 +248,7 @@ describe('Media Executor Module', () => {
         prompt: 'Edit this',
         model: 'gpt-image-2',
         referenceImages: ['data:image/png;base64,source'],
-        generationMode: 'image_to_image',
+        generationMode: 'image_edit',
         maskImage: 'data:image/png;base64,mask',
         outputFormat: 'png',
       });
@@ -266,7 +266,7 @@ describe('Media Executor Module', () => {
       expect(generateSpy).toHaveBeenCalledWith(
         expect.any(Object),
         expect.objectContaining({
-          generationMode: 'image_to_image',
+          generationMode: 'image_edit',
           referenceImages: ['data:image/png;base64,abc'],
           maskImage: 'data:image/png;base64,mask',
           outputFormat: 'png',

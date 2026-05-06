@@ -70,6 +70,7 @@ export type DrawnixState = {
   openSettings: boolean;
   openCommandPalette?: boolean;
   openCanvasSearch?: boolean;
+  toolSettingsVersion?: number;
   linkState?: LinkState | null;
   lastSelectedElementIds?: string[]; // 最近选中的元素IDs,用于AI生成插入位置计算
 };

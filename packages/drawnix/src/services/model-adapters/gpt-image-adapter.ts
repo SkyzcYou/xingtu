@@ -20,6 +20,7 @@ const GPT_IMAGE_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp']);
 const GPT_IMAGE_BACKGROUND_VALUES = new Set(['transparent', 'opaque', 'auto']);
 const GPT_IMAGE_MODERATION_VALUES = new Set(['low', 'auto']);
 const GPT_IMAGE_INPUT_FIDELITY_VALUES = new Set(['high', 'low']);
+const GPT_IMAGE_RESPONSE_FORMAT_VALUES = new Set(['url', 'b64_json']);
 
 function getStringParam(
   params: Record<string, unknown> | undefined,
@@ -80,6 +81,15 @@ function setAllowedStringValue(
   if (value && allowed.has(value)) {
     body[key] = value;
   }
+}
+
+function getGPTImageResponseFormat(
+  params: Record<string, unknown> | undefined
+): 'url' | 'b64_json' {
+  const value = getStringParam(params, 'response_format');
+  return value && GPT_IMAGE_RESPONSE_FORMAT_VALUES.has(value)
+    ? (value as 'url' | 'b64_json')
+    : 'url';
 }
 
 function applyCommonGPTImageOptions(
@@ -162,6 +172,7 @@ export function buildGPTImageGenerationBody(
   const body: Record<string, unknown> = {
     model: request.model,
     prompt: request.prompt,
+    response_format: getGPTImageResponseFormat(request.params),
   };
 
   applyCommonGPTImageOptions(body, request, 'generation');
@@ -244,6 +255,7 @@ export async function buildGPTImageEditFormData(
   const fields: Record<string, unknown> = {
     model: request.model,
     prompt: request.prompt,
+    response_format: getGPTImageResponseFormat(params),
   };
 
   setAllowedStringValue(

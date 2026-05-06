@@ -17,6 +17,7 @@ interface UsePencilCursorOptions {
 
 // 橡皮擦颜色
 const ERASER_COLOR = '#f5f5f5';
+const MASK_BRUSH_CURSOR_COLOR = 'rgba(0, 0, 0, 0.6)';
 
 /**
  * 生成圆形光标的 SVG data URL
@@ -111,7 +112,11 @@ function applyCursorStyle(board: PlaitBoard, pointer: string) {
   if (isPencilPointer(pointer)) {
     // 画笔光标（支持不同形状）
     const scaledSize = settings.strokeWidth * zoom;
-    const cursorStyle = generateCursorSvg(settings.strokeColor, scaledSize, settings.pencilShape);
+    const cursorColor =
+      pointer === FreehandShape.mask
+        ? MASK_BRUSH_CURSOR_COLOR
+        : settings.strokeColor;
+    const cursorStyle = generateCursorSvg(cursorColor, scaledSize, settings.pencilShape);
     hostSvg.style.cursor = cursorStyle;
   } else if (isEraserPointer(pointer)) {
     // 橡皮擦光标（支持不同形状）

@@ -22,7 +22,7 @@ import { BrushShape, FreehandStrokeStyle } from './freehand-settings';
 import { getFillRenderColor } from '../../types/fill.types';
 
 export function getFreehandPointers() {
-  return [FreehandShape.feltTipPen, FreehandShape.eraser];
+  return [FreehandShape.feltTipPen, FreehandShape.mask, FreehandShape.eraser];
 }
 
 /**

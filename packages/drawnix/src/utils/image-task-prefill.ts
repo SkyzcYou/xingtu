@@ -6,6 +6,7 @@ import type { AIInputPrefillEventDetail } from '../services/ai-input-ui-events';
 export interface ImageGenerationReferenceImage {
   url: string;
   name: string;
+  maskImage?: string;
 }
 
 export interface ImageGenerationInitialData {
@@ -186,6 +187,15 @@ export function getImageTaskReferenceImages(
   );
   if (inputReference && !seenUrls.has(inputReference.url)) {
     images.push(inputReference);
+  }
+
+  const maskImage =
+    readString(params.maskImage) || readString(params.mask_image);
+  if (maskImage && images.length === 1) {
+    images[0] = {
+      ...images[0],
+      maskImage,
+    };
   }
 
   return images;

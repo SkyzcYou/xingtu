@@ -1,9 +1,13 @@
 {
-  "version": "0.7.0",
-  "buildTime": "2026-05-04T12:04:42.517Z",
+  "version": "0.7.1",
+  "buildTime": "2026-05-06T05:56:22.541Z",
   "gitCommit": "unknown",
   "changelog": [
-    "优化参考图描述和提示词优先级协议",
-    "优化长提示词输入框展开体验"
+    "为绘图工具添加键盘快捷键调整大小功能",
+    "修复蒙版画笔导出和预览样式问题",
+    "support AI image mask editing",
+    "Stop idle-prefetch retries from blocking SW updates",
+    "keep send button visible",
+    "resume async image tasks after reload"
   ]
 }

@@ -76,10 +76,15 @@ describe('media-api provider routing', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it('submits async image reference images to /v1/videos as input_reference', async () => {
+  it('submits async image reference images and mask to /v1/videos form data', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === 'data:image/png;base64,abc123') {
         return new Response(new Blob(['ref'], { type: 'image/png' }), {
+          status: 200,
+        });
+      }
+      if (String(input) === 'data:image/png;base64,mask123') {
+        return new Response(new Blob(['mask'], { type: 'image/png' }), {
           status: 200,
         });
       }
@@ -91,6 +96,7 @@ describe('media-api provider routing', () => {
         expect(formData.get('prompt')).toBe('edit with reference');
         expect(formData.get('size')).toBe('1:1');
         expect(formData.get('input_reference')).toBeInstanceOf(Blob);
+        expect(formData.get('mask')).toBeInstanceOf(Blob);
 
         return new Response(
           JSON.stringify({
@@ -126,6 +132,7 @@ describe('media-api provider routing', () => {
         model: 'gpt-image-2',
         size: '1:1',
         referenceImages: ['data:image/png;base64,abc123'],
+        maskImage: 'data:image/png;base64,mask123',
       },
       {
         apiKey: 'secret',
@@ -140,7 +147,7 @@ describe('media-api provider routing', () => {
     );
 
     expect(result.url).toBe('https://cdn.example.com/final.png');
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
   it('uses bearer auth for shared video submission', async () => {

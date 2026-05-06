@@ -30,6 +30,7 @@ export interface AsyncImageGenerationParams {
   prompt: string;
   size?: string; // 接口的尺寸/比例字段（枚举 1:1、4:5 等）
   referenceImages?: string[];
+  maskImage?: string;
 }
 
 export interface AsyncImageSubmitResponse {
@@ -90,12 +91,27 @@ function resolveProviderContext(
   };
 }
 
-function appendReferenceImage(
+function isLocalResolvableImage(value: string): boolean {
+  return value.startsWith('/__aitu_cache__/') || value.startsWith('/asset-library/');
+}
+
+async function normalizeImageFormValue(value: string): Promise<string> {
+  if (!isLocalResolvableImage(value)) {
+    return value;
+  }
+
+  const { unifiedCacheService } = await import('./unified-cache-service');
+  const imageData = await unifiedCacheService.getImageForAI(value);
+  return imageData.value;
+}
+
+async function appendReferenceImage(
   formData: FormData,
+  field: 'input_reference' | 'mask',
   value: string,
   index: number
-): void {
-  const normalized = normalizeImageDataUrl(value);
+): Promise<void> {
+  const normalized = normalizeImageDataUrl(await normalizeImageFormValue(value));
   try {
     const match = normalized.match(/^data:([^;,]+)?;base64,(.*)$/);
     if (match) {
@@ -106,9 +122,9 @@ function appendReferenceImage(
         bytes[i] = binary.charCodeAt(i);
       }
       formData.append(
-        'input_reference',
+        field,
         new Blob([bytes], { type: mimeType }),
-        `reference-${index + 1}.png`
+        field === 'mask' ? 'mask.png' : `reference-${index + 1}.png`
       );
       return;
     }
@@ -116,7 +132,7 @@ function appendReferenceImage(
     // Fall back to raw value below; provider gateway can still resolve URLs.
   }
 
-  formData.append('input_reference', normalized);
+  formData.append(field, normalized);
 }
 
 class AsyncImageAPIService {
@@ -137,9 +153,17 @@ class AsyncImageAPIService {
       formData.append('size', params.size);
     }
     if (params.referenceImages?.length) {
-      params.referenceImages.forEach((referenceImage, index) => {
-        appendReferenceImage(formData, referenceImage, index);
-      });
+      for (const [index, referenceImage] of params.referenceImages.entries()) {
+        await appendReferenceImage(
+          formData,
+          'input_reference',
+          referenceImage,
+          index
+        );
+      }
+    }
+    if (params.maskImage) {
+      await appendReferenceImage(formData, 'mask', params.maskImage, 0);
     }
 
     const response = await providerTransport.send(providerContext, {

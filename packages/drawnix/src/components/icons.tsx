@@ -712,6 +712,14 @@ export const FeltTipPenIcon: React.FC<React.SVGProps<SVGSVGElement> & { size?: n
   </svg>
 );
 
+export const MaskBrushIcon: React.FC<React.SVGProps<SVGSVGElement> & { size?: number }> = ({ size = 24, ...props }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width={size} height={size} {...props}>
+    <rect x="4" y="4" width="16" height="16" rx="3" strokeDasharray="3 2" />
+    <path d="m14.5 7.5 2 2-6.4 6.4-2.6.6.6-2.6z" />
+    <path d="m13.2 8.8 2 2" />
+  </svg>
+);
+
 // 激光笔图标
 export const LaserPointerIcon: React.FC<React.SVGProps<SVGSVGElement> & { size?: number }> = ({ size = 24, ...props }) => (
   <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" width={size} height={size} {...props}>

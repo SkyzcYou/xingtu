@@ -7,6 +7,7 @@ import {
   FeltTipPenIcon,
   VectorPenIcon,
   LaserPointerIcon,
+  MaskBrushIcon,
 } from '../../icons';
 import { BoardTransforms } from '@plait/core';
 import React from 'react';
@@ -37,6 +38,11 @@ export const FREEHANDS: FreehandProps[] = [
       icon: <VectorPenIcon />,
       pointer: PenShape.pen,
       titleKey: 'toolbar.vectorPen',
+    },
+    {
+      icon: <MaskBrushIcon />,
+      pointer: FreehandShape.mask,
+      titleKey: 'toolbar.maskBrush',
     },
     {
       icon: <EraseIcon />,
@@ -80,6 +86,14 @@ export const FreehandPanel: React.FC<FreehandPickerProps> = ({
                   icon={freehand.icon}
                   tooltip={t(freehand.titleKey as keyof Translations)}
                   aria-label={t(freehand.titleKey as keyof Translations)}
+                  aria-keyshortcuts={
+                    freehand.pointer === FreehandShape.mask
+                      ? 'Shift+M'
+                      : undefined
+                  }
+                  keyBindingLabel={
+                    freehand.pointer === FreehandShape.mask ? 'M' : undefined
+                  }
                   onPointerDown={() => {
                     // 切换工具前，结束钢笔绘制（如果切换到非钢笔工具）
                     if (freehand.pointer !== PenShape.pen) {

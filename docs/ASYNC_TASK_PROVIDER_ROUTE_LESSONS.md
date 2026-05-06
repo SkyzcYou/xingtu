@@ -1,6 +1,6 @@
 # 异步任务供应商路由经验
 
-更新日期：2026-05-02
+更新日期：2026-05-05
 
 ## 背景
 
@@ -86,12 +86,27 @@
 
 如果某条链路漏掉字段，刷新或远程同步后仍会回到默认供应商查询。
 
+### 6. 异步图片恢复判定不能只依赖模型白名单
+
+刷新恢复时，只要异步任务已经拿到远端任务 ID，就应该优先恢复轮询，而不是直接标记为“页面刷新中断”。
+
+图片任务尤其容易踩坑：动态供应商模型不一定在内置 `ASYNC_IMAGE_MODEL_IDS` 白名单里，但任务创建时已经持久化了 `invocationRoute.binding`。因此恢复判定应满足：
+
+- 任务类型是 image
+- 已有 `remoteId`
+- 模型命中内置异步图片白名单，或 `invocationRoute.binding` 表明它是 `openai.async.media` / `openai.async.image.form`
+
+这样页面刷新后，UI 会继续显示生成中并由执行器恢复轮询；只有真正的业务终态失败才进入失败界面。
+
+不要为了隐藏错误去改 UI。失败界面只是任务状态的投影，根因应在任务恢复层修正。
+
 ## 代码落点
 
 - `task-invocation-route.ts`：创建、解析、严格校验任务路由快照。
 - `core.types.ts`：任务模型增加 `invocationRoute`。
 - `task-queue-service.ts`：创建任务、外部任务、storage sync 写入路由快照。
 - `generation-api-service.ts` / `useTaskExecutor.ts`：image/audio/video 恢复查询优先用任务路由，并在严格模式下校验原供应商。
+- `task-utils.ts`：集中判断异步图片任务是否可恢复，避免 storage 和 executor 使用不同条件。
 - `fallback-executor.ts`：fallback 视频恢复查询使用原供应商。
 - `video-binding-utils.ts`：统一视频状态查询路径模板。
 - `github-sync`：远程同步保留 `invocationRoute`。
@@ -103,6 +118,7 @@
 - 修改默认供应商后，旧异步任务仍应使用原供应商查询。
 - 删除或停用原供应商后，任务应失败为明确配置错误，不应切到默认 key。
 - 自定义 `pollPathTemplate` 的视频供应商应按模板查询状态。
+- 动态异步图片模型即使不在内置白名单，只要保存了 async image binding 和 `remoteId`，刷新后也应继续轮询。
 
 ## 经验规则
 
@@ -111,3 +127,4 @@
 - 不要把 API Key 持久化进任务；持久化供应商 ID，查询时读取当前 key。
 - 新增异步供应商时，必须同时补提交路径、轮询路径、恢复路径和同步路径测试。
 - 任何状态恢复逻辑都要警惕静默 fallback，它会把配置问题伪装成模型权限问题。
+- UI 失败态不应作为异步中断兜底；先确认任务是否已有可轮询的远端 ID。

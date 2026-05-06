@@ -28,6 +28,7 @@ export interface ReferenceImage {
   url: string;
   name: string;
   file?: File;
+  maskImage?: string;
 }
 
 interface ReferenceImageUploadProps {

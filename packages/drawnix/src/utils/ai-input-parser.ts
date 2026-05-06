@@ -92,6 +92,8 @@ export interface SelectionInfo {
   graphics: string[];
   /** 图片尺寸信息（按顺序对应 images + graphics） */
   imageDimensions?: ImageDimensions[];
+  /** 单张普通图片自动识别出的局部编辑蒙版 URL */
+  maskImage?: string;
 }
 
 /**

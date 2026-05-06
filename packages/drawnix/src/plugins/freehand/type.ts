@@ -33,10 +33,13 @@ export enum FreehandShape {
   eraser = 'eraser',
   nibPen = 'nibPen',
   feltTipPen = 'feltTipPen',
+  mask = 'mask',
   artisticBrush = 'artisticBrush',
   markerHighlight = 'markerHighlight',
   laserPointer = 'laserPointer',
 }
+
+export const FREEHAND_MASK_VISIBLE_OPACITY = 0.6;
 
 export const FREEHAND_TYPE = 'freehand';
 

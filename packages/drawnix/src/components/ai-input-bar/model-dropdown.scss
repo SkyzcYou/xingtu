@@ -15,7 +15,8 @@ $green-health: #10b981;
 .model-dropdown {
   position: relative;
   display: inline-flex;
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
 
   &--disabled {
     cursor: not-allowed;
@@ -45,6 +46,7 @@ $green-health: #10b981;
       font-size: 13px;
       font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
       white-space: nowrap;
+      min-width: 0;
 
       .model-dropdown__at {
         color: $orange-primary;
@@ -54,6 +56,8 @@ $green-health: #10b981;
       .model-dropdown__code {
         color: $gray-dark;
         font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
     }
 

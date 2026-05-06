@@ -12,12 +12,128 @@ import { BoardCreationMode, setCreationMode } from '@plait/common';
 import { MindPointerType } from '@plait/mind';
 import { FreehandShape } from './freehand/type';
 import { PenShape } from './pen/type';
+import {
+  getFreehandSettings,
+  setEraserWidth,
+  setFreehandStrokeWidth,
+} from './freehand/freehand-settings';
+import { getPenSettings, setPenStrokeWidth } from './pen/pen-settings';
 import { ArrowLineShape, BasicShapes } from '@plait/draw';
 import { AlignmentTransforms } from '../transforms/alignment';
 import { DistributeTransforms } from '../transforms/distribute';
 import { BooleanTransforms } from '../transforms/boolean';
 import { FramePointerType } from './with-frame';
 import { LassoPointerType } from './with-lasso-selection';
+import {
+  updateEraserCursor,
+  updatePencilCursor,
+} from '../hooks/usePencilCursor';
+
+const MIN_TOOL_SIZE = 1;
+const MAX_STROKE_WIDTH = 100;
+const MAX_ERASER_WIDTH = 256;
+const TOOL_SIZE_STEP = 1;
+let toolSettingsVersionSeed = 0;
+
+function clampSize(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function isToolSizeHotkey(event: KeyboardEvent) {
+  return (
+    event.key === '-' ||
+    event.key === '+' ||
+    event.key === 'ArrowUp' ||
+    event.key === 'ArrowRight' ||
+    event.key === 'ArrowDown' ||
+    event.key === 'ArrowLeft' ||
+    event.code === 'NumpadAdd' ||
+    event.code === 'NumpadSubtract'
+  );
+}
+
+function getToolSizeDelta(event: KeyboardEvent) {
+  return event.key === '-' ||
+    event.key === 'ArrowDown' ||
+    event.key === 'ArrowLeft' ||
+    event.code === 'NumpadSubtract'
+    ? -TOOL_SIZE_STEP
+    : TOOL_SIZE_STEP;
+}
+
+function refreshToolSettings(
+  board: PlaitBoard,
+  updateAppState: (appState: Partial<DrawnixState>) => void
+) {
+  const currentVersion =
+    (board as PlaitBoard & { appState?: DrawnixState }).appState
+      ?.toolSettingsVersion ?? 0;
+  toolSettingsVersionSeed =
+    Math.max(toolSettingsVersionSeed, currentVersion) + 1;
+  updateAppState({ toolSettingsVersion: toolSettingsVersionSeed });
+}
+
+function adjustActiveToolSize(
+  board: PlaitBoard,
+  event: KeyboardEvent,
+  updateAppState: (appState: Partial<DrawnixState>) => void
+) {
+  if (
+    !isToolSizeHotkey(event) ||
+    event.altKey ||
+    event.metaKey ||
+    event.ctrlKey
+  ) {
+    return false;
+  }
+
+  const delta = getToolSizeDelta(event);
+
+  if (PlaitBoard.isInPointer(board, [FreehandShape.eraser])) {
+    const settings = getFreehandSettings(board);
+    const nextSize = clampSize(
+      settings.eraserWidth + delta,
+      MIN_TOOL_SIZE,
+      MAX_ERASER_WIDTH
+    );
+    setEraserWidth(board, nextSize);
+    updateEraserCursor(board);
+    refreshToolSettings(board, updateAppState);
+    return true;
+  }
+
+  if (
+    PlaitBoard.isInPointer(board, [
+      FreehandShape.feltTipPen,
+      FreehandShape.mask,
+    ])
+  ) {
+    const settings = getFreehandSettings(board);
+    const nextSize = clampSize(
+      settings.strokeWidth + delta,
+      MIN_TOOL_SIZE,
+      MAX_STROKE_WIDTH
+    );
+    setFreehandStrokeWidth(board, nextSize);
+    updatePencilCursor(board, board.pointer as string);
+    refreshToolSettings(board, updateAppState);
+    return true;
+  }
+
+  if (PlaitBoard.isInPointer(board, [PenShape.pen])) {
+    const settings = getPenSettings(board);
+    const nextSize = clampSize(
+      settings.strokeWidth + delta,
+      MIN_TOOL_SIZE,
+      MAX_STROKE_WIDTH
+    );
+    setPenStrokeWidth(board, nextSize);
+    refreshToolSettings(board, updateAppState);
+    return true;
+  }
+
+  return false;
+}
 
 export const buildDrawnixHotkeyPlugin = (
   updateAppState: (appState: Partial<DrawnixState>) => void
@@ -180,6 +296,23 @@ export const buildDrawnixHotkeyPlugin = (
           event.preventDefault();
           return;
         }
+        if (
+          !event.altKey &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          isHotkey(['shift+m'], { byKey: true })(event)
+        ) {
+          setCreationMode(board, BoardCreationMode.drawing);
+          BoardTransforms.updatePointerType(board, FreehandShape.mask);
+          updateAppState({ pointer: FreehandShape.mask });
+          event.preventDefault();
+          return;
+        }
+
+        if (adjustActiveToolSize(board, event, updateAppState)) {
+          event.preventDefault();
+          return;
+        }
 
         if (!event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
           if (event.key === 'l') {
@@ -189,7 +322,16 @@ export const buildDrawnixHotkeyPlugin = (
             event.preventDefault();
             return;
           }
-          if (event.key === 'Escape' && PlaitBoard.isPointer(board, FreehandShape.laserPointer)) {
+          const escapeToSelectionPointers = [
+            FreehandShape.feltTipPen,
+            FreehandShape.mask,
+            FreehandShape.eraser,
+            FreehandShape.laserPointer,
+          ];
+          if (
+            event.key === 'Escape' &&
+            PlaitBoard.isInPointer(board, escapeToSelectionPointers)
+          ) {
             BoardTransforms.updatePointerType(board, PlaitPointerType.selection);
             updateAppState({ pointer: PlaitPointerType.selection });
             event.preventDefault();

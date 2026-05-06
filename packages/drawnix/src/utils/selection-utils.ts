@@ -2,7 +2,7 @@ import { getSelectedElements, PlaitBoard, PlaitElement, getRectangleByElements, 
 import { MindElement } from '@plait/mind';
 import { PlaitDrawElement } from '@plait/draw';
 import { Node } from 'slate';
-import { Freehand } from '../plugins/freehand/type';
+import { Freehand, FreehandShape } from '../plugins/freehand/type';
 import { PenPath } from '../plugins/pen/type';
 import { SAME_ROW_THRESHOLD } from '../components/ttd-dialog/shared/size-constants';
 import { trimImageWhiteAndTransparentBorder } from '@aitu/utils';
@@ -15,6 +15,12 @@ import {
   isOrdinary3DTransformImage,
   sanitizeImage3DTransform,
 } from './image-3d-transform';
+import {
+  exportImageMaskFromBrushes,
+  findMaskBrushesForImage,
+  type MaskExportInfo,
+  isMaskBrushEligibleImage,
+} from './ai-mask-brush';
 
 /**
  * 从图片 URL 获取原始尺寸
@@ -127,6 +133,8 @@ export interface ProcessedContent {
   remainingImages: { url: string; name?: string; width?: number; height?: number }[];
   remainingText: string;
   graphicsImage?: string;
+  maskImage?: string;
+  maskExportInfo?: MaskExportInfo;
   /** 图形图片的尺寸（如果有） */
   graphicsImageDimensions?: { width: number; height: number };
 }
@@ -346,6 +354,9 @@ export const isGraphicsElement = (board: PlaitBoard, element: PlaitElement): boo
   
   // Freehand drawings
   if (Freehand.isFreehand(element)) {
+    if (element.shape === FreehandShape.mask) {
+      return false;
+    }
     // console.log('Element classified as freehand graphics');
     return true;
   }
@@ -957,6 +968,99 @@ export function getImageTransformPromptContext(
   )}。生成顺序：1. 建立三维空间和主体骨架；2. 移动相机到目标方位；3. 重新计算主体、道具、前景、中景和背景的大小、遮挡、朝向、前后关系。主体不能保持原参考图的正面摆放，主体位置和姿态必须出现可见变化。失败条件：如果画面是在白色/空白背景上摆放一张倾斜矩形图片，或只是把整张参考图旋转/投影成四边形，这个结果无效。`;
 }
 
+function canvasToImageBlob(
+  canvas: HTMLCanvasElement,
+  type = 'image/png',
+  quality?: number
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('图片生成失败'));
+        return;
+      }
+      resolve(blob);
+    }, type, quality);
+  });
+}
+
+async function resizeImageUrlForMaskEdit(
+  url: string,
+  width: number,
+  height: number
+): Promise<string | undefined> {
+  if (width <= 0 || height <= 0) {
+    return undefined;
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+
+    img.onload = async () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(undefined);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const blob = await canvasToImageBlob(canvas, 'image/jpeg', 0.9);
+        const { unifiedCacheService } = await import(
+          '../services/unified-cache-service'
+        );
+        const cacheId = `ai-mask-reference-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+        const stableUrl = `/__aitu_cache__/image/${cacheId}.jpg`;
+        await unifiedCacheService.cacheMediaFromBlob(stableUrl, blob, 'image', {
+          metadata: {
+            source: 'ai-mask-reference-resize',
+            width,
+            height,
+          },
+        });
+        resolve(stableUrl);
+      } catch {
+        resolve(undefined);
+      }
+    };
+
+    img.onerror = () => {
+      resolve(undefined);
+    };
+
+    if (
+      url.startsWith('/__aitu_cache__/') ||
+      url.startsWith('/asset-library/')
+    ) {
+      import('../services/unified-cache-service')
+        .then(({ unifiedCacheService }) =>
+          unifiedCacheService.getImageForAI(url, {
+            maxSize: Number.MAX_SAFE_INTEGER,
+          })
+        )
+        .then((imageData) => {
+          img.src = imageData.value;
+        })
+        .catch(() => resolve(undefined));
+      return;
+    }
+
+    if (
+      !url.startsWith('data:') &&
+      !url.startsWith('blob:') &&
+      !url.startsWith('/')
+    ) {
+      img.crossOrigin = 'anonymous';
+      img.referrerPolicy = 'no-referrer';
+    }
+    img.src = url;
+  });
+}
+
 export const extractImagesFromElementForAI = async (
   board: PlaitBoard,
   element: PlaitElement
@@ -1037,6 +1141,14 @@ export const processSelectedContentForAI = async (
   // Step 1: Find graphics elements and their overlapping elements (using sorted elements)
   const { graphicsElements, overlappingElements } = findElementsOverlappingWithGraphics(board, sortedElements);
   // console.log('Graphics elements:', graphicsElements.length, 'Overlapping elements:', overlappingElements.length);
+  const selectedImageForMask =
+    sortedElements.length === 1 && isMaskBrushEligibleImage(sortedElements[0])
+      ? sortedElements[0]
+      : undefined;
+  const maskBrushElements = selectedImageForMask
+    ? findMaskBrushesForImage(board, selectedImageForMask)
+    : [];
+  const maskBrushElementSet = new Set(maskBrushElements);
   
   // Step 2: Combine graphics elements with overlapping elements, preserving sorted order.
   // 3D-transformed ordinary images stay as original AI references, with camera-view details in text context.
@@ -1049,7 +1161,11 @@ export const processSelectedContentForAI = async (
       (element) => !originalImageReferenceElements.has(element)
     ),
   ]);
-  const allGraphicsRelatedElements = sortedElements.filter(el => allGraphicsRelatedElementsSet.has(el));
+  const allGraphicsRelatedElements = sortedElements.filter(
+    (el) =>
+      allGraphicsRelatedElementsSet.has(el) &&
+      !maskBrushElementSet.has(el as any)
+  );
   
   // Step 3: Identify remaining elements (not graphics-related), preserving sorted order
   const remainingElements = sortedElements.filter(
@@ -1120,11 +1236,55 @@ export const processSelectedContentForAI = async (
       graphicsImageDimensions = dims;
     }
   }
+
+  let maskImage: string | undefined;
+  let maskExportInfo: MaskExportInfo | undefined;
+  if (selectedImageForMask && maskBrushElements.length > 0) {
+    try {
+      maskImage = await exportImageMaskFromBrushes({
+        imageElement: selectedImageForMask,
+        maskElements: maskBrushElements,
+        invert: !!(selectedImageForMask as any).aiMaskInverted,
+        onExportInfo: (info) => {
+          maskExportInfo = info;
+        },
+      });
+    } catch (error) {
+      console.warn('[selection-utils] Failed to export AI mask brush:', error);
+    }
+  }
+
+  if (
+    maskImage &&
+    maskExportInfo &&
+    maskExportInfo.scale < 1 &&
+    imagesWithDimensions.length === 1
+  ) {
+    const resizedImage = await resizeImageUrlForMaskEdit(
+      imagesWithDimensions[0].url,
+      maskExportInfo.width,
+      maskExportInfo.height
+    );
+    if (resizedImage) {
+      imagesWithDimensions[0] = {
+        ...imagesWithDimensions[0],
+        url: resizedImage,
+        width: maskExportInfo.width,
+        height: maskExportInfo.height,
+      };
+    } else {
+      console.warn('[selection-utils] Failed to resize AI mask reference image');
+      maskImage = undefined;
+      maskExportInfo = undefined;
+    }
+  }
   
   const result = {
     remainingImages: imagesWithDimensions,
     remainingText: remainingTexts.join('\n'),
     graphicsImage,
+    maskImage,
+    maskExportInfo,
     graphicsImageDimensions,
   };
   

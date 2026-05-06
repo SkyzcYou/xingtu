@@ -380,21 +380,28 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   &__bottom-bar {
     display: flex;
     align-items: center;
-    gap: 4px; // 减小间距防止换行
+    gap: 8px;
     width: 100%;
     flex-shrink: 0;
-    flex-wrap: nowrap; // 强制不换行
-    overflow-x: auto; // 如果实在太长允许滚动（虽然最好不要）
-    scrollbar-width: none; // 隐藏滚动条
-    &::-webkit-scrollbar {
-      display: none;
-    }
+    flex-wrap: nowrap;
   }
 
-  // 底部栏中间的弹性空间
-  &__bottom-spacer {
-    flex: 1;
-    min-width: 8px; // 最小间距
+  &__bottom-start,
+  &__bottom-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  &__bottom-start {
+    flex: 0 0 auto;
+  }
+
+  &__bottom-controls {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    overflow: hidden;
   }
 
   // 输入区域 - 向上扩展
@@ -825,7 +832,8 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   .generation-type-dropdown {
     position: relative;
     display: inline-flex;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    min-width: 0;
 
     &__trigger {
       display: flex;
@@ -929,7 +937,8 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   .skill-dropdown {
     position: relative;
     display: inline-flex;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    min-width: 0;
 
     &__trigger {
       display: flex;
@@ -982,7 +991,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   .count-dropdown {
     position: relative;
     display: inline-flex;
-    flex-shrink: 0;
+    flex: 0 0 auto;
 
     &__trigger {
       display: flex;
@@ -1080,7 +1089,8 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     color: $gray-medium;
     cursor: not-allowed;
     transition: all 0.2s ease;
-    flex-shrink: 0;
+    flex: 0 0 40px;
+    min-width: 40px;
 
     &.active {
       background: $orange-primary;
@@ -1654,11 +1664,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     }
 
     &__bottom-bar {
-      gap: 2px;
+      gap: 4px;
     }
 
-    &__bottom-spacer {
-      min-width: 4px;
+    &__bottom-start,
+    &__bottom-controls {
+      gap: 2px;
     }
 
     &__type-btn {
@@ -1715,6 +1726,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       width: 36px;
       height: 36px;
       min-width: 36px;
+      flex-basis: 36px;
     }
 
     // 下拉菜单调整
@@ -1729,6 +1741,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       &__menu {
         max-width: calc(100vw - 32px);
       }
+    }
+
+    .model-dropdown__trigger--minimal,
+    .parameters-dropdown__trigger {
+      padding: 4px 6px;
+      font-size: 12px;
     }
   }
 
@@ -1768,6 +1786,10 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       min-width: 34px;
     }
 
+    &__send-btn {
+      flex-basis: 34px;
+    }
+
     &__knowledge-selector .knowledge-note-context-selector__trigger {
       width: 34px;
       height: 34px;
@@ -1798,7 +1820,9 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     // 隐藏一些次要元素节省空间
     .generation-type-dropdown__label,
     .count-dropdown__label,
-    .skill-dropdown__label {
+    .skill-dropdown__label,
+    .parameters-dropdown__label,
+    .model-dropdown__code {
       display: none;
     }
   }

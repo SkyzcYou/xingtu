@@ -1,7 +1,7 @@
 import { Generator, getStrokeLineDash, StrokeStyle } from '@plait/common';
 import { PlaitBoard, setStrokeLinecap, Point } from '@plait/core';
 import { Options } from 'roughjs/bin/core';
-import { Freehand } from './type';
+import { Freehand, FreehandShape, FREEHAND_MASK_VISIBLE_OPACITY } from './type';
 import {
   gaussianSmooth,
   getFillByElement,
@@ -505,25 +505,36 @@ export class FreehandGenerator extends Generator<Freehand> {
     const brushShape = element.brushShape;
     const linecap = getLinecapFromBrushShape(brushShape);
     
+    const withMaskOpacity = (g: SVGGElement | undefined) => {
+      if (g && element.shape === FreehandShape.mask) {
+        g.setAttribute('opacity', String(FREEHAND_MASK_VISIBLE_OPACITY));
+      }
+      return g;
+    };
+
     // 如果有压力数据，使用压力感应绘制
     if (element.pressures && element.pressures.length > 0) {
-      return createPressurePath(
-        element.points,
-        element.pressures,
-        strokeWidth,
-        strokeColor,
-        strokeStyle,
-        brushShape
+      return withMaskOpacity(
+        createPressurePath(
+          element.points,
+          element.pressures,
+          strokeWidth,
+          strokeColor,
+          strokeStyle,
+          brushShape
+        )
       );
     }
     
     // 双层线样式（无压力数据）
     if (strokeStyle === FreehandStrokeStyle.double) {
-      return createDoubleLineWithoutPressure(
-        element.points,
-        strokeWidth,
-        strokeColor,
-        brushShape
+      return withMaskOpacity(
+        createDoubleLineWithoutPressure(
+          element.points,
+          strokeWidth,
+          strokeColor,
+          brushShape
+        )
       );
     }
     
@@ -540,7 +551,7 @@ export class FreehandGenerator extends Generator<Freehand> {
       option
     );
     setStrokeLinecap(g, linecap);
-    return g;
+    return withMaskOpacity(g);
   }
 
   canDraw(element: Freehand): boolean {

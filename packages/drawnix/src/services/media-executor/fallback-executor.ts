@@ -257,6 +257,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
           modelRef: modelRef || null,
           size,
           referenceImages,
+          maskImage: params.maskImage,
           assetMetadata: params.assetMetadata,
         },
         config,
@@ -419,6 +420,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       modelRef?: ImageGenerationParams['modelRef'];
       size?: string;
       referenceImages?: string[];
+      maskImage?: string;
       assetMetadata?: ImageGenerationParams['assetMetadata'];
     },
     config: { imageConfig: GeminiConfig; videoConfig: VideoAPIConfig },
@@ -454,6 +456,16 @@ export class FallbackMediaExecutor implements IMediaExecutor {
           })
         );
       }
+      let processedMaskImage: string | undefined;
+      if (params.maskImage) {
+        const maskData = await unifiedCacheService.getImageForAI(
+          params.maskImage
+        );
+        processedMaskImage = await ensureBase64ForAI(
+          maskData,
+          options?.signal
+        );
+      }
 
       // 调用异步图片生成
       const result = await generateAsyncImage(
@@ -462,6 +474,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
           model: params.model,
           size: params.size,
           referenceImages: processedImages,
+          maskImage: processedMaskImage,
         },
         config.imageConfig,
         {

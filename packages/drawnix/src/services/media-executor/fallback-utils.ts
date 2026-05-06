@@ -235,6 +235,7 @@ export async function generateAsyncImage(
     model: string;
     size?: string;
     referenceImages?: string[];
+    maskImage?: string;
   },
   config: GeminiConfig,
   options: AsyncImageOptions
@@ -245,6 +246,7 @@ export async function generateAsyncImage(
       model: params.model,
       size: params.size,
       referenceImages: params.referenceImages,
+      maskImage: params.maskImage,
     },
     {
       apiKey: config.apiKey,

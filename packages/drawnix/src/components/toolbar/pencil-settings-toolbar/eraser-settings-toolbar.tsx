@@ -62,7 +62,7 @@ export const EraserSettingsToolbar: React.FC = () => {
     const newSettings = getFreehandSettings(board);
     setEraserSize(newSettings.eraserWidth);
     setCurrentShape(newSettings.eraserShape);
-  }, [board, appState.pointer]);
+  }, [board, appState.pointer, appState.toolSettingsVersion]);
 
   // 处理橡皮擦大小变化
   const handleSizeChange = useCallback(
