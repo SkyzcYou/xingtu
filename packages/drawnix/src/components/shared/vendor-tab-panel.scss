@@ -3,9 +3,9 @@
  * 支持两列（标签 | 内容）和三列（标签 | 分类 | 内容）布局
  */
 
-$orange-primary: #f59e0b;
-$orange-light: rgba(243, 156, 18, 0.12);
-$orange-border: rgba(243, 156, 18, 0.6);
+$accent-primary: var(--xingtu-theme-accent);
+$accent-light: rgba(var(--xingtu-theme-accent-rgb), 0.12);
+$accent-border: rgba(var(--xingtu-theme-accent-rgb), 0.6);
 $gray-light: #f3f4f6;
 $gray-medium: #9ca3af;
 $gray-dark: #6b7280;
@@ -101,8 +101,8 @@ $text-dark: #1f2937;
     }
 
     &--active {
-      border-left-color: $orange-border;
-      background: $orange-light;
+      border-left-color: $accent-border;
+      background: $accent-light;
       color: $text-dark;
       font-weight: 600;
     }
@@ -201,7 +201,7 @@ $text-dark: #1f2937;
       }
 
       &--active {
-        background: rgba(243, 156, 18, 0.15);
+        background: rgba(var(--xingtu-theme-accent-rgb), 0.15);
         color: var(--color-gray-20, #ccc);
       }
     }

@@ -56,8 +56,8 @@
 }
 
 .model-discovery-dialog__header-pill--accent {
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
+  background: rgba(var(--xingtu-theme-accent-rgb), 0.14);
+  color: var(--xingtu-theme-accent-hover);
 }
 
 .model-discovery-dialog__close {
@@ -186,11 +186,11 @@
 }
 
 .model-discovery-dialog__type-tab--active::after {
-  background: #f59e0b;
+  background: var(--xingtu-theme-accent);
 }
 
 .model-discovery-dialog__type-tab:hover {
-  color: #b45309;
+  color: var(--xingtu-theme-accent-hover);
 }
 
 .model-discovery-dialog__type-tab-count {
@@ -312,7 +312,7 @@
 .model-discovery-dialog__vendor-selected {
   display: inline-flex;
   align-items: center;
-  color: #b45309;
+  color: var(--xingtu-theme-accent-hover);
   font-size: 12px;
   font-weight: 700;
 }
@@ -505,7 +505,7 @@
 }
 
 .model-discovery-dialog__button--primary {
-  background: linear-gradient(135deg, #f59e0b, #f97316);
+  background: linear-gradient(135deg, var(--xingtu-theme-accent), var(--xingtu-theme-accent-hover));
   color: #fff;
 }
 

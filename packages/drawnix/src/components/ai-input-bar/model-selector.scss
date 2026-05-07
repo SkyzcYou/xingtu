@@ -39,7 +39,7 @@
     font-weight: 500;
 
     svg {
-      color: #f59e0b;
+      color: var(--xingtu-theme-accent);
     }
   }
 
@@ -70,7 +70,7 @@
     }
 
     &--highlighted {
-      background-color: rgba(245, 158, 11, 0.1);
+      background-color: rgba(var(--xingtu-theme-accent-rgb), 0.1);
     }
 
     &--selected {
@@ -157,7 +157,7 @@
 
     &-check {
       flex-shrink: 0;
-      color: #f59e0b;
+      color: var(--xingtu-theme-accent);
       margin-left: 8px;
     }
   }
@@ -242,7 +242,7 @@
       }
 
       &--highlighted {
-        background-color: rgba(245, 158, 11, 0.15);
+        background-color: rgba(var(--xingtu-theme-accent-rgb), 0.15);
       }
 
       &--selected {

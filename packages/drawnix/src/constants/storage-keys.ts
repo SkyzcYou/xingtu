@@ -48,6 +48,8 @@ export const LS_KEYS = {
   AI_VIDEO_TOOL_PREFERENCES: 'aitu_ai_video_tool_preferences',
   /** 是否显示画布上的 WorkZone 进度卡片 */
   WORKZONE_CARD_VISIBLE: 'aitu_workzone_card_visible',
+  /** 应用主题偏好 */
+  APP_THEME: 'xingtu_app_theme',
 
   // ---- 抽屉状态（轻量 UI 状态，保留在 LocalStorage） ----
   /** 聊天抽屉状态 */

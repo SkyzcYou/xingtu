@@ -4,6 +4,16 @@
 :root {
   /* 主品牌色 - 橙金色系 */
   --td-brand-color: #F39C12;
+  --td-brand-color-rgb: 243, 156, 18;
+  --td-brand-color-hover-rgb: 230, 126, 34;
+  --td-brand-color-active-rgb: 211, 84, 0;
+  --xingtu-theme-accent: var(--td-brand-color);
+  --xingtu-theme-accent-hover: var(--td-brand-color-hover);
+  --xingtu-theme-accent-active: var(--td-brand-color-active);
+  --xingtu-theme-accent-rgb: var(--td-brand-color-rgb);
+  --xingtu-theme-accent-hover-rgb: var(--td-brand-color-hover-rgb);
+  --xingtu-theme-accent-active-rgb: var(--td-brand-color-active-rgb);
+  --xingtu-theme-accent-foreground: #fff;
   --td-brand-color-1: #FEF5E7;
   --td-brand-color-2: #FDE68A;
   --td-brand-color-3: #FBBF24;
@@ -73,6 +83,56 @@
   --td-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Noto Sans', 'Noto Sans CJK SC', 'Microsoft Yahei', 'Hiragino Sans GB', Arial, sans-serif;
 }
 
+:root[data-xingtu-theme='xingtu-neutral'] {
+  --td-brand-color: #171717;
+  --td-brand-color-rgb: 23, 23, 23;
+  --td-brand-color-hover-rgb: 38, 38, 38;
+  --td-brand-color-active-rgb: 0, 0, 0;
+  --xingtu-theme-accent: var(--td-brand-color);
+  --xingtu-theme-accent-hover: var(--td-brand-color-hover);
+  --xingtu-theme-accent-active: var(--td-brand-color-active);
+  --xingtu-theme-accent-rgb: var(--td-brand-color-rgb);
+  --xingtu-theme-accent-hover-rgb: var(--td-brand-color-hover-rgb);
+  --xingtu-theme-accent-active-rgb: var(--td-brand-color-active-rgb);
+  --xingtu-theme-accent-foreground: #fff;
+  --td-brand-color-1: #FAFAFA;
+  --td-brand-color-2: #F5F5F5;
+  --td-brand-color-3: #E5E5E5;
+  --td-brand-color-4: #D4D4D4;
+  --td-brand-color-5: #A3A3A3;
+  --td-brand-color-6: #737373;
+  --td-brand-color-7: #525252;
+  --td-brand-color-8: #404040;
+  --td-brand-color-9: #262626;
+  --td-brand-color-10: #171717;
+  --td-brand-color-hover: #262626;
+  --td-brand-color-focus: #171717;
+  --td-brand-color-active: #000000;
+  --td-brand-color-disabled: #D4D4D4;
+  --td-brand-color-light: #F5F5F5;
+  --td-brand-color-light-hover: #E5E5E5;
+  --td-brand-color-light-active: #D4D4D4;
+  --td-success-color: #16A34A;
+  --td-success-color-hover: #15803D;
+  --td-success-color-active: #166534;
+  --td-warning-color: #737373;
+  --td-warning-color-hover: #525252;
+  --td-warning-color-active: #404040;
+  --td-error-color: #DC2626;
+  --td-error-color-hover: #B91C1C;
+  --td-error-color-active: #991B1B;
+  --td-text-color-primary: #171717;
+  --td-text-color-secondary: #525252;
+  --td-text-color-placeholder: #A3A3A3;
+  --td-text-color-disabled: #D4D4D4;
+  --td-bg-color-page: #FFFFFF;
+  --td-bg-color-container: #FFFFFF;
+  --td-bg-color-container-hover: #F5F5F5;
+  --td-bg-color-container-active: #E5E5E5;
+  --td-border-level-1-color: #E5E5E5;
+  --td-border-level-2-color: #D4D4D4;
+}
+
 /* 特定组件的品牌色彩定制 */
 .drawnix {
   /* Button 组件 */
@@ -109,7 +169,7 @@
   /* Input 组件 */
   .t-input:focus {
     border-color: var(--td-brand-color);
-    box-shadow: 0 0 0 2px rgba(243, 156, 18, 0.2);
+    box-shadow: 0 0 0 2px rgba(var(--td-brand-color-rgb), 0.2);
   }
 
   /* Tabs 组件 */
@@ -137,7 +197,7 @@
 
   /* Select 组件 */
   .t-select__option.t-is-selected {
-    background-color: rgba(243, 156, 18, 0.1);
+    background-color: rgba(var(--td-brand-color-rgb), 0.1);
     color: var(--td-brand-color);
   }
 
@@ -153,7 +213,7 @@
 
   /* Tag 组件 */
   .t-tag--theme-primary {
-    background-color: rgba(243, 156, 18, 0.1);
+    background-color: rgba(var(--td-brand-color-rgb), 0.1);
     color: var(--td-brand-color);
     border-color: var(--td-brand-color-2);
   }
@@ -255,10 +315,39 @@
   /* BackTop 组件 */
   .t-back-top {
     background-color: var(--td-brand-color);
-    
+
     &:hover {
       background-color: var(--td-brand-color-hover);
     }
+  }
+}
+
+:root[data-xingtu-theme='xingtu-neutral'] {
+  .drawnix .t-button--theme-primary,
+  .t-dialog .t-button--theme-primary,
+  .t-dialog__confirm {
+    background: var(--td-brand-color);
+    border-color: var(--td-brand-color);
+    color: var(--td-bg-color-page);
+
+    &:hover {
+      background: var(--td-brand-color-hover);
+      border-color: var(--td-brand-color-hover);
+      color: var(--td-bg-color-page);
+    }
+
+    &:active {
+      background: var(--td-brand-color-active);
+      border-color: var(--td-brand-color-active);
+      color: var(--td-bg-color-page);
+    }
+  }
+
+  .t-dialog,
+  .t-dialog__header,
+  .t-dialog__body,
+  .t-dialog__footer {
+    border-color: var(--td-border-level-1-color);
   }
 }
 

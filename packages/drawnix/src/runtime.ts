@@ -13,6 +13,7 @@ export type {
   CrashInfo,
 } from './services/crash-recovery-service';
 export { safeReload } from './utils/active-tasks';
+export { applyAppTheme, getStoredAppTheme } from './utils/app-theme';
 export { useDocumentTitle } from './hooks/useDocumentTitle';
 export { markTabSyncVersion } from './hooks/useTabSync';
 

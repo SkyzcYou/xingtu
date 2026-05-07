@@ -5,7 +5,7 @@
  */
 
 // Color variables
-$orange-primary: #F59E0B;
+$accent-primary: var(--xingtu-theme-accent);
 $gray-light: #F3F4F6;
 $gray-medium: #9CA3AF;
 $text-dark: #1F2937;
@@ -42,7 +42,7 @@ $text-dark: #1F2937;
     }
 
     &--graphics {
-      border: 1px solid $orange-primary;
+      border: 1px solid $accent-primary;
     }
 
     &--video {
@@ -169,7 +169,7 @@ $text-dark: #1F2937;
     bottom: 0;
     left: 0;
     right: 0;
-    background: rgba(245, 158, 11, 0.9);
+    background: rgba(var(--xingtu-theme-accent-rgb), 0.9);
     color: #fff;
     font-size: 10px;
     text-align: center;

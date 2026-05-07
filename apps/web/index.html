@@ -160,6 +160,23 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
     <meta name="app-version" content="0.7.1" />
+    <script>
+      (function () {
+        try {
+          var theme = window.localStorage.getItem('xingtu_app_theme');
+          if (theme !== 'xingtu-orange') {
+            document.documentElement.setAttribute(
+              'data-xingtu-theme',
+              'xingtu-neutral'
+            );
+          } else {
+            document.documentElement.removeAttribute('data-xingtu-theme');
+          }
+        } catch (error) {
+          console.debug('[app-theme] Failed to apply saved theme before boot', error);
+        }
+      })();
+    </script>
     <style>
       :root {
         --app-boot-bg: radial-gradient(
@@ -173,6 +190,29 @@
         --app-boot-accent: #f39c12;
         --app-boot-accent-soft: rgba(243, 156, 18, 0.14);
         --app-boot-shadow: 0 20px 60px rgba(45, 52, 54, 0.08);
+      }
+
+      :root[data-xingtu-theme='xingtu-neutral'] {
+        --app-boot-bg: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+        --app-boot-text: #171717;
+        --app-boot-muted: #737373;
+        --app-boot-accent: #171717;
+        --app-boot-accent-soft: #f5f5f5;
+        --app-boot-shadow: 0 20px 60px rgba(23, 23, 23, 0.08);
+      }
+
+      :root[data-xingtu-theme='xingtu-neutral'] .app-boot-mark {
+        background: #f5f5f5;
+        color: #171717;
+      }
+
+      :root[data-xingtu-theme='xingtu-neutral'] .app-boot-progress-track {
+        background: #e5e5e5;
+      }
+
+      :root[data-xingtu-theme='xingtu-neutral'] .app-boot-progress-fill {
+        background: #171717;
+        box-shadow: none;
       }
 
       #app-boot-loading {

@@ -99,11 +99,18 @@ import { modelBenchmarkService } from '../../services/model-benchmark-service';
 import { HoverTip } from '../shared/hover';
 import { createProviderProfileDraft } from './provider-profile-draft';
 import { MessagePlugin } from '../../utils/message-plugin';
+import {
+  APP_THEME_OPTIONS,
+  applyAppTheme,
+  getStoredAppTheme,
+  setStoredAppTheme,
+  type AppTheme,
+} from '../../utils/app-theme';
 
 export { IMAGE_MODEL_GROUPED_SELECT_OPTIONS as IMAGE_MODEL_GROUPED_OPTIONS } from '../../constants/model-config';
 export { VIDEO_MODEL_SELECT_OPTIONS as VIDEO_MODEL_OPTIONS } from '../../constants/model-config';
 
-type SettingsView = 'providers' | 'presets' | 'canvas' | 'speech';
+type SettingsView = 'providers' | 'presets' | 'theme' | 'canvas' | 'speech';
 type CompactPanelMode = 'catalog' | 'detail';
 type ProviderNavigationIntent =
   | { action: 'select'; profileId: string }
@@ -115,6 +122,7 @@ const SETTINGS_DIALOG_COMPACT_BREAKPOINT = 980;
 const VIEW_SECTIONS: Array<{ value: SettingsView; label: string }> = [
   { value: 'providers', label: '供应商' },
   { value: 'presets', label: '模型预设' },
+  { value: 'theme', label: '主题设置' },
   { value: 'canvas', label: '画布显示' },
   { value: 'speech', label: '语音播放' },
 ];
@@ -676,6 +684,7 @@ export const SettingsDialog = ({
   const [videoModelName, setVideoModelName] = useState('');
   const [textModelName, setTextModelName] = useState('');
   const [showWorkZoneCard, setShowWorkZoneCard] = useState(true);
+  const [appTheme, setAppTheme] = useState<AppTheme>(getStoredAppTheme);
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [discoveryDialogOpen, setDiscoveryDialogOpen] = useState(false);
   const [initialDraftSignature, setInitialDraftSignature] = useState('');
@@ -916,6 +925,7 @@ export const SettingsDialog = ({
     setImageModelName(geminiConfig.imageModelName || getDefaultImageModel());
     setVideoModelName(geminiConfig.videoModelName || getDefaultVideoModel());
     setTextModelName(geminiConfig.textModelName || getDefaultTextModel());
+    setAppTheme(getStoredAppTheme());
 
     try {
       nextShowWorkZoneCard =
@@ -1127,6 +1137,28 @@ export const SettingsDialog = ({
       console.error('Failed to persist canvas visibility state:', error);
       setShowWorkZoneCard(!checked);
       MessagePlugin.error('画布显示配置保存失败，请重试');
+    }
+  };
+
+  const handleAppThemeChange = (nextTheme: AppTheme) => {
+    const previousTheme = appTheme;
+    analytics.trackUIInteraction({
+      area: 'settings',
+      action: 'app_theme_changed',
+      control: 'app_theme_select',
+      value: nextTheme,
+      source: 'settings_dialog',
+    });
+    setAppTheme(nextTheme);
+
+    try {
+      setStoredAppTheme(nextTheme);
+      applyAppTheme(nextTheme);
+    } catch (error) {
+      console.error('Failed to persist app theme:', error);
+      setAppTheme(previousTheme);
+      applyAppTheme(previousTheme);
+      MessagePlugin.error('主题设置保存失败，请重试');
     }
   };
 
@@ -3009,6 +3041,60 @@ export const SettingsDialog = ({
     );
   };
 
+  const renderThemeSettings = () => (
+    <div className="settings-dialog__workspace settings-dialog__workspace--single">
+      <div className="settings-dialog__content-panel settings-dialog__content-panel--canvas">
+        {isCompactLayout ? (
+          <div className="settings-dialog__compact-stage-header">
+            <div className="settings-dialog__compact-stage-copy">
+              <span className="settings-dialog__compact-stage-eyebrow">
+                主题设置
+              </span>
+              <p className="settings-dialog__compact-stage-text">
+                切换后会立即应用到应用界面，并在下次打开时保持。
+              </p>
+            </div>
+          </div>
+        ) : null}
+        <div className="settings-dialog__section settings-dialog__section--canvas-card">
+          <div className="settings-dialog__section-header">
+            <div>
+              <h3 className="settings-dialog__section-title">应用主题</h3>
+            </div>
+          </div>
+
+          <div className="settings-dialog__preference settings-dialog__preference--panel">
+            <div className="settings-dialog__toggle-copy">
+              <span className="settings-dialog__toggle-title">界面主题</span>
+              <span className="settings-dialog__toggle-desc">
+                选择星图橙金或中性风主题。
+              </span>
+            </div>
+            <select
+              className="settings-dialog__select settings-dialog__theme-select"
+              value={appTheme}
+              onChange={(event) =>
+                handleAppThemeChange(event.target.value as AppTheme)
+              }
+            >
+              {APP_THEME_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="settings-dialog__field-hint">
+            {
+              APP_THEME_OPTIONS.find((option) => option.value === appTheme)
+                ?.description
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderCanvasSettings = () => (
     <div className="settings-dialog__workspace settings-dialog__workspace--single">
       <div className="settings-dialog__content-panel settings-dialog__content-panel--canvas">
@@ -3081,6 +3167,10 @@ export const SettingsDialog = ({
   };
 
   const renderActiveView = () => {
+    if (activeView === 'theme') {
+      return renderThemeSettings();
+    }
+
     if (activeView === 'canvas') {
       return renderCanvasSettings();
     }
