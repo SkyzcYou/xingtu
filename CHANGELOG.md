@@ -1,3 +1,13 @@
+## 0.7.3 (2026-05-10)
+
+### 🚀 Features
+
+- 统一星图毛玻璃浮层与窗口样式 ([5eac56ac](https://github.com/ljquan/aitu/commit/5eac56ac))
+
+### 🩹 Fixes
+
+- 优化输入栏弹窗与设置窗口适配 ([3ff59297](https://github.com/ljquan/aitu/commit/3ff59297))
+
 ## 0.7.2 (2026-05-10)
 
 ### 🩹 Fixes

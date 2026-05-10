@@ -1,6 +1,21 @@
 {
   "versions": [
     {
+      "version": "0.7.3",
+      "date": "2026-05-10",
+      "changes": {
+        "features": [
+          "统一星图毛玻璃浮层与窗口样式"
+        ],
+        "fixes": [
+          "优化输入栏弹窗与设置窗口适配"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "优化输入栏弹窗与设置窗口适配"
+    },
+    {
       "version": "0.7.2",
       "date": "2026-05-10",
       "changes": {
