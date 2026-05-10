@@ -18,6 +18,19 @@ $drawer-input-height: 160px;
 // ============================================================================
 
 .chat-drawer {
+  --chat-user-bubble-bg: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+  --chat-user-bubble-color: #ffffff;
+  --chat-user-bubble-border: transparent;
+  --chat-user-bubble-shadow: 0 4px 12px rgba(243, 156, 18, 0.2);
+  --chat-user-card-bg: #ffffff;
+  --chat-user-card-border: rgba(243, 156, 18, 0.1);
+  --chat-user-card-shadow: 0 2px 8px rgba(243, 156, 18, 0.15);
+  --chat-user-meta-bg: #fafafa;
+  --chat-user-meta-border: #f0f0f0;
+  --chat-user-meta-divider: #e0e0e0;
+  --chat-user-meta-icon-hover: var(--td-brand-color);
+  --chat-user-selection-bg: rgba(255, 255, 255, 0.4);
+  --chat-user-selection-color: #ffffff;
   position: fixed;
   top: 0;
   right: 0;
@@ -56,6 +69,28 @@ $drawer-input-height: 160px;
   &--dragging {
     transition: none;
     user-select: none;
+  }
+
+  :root[data-xingtu-theme='xingtu-neutral'] & {
+    --chat-user-bubble-bg: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.84),
+      rgba(245, 245, 245, 0.76)
+    );
+    --chat-user-bubble-color: rgba(22, 23, 24, 0.88);
+    --chat-user-bubble-border: rgba(22, 23, 24, 0.1);
+    --chat-user-bubble-shadow: 0 10px 22px rgba(15, 23, 42, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.72) inset;
+    --chat-user-card-bg: rgba(255, 255, 255, 0.78);
+    --chat-user-card-border: rgba(22, 23, 24, 0.1);
+    --chat-user-card-shadow: 0 10px 24px rgba(15, 23, 42, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.72) inset;
+    --chat-user-meta-bg: rgba(250, 250, 250, 0.72);
+    --chat-user-meta-border: rgba(22, 23, 24, 0.08);
+    --chat-user-meta-divider: rgba(22, 23, 24, 0.1);
+    --chat-user-meta-icon-hover: rgba(22, 23, 24, 0.72);
+    --chat-user-selection-bg: rgba(22, 23, 24, 0.16);
+    --chat-user-selection-color: rgba(22, 23, 24, 0.92);
   }
 
   // 拖动调整宽度的手柄
@@ -314,10 +349,11 @@ $drawer-input-height: 160px;
     flex-direction: row-reverse;
 
     .message-item__bubble {
-      background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
-      color: white;
+      color: var(--chat-user-bubble-color);
+      background: var(--chat-user-bubble-bg);
+      border: 1px solid var(--chat-user-bubble-border);
       border-radius: $border-radius $border-radius 4px $border-radius;
-      box-shadow: 0 4px 12px rgba(243, 156, 18, 0.2);
+      box-shadow: var(--chat-user-bubble-shadow);
     }
   }
 
@@ -1029,12 +1065,20 @@ $drawer-input-height: 160px;
     flex-direction: row-reverse;
     align-self: flex-end;
 
-    .chat-message-content {
-      background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
-      color: white;
-      border-radius: $border-radius $border-radius 4px $border-radius;
-      border: none;
-      box-shadow: 0 4px 12px rgba(243, 156, 18, 0.2);
+    &:not(.user-bubble) {
+      .chat-message-content {
+        color: var(--chat-user-bubble-color);
+        background: var(--chat-user-bubble-bg);
+        border-radius: $border-radius $border-radius 4px $border-radius;
+        border: 1px solid var(--chat-user-bubble-border);
+        box-shadow: var(--chat-user-bubble-shadow);
+      }
+
+      .chat-message-content::selection,
+      .chat-message-content *::selection {
+        color: var(--chat-user-selection-color);
+        background-color: var(--chat-user-selection-bg);
+      }
     }
   }
 

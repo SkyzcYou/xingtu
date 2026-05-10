@@ -88,16 +88,26 @@ const Menu = ({
     [getFocusableItems, onClose]
   );
 
-  // 菜单打开时自动聚焦第一个菜单项
-  useEffect(() => {
-    const items = getFocusableItems();
-    if (items.length > 0) {
-      // 延迟聚焦，确保 DOM 已渲染
-      requestAnimationFrame(() => {
-        items[0]?.focus();
-      });
+  const focusContainer = useCallback(() => {
+    containerRef.current?.focus();
+  }, []);
+
+  const handlePointerMove = useCallback(() => {
+    const activeElement = document.activeElement;
+    if (
+      activeElement instanceof HTMLButtonElement &&
+      activeElement.classList.contains('menu-item') &&
+      containerRef.current?.contains(activeElement)
+    ) {
+      focusContainer();
     }
-  }, [getFocusableItems]);
+  }, [focusContainer]);
+
+  // 菜单打开时聚焦容器，避免第一个菜单项被默认高亮
+  useEffect(() => {
+    const timeoutId = window.setTimeout(focusContainer, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [focusContainer]);
 
   return (
     <MenuContentPropsContext.Provider value={{ onSelect }}>
@@ -106,8 +116,10 @@ const Menu = ({
         style={style}
         data-testid="menu"
         onKeyDown={handleKeyDown}
+        onPointerMove={handlePointerMove}
         ref={containerRef}
         role="menu"
+        tabIndex={-1}
       >
         {
           <Island className="menu-container" padding={2}>

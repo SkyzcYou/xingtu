@@ -122,7 +122,8 @@ const SETTINGS_DIALOG_COMPACT_BREAKPOINT = 980;
 const VIEW_SECTIONS: Array<{ value: SettingsView; label: string }> = [
   { value: 'providers', label: '供应商' },
   { value: 'presets', label: '模型预设' },
-  { value: 'theme', label: '主题设置' },
+  // TODO: Re-enable theme settings when users are allowed to change themes.
+  // { value: 'theme', label: '主题设置' },
   { value: 'canvas', label: '画布显示' },
   { value: 'speech', label: '语音播放' },
 ];

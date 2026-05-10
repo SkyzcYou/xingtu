@@ -1,8 +1,8 @@
 .image-generation-progress-display {
-  --image-generation-progress-accent: #f39c12;
-  --image-generation-progress-accent-soft: rgba(243, 156, 18, 0.18);
-  --image-generation-progress-ring-bg: rgba(148, 163, 184, 0.3);
-  --image-generation-progress-text: rgba(51, 65, 85, 0.84);
+  --image-generation-progress-accent: var(--xingtu-generation-running-accent, #F39C12);
+  --image-generation-progress-accent-soft: rgba(var(--xingtu-generation-running-accent-rgb, 243, 156, 18), 0.14);
+  --image-generation-progress-ring-bg: var(--xingtu-generation-running-ring-bg, rgba(203, 213, 225, 0.34));
+  --image-generation-progress-text: var(--xingtu-generation-running-body-text, rgba(55, 65, 81, 0.9));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -86,8 +86,8 @@
 }
 
 .image-generation-progress-display--loading {
-  --image-generation-progress-accent: #00a870;
-  --image-generation-progress-accent-soft: rgba(0, 168, 112, 0.16);
+  --image-generation-progress-accent: var(--xingtu-generation-running-loading-accent, #00A870);
+  --image-generation-progress-accent-soft: rgba(var(--xingtu-generation-running-loading-accent-rgb, 0, 168, 112), 0.16);
 }
 
 .image-generation-progress-display--danger {

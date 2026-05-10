@@ -1,5 +1,11 @@
 @import "../../styles/variables.module.scss";
 
+$stitch-glass-bg: rgba(218, 220, 224, 0.5);
+$stitch-glass-border: rgba(22, 23, 24, 0.15);
+$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1);
+$stitch-glass-blur: blur(40px);
+
 .drawnix {
   .menu {
     &--mobile {
@@ -22,7 +28,12 @@
     }
 
     .menu-container {
-      background-color: var(--island-bg-color);
+      background: $stitch-glass-bg;
+      border: 1px solid $stitch-glass-border;
+      border-radius: var(--border-radius-lg);
+      box-shadow: $stitch-glass-shadow;
+      backdrop-filter: $stitch-glass-blur;
+      -webkit-backdrop-filter: $stitch-glass-blur;
       max-height: calc(100vh - 150px);
       overflow-y: auto;
       --gap: 2;
@@ -55,7 +66,7 @@
       }
 
       &--active {
-        background-color: var(--color-surface-primary-container);
+        background-color: rgba(var(--xingtu-theme-accent-rgb), 0.12);
         text-decoration: none;
       }
 
@@ -81,16 +92,16 @@
       }
 
       &:hover {
-        background-color: var(--color-surface-primary-container);
+        background-color: rgba(var(--xingtu-theme-accent-rgb), 0.12);
         text-decoration: none;
       }
 
       &:focus-visible {
-        background-color: var(--color-surface-primary-container);
+        background-color: rgba(var(--xingtu-theme-accent-rgb), 0.12);
       }
 
       &:active {
-        background-color: var(--color-surface-primary-container);
+        background-color: rgba(var(--xingtu-theme-accent-rgb), 0.12);
       }
 
       svg {

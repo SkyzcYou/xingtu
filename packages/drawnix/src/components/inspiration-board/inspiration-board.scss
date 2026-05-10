@@ -13,6 +13,11 @@
 $card-border-radius: 12px;
 $card-gap: 12px;
 $animation-duration: 0.3s;
+$stitch-glass-bg: rgba(218, 220, 224, 0.5);
+$stitch-glass-border: rgba(22, 23, 24, 0.15);
+$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1);
+$stitch-glass-blur: blur(40px);
 
 // ============================================================================
 // Inspiration Board Container
@@ -21,11 +26,13 @@ $animation-duration: 0.3s;
 .inspiration-board {
   padding: $spacing-md;
   padding-bottom: $spacing-md; // 底部内边距
-  background: var(--island-bg-color, #fff);
-  border: none;
+  background: $stitch-glass-bg;
+  border: 1px solid $stitch-glass-border;
+  border-bottom: none;
   border-radius: 24px 24px 0 0; // 上圆角，下直角与输入框连接
-  backdrop-filter: blur(10px);
-  box-shadow: none; // 移除阴影，由父容器统一处理
+  backdrop-filter: $stitch-glass-blur;
+  -webkit-backdrop-filter: $stitch-glass-blur;
+  box-shadow: $stitch-glass-shadow;
   animation: slideUp $animation-duration ease-out;
   pointer-events: auto; // 覆盖父容器 ai-input-bar 的 pointer-events: none
   width: 100%;

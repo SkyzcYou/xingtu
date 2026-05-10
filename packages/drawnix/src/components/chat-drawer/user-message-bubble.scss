@@ -12,9 +12,9 @@
     gap: 0;
     overflow: hidden;
     border-radius: 12px 12px 4px 12px;
-    box-shadow: 0 2px 8px rgba(243, 156, 18, 0.15);
-    background: #ffffff;
-    border: 1px solid rgba(243, 156, 18, 0.1);
+    box-shadow: var(--chat-user-card-shadow);
+    background: var(--chat-user-card-bg);
+    border: 1px solid var(--chat-user-card-border);
   }
 
   // 纯文字消息的简化样式
@@ -26,8 +26,9 @@
     }
 
     .user-bubble__text {
+      border: 1px solid var(--chat-user-bubble-border);
       border-radius: 16px 16px 4px 16px;
-      box-shadow: 0 2px 12px rgba(243, 156, 18, 0.2);
+      box-shadow: var(--chat-user-bubble-shadow);
     }
   }
 
@@ -77,8 +78,8 @@
 
   &__text {
     padding: $spacing-md $spacing-lg;
-    background: linear-gradient(135deg, #F39C12 0%, #E67E22 100%);
-    color: white;
+    color: var(--chat-user-bubble-color);
+    background: var(--chat-user-bubble-bg);
     word-break: break-word;
     white-space: pre-wrap;
     line-height: 1.5;
@@ -92,8 +93,8 @@
 
       // 选中时的高亮样式
       &::selection {
-        background-color: rgba(255, 255, 255, 0.4);
-        color: white;
+        color: var(--chat-user-selection-color);
+        background-color: var(--chat-user-selection-bg);
       }
     }
   }
@@ -105,8 +106,8 @@
     align-items: center;
     gap: $spacing-sm;
     padding: $spacing-xs $spacing-lg;
-    background: #fafafa;
-    border-top: 1px solid #f0f0f0;
+    background: var(--chat-user-meta-bg);
+    border-top: 1px solid var(--chat-user-meta-border);
     min-height: 32px;
   }
 
@@ -124,7 +125,7 @@
       content: '';
       width: 1px;
       height: 10px;
-      background: #e0e0e0;
+      background: var(--chat-user-meta-divider);
       margin-left: $spacing-sm;
     }
 
@@ -132,7 +133,7 @@
       color: var(--td-text-color-secondary);
       
       .user-bubble__meta-icon {
-        color: var(--td-brand-color);
+        color: var(--chat-user-meta-icon-hover);
       }
     }
   }

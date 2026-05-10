@@ -70,6 +70,14 @@
     .t-tabs__nav-container.t-is-top::after{
       display: none;
     }
+
+    .t-tabs__nav-item.t-is-active {
+      color: var(--xingtu-control-selected-color) !important;
+    }
+
+    .t-tabs__bar {
+      background-color: var(--xingtu-control-selected-color) !important;
+    }
   }
 
   &__filters {
@@ -110,10 +118,16 @@
     }
   }
 
-  &__filter-btn--active {
-    color: #F39C12 !important;
-    background: rgba(243, 156, 18, 0.12) !important;
-    box-shadow: inset 0 0 0 1px rgba(243, 156, 18, 0.18);
+  &__type-filters &__filter-btn--active.t-button {
+    color: var(--xingtu-control-selected-color) !important;
+    background: var(--xingtu-control-selected-bg) !important;
+    box-shadow: 0 0 0 1px var(--xingtu-control-selected-ring),
+      0 4px 10px var(--xingtu-control-selected-shadow);
+
+    &:hover {
+      color: var(--xingtu-control-selected-color) !important;
+      background: var(--xingtu-control-selected-bg-hover) !important;
+    }
 
     svg,
     .t-icon,
@@ -140,22 +154,36 @@
   &__search-input {
     flex: 1;
     min-width: 100px;
-    
+
     .t-input {
-      border-radius: 8px;
+      border-radius: 10px !important;
       height: 32px;
-      background: var(--td-bg-color-container, #fff) !important;
-      border: 1.5px solid #dcdcdc !important; // 强化边框
+      background: rgba(255, 255, 255, 0.34) !important;
+      border: 1px solid rgba(22, 23, 24, 0.08) !important;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       transition: all 0.25s ease;
-      
+
       &:hover {
-        border-color: #F39C12 !important;
+        background: rgba(255, 255, 255, 0.46) !important;
+        border-color: rgba(22, 23, 24, 0.14) !important;
       }
 
       &--focused {
-        border-color: #F39C12 !important;
-        box-shadow: 0 0 0 3px rgba(243, 156, 18, 0.15) !important;
+        background: rgba(255, 255, 255, 0.58) !important;
+        border-color: rgba(22, 23, 24, 0.16) !important;
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.28),
+          inset 0 1px 0 rgba(255, 255, 255, 0.36) !important;
       }
+    }
+
+    .t-input__inner {
+      color: rgba(22, 23, 24, 0.86) !important;
+    }
+
+    .t-input__inner::placeholder {
+      color: rgba(22, 23, 24, 0.42) !important;
     }
   }
 
@@ -220,7 +248,7 @@
   }
 
   &__content {
-    padding: 12px 0 12px 24px;
+    padding: 12px 16px 12px 24px;
   }
 
   &__list {
@@ -284,30 +312,21 @@
   display: grid;
   gap: 4px 12px;
   background: transparent;
-  border-bottom: 1px solid var(--td-component-border, #e7e7e7);
+  border-bottom: 1px solid rgba(22, 23, 24, 0.08);
   padding: 16px 24px 16px 0;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
   position: relative;
   cursor: pointer;
 
   &:hover {
-    background-color: var(--td-bg-color-secondarycontainer, #f3f3f3);
+    background: rgba(255, 255, 255, 0.24);
   }
 
   &--selected {
-    border-color: #F39C12;
-    background: rgba(243, 156, 18, 0.04);
+    border-bottom-color: rgba(22, 23, 24, 0.14);
+    background: rgba(255, 255, 255, 0.34);
   }
 
-
-
-  &--processing {
-    .task-item__status-tag {
-      background-color: rgba(90, 79, 207, 0.08) !important;
-      color: #5A4FCF !important;
-      border: 1px solid rgba(90, 79, 207, 0.15) !important;
-    }
-  }
 
   // ==========================================
   // 宽布局模式：提示词和信息都在图片右侧
@@ -315,7 +334,7 @@
   &--wide {
     // 默认：没有 checkbox 的情况（非选择模式）
     grid-template-columns: 120px 1fr;
-    grid-template-areas: 
+    grid-template-areas:
       "preview body";
 
     .task-item__preview-wrapper {
@@ -326,14 +345,26 @@
       grid-area: body;
     }
 
+    &.task-item--failed {
+      grid-template-areas:
+        "preview body"
+        "error error";
+    }
+
     // 选择模式：有 checkbox 的情况
     &.task-item--selection-mode {
       grid-template-columns: auto 120px 1fr;
-      grid-template-areas: 
+      grid-template-areas:
         "checkbox preview body";
 
       .task-item__checkbox {
         grid-area: checkbox;
+      }
+
+      &.task-item--failed {
+        grid-template-areas:
+          "checkbox preview body"
+          "error error error";
       }
     }
   }
@@ -344,9 +375,16 @@
   &--compact {
     // 默认：没有 checkbox 的情况（非选择模式）
     grid-template-columns: 100px 1fr;
-    grid-template-areas: 
+    grid-template-areas:
       "preview prompt"
       "info    info";
+
+    &.task-item--failed {
+      grid-template-areas:
+        "preview prompt"
+        "info    info"
+        "error   error";
+    }
 
     .task-item__preview-wrapper {
       grid-area: preview;
@@ -374,12 +412,19 @@
     // 选择模式：有 checkbox 的情况
     &.task-item--selection-mode {
       grid-template-columns: auto 100px 1fr;
-      grid-template-areas: 
+      grid-template-areas:
         "checkbox preview prompt"
         "info     info    info";
 
       .task-item__checkbox {
         grid-area: checkbox;
+      }
+
+      &.task-item--failed {
+        grid-template-areas:
+          "checkbox preview prompt"
+          "info     info    info"
+          "error    error   error";
       }
     }
   }
@@ -388,7 +433,7 @@
     display: flex;
     align-items: flex-start;
     padding-top: 4px;
-    padding-left: 16px; // 避开失败任务的红色竖线，同时与全选 checkbox 对齐
+    padding-left: 16px;
 
     // 覆盖 TDesign Checkbox 默认样式为橙色主题
     :global(.t-checkbox) {
@@ -418,10 +463,13 @@
   &__preview {
     width: 100%;
     height: 100%;
-    border-radius: 8px;
+    border-radius: 12px;
     overflow: hidden;
     cursor: pointer;
     position: relative;
+    background: rgba(255, 255, 255, 0.32);
+    border: 1px solid rgba(22, 23, 24, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
 
     img, video {
       width: 100%;
@@ -446,8 +494,9 @@
       align-items: center;
       justify-content: center;
       gap: 4px;
-      color: var(--td-text-color-placeholder, #999);
+      color: rgba(22, 23, 24, 0.48);
       font-size: 11px;
+      background: rgba(255, 255, 255, 0.24);
     }
 
     &-failed {
@@ -458,14 +507,16 @@
       align-items: center;
       justify-content: center;
       gap: 2px;
-      border-radius: 8px;
-      background: var(--td-bg-color-secondarycontainer, #f3f3f3);
-      border: 1px solid var(--td-component-border, #e7e7e7);
-      color: var(--td-text-color-placeholder, #bbb);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.34);
+      border: 1px solid rgba(22, 23, 24, 0.08);
+      color: rgba(22, 23, 24, 0.48);
       font-size: 10px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
 
       .t-icon {
-        opacity: 0.5;
+        opacity: 0.72;
         font-size: 18px;
       }
     }
@@ -562,12 +613,17 @@
     padding: 0 10px !important;
     border-radius: 13px !important;
     font-size: 12px !important;
-    background: #f39c12 !important;
-    border: none !important;
-    color: white !important;
+    background: rgba(255, 255, 255, 0.58) !important;
+    border: 1px solid rgba(22, 23, 24, 0.08) !important;
+    color: rgba(22, 23, 24, 0.86) !important;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
 
     &:hover {
-      background: #e67e22 !important;
+      background: rgba(255, 255, 255, 0.68) !important;
+      border-color: rgba(22, 23, 24, 0.14) !important;
+      color: rgba(22, 23, 24, 0.9) !important;
     }
 
     .t-icon {
@@ -581,22 +637,24 @@
     gap: 4px;
 
     .t-button {
-      color: var(--td-text-color-placeholder, #999) !important;
+      color: rgba(22, 23, 24, 0.48) !important;
       padding: 4px !important;
       height: 24px !important;
       width: 24px !important;
       min-width: 0 !important;
+      border-radius: 8px !important;
 
       &:hover {
-        color: var(--td-text-color-primary, #333) !important;
-        background: var(--td-bg-color-secondarycontainer, #f3f3f3) !important;
+        color: rgba(22, 23, 24, 0.82) !important;
+        background: rgba(255, 255, 255, 0.42) !important;
       }
     }
   }
 
   &__delete-btn {
     &:hover {
-      color: var(--td-error-color, #e34d59) !important;
+      color: rgba(127, 29, 29, 0.72) !important;
+      background: rgba(255, 255, 255, 0.42) !important;
     }
   }
 
@@ -617,15 +675,18 @@
     .t-tag {
       font-size: 10px !important;
       height: 18px !important;
-      border-radius: 4px !important;
-      padding: 0 4px !important;
-      color: var(--td-text-color-secondary, #666);
-      background: var(--td-bg-color-secondarycontainer, #f3f3f3);
-      border: none;
+      border-radius: 6px !important;
+      padding: 0 5px !important;
+      color: rgba(22, 23, 24, 0.58) !important;
+      background: rgba(255, 255, 255, 0.34) !important;
+      border: 1px solid rgba(22, 23, 24, 0.06) !important;
     }
 
     .task-item__status-tag {
       font-weight: 500;
+      background: rgba(255, 255, 255, 0.46) !important;
+      color: rgba(22, 23, 24, 0.72) !important;
+      border-color: rgba(22, 23, 24, 0.08) !important;
     }
   }
 
@@ -640,25 +701,30 @@
   }
 
   &__link {
-    color: var(--td-brand-color, #0052d9);
+    color: rgba(22, 23, 24, 0.64);
     text-decoration: none;
     &:hover { text-decoration: underline; }
   }
 
   &__error {
-    background: #FFF1F0;
-    border-radius: 6px;
-    padding: 6px 10px;
-    margin-top: 4px;
-    
+    grid-area: error;
+    background: rgba(127, 29, 29, 0.1);
+    border: 1px solid rgba(127, 29, 29, 0.24);
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    padding: 8px 10px;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+
     &-message {
-      color: #E34D59;
+      color: rgba(127, 29, 29, 0.88);
       font-size: 11px;
       line-height: 1.4;
+      font-weight: 500;
     }
 
     &-details-link {
-      color: #0052d9;
+      color: rgba(127, 29, 29, 0.88);
       cursor: pointer;
       text-decoration: underline;
       margin-left: 4px;
@@ -780,7 +846,7 @@
     }
 
     &__content {
-      padding: 12px 0 24px 16px;
+      padding: 12px 16px 24px 16px;
     }
   }
 }
@@ -880,7 +946,7 @@
     }
 
     &__content {
-      padding: 8px 0 16px 12px;
+      padding: 8px 12px 16px 12px;
     }
 
     &__list {

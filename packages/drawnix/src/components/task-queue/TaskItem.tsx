@@ -971,40 +971,40 @@ export const TaskItem: React.FC<TaskItemProps> = React.memo(
                 )}
               </div>
             </div>
-
-            {/* Error Message */}
-            {isFailed && task.error && (
-              <div className="task-item__error">
-                <div className="task-item__error-message">
-                  {task.error.message}
-                  {task.error.details?.originalError && (
-                    <HoverTip
-                      content={
-                        <div className="task-item__error-details-tooltip">
-                          <div className="task-item__error-details-title">
-                            详细错误:
-                          </div>
-                          <div className="task-item__error-details-content">
-                            {task.error.details.originalError}
-                          </div>
-                        </div>
-                      }
-                      theme="light"
-                      placement="bottom"
-                    >
-                      <span
-                        className="task-item__error-details-link"
-                        onClick={(e: any) => e.stopPropagation()}
-                      >
-                        [详情]
-                      </span>
-                    </HoverTip>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         </div>
+
+        {/* Error Message */}
+        {isFailed && task.error && (
+          <div className="task-item__error">
+            <div className="task-item__error-message">
+              {task.error.message}
+              {task.error.details?.originalError && (
+                <HoverTip
+                  content={
+                    <div className="task-item__error-details-tooltip">
+                      <div className="task-item__error-details-title">
+                        详细错误:
+                      </div>
+                      <div className="task-item__error-details-content">
+                        {task.error.details.originalError}
+                      </div>
+                    </div>
+                  }
+                  theme="light"
+                  placement="bottom"
+                >
+                  <span
+                    className="task-item__error-details-link"
+                    onClick={(e: any) => e.stopPropagation()}
+                  >
+                    [详情]
+                  </span>
+                </HoverTip>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   },

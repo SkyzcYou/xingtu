@@ -61,6 +61,7 @@ export const ImageGenerationAnchorContent: React.FC<
     batchPreview?.totalCount ??
     Math.max(element.requestedCount ?? 0, element.taskIds.length, 1);
   const showActions = viewModel.phase === 'failed' || detailsOpen || selected;
+  const showFailedSurfaceActions = viewModel.phase === 'failed';
   const showRing = viewModel.progressMode !== 'hidden';
   const showDeterminateProgress =
     viewModel.progressMode === 'determinate' && viewModel.progress != null;
@@ -79,6 +80,10 @@ export const ImageGenerationAnchorContent: React.FC<
       : isRenderingResult
       ? 'loading'
       : 'default';
+  const failedErrorSummary = viewModel.error
+    ? `${viewModel.error.split('(')[0]?.trim() || '请求失败'} · 图片生成请求失败`
+    : undefined;
+
   const detailItems = useMemo(
     () => [
       { label: '阶段', value: viewModel.phaseLabel },
@@ -196,8 +201,11 @@ export const ImageGenerationAnchorContent: React.FC<
         ) : null}
         {viewModel.phase === 'failed' && viewModel.error ? (
           <div className="image-generation-anchor__error">
-            <span className="image-generation-anchor__error-raw">
-              {viewModel.error}
+            <span
+              className="image-generation-anchor__error-raw"
+              title={viewModel.error}
+            >
+              {failedErrorSummary}
             </span>
             <button
               type="button"
@@ -232,6 +240,59 @@ export const ImageGenerationAnchorContent: React.FC<
     batchPreview && batchPreview.readySlotCount > 0
       ? `${batchPreview.readySlotCount}/${batchPreview.totalCount} 已完成`
       : batchPreview?.statusText;
+
+  const renderActions = (surface = false) => {
+    if (!showActions) {
+      return null;
+    }
+
+    const primaryButton = (
+      <button
+        key="primary"
+        type="button"
+        className="image-generation-anchor__action image-generation-anchor__action--primary"
+        onPointerDown={stopEventPropagation}
+        onMouseDown={stopEventPropagation}
+        onClick={(event) => {
+          stopPointer(event);
+          handleAction(viewModel.primaryAction.type);
+        }}
+      >
+        {primaryActionLabel}
+      </button>
+    );
+    const secondaryButton = viewModel.secondaryAction ? (
+      <button
+        key="secondary"
+        type="button"
+        className="image-generation-anchor__action image-generation-anchor__action--secondary"
+        onPointerDown={stopEventPropagation}
+        onMouseDown={stopEventPropagation}
+        onClick={(event) => {
+          stopPointer(event);
+          if (secondaryActionType) {
+            handleAction(secondaryActionType);
+          }
+        }}
+      >
+        {secondaryActionLabel}
+      </button>
+    ) : null;
+    const actionButtons =
+      surface && viewModel.phase === 'failed' && secondaryButton
+        ? [secondaryButton, primaryButton]
+        : [primaryButton, secondaryButton];
+
+    return (
+      <div
+        className={classNames('image-generation-anchor__actions', {
+          'image-generation-anchor__actions--surface': surface,
+        })}
+      >
+        {actionButtons}
+      </div>
+    );
+  };
 
   const renderSurfacePreview = () => {
     if (isStack && batchPreview) {
@@ -365,6 +426,7 @@ export const ImageGenerationAnchorContent: React.FC<
         {renderSurfacePreview()}
 
         {renderCore()}
+        {showFailedSurfaceActions ? renderActions(true) : null}
       </div>
 
       {detailsOpen ? (
@@ -385,38 +447,7 @@ export const ImageGenerationAnchorContent: React.FC<
         </div>
       ) : null}
 
-      {showActions ? (
-        <div className="image-generation-anchor__actions">
-          <button
-            type="button"
-            className="image-generation-anchor__action"
-            onPointerDown={stopEventPropagation}
-            onMouseDown={stopEventPropagation}
-            onClick={(event) => {
-              stopPointer(event);
-              handleAction(viewModel.primaryAction.type);
-            }}
-          >
-            {primaryActionLabel}
-          </button>
-          {viewModel.secondaryAction ? (
-            <button
-              type="button"
-              className="image-generation-anchor__action image-generation-anchor__action--secondary"
-              onPointerDown={stopEventPropagation}
-              onMouseDown={stopEventPropagation}
-              onClick={(event) => {
-                stopPointer(event);
-                if (secondaryActionType) {
-                  handleAction(secondaryActionType);
-                }
-              }}
-            >
-              {secondaryActionLabel}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      {!showFailedSurfaceActions ? renderActions() : null}
     </div>
   );
 };

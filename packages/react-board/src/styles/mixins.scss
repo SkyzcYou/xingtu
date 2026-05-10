@@ -1,18 +1,36 @@
 @mixin board-background-color {
-    &.theme-colorful .board-host-svg,
-    &.theme-default .board-host-svg {
-        background-color: #ffffff;
+    &.theme-colorful {
+        --plait-board-background-color: #ffffff;
+        --plait-dot-grid-color: #cccccc;
+        --plait-dot-grid-glow-color: #000000;
     }
-    &.theme-soft .board-host-svg {
-        background-color: #f5f5f5;
+    &.theme-default {
+        --plait-board-background-color: #f6f7f8;
+        --plait-board-background-image:
+            radial-gradient(circle at 18% 14%, rgba(255, 255, 255, 0.72), transparent 30%),
+            radial-gradient(circle at 78% 82%, rgba(226, 232, 240, 0.42), transparent 34%),
+            linear-gradient(135deg, rgba(255, 255, 255, 0.36), rgba(218, 220, 224, 0.2));
+        --plait-dot-grid-color: #bcc4cf;
+        --plait-dot-grid-glow-color: #535c68;
     }
-    &.theme-retro .board-host-svg {
-        background-color: #f9f8ed;
+    &.theme-soft {
+        --plait-board-background-color: #f5f5f5;
+        --plait-dot-grid-color: #c9c9c9;
+        --plait-dot-grid-glow-color: #000000;
     }
-    &.theme-dark .board-host-svg {
-        background-color: #141414;
+    &.theme-retro {
+        --plait-board-background-color: #f9f8ed;
+        --plait-dot-grid-color: #d2cdbf;
+        --plait-dot-grid-glow-color: #3d3325;
     }
-    &.theme-starry .board-host-svg {
-        background-color: #0d2537;
+    &.theme-dark {
+        --plait-board-background-color: #141414;
+        --plait-dot-grid-color: #666666;
+        --plait-dot-grid-glow-color: #ffffff;
+    }
+    &.theme-starry {
+        --plait-board-background-color: #0d2537;
+        --plait-dot-grid-color: #496274;
+        --plait-dot-grid-glow-color: #ffffff;
     }
 }

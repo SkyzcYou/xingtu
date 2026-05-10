@@ -15,6 +15,12 @@ $gray-medium: #9ca3af;
 $gray-dark: #6b7280;
 $text-dark: #1f2937;
 $vip-color: #e91e63;
+$stitch-glass-bg: rgba(218, 220, 224, 0.5);
+$stitch-glass-border: rgba(22, 23, 24, 0.15);
+$stitch-glass-hover: rgba(22, 23, 24, 0.08);
+$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1);
+$stitch-glass-blur: blur(40px);
 $ai-input-font-size: 15px;
 $ai-input-line-height-ratio: 1.5;
 $ai-input-line-height: $ai-input-font-size * $ai-input-line-height-ratio;
@@ -75,9 +81,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       left: 16px; // 与 padding 对应
       right: 16px;
       bottom: 0;
-      background: var(--island-bg-color, #fff);
+      background: $stitch-glass-bg;
+      border: 1px solid $stitch-glass-border;
       border-radius: 24px;
-      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.1);
+      box-shadow: $stitch-glass-shadow;
+      backdrop-filter: $stitch-glass-blur;
+      -webkit-backdrop-filter: $stitch-glass-blur;
       z-index: -1;
       pointer-events: none;
     }
@@ -163,7 +172,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
     overflow: hidden;
-    background: var(--island-bg-color, #fff);
+    background: rgba(255, 255, 255, 0.42);
     padding: 4px;
     animation: fadeIn 0.15s ease;
 
@@ -353,15 +362,18 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     display: flex;
     flex-direction: column-reverse; // 倒序排列，底部栏在下，输入区向上扩展
     width: 100%;
-    background: var(--island-bg-color, #fff);
+    background: $stitch-glass-bg;
+    border: 1px solid $stitch-glass-border;
     border-radius: 24px;
     padding: 6px 10px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: $stitch-glass-shadow;
+    backdrop-filter: $stitch-glass-blur;
+    -webkit-backdrop-filter: $stitch-glass-blur;
     transition: all 0.2s ease;
 
     // 展开状态（聚焦或有选中内容时）
     &--expanded {
-      border-radius: 16px;
+      border-radius: 24px;
       padding: 12px;
     }
 
@@ -371,7 +383,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       box-shadow: none; // 移除阴影，由灵感板统一处理
 
       &--expanded {
-        border-radius: 0 0 16px 16px;
+        border-radius: 0 0 24px 24px;
       }
     }
   }
@@ -517,10 +529,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     bottom: calc(100% + 8px);
     left: 0;
     min-width: 220px;
-    background: var(--island-bg-color, #fff);
-    border: 1px solid $gray-light;
+    background: $stitch-glass-bg;
+    border: 1px solid $stitch-glass-border;
     border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+    box-shadow: $stitch-glass-shadow;
+    backdrop-filter: $stitch-glass-blur;
+    -webkit-backdrop-filter: $stitch-glass-blur;
     padding: 6px;
     z-index: 10;
     animation: menuSlideUp 0.15s ease;
@@ -540,7 +554,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     transition: background 0.15s ease;
 
     &:hover {
-      background: $gray-light;
+      background: $stitch-glass-hover;
     }
 
     &.active {
@@ -885,10 +899,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       position: absolute;
       bottom: calc(100% + 8px);
       left: 0;
-      background: var(--island-bg-color, #fff);
-      border: 1px solid $gray-light;
-      border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+      background: $stitch-glass-bg;
+      border: 1px solid $stitch-glass-border;
+      border-radius: 12px;
+      box-shadow: $stitch-glass-shadow;
+      backdrop-filter: $stitch-glass-blur;
+      -webkit-backdrop-filter: $stitch-glass-blur;
       padding: 4px;
       z-index: 100;
       min-width: 100px;
@@ -907,13 +923,19 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       color: $text-dark;
 
       &:hover {
-        background: $gray-light;
+        background: $stitch-glass-hover;
       }
 
       &--selected {
-        background: rgba(var(--xingtu-theme-accent-rgb), 0.08);
-        color: $accent-primary;
+        background: rgba(22, 23, 24, 0.14);
+        color: $text-dark;
         font-weight: 500;
+
+        &:hover,
+        &.generation-type-dropdown__item--highlighted,
+        &.count-dropdown__item--highlighted {
+          background: rgba(22, 23, 24, 0.18);
+        }
       }
     }
 
@@ -923,13 +945,13 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       color: $gray-medium;
 
       .generation-type-dropdown__item--selected & {
-        color: $accent-primary;
+        color: $text-dark;
       }
     }
 
     &__item-check {
       margin-left: auto;
-      color: $accent-primary;
+      color: $text-dark;
     }
   }
 
@@ -1040,10 +1062,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       position: absolute;
       bottom: calc(100% + 8px);
       left: 0;
-      background: var(--island-bg-color, #fff);
-      border: 1px solid $gray-light;
-      border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+      background: $stitch-glass-bg;
+      border: 1px solid $stitch-glass-border;
+      border-radius: 12px;
+      box-shadow: $stitch-glass-shadow;
+      backdrop-filter: $stitch-glass-blur;
+      -webkit-backdrop-filter: $stitch-glass-blur;
       padding: 4px;
       z-index: 100;
       min-width: 80px;
@@ -1061,18 +1085,24 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       color: $text-dark;
 
       &:hover {
-        background: $gray-light;
+        background: $stitch-glass-hover;
       }
 
       &--selected {
-        background: rgba(var(--xingtu-theme-accent-rgb), 0.08);
-        color: $accent-primary;
+        background: rgba(22, 23, 24, 0.14);
+        color: $text-dark;
         font-weight: 500;
+
+        &:hover,
+        &.generation-type-dropdown__item--highlighted,
+        &.count-dropdown__item--highlighted {
+          background: rgba(22, 23, 24, 0.18);
+        }
       }
     }
 
     &__item-check {
-      color: $accent-primary;
+      color: $text-dark;
     }
   }
 
@@ -1208,9 +1238,11 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     }
 
     &__container {
-      background: var(--color-surface-high, #2a2a2a);
-      border-color: var(--color-border, #444);
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+      background: $stitch-glass-bg;
+      border-color: $stitch-glass-border;
+      box-shadow: $stitch-glass-shadow;
+      backdrop-filter: $stitch-glass-blur;
+      -webkit-backdrop-filter: $stitch-glass-blur;
     }
 
     &__type-btn {
@@ -1242,8 +1274,11 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     }
 
     &__model-menu {
-      background: var(--color-surface-high, #2a2a2a);
-      border-color: var(--color-border, #444);
+      background: $stitch-glass-bg;
+      border-color: $stitch-glass-border;
+      box-shadow: $stitch-glass-shadow;
+      backdrop-filter: $stitch-glass-blur;
+      -webkit-backdrop-filter: $stitch-glass-blur;
     }
 
     &__model-option {
@@ -1322,9 +1357,11 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       }
 
       &__menu {
-        background: var(--color-surface-high, #2a2a2a);
-        border-color: var(--color-border, #444);
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        background: $stitch-glass-bg;
+        border-color: $stitch-glass-border;
+        box-shadow: $stitch-glass-shadow;
+        backdrop-filter: $stitch-glass-blur;
+        -webkit-backdrop-filter: $stitch-glass-blur;
       }
 
       &__item {
@@ -1394,9 +1431,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   bottom: calc(100% + 8px);
   left: 0;
   right: 0;
-  background: var(--island-bg-color, #fff);
+  background: $stitch-glass-bg;
+  border: 1px solid $stitch-glass-border;
   border-radius: 16px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: $stitch-glass-shadow;
+  backdrop-filter: $stitch-glass-blur;
+  -webkit-backdrop-filter: $stitch-glass-blur;
   overflow: hidden;
   animation: panelSlideUp 0.2s ease;
   max-height: 320px;
@@ -1540,8 +1580,11 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 // Dark mode for prompt suggestion panel
 :root[data-theme='dark'] {
   .prompt-suggestion-panel {
-    background: var(--color-surface-high, #2a2a2a);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    background: $stitch-glass-bg;
+    border-color: $stitch-glass-border;
+    box-shadow: $stitch-glass-shadow;
+    backdrop-filter: $stitch-glass-blur;
+    -webkit-backdrop-filter: $stitch-glass-blur;
 
     &__content {
       &::-webkit-scrollbar-thumb {
@@ -1837,10 +1880,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     min-width: 280px;
     max-width: 400px;
     max-height: 320px;
-    background: var(--island-bg-color, #fff);
-    border: 1px solid #e5e7eb;
+    background: $stitch-glass-bg;
+    border: 1px solid $stitch-glass-border;
     border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    box-shadow: $stitch-glass-shadow;
+    backdrop-filter: $stitch-glass-blur;
+    -webkit-backdrop-filter: $stitch-glass-blur;
     overflow: hidden;
     z-index: 1000;
     animation: atSuggestionFadeIn 0.15s ease;
@@ -1852,7 +1897,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     font-weight: 500;
     color: $gray-dark;
     border-bottom: 1px solid #f3f4f6;
-    background: #fafafa;
+    background: transparent;
   }
 
   &__at-suggestion-list {
@@ -1976,12 +2021,15 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 :root[data-theme='dark'] {
   .ai-input-bar {
     &__at-suggestion {
-      background: var(--color-surface-high, #2a2a2a);
-      border-color: var(--color-border, #444);
+      background: $stitch-glass-bg;
+      border-color: $stitch-glass-border;
+      box-shadow: $stitch-glass-shadow;
+      backdrop-filter: $stitch-glass-blur;
+      -webkit-backdrop-filter: $stitch-glass-blur;
     }
 
     &__at-suggestion-header {
-      background: var(--color-surface-mid, #333);
+      background: transparent;
       border-bottom-color: var(--color-border, #444);
       color: var(--color-gray-50, #999);
     }
@@ -2033,10 +2081,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
 // Generation Type Dropdown Menu (portaled to body)
 .generation-type-dropdown__menu {
-  background: var(--island-bg-color, #fff);
-  border: 1px solid $gray-light;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  background: $stitch-glass-bg;
+  border: 1px solid $stitch-glass-border;
+  border-radius: 12px;
+  box-shadow: $stitch-glass-shadow;
+  backdrop-filter: $stitch-glass-blur;
+  -webkit-backdrop-filter: $stitch-glass-blur;
   padding: 0;
   min-width: 100px;
   overflow: hidden;
@@ -2051,7 +2101,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   font-weight: 500;
   color: $gray-dark;
   border-bottom: 1px solid $gray-light;
-  background: #fafafa;
+  background: transparent;
 }
 
 .generation-type-dropdown__list {
@@ -2072,17 +2122,17 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
   &:hover,
   &--highlighted {
-    background: $gray-light;
+    background: $stitch-glass-hover;
   }
 
   &--selected {
-    background: rgba(var(--xingtu-theme-accent-rgb), 0.08);
-    color: $accent-primary;
+    background: rgba(22, 23, 24, 0.14);
+    color: $text-dark;
     font-weight: 500;
 
     &:hover,
     &.generation-type-dropdown__item--highlighted {
-      background: rgba(var(--xingtu-theme-accent-rgb), 0.12);
+      background: rgba(22, 23, 24, 0.18);
     }
   }
 }
@@ -2093,7 +2143,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   color: $gray-medium;
 
   .generation-type-dropdown__item--selected & {
-    color: $accent-primary;
+    color: $text-dark;
   }
 }
 
@@ -2103,15 +2153,17 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
 .generation-type-dropdown__item-check {
   margin-left: auto;
-  color: $accent-primary;
+  color: $text-dark;
 }
 
 // Skill Dropdown Menu (portaled to body)
 .skill-dropdown__menu {
-  background: var(--island-bg-color, #fff);
-  border: 1px solid $gray-light;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  background: $stitch-glass-bg;
+  border: 1px solid $stitch-glass-border;
+  border-radius: 12px;
+  box-shadow: $stitch-glass-shadow;
+  backdrop-filter: $stitch-glass-blur;
+  -webkit-backdrop-filter: $stitch-glass-blur;
   padding: 0;
   min-width: 120px;
   overflow: hidden;
@@ -2126,7 +2178,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   font-weight: 500;
   color: $gray-dark;
   border-bottom: 1px solid $gray-light;
-  background: #fafafa;
+  background: transparent;
 }
 
 .skill-dropdown__list {
@@ -2194,7 +2246,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   border: 1px solid $gray-light;
   border-radius: 4px;
   outline: none;
-  background: var(--island-bg-color, #fff);
+  background: rgba(255, 255, 255, 0.42);
   color: inherit;
 
   &:focus {
@@ -2228,16 +2280,18 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   transition: background 0.1s ease;
 
   &:hover {
-    background: rgba(var(--xingtu-theme-accent-rgb), 0.08);
+    background: $gray-light;
   }
 }
 
 // Count Dropdown Menu (portaled to body)
 .count-dropdown__menu {
-  background: var(--island-bg-color, #fff);
-  border: 1px solid $gray-light;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  background: $stitch-glass-bg;
+  border: 1px solid $stitch-glass-border;
+  border-radius: 12px;
+  box-shadow: $stitch-glass-shadow;
+  backdrop-filter: $stitch-glass-blur;
+  -webkit-backdrop-filter: $stitch-glass-blur;
   padding: 0;
   min-width: 80px;
   overflow: hidden;
@@ -2252,7 +2306,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   font-weight: 500;
   color: $gray-dark;
   border-bottom: 1px solid $gray-light;
-  background: #fafafa;
+  background: transparent;
 }
 
 .count-dropdown__list {
@@ -2273,24 +2327,24 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
   &:hover,
   &--highlighted {
-    background: $gray-light;
+    background: $stitch-glass-hover;
   }
 
   &--selected {
-    background: rgba(var(--xingtu-theme-accent-rgb), 0.08);
-    color: $accent-primary;
+    background: rgba(22, 23, 24, 0.14);
+    color: $text-dark;
     font-weight: 500;
 
     &:hover,
     &.count-dropdown__item--highlighted {
-      background: rgba(var(--xingtu-theme-accent-rgb), 0.12);
+      background: rgba(22, 23, 24, 0.18);
     }
   }
 }
 
 .count-dropdown__item-check {
   margin-left: 8px;
-  color: $accent-primary;
+  color: $text-dark;
 }
 
 // 深色模式下的 Portal 下拉菜单样式（使用应用级别主题检测，与其他组件一致）
@@ -2298,15 +2352,17 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   .generation-type-dropdown__menu,
   .count-dropdown__menu,
   .skill-dropdown__menu {
-    background: var(--color-surface-high, #2a2a2a);
-    border-color: var(--color-border, #444);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    background: $stitch-glass-bg;
+    border-color: $stitch-glass-border;
+    box-shadow: $stitch-glass-shadow;
+    backdrop-filter: $stitch-glass-blur;
+    -webkit-backdrop-filter: $stitch-glass-blur;
   }
 
   .generation-type-dropdown__header,
   .count-dropdown__header,
   .skill-dropdown__header {
-    background: var(--color-surface-mid, #333);
+    background: transparent;
     border-bottom-color: var(--color-border, #444);
     color: var(--color-gray-50, #999);
   }
@@ -2335,7 +2391,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   }
 
   .skill-dropdown__header {
-    background: var(--color-surface-mid, #333);
+    background: transparent;
     border-bottom-color: var(--color-border, #444);
     color: var(--color-gray-50, #999);
   }

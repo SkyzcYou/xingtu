@@ -27,6 +27,112 @@ import useBoardEvent from './hooks/use-board-event';
 import './styles/index.scss';
 import { useBoard, useListRender } from './hooks/use-board';
 
+const DOT_GRID_GLOW_RADIUS = 120;
+const DOT_GRID_FADE_DURATION = 800;
+const DOT_GRID_HIDDEN_MASK = 'linear-gradient(transparent, transparent)';
+
+const DotGridBackground: React.FC = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const glowRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<number | null>(null);
+  const pointerRef = useRef<{
+    x: number;
+    y: number;
+    alpha: number;
+    lastMoveTime: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const glow = glowRef.current;
+    if (!container || !glow) {
+      return;
+    }
+
+    const clearGlow = () => {
+      glow.style.setProperty('--plait-dot-grid-opacity', '0');
+      glow.style.setProperty('--plait-dot-grid-mask', DOT_GRID_HIDDEN_MASK);
+    };
+
+    if (
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      clearGlow();
+      return;
+    }
+
+    const renderGlow = () => {
+      const pointer = pointerRef.current;
+      if (!pointer || pointer.alpha <= 0.01) {
+        clearGlow();
+        return;
+      }
+      const alpha = Math.min(pointer.alpha, 1);
+      const mask = `radial-gradient(circle ${DOT_GRID_GLOW_RADIUS}px at ${pointer.x}px ${pointer.y}px, rgba(0,0,0,${alpha}) 0%, rgba(0,0,0,${alpha * 0.8}) 25%, rgba(0,0,0,${alpha * 0.4}) 55%, transparent 100%)`;
+      glow.style.setProperty('--plait-dot-grid-opacity', '1');
+      glow.style.setProperty('--plait-dot-grid-mask', mask);
+    };
+
+    const animate = () => {
+      const pointer = pointerRef.current;
+      if (!pointer) {
+        frameRef.current = null;
+        return;
+      }
+      pointer.alpha = 1 - Math.min((performance.now() - pointer.lastMoveTime) / DOT_GRID_FADE_DURATION, 1);
+      renderGlow();
+      if (pointer.alpha > 0.01) {
+        frameRef.current = requestAnimationFrame(animate);
+      } else {
+        pointerRef.current = null;
+        frameRef.current = null;
+        renderGlow();
+      }
+    };
+
+    const scheduleAnimation = () => {
+      if (frameRef.current === null) {
+        frameRef.current = requestAnimationFrame(animate);
+      }
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      if (
+        event.clientX < rect.left ||
+        event.clientX > rect.right ||
+        event.clientY < rect.top ||
+        event.clientY > rect.bottom
+      ) {
+        return;
+      }
+      pointerRef.current = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+        alpha: 1,
+        lastMoveTime: performance.now(),
+      };
+      scheduleAnimation();
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div className="plait-dot-grid-background" ref={containerRef}>
+      <div className="plait-dot-grid-background__base" />
+      <div className="plait-dot-grid-background__glow" ref={glowRef} />
+    </div>
+  );
+};
+
 export type PlaitBoardProps = {
   style?: React.CSSProperties;
   className?: string;
@@ -121,6 +227,7 @@ export const Board: React.FC<PlaitBoardProps> = ({
       ref={boardContainerRef}
       style={style}
     >
+      <DotGridBackground />
       <div
         className="viewport-container"
         ref={viewportContainerRef}

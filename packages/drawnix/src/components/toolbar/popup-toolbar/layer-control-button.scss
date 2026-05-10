@@ -1,15 +1,18 @@
-/**
- * 图层控制面板样式
- * Layer Control Panel Styles
- */
+$stitch-glass-bg: rgba(218, 220, 224, 0.5);
+$stitch-glass-border: rgba(22, 23, 24, 0.15);
+$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1);
+$stitch-glass-blur: blur(40px);
 
 .layer-control-panel {
   display: flex;
-  background: #fff;
-  border-radius: 8px;
+  background: $stitch-glass-bg;
+  border: 1px solid $stitch-glass-border;
+  border-radius: 24px;
   padding: 4px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: $stitch-glass-shadow;
+  backdrop-filter: $stitch-glass-blur;
+  -webkit-backdrop-filter: $stitch-glass-blur;
 }
 
 .layer-actions {
@@ -25,7 +28,7 @@
   justify-content: center;
   gap: 2px;
   padding: 6px 8px;
-  background: #f5f5f5;
+  background: rgba(255, 255, 255, 0.24);
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -44,10 +47,10 @@
   }
 
   &:hover:not(.disabled) {
-    background: #5A4FCF;
+    background: rgba(255, 255, 255, 0.34);
 
     svg, span {
-      color: #fff;
+      color: #171717;
     }
   }
 

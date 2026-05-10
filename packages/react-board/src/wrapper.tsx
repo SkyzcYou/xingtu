@@ -43,6 +43,7 @@ import {
   ignoreUpcomingViewportScroll,
   refreshSelectedElementActiveSections,
   refreshSelectedElementActiveSectionsForViewportChange,
+  scheduleSelectedElementActiveSectionRefresh,
 } from './utils/viewport';
 
 export type WrapperProps = {
@@ -167,7 +168,7 @@ export const Wrapper: React.FC<WrapperProps> = ({
           parent: board,
           parentG: PlaitBoard.getElementHost(board),
         });
-        refreshSelectedElementActiveSectionsForViewportChange(board);
+        scheduleSelectedElementActiveSectionRefresh(board);
         return;
       }
       listRender.update(board.children, {

@@ -69,7 +69,7 @@ export const FreehandPanel: React.FC<FreehandPickerProps> = ({
   const board = useBoard();
 
   return (
-    <Island padding={1}>
+    <Island className="freehand-panel" padding={1}>
       <Stack.Row gap={1} align="center">
         {/* 绘图工具选择 */}
         <Stack.Row gap={1}>

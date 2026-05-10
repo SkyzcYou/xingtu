@@ -1,4 +1,7 @@
 {
+  "enabledPlugins": {
+    "chrome-devtools-mcp@claude-plugins-official": false
+  },
   "permissions": {
     "allow": [
       "Bash(find:*)",

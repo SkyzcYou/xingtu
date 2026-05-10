@@ -1,7 +1,19 @@
 // 主要定位样式在 index.scss 的 .drawnix 内定义
+$stitch-glass-bg: rgba(218, 220, 224, 0.5);
+$stitch-glass-border: rgba(22, 23, 24, 0.15);
+$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1);
+$stitch-glass-blur: blur(40px);
+
 .pencil-settings-toolbar {
   display: flex;
   align-items: center;
+  background: $stitch-glass-bg;
+  border: 1px solid $stitch-glass-border;
+  border-radius: 24px;
+  box-shadow: $stitch-glass-shadow;
+  backdrop-filter: $stitch-glass-blur;
+  -webkit-backdrop-filter: $stitch-glass-blur;
   
   // 模拟光标预览 - 绝对定位，独立于配置器
   .cursor-preview-dot {
@@ -20,6 +32,10 @@
     display: flex;
     align-items: center;
     padding: 4px 8px !important;
+    background: transparent;
+    border: none;
+    border-radius: inherit;
+    box-shadow: none;
   }
   
   .pencil-color-button {
@@ -67,8 +83,8 @@
     gap: 2px;
     margin-left: 4px;
     padding: 2px;
-    background: rgba(0, 0, 0, 0.04);
-    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.24);
+    border-radius: 8px;
 
     .pencil-stroke-style-button {
       height: 28px;
@@ -82,12 +98,12 @@
       transition: all 0.15s ease;
 
       &.active {
-        background: #ffffff;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        background: rgba(255, 255, 255, 0.58);
+        box-shadow: 0 0 0 1px rgba(22, 23, 24, 0.08);
       }
 
       &:hover:not(.active) {
-        background: rgba(0, 0, 0, 0.04);
+        background: rgba(255, 255, 255, 0.34);
       }
     }
   }
@@ -101,14 +117,16 @@
     padding: 0 12px;
     width: 72px;
     height: 32px;
-    background: #f5f5f5;
+    background: rgba(255, 255, 255, 0.42);
     border-radius: 16px;
-    border: 1px solid #e0e0e0;
+    border: 1px solid rgba(22, 23, 24, 0.12);
     flex-shrink: 0;
     box-sizing: border-box;
     
     &:focus-within {
-      border-color: #1890ff;
+      background: rgba(255, 255, 255, 0.58);
+      border-color: rgba(22, 23, 24, 0.18);
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.34);
     }
     
     .pencil-width-input,
@@ -150,7 +168,7 @@
   .toolbar-divider {
     width: 1px;
     height: 20px;
-    background: #e0e0e0;
+    background: rgba(22, 23, 24, 0.1);
     margin: 0 4px;
     flex-shrink: 0;
   }
@@ -178,8 +196,8 @@
     gap: 2px;
     padding: 2px;
     margin-left: 4px;
-    background: rgba(0, 0, 0, 0.04);
-    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.24);
+    border-radius: 8px;
 
     .pencil-shape-button {
       height: 28px;
@@ -194,13 +212,13 @@
       color: #666;
 
       &.active {
-        background: #ffffff;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        background: rgba(255, 255, 255, 0.58);
+        box-shadow: 0 0 0 1px rgba(22, 23, 24, 0.08);
         color: #333;
       }
 
       &:hover:not(.active) {
-        background: rgba(0, 0, 0, 0.04);
+        background: rgba(255, 255, 255, 0.34);
       }
     }
   }
@@ -211,8 +229,8 @@
     align-items: center;
     gap: 2px;
     padding: 2px;
-    background: rgba(0, 0, 0, 0.04);
-    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.24);
+    border-radius: 8px;
 
     .eraser-shape-button {
       height: 28px;
@@ -227,13 +245,13 @@
       color: #666;
 
       &.active {
-        background: #ffffff;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        background: rgba(255, 255, 255, 0.58);
+        box-shadow: 0 0 0 1px rgba(22, 23, 24, 0.08);
         color: #333;
       }
 
       &:hover:not(.active) {
-        background: rgba(0, 0, 0, 0.04);
+        background: rgba(255, 255, 255, 0.34);
       }
     }
   }
@@ -248,14 +266,18 @@
 .stroke-width-picker,
 .size-picker-popover {
   min-width: 200px;
-  background: #ffffff;
-  border-radius: 8px;
+  background: $stitch-glass-bg;
+  border: 1px solid $stitch-glass-border;
+  border-radius: 12px;
+  box-shadow: $stitch-glass-shadow;
+  backdrop-filter: $stitch-glass-blur;
+  -webkit-backdrop-filter: $stitch-glass-blur;
 
   .stroke-width-value,
   .size-picker-value {
     font-variant-numeric: tabular-nums;
     font-family: var(--font-family-mono, monospace);
-    background: rgba(0, 0, 0, 0.04);
+    background: rgba(255, 255, 255, 0.34);
     padding: 2px 6px;
     border-radius: 4px;
     text-align: center;

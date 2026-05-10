@@ -7,6 +7,13 @@
 @import './responsive'; // 响应式设计变量和混合宏
 @import './common-variables';
 @import './toolbox-theme.scss'; // 工具箱主题变量
+
+$stitch-glass-bg: rgba(218, 220, 224, 0.5);
+$stitch-glass-border: rgba(22, 23, 24, 0.15);
+$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1);
+$stitch-glass-blur: blur(40px);
+
 @import '../components/tool-element/tool.component.scss';
 @import '../components/minimap/minimap.scss';
 @import '../components/toolbar/pencil-settings-toolbar/pencil-settings-toolbar.scss'; // 画笔设置工具栏
@@ -66,9 +73,12 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: $z-unified-toolbar;
-    background: var(--color-surface-high);
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    background: $stitch-glass-bg;
+    border: 1px solid $stitch-glass-border;
+    border-radius: 24px;
+    box-shadow: $stitch-glass-shadow;
+    backdrop-filter: $stitch-glass-blur;
+    -webkit-backdrop-filter: $stitch-glass-blur;
 
     // 移动端调整定位，位于工具栏右侧避免重叠
     @media (max-width: 768px) {
@@ -83,9 +93,12 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: $z-unified-toolbar;
-    background: var(--color-surface-high);
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    background: $stitch-glass-bg;
+    border: 1px solid $stitch-glass-border;
+    border-radius: 24px;
+    box-shadow: $stitch-glass-shadow;
+    backdrop-filter: $stitch-glass-blur;
+    -webkit-backdrop-filter: $stitch-glass-blur;
 
     // 移动端调整定位，位于工具栏右侧避免重叠
     @media (max-width: 768px) {
@@ -191,14 +204,12 @@
     width: fit-content;
     max-width: 80px;
     overflow: visible; // 允许 Badge 角标溢出显示，滚动由 __scrollable 处理
-    border-radius: 20px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08); // 更加柔和的阴影
-    background: rgba(
-      var(--island-bg-color-rgb, 255, 255, 255),
-      0.95
-    ); // 稍微透明感
-    backdrop-filter: blur(10px); // 毛玻璃效果
-    border: 1px solid var(--color-border-light, rgba(0, 0, 0, 0.05));
+    border-radius: 24px;
+    box-shadow: $stitch-glass-shadow;
+    background: $stitch-glass-bg;
+    backdrop-filter: $stitch-glass-blur;
+    -webkit-backdrop-filter: $stitch-glass-blur;
+    border: 1px solid $stitch-glass-border;
 
     // 可滚动内容区域
     &__scrollable {
@@ -305,7 +316,7 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        background: inherit;
+        background: transparent;
         overflow: visible; // 允许 Badge 角标溢出显示
       }
 
@@ -317,7 +328,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        background: inherit;
+        background: transparent;
       }
     }
 
@@ -342,7 +353,7 @@
       max-height: calc(100vh - 160px); // 限制最大高度
       width: 38px; // 固定宽度，确保收起和展开状态一致（以收起状态为准）
       max-width: 38px;
-      border-radius: 16px;
+      border-radius: 24px;
 
       .unified-toolbar__drag-handle {
         display: none;
@@ -556,12 +567,16 @@
     min-width: 200px;
     max-width: 280px;
     padding: 8px;
-    background: var(--island-bg-color);
-    border-radius: 8px;
+    background: $stitch-glass-bg;
+    border: 1px solid $stitch-glass-border;
+    border-radius: 24px;
+    box-shadow: $stitch-glass-shadow;
+    backdrop-filter: $stitch-glass-blur;
+    -webkit-backdrop-filter: $stitch-glass-blur;
 
     &__header {
       padding: 4px 8px 8px;
-      border-bottom: 1px solid var(--color-border);
+      border-bottom: 1px solid rgba(22, 23, 24, 0.1);
       margin-bottom: 8px;
     }
 
@@ -579,18 +594,33 @@
       overflow-y: auto;
     }
 
+    .tool-icon:hover {
+      background-color: rgba(255, 255, 255, 0.34);
+    }
+
+    .tool-icon_type_button {
+      &.tool-icon--selected {
+        background: rgba(255, 255, 255, 0.58);
+        box-shadow: 0 0 0 1px rgba(22, 23, 24, 0.08);
+      }
+
+      &:active {
+        background-color: rgba(255, 255, 255, 0.42);
+      }
+    }
+
     &__item {
       border-radius: 6px;
       transition: background-color 0.15s ease;
 
       &:hover {
-        background-color: var(--color-surface-high);
+        background-color: rgba(255, 255, 255, 0.34);
       }
     }
 
     &__footer {
       padding: 8px 8px 4px;
-      border-top: 1px solid var(--color-border);
+      border-top: 1px solid rgba(22, 23, 24, 0.1);
       margin-top: 8px;
     }
 
@@ -617,7 +647,7 @@
       transition: background-color 0.15s ease;
 
       &:hover {
-        background-color: var(--color-surface-high);
+        background-color: rgba(255, 255, 255, 0.34);
       }
 
       .stack {
@@ -646,7 +676,7 @@
 
         &:hover,
         &.active {
-          background-color: var(--color-surface-primary-container);
+          background-color: rgba(255, 255, 255, 0.34);
         }
       }
 
@@ -798,6 +828,15 @@
     background-color: var(--color-border, #e0e0e0);
     margin: 4px 0;
   }
+}
+
+.freehand-panel.island {
+  background: $stitch-glass-bg;
+  border: 1px solid $stitch-glass-border;
+  border-radius: 16px;
+  box-shadow: $stitch-glass-shadow;
+  backdrop-filter: $stitch-glass-blur;
+  -webkit-backdrop-filter: $stitch-glass-blur;
 }
 
 // Freehand panel divider

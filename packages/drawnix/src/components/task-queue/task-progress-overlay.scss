@@ -15,11 +15,12 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  --task-progress-accent: #f39c12;
+  --task-progress-accent: var(--xingtu-generation-running-accent, #F39C12);
+  --task-progress-accent-rgb: var(--xingtu-generation-running-accent-rgb, 243, 156, 18);
   background:
-    radial-gradient(circle at 18% 18%, rgba(245, 184, 73, 0.16), transparent 24%),
-    radial-gradient(circle at 76% 78%, rgba(179, 144, 122, 0.14), transparent 32%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(236, 230, 224, 0.74));
+    radial-gradient(circle at 18% 18%, rgba(var(--xingtu-generation-running-surface-strong-rgb, 255, 252, 245), 0.58), transparent 24%),
+    radial-gradient(circle at 76% 78%, rgba(var(--xingtu-generation-running-muted-rgb, 250, 204, 21), 0.16), transparent 32%),
+    linear-gradient(135deg, rgba(var(--xingtu-generation-running-surface-strong-rgb, 255, 252, 245), 0.68), rgba(var(--xingtu-generation-running-surface-rgb, 255, 246, 219), 0.5));
   border-radius: inherit;
   overflow: hidden;
 
@@ -42,8 +43,8 @@
 
   &__pulse {
     background:
-      radial-gradient(circle at 16% 18%, rgba(243, 156, 18, 0.14), transparent 22%),
-      radial-gradient(circle at 72% 70%, rgba(168, 133, 112, 0.12), transparent 34%);
+      radial-gradient(circle at 16% 18%, rgba(var(--task-progress-accent-rgb), 0.12), transparent 22%),
+      radial-gradient(circle at 72% 70%, rgba(var(--xingtu-generation-running-muted-rgb, 250, 204, 21), 0.14), transparent 34%);
     mix-blend-mode: multiply;
     animation: task-progress-overlay-pulse 3.6s ease-in-out infinite;
   }
@@ -66,9 +67,9 @@
 
   &__progress {
     --image-generation-progress-accent: var(--task-progress-accent);
-    --image-generation-progress-accent-soft: rgba(243, 156, 18, 0.14);
-    --image-generation-progress-ring-bg: rgba(148, 163, 184, 0.24);
-    --image-generation-progress-text: rgba(55, 65, 81, 0.9);
+    --image-generation-progress-accent-soft: rgba(var(--task-progress-accent-rgb), 0.14);
+    --image-generation-progress-ring-bg: var(--xingtu-generation-running-ring-bg, rgba(203, 213, 225, 0.34));
+    --image-generation-progress-text: var(--xingtu-generation-running-body-text, rgba(55, 65, 81, 0.9));
   }
 
   // 底部进度条
@@ -84,45 +85,47 @@
 
   &__bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, #F39C12, #E67E22);
+    background: var(--xingtu-generation-running-progress-gradient, linear-gradient(90deg, #F39C12, #E67E22));
     transition: width 0.3s ease;
-    box-shadow: 0 0 8px rgba(243, 156, 18, 0.5);
+    box-shadow: 0 0 8px var(--xingtu-generation-running-progress-shadow, rgba(243, 156, 18, 0.5));
   }
 }
 
 // 视频任务的特殊样式
 .task-progress-overlay--video {
-  --task-progress-accent: #5a4fcf;
+  --task-progress-accent: var(--xingtu-generation-running-video-accent, #5A4FCF);
+  --task-progress-accent-rgb: var(--xingtu-generation-running-video-accent-rgb, 90, 79, 207);
   background:
-    radial-gradient(circle at 18% 18%, rgba(105, 91, 224, 0.18), transparent 24%),
-    radial-gradient(circle at 72% 74%, rgba(90, 79, 207, 0.1), transparent 32%),
-    linear-gradient(135deg, rgba(250, 249, 255, 0.88), rgba(232, 229, 247, 0.78));
+    radial-gradient(circle at 18% 18%, rgba(var(--xingtu-generation-running-surface-strong-rgb, 255, 252, 245), 0.56), transparent 24%),
+    radial-gradient(circle at 72% 74%, rgba(var(--task-progress-accent-rgb), 0.16), transparent 32%),
+    linear-gradient(135deg, rgba(var(--xingtu-generation-running-surface-strong-rgb, 255, 252, 245), 0.66), rgba(var(--xingtu-generation-running-surface-rgb, 255, 246, 219), 0.52));
 
   .task-progress-overlay__pulse {
     background:
-      radial-gradient(circle at 18% 22%, rgba(123, 104, 238, 0.16), transparent 22%),
-      radial-gradient(circle at 72% 70%, rgba(90, 79, 207, 0.14), transparent 34%);
+      radial-gradient(circle at 18% 22%, rgba(var(--task-progress-accent-rgb), 0.16), transparent 22%),
+      radial-gradient(circle at 72% 70%, rgba(var(--task-progress-accent-rgb), 0.14), transparent 34%);
   }
 
   .task-progress-overlay__bar-fill {
-    background: linear-gradient(90deg, #5A4FCF, #7B68EE);
-    box-shadow: 0 0 8px rgba(90, 79, 207, 0.5);
+    background: var(--xingtu-generation-running-video-progress-gradient, linear-gradient(90deg, #5A4FCF, #7B68EE));
+    box-shadow: 0 0 8px var(--xingtu-generation-running-video-progress-shadow, rgba(90, 79, 207, 0.5));
   }
 }
 
 // 图片加载阶段的特殊样式
 .task-progress-overlay--loading {
-  --task-progress-accent: #00a870;
+  --task-progress-accent: var(--xingtu-generation-running-loading-accent, #00A870);
+  --task-progress-accent-rgb: var(--xingtu-generation-running-loading-accent-rgb, 0, 168, 112);
 
   .task-progress-overlay__pulse {
     background:
-      radial-gradient(circle at 18% 18%, rgba(0, 168, 112, 0.12), transparent 22%),
-      radial-gradient(circle at 76% 72%, rgba(132, 204, 166, 0.12), transparent 34%);
+      radial-gradient(circle at 18% 18%, rgba(var(--task-progress-accent-rgb), 0.12), transparent 22%),
+      radial-gradient(circle at 76% 72%, rgba(var(--task-progress-accent-rgb), 0.12), transparent 34%);
   }
 
   .task-progress-overlay__bar-fill {
-    background: linear-gradient(90deg, #00A870, #00C48C);
-    box-shadow: 0 0 8px rgba(0, 168, 112, 0.5);
+    background: var(--xingtu-generation-running-loading-progress-gradient, linear-gradient(90deg, #00A870, #00C48C));
+    box-shadow: 0 0 8px var(--xingtu-generation-running-loading-progress-shadow, rgba(0, 168, 112, 0.5));
   }
 }
 

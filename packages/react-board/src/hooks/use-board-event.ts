@@ -30,6 +30,7 @@ const useBoardEvent = (
         if (!target) return;
         const { scrollLeft, scrollTop } = target;
         updateViewportByScrolling(board, scrollLeft, scrollTop);
+        refreshSelectedElementActiveSectionsForViewportChange(board);
       }
     },
     { target: viewportContainerRef }

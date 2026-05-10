@@ -180,39 +180,35 @@
     <style>
       :root {
         --app-boot-bg: radial-gradient(
-            circle at top,
-            rgba(90, 79, 207, 0.14),
-            transparent 38%
+            circle at 18% 18%,
+            rgba(255, 255, 255, 0.72),
+            transparent 34%
           ),
-          linear-gradient(180deg, #fff8ef 0%, #ffffff 58%, #f8f9ff 100%);
-        --app-boot-text: #2d3436;
-        --app-boot-muted: #636e72;
-        --app-boot-accent: #f39c12;
-        --app-boot-accent-soft: rgba(243, 156, 18, 0.14);
-        --app-boot-shadow: 0 20px 60px rgba(45, 52, 54, 0.08);
+          radial-gradient(
+            circle at 82% 12%,
+            rgba(218, 220, 224, 0.5),
+            transparent 32%
+          ),
+          linear-gradient(135deg, #f4f4f2 0%, #e9ebe8 48%, #f7f7f5 100%);
+        --app-boot-text: #161718;
+        --app-boot-muted: rgba(22, 23, 24, 0.58);
+        --app-boot-accent: rgba(22, 23, 24, 0.86);
+        --app-boot-accent-soft: rgba(255, 255, 255, 0.34);
+        --app-boot-glass-bg: rgba(218, 220, 224, 0.5);
+        --app-boot-glass-border: rgba(22, 23, 24, 0.15);
+        --app-boot-glass-highlight: rgba(255, 255, 255, 0.34);
+        --app-boot-glass-blur: blur(40px);
+        --app-boot-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+          0 4px 6px -4px rgba(0, 0, 0, 0.1);
       }
 
       :root[data-xingtu-theme='xingtu-neutral'] {
-        --app-boot-bg: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
-        --app-boot-text: #171717;
-        --app-boot-muted: #737373;
-        --app-boot-accent: #171717;
-        --app-boot-accent-soft: #f5f5f5;
-        --app-boot-shadow: 0 20px 60px rgba(23, 23, 23, 0.08);
-      }
-
-      :root[data-xingtu-theme='xingtu-neutral'] .app-boot-mark {
-        background: #f5f5f5;
-        color: #171717;
-      }
-
-      :root[data-xingtu-theme='xingtu-neutral'] .app-boot-progress-track {
-        background: #e5e5e5;
-      }
-
-      :root[data-xingtu-theme='xingtu-neutral'] .app-boot-progress-fill {
-        background: #171717;
-        box-shadow: none;
+        --app-boot-bg: radial-gradient(
+            circle at 18% 18%,
+            rgba(255, 255, 255, 0.72),
+            transparent 34%
+          ),
+          linear-gradient(135deg, #f7f7f5 0%, #e9ebe8 100%);
       }
 
       #app-boot-loading {
@@ -246,10 +242,11 @@
         width: min(420px, calc(100vw - 48px));
         padding: 28px 24px;
         border-radius: 24px;
-        background: rgba(255, 255, 255, 0.92);
-        border: 1px solid rgba(255, 255, 255, 0.72);
+        background: var(--app-boot-glass-bg);
+        border: 1px solid var(--app-boot-glass-border);
         box-shadow: var(--app-boot-shadow);
-        backdrop-filter: blur(14px);
+        backdrop-filter: var(--app-boot-glass-blur);
+        -webkit-backdrop-filter: var(--app-boot-glass-blur);
         text-align: center;
       }
 
@@ -262,12 +259,10 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: linear-gradient(
-          135deg,
-          rgba(243, 156, 18, 0.18),
-          rgba(90, 79, 207, 0.12)
-        );
+        background: var(--app-boot-glass-highlight);
+        border: 1px solid rgba(22, 23, 24, 0.08);
         color: var(--app-boot-accent);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
         font-size: 16px;
         font-weight: 700;
         letter-spacing: 0.02em;
@@ -299,7 +294,9 @@
         padding: 10px 14px;
         border-radius: 999px;
         background: var(--app-boot-accent-soft);
+        border: 1px solid rgba(22, 23, 24, 0.08);
         color: var(--app-boot-accent);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
         font-size: 13px;
         font-weight: 600;
       }
@@ -310,7 +307,7 @@
         height: 8px;
         overflow: hidden;
         border-radius: 999px;
-        background: rgba(243, 156, 18, 0.16);
+        background: rgba(22, 23, 24, 0.1);
       }
 
       .app-boot-progress-fill {
@@ -320,10 +317,10 @@
         border-radius: inherit;
         background: linear-gradient(
           90deg,
-          rgba(243, 156, 18, 0.72),
-          rgba(243, 156, 18, 1)
+          rgba(22, 23, 24, 0.52),
+          rgba(22, 23, 24, 0.82)
         );
-        box-shadow: 0 0 16px rgba(243, 156, 18, 0.3);
+        box-shadow: 0 0 16px rgba(22, 23, 24, 0.12);
         transition: width 0.24s ease;
       }
 

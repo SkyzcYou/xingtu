@@ -1,10 +1,11 @@
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import {
   PlaitElement,
   clearSelectedElement,
   getSelectedElements,
   initializeViewBox,
   initializeViewportContainer,
+  updateViewportByScrolling,
   updateViewportOffset,
   type Viewport,
   type PlaitBoard,
@@ -39,6 +40,7 @@ vi.mock('@plait/core', async () => {
     initializeViewportContainer: vi.fn(),
     initializeViewBox: vi.fn(),
     initializeViewportOffset: vi.fn(),
+    updateViewportByScrolling: vi.fn(),
     updateViewportOffset: vi.fn(),
   };
 });
@@ -65,6 +67,7 @@ const mockedInitializeViewportContainer = vi.mocked(
   initializeViewportContainer
 );
 const mockedInitializeViewBox = vi.mocked(initializeViewBox);
+const mockedUpdateViewportByScrolling = vi.mocked(updateViewportByScrolling);
 const mockedUpdateViewportOffset = vi.mocked(updateViewportOffset);
 const mockedGetSelectedElements = vi.mocked(getSelectedElements);
 const mockedClearSelectedElement = vi.mocked(clearSelectedElement);
@@ -277,6 +280,38 @@ describe('ReactBoard', () => {
       expect(viewportContainer.scrollTop).toBe(60);
     });
     expect(elementRef.updateActiveSection.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('refreshes selected active sections synchronously on viewport scroll', () => {
+    const value: PlaitElement[] = [];
+    const selectedElement = { id: 'selected' } as PlaitElement;
+    const elementRef = { updateActiveSection: vi.fn() };
+
+    mockedGetSelectedElements.mockReturnValue([selectedElement]);
+    mockedGetElementRef.mockReturnValue(elementRef as any);
+
+    const { container } = render(renderBoard(value));
+    container
+      .querySelector('.board-host-svg')
+      ?.setAttribute('viewBox', '0 0 1000 800');
+    const viewportContainer = container.querySelector(
+      '.viewport-container'
+    ) as HTMLElement;
+
+    vi.clearAllMocks();
+    mockedGetSelectedElements.mockReturnValue([selectedElement]);
+    mockedGetElementRef.mockReturnValue(elementRef as any);
+
+    viewportContainer.scrollLeft = 120;
+    viewportContainer.scrollTop = 80;
+    fireEvent.scroll(viewportContainer);
+
+    expect(mockedUpdateViewportByScrolling).toHaveBeenCalledWith(
+      expect.anything(),
+      120,
+      80
+    );
+    expect(elementRef.updateActiveSection).toHaveBeenCalled();
   });
 
   it('does not refresh element refs when viewport changes without selection', async () => {

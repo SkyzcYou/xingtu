@@ -3,16 +3,24 @@
  * 注意：使用 .ai-input-bar 限定作用域，避免与 chat-drawer 的 ModelSelector 冲突
  */
 
+$stitch-glass-bg: rgba(218, 220, 224, 0.5);
+$stitch-glass-border: rgba(22, 23, 24, 0.15);
+$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1);
+$stitch-glass-blur: blur(40px);
+
 .ai-input-bar .ai-model-selector {
   position: absolute;
   bottom: 100%;
   left: 0;
   right: 0;
   margin-bottom: 8px;
-  background: var(--island-bg-color, #ffffff);
-  border: 1px solid var(--color-border, #e5e5e5);
+  background: $stitch-glass-bg;
+  border: 1px solid $stitch-glass-border;
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: $stitch-glass-shadow;
+  backdrop-filter: $stitch-glass-blur;
+  -webkit-backdrop-filter: $stitch-glass-blur;
   z-index: 1000;
   overflow: hidden;
   animation: modelSelectorFadeIn 0.15s ease-out;
@@ -224,8 +232,11 @@
 // 暗色主题支持
 :root[data-theme='dark'] {
   .ai-input-bar .ai-model-selector {
-    background: var(--color-surface-high, #2a2a2a);
-    border-color: var(--color-border, #444444);
+    background: $stitch-glass-bg;
+    border-color: $stitch-glass-border;
+    box-shadow: $stitch-glass-shadow;
+    backdrop-filter: $stitch-glass-blur;
+    -webkit-backdrop-filter: $stitch-glass-blur;
 
     &__header {
       border-color: var(--color-border, #444444);

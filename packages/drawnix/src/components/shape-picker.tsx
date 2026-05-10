@@ -74,7 +74,7 @@ export const ShapePicker: React.FC<ShapePickerProps> = ({
 }) => {
   const board = useBoard();
   return (
-    <Island padding={1}>
+    <Island className="shape-picker" padding={1}>
       <Stack.Col gap={1}>
         {ROW_SHAPES.map((rowShapes, rowIndex) => {
           return (

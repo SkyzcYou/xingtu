@@ -41,7 +41,7 @@ export type ArrowPickerProps = {
 export const ArrowPicker: React.FC<ArrowPickerProps> = ({ onPointerUp }) => {
   const board = useBoard();
   return (
-    <Island padding={1}>
+    <Island className="arrow-picker" padding={1}>
       <Stack.Row gap={1}>
         {ARROWS.map((arrow, index) => {
           return (

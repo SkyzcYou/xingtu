@@ -112,6 +112,7 @@ import { VideoFrameSelector } from '../../video-frame-selector/video-frame-selec
 import { insertVideoFrame } from '../../../utils/video-frame';
 import { isToolElement } from '../../../plugins/with-tool';
 import { isWorkZoneElement } from '../../../plugins/with-workzone';
+import { isTemporaryHandMode } from '../../../plugins/hand-mode';
 import { splitAndInsertImages } from '../../../utils/image-splitter';
 import {
   smartDownload,
@@ -186,6 +187,7 @@ const FrameSlideshow = lazy(() =>
 );
 
 const POPUP_TOOLBAR_POSITION_FRAMES = 2;
+const POPUP_TOOLBAR_VIEWPORT_PAN_IDLE_MS = 125;
 
 const schedulePopupToolbarFrame = (callback: FrameRequestCallback) => {
   if (typeof window.requestAnimationFrame === 'function') {
@@ -213,6 +215,11 @@ export const PopupToolbar = () => {
   const { language, t } = useI18n();
   const [movingOrDragging, setMovingOrDragging] = useState(false);
   const movingOrDraggingRef = useRef(movingOrDragging);
+  const [viewportPanning, setViewportPanning] = useState(false);
+  const viewportPanningRef = useRef(false);
+  const viewportPanningEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   // 视频帧选择弹窗状态
   const [showVideoFrameSelector, setShowVideoFrameSelector] = useState(false);
@@ -957,8 +964,14 @@ export const PopupToolbar = () => {
     );
   }, [board, language, selectedElements]);
 
-  const updatePopupToolbarPosition = useCallback(() => {
-    if (!open || movingOrDragging) {
+  const updatePopupToolbarPosition = useCallback((
+    options?: { ignoreViewportPanning?: boolean }
+  ) => {
+    if (
+      !open ||
+      movingOrDragging ||
+      (!options?.ignoreViewportPanning && viewportPanningRef.current)
+    ) {
       return;
     }
 
@@ -1016,9 +1029,103 @@ export const PopupToolbar = () => {
     }
   }, [board, movingOrDragging, open, refs]);
 
-  // 等待 viewBox/scroll 在缩放后落定，再更新 toolbar 和属性面板坐标。
+  const clearViewportPanningEndTimer = useCallback(() => {
+    if (viewportPanningEndTimerRef.current) {
+      clearTimeout(viewportPanningEndTimerRef.current);
+      viewportPanningEndTimerRef.current = null;
+    }
+  }, []);
+
+  const finishViewportPanning = useCallback(() => {
+    clearViewportPanningEndTimer();
+    if (isTemporaryHandMode(board)) {
+      viewportPanningEndTimerRef.current = setTimeout(
+        finishViewportPanning,
+        POPUP_TOOLBAR_VIEWPORT_PAN_IDLE_MS
+      );
+      return;
+    }
+    viewportPanningRef.current = false;
+    updatePopupToolbarPosition({ ignoreViewportPanning: true });
+    setViewportPanning(false);
+  }, [board, clearViewportPanningEndTimer, updatePopupToolbarPosition]);
+
+  const scheduleViewportPanningEnd = useCallback(() => {
+    clearViewportPanningEndTimer();
+    viewportPanningEndTimerRef.current = setTimeout(
+      finishViewportPanning,
+      POPUP_TOOLBAR_VIEWPORT_PAN_IDLE_MS
+    );
+  }, [clearViewportPanningEndTimer, finishViewportPanning]);
+
+  const markViewportPanning = useCallback(() => {
+    if (!open || movingOrDragging) {
+      return;
+    }
+    if (!viewportPanningRef.current) {
+      viewportPanningRef.current = true;
+      setViewportPanning(true);
+    }
+    scheduleViewportPanningEnd();
+  }, [movingOrDragging, open, scheduleViewportPanningEnd]);
+
+  useEffect(() => {
+    const viewportContainer = PlaitBoard.getViewportContainer(board);
+    const boardContainer = PlaitBoard.getBoardContainer(board);
+
+    const handleViewportScroll = () => {
+      markViewportPanning();
+    };
+
+    const handleViewportMovingClassChange = () => {
+      if (isTemporaryHandMode(board)) {
+        markViewportPanning();
+        return;
+      }
+      if (viewportPanningRef.current) {
+        scheduleViewportPanningEnd();
+      }
+    };
+
+    viewportContainer.addEventListener('scroll', handleViewportScroll, {
+      passive: true,
+    });
+
+    let observer: MutationObserver | null = null;
+    if (typeof MutationObserver !== 'undefined') {
+      observer = new MutationObserver(handleViewportMovingClassChange);
+      observer.observe(boardContainer, {
+        attributes: true,
+        attributeFilter: ['class'],
+      });
+    }
+
+    handleViewportMovingClassChange();
+
+    return () => {
+      viewportContainer.removeEventListener('scroll', handleViewportScroll);
+      observer?.disconnect();
+      clearViewportPanningEndTimer();
+      viewportPanningRef.current = false;
+    };
+  }, [
+    board,
+    clearViewportPanningEndTimer,
+    markViewportPanning,
+    scheduleViewportPanningEnd,
+  ]);
+
   useEffect(() => {
     if (!open || movingOrDragging) {
+      clearViewportPanningEndTimer();
+      viewportPanningRef.current = false;
+      setViewportPanning(false);
+    }
+  }, [clearViewportPanningEndTimer, movingOrDragging, open]);
+
+  // 等待 viewBox/scroll 在缩放后落定，再更新 toolbar 和属性面板坐标。
+  useEffect(() => {
+    if (!open || movingOrDragging || viewportPanning) {
       return;
     }
 
@@ -1049,6 +1156,7 @@ export const PopupToolbar = () => {
   }, [
     open,
     movingOrDragging,
+    viewportPanning,
     viewport,
     selection,
     children,
@@ -1111,7 +1219,9 @@ export const PopupToolbar = () => {
       {open && !movingOrDragging && (
         <Island
           padding={1}
-          className={classNames('popup-toolbar', ATTACHED_ELEMENT_CLASS_NAME)}
+          className={classNames('popup-toolbar', ATTACHED_ELEMENT_CLASS_NAME, {
+            'popup-toolbar--viewport-panning': viewportPanning,
+          })}
           ref={(node) => {
             refs.setFloating(node);
             (
