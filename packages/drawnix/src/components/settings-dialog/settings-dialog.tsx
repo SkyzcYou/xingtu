@@ -24,6 +24,7 @@ import {
   FlaskConical,
   Loader2,
   Search,
+  Settings,
   Trash2,
   X,
 } from 'lucide-react';
@@ -3227,6 +3228,7 @@ export const SettingsDialog = ({
         id="settings-dialog"
         visible={appState.openSettings}
         title="设置"
+        icon={<Settings size={16} />}
         onClose={handleWindowClose}
         width={isCompactLayout ? '100%' : '88%'}
         height={isCompactLayout ? '100%' : '88%'}
@@ -3247,9 +3249,9 @@ export const SettingsDialog = ({
         resizable={!isCompactLayout}
         movable={!isCompactLayout}
         modal={false}
-        className="winbox-ai-generation winbox-tool-window winbox-settings-window"
+        className="winbox-ai-generation winbox-glass-window winbox-tool-window winbox-settings-window"
         container={container}
-        background="#ffffff"
+        background="transparent"
       >
         <div
           ref={dialogRef}

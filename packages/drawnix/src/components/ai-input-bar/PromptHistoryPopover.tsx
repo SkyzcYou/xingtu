@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { History } from 'lucide-react';
 import { usePromptHistory } from '../../hooks/usePromptHistory';
 import { useGenerationHistory } from '../../hooks/useGenerationHistory';
 import { useConfirmDialog } from '../dialog/ConfirmDialog';
@@ -274,7 +274,7 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
           >
-            <MoreHorizontal size={18} />
+            <History size={18} />
           </button>
         </HoverTip>
         {extraActions}
@@ -296,6 +296,17 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
             onTitleClick={handleOpenMyPrompts}
             language={language}
             showCount={true}
+            footer={
+              <div className="prompt-history-popover__panel-footer">
+                <button
+                  type="button"
+                  className="prompt-history-popover__open-library-btn"
+                  onClick={handleOpenMyPrompts}
+                >
+                  {language === 'zh' ? '打开我的提示词库' : 'Open prompt library'}
+                </button>
+              </div>
+            }
             analyticsSurface="ai_input_prompt_popover"
             analyticsPromptType={generationType}
           />

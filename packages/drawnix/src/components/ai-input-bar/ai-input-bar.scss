@@ -11,16 +11,10 @@
 $accent-primary: var(--xingtu-theme-accent);
 $accent-dark: var(--xingtu-theme-accent-hover);
 $gray-light: #f3f4f6;
-$gray-medium: #9ca3af;
-$gray-dark: #6b7280;
-$text-dark: #1f2937;
+$gray-medium: var(--xingtu-glass-text-tertiary);
+$gray-dark: var(--xingtu-glass-text-secondary);
+$text-dark: var(--xingtu-glass-text-primary);
 $vip-color: #e91e63;
-$stitch-glass-bg: rgba(218, 220, 224, 0.5);
-$stitch-glass-border: rgba(22, 23, 24, 0.15);
-$stitch-glass-hover: rgba(22, 23, 24, 0.08);
-$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
-  0 4px 6px -4px rgba(0, 0, 0, 0.1);
-$stitch-glass-blur: blur(40px);
 $ai-input-font-size: 15px;
 $ai-input-line-height-ratio: 1.5;
 $ai-input-line-height: $ai-input-font-size * $ai-input-line-height-ratio;
@@ -81,12 +75,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       left: 16px; // 与 padding 对应
       right: 16px;
       bottom: 0;
-      background: $stitch-glass-bg;
-      border: 1px solid $stitch-glass-border;
+      background: var(--xingtu-glass-bg);
+      border: 1px solid var(--xingtu-glass-border);
       border-radius: 24px;
-      box-shadow: $stitch-glass-shadow;
-      backdrop-filter: $stitch-glass-blur;
-      -webkit-backdrop-filter: $stitch-glass-blur;
+      box-shadow: var(--xingtu-glass-shadow);
+      backdrop-filter: var(--xingtu-glass-blur);
+      -webkit-backdrop-filter: var(--xingtu-glass-blur);
       z-index: -1;
       pointer-events: none;
     }
@@ -172,7 +166,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.42);
+    background: var(--xingtu-glass-control-bg-active);
     padding: 4px;
     animation: fadeIn 0.15s ease;
 
@@ -233,7 +227,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     align-items: center;
     gap: 6px;
     padding-bottom: 8px;
-    border-bottom: 1px solid $gray-light;
+    border-bottom: 1px solid var(--xingtu-glass-divider);
     color: #3b82f6;
     font-size: 14px;
     font-weight: 500;
@@ -362,13 +356,13 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     display: flex;
     flex-direction: column-reverse; // 倒序排列，底部栏在下，输入区向上扩展
     width: 100%;
-    background: $stitch-glass-bg;
-    border: 1px solid $stitch-glass-border;
+    background: var(--xingtu-glass-bg);
+    border: 1px solid var(--xingtu-glass-border);
     border-radius: 24px;
     padding: 6px 10px;
-    box-shadow: $stitch-glass-shadow;
-    backdrop-filter: $stitch-glass-blur;
-    -webkit-backdrop-filter: $stitch-glass-blur;
+    box-shadow: var(--xingtu-glass-shadow);
+    backdrop-filter: var(--xingtu-glass-blur);
+    -webkit-backdrop-filter: var(--xingtu-glass-blur);
     transition: all 0.2s ease;
 
     // 展开状态（聚焦或有选中内容时）
@@ -529,12 +523,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     bottom: calc(100% + 8px);
     left: 0;
     min-width: 220px;
-    background: $stitch-glass-bg;
-    border: 1px solid $stitch-glass-border;
+    background: var(--xingtu-glass-bg);
+    border: 1px solid var(--xingtu-glass-border);
     border-radius: 12px;
-    box-shadow: $stitch-glass-shadow;
-    backdrop-filter: $stitch-glass-blur;
-    -webkit-backdrop-filter: $stitch-glass-blur;
+    box-shadow: var(--xingtu-glass-shadow);
+    backdrop-filter: var(--xingtu-glass-blur);
+    -webkit-backdrop-filter: var(--xingtu-glass-blur);
     padding: 6px;
     z-index: 10;
     animation: menuSlideUp 0.15s ease;
@@ -554,7 +548,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     transition: background 0.15s ease;
 
     &:hover {
-      background: $stitch-glass-hover;
+      background: var(--xingtu-glass-list-bg-hover);
     }
 
     &.active {
@@ -588,14 +582,14 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     border: 1px solid $gray-light;
     background: transparent;
     border-radius: 8px;
-    color: $gray-dark;
+    color: var(--xingtu-glass-text-secondary);
     cursor: pointer;
     transition: all 0.15s ease;
 
     &:hover {
-      color: $text-dark;
-      background: $gray-light;
-      border-color: $gray-medium;
+      color: var(--xingtu-theme-accent-hover);
+      background: rgba(var(--xingtu-theme-accent-rgb), 0.1);
+      border-color: var(--xingtu-glass-text-tertiary);
     }
   }
 
@@ -798,14 +792,14 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     border: none;
     background: transparent;
     border-radius: 8px;
-    color: $gray-dark;
+    color: var(--xingtu-glass-text-secondary);
     cursor: pointer;
     transition: all 0.2s ease;
     flex-shrink: 0;
 
     &:hover {
-      background: $gray-light;
-      color: $accent-primary;
+      background: rgba(var(--xingtu-theme-accent-rgb), 0.1);
+      color: var(--xingtu-theme-accent-hover);
     }
 
     &:active {
@@ -882,11 +876,11 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     }
 
     &__label {
-      color: $gray-dark;
+      color: var(--xingtu-glass-text-secondary);
     }
 
     &__chevron {
-      color: $gray-medium;
+      color: var(--xingtu-glass-text-tertiary);
       transition: transform 0.2s ease;
       margin-left: 1px;
 
@@ -899,12 +893,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       position: absolute;
       bottom: calc(100% + 8px);
       left: 0;
-      background: $stitch-glass-bg;
-      border: 1px solid $stitch-glass-border;
+      background: var(--xingtu-glass-bg);
+      border: 1px solid var(--xingtu-glass-border);
       border-radius: 12px;
-      box-shadow: $stitch-glass-shadow;
-      backdrop-filter: $stitch-glass-blur;
-      -webkit-backdrop-filter: $stitch-glass-blur;
+      box-shadow: var(--xingtu-glass-shadow);
+      backdrop-filter: var(--xingtu-glass-blur);
+      -webkit-backdrop-filter: var(--xingtu-glass-blur);
       padding: 4px;
       z-index: 100;
       min-width: 100px;
@@ -923,18 +917,18 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       color: $text-dark;
 
       &:hover {
-        background: $stitch-glass-hover;
+        background: var(--xingtu-glass-list-bg-hover);
       }
 
       &--selected {
-        background: rgba(22, 23, 24, 0.14);
+        background: var(--xingtu-glass-list-bg-selected);
         color: $text-dark;
         font-weight: 500;
 
         &:hover,
         &.generation-type-dropdown__item--highlighted,
         &.count-dropdown__item--highlighted {
-          background: rgba(22, 23, 24, 0.18);
+          background: var(--xingtu-glass-list-bg-selected-hover);
         }
       }
     }
@@ -995,11 +989,11 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     }
 
     &__label {
-      color: $gray-dark;
+      color: var(--xingtu-glass-text-secondary);
     }
 
     &__chevron {
-      color: $gray-medium;
+      color: var(--xingtu-glass-text-tertiary);
       transition: transform 0.2s ease;
       margin-left: 1px;
 
@@ -1045,11 +1039,11 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     }
 
     &__label {
-      color: $gray-dark;
+      color: var(--xingtu-glass-text-secondary);
     }
 
     &__chevron {
-      color: $gray-medium;
+      color: var(--xingtu-glass-text-tertiary);
       transition: transform 0.2s ease;
       margin-left: 1px;
 
@@ -1062,12 +1056,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       position: absolute;
       bottom: calc(100% + 8px);
       left: 0;
-      background: $stitch-glass-bg;
-      border: 1px solid $stitch-glass-border;
+      background: var(--xingtu-glass-bg);
+      border: 1px solid var(--xingtu-glass-border);
       border-radius: 12px;
-      box-shadow: $stitch-glass-shadow;
-      backdrop-filter: $stitch-glass-blur;
-      -webkit-backdrop-filter: $stitch-glass-blur;
+      box-shadow: var(--xingtu-glass-shadow);
+      backdrop-filter: var(--xingtu-glass-blur);
+      -webkit-backdrop-filter: var(--xingtu-glass-blur);
       padding: 4px;
       z-index: 100;
       min-width: 80px;
@@ -1085,18 +1079,18 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       color: $text-dark;
 
       &:hover {
-        background: $stitch-glass-hover;
+        background: var(--xingtu-glass-list-bg-hover);
       }
 
       &--selected {
-        background: rgba(22, 23, 24, 0.14);
+        background: var(--xingtu-glass-list-bg-selected);
         color: $text-dark;
         font-weight: 500;
 
         &:hover,
         &.generation-type-dropdown__item--highlighted,
         &.count-dropdown__item--highlighted {
-          background: rgba(22, 23, 24, 0.18);
+          background: var(--xingtu-glass-list-bg-selected-hover);
         }
       }
     }
@@ -1225,7 +1219,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     }
 
     &__hover-text-header {
-      border-bottom-color: var(--color-border, #444);
+      border-bottom-color: var(--xingtu-glass-divider);
       color: #60a5fa; // Lighter blue for dark mode
     }
 
@@ -1238,11 +1232,11 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     }
 
     &__container {
-      background: $stitch-glass-bg;
-      border-color: $stitch-glass-border;
-      box-shadow: $stitch-glass-shadow;
-      backdrop-filter: $stitch-glass-blur;
-      -webkit-backdrop-filter: $stitch-glass-blur;
+      background: var(--xingtu-glass-bg);
+      border-color: var(--xingtu-glass-border);
+      box-shadow: var(--xingtu-glass-shadow);
+      backdrop-filter: var(--xingtu-glass-blur);
+      -webkit-backdrop-filter: var(--xingtu-glass-blur);
     }
 
     &__type-btn {
@@ -1274,11 +1268,11 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     }
 
     &__model-menu {
-      background: $stitch-glass-bg;
-      border-color: $stitch-glass-border;
-      box-shadow: $stitch-glass-shadow;
-      backdrop-filter: $stitch-glass-blur;
-      -webkit-backdrop-filter: $stitch-glass-blur;
+      background: var(--xingtu-glass-bg);
+      border-color: var(--xingtu-glass-border);
+      box-shadow: var(--xingtu-glass-shadow);
+      backdrop-filter: var(--xingtu-glass-blur);
+      -webkit-backdrop-filter: var(--xingtu-glass-blur);
     }
 
     &__model-option {
@@ -1357,11 +1351,11 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
       }
 
       &__menu {
-        background: $stitch-glass-bg;
-        border-color: $stitch-glass-border;
-        box-shadow: $stitch-glass-shadow;
-        backdrop-filter: $stitch-glass-blur;
-        -webkit-backdrop-filter: $stitch-glass-blur;
+        background: var(--xingtu-glass-bg);
+        border-color: var(--xingtu-glass-border);
+        box-shadow: var(--xingtu-glass-shadow);
+        backdrop-filter: var(--xingtu-glass-blur);
+        -webkit-backdrop-filter: var(--xingtu-glass-blur);
       }
 
       &__item {
@@ -1431,12 +1425,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   bottom: calc(100% + 8px);
   left: 0;
   right: 0;
-  background: $stitch-glass-bg;
-  border: 1px solid $stitch-glass-border;
+  background: var(--xingtu-glass-bg);
+  border: 1px solid var(--xingtu-glass-border);
   border-radius: 16px;
-  box-shadow: $stitch-glass-shadow;
-  backdrop-filter: $stitch-glass-blur;
-  -webkit-backdrop-filter: $stitch-glass-blur;
+  box-shadow: var(--xingtu-glass-shadow);
+  backdrop-filter: var(--xingtu-glass-blur);
+  -webkit-backdrop-filter: var(--xingtu-glass-blur);
   overflow: hidden;
   animation: panelSlideUp 0.2s ease;
   max-height: 320px;
@@ -1482,7 +1476,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     &:not(:last-child) {
       margin-bottom: 12px;
       padding-bottom: 12px;
-      border-bottom: 1px solid $gray-light;
+      border-bottom: 1px solid var(--xingtu-glass-divider);
     }
   }
 
@@ -1580,11 +1574,11 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 // Dark mode for prompt suggestion panel
 :root[data-theme='dark'] {
   .prompt-suggestion-panel {
-    background: $stitch-glass-bg;
-    border-color: $stitch-glass-border;
-    box-shadow: $stitch-glass-shadow;
-    backdrop-filter: $stitch-glass-blur;
-    -webkit-backdrop-filter: $stitch-glass-blur;
+    background: var(--xingtu-glass-bg);
+    border-color: var(--xingtu-glass-border);
+    box-shadow: var(--xingtu-glass-shadow);
+    backdrop-filter: var(--xingtu-glass-blur);
+    -webkit-backdrop-filter: var(--xingtu-glass-blur);
 
     &__content {
       &::-webkit-scrollbar-thumb {
@@ -1602,7 +1596,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
     &__section {
       &:not(:last-child) {
-        border-bottom-color: var(--color-border, #444);
+        border-bottom-color: var(--xingtu-glass-divider);
       }
     }
 
@@ -1880,12 +1874,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     min-width: 280px;
     max-width: 400px;
     max-height: 320px;
-    background: $stitch-glass-bg;
-    border: 1px solid $stitch-glass-border;
+    background: var(--xingtu-glass-bg);
+    border: 1px solid var(--xingtu-glass-border);
     border-radius: 12px;
-    box-shadow: $stitch-glass-shadow;
-    backdrop-filter: $stitch-glass-blur;
-    -webkit-backdrop-filter: $stitch-glass-blur;
+    box-shadow: var(--xingtu-glass-shadow);
+    backdrop-filter: var(--xingtu-glass-blur);
+    -webkit-backdrop-filter: var(--xingtu-glass-blur);
     overflow: hidden;
     z-index: 1000;
     animation: atSuggestionFadeIn 0.15s ease;
@@ -1896,7 +1890,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
     font-size: 12px;
     font-weight: 500;
     color: $gray-dark;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--xingtu-glass-divider);
     background: transparent;
   }
 
@@ -2021,16 +2015,16 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 :root[data-theme='dark'] {
   .ai-input-bar {
     &__at-suggestion {
-      background: $stitch-glass-bg;
-      border-color: $stitch-glass-border;
-      box-shadow: $stitch-glass-shadow;
-      backdrop-filter: $stitch-glass-blur;
-      -webkit-backdrop-filter: $stitch-glass-blur;
+      background: var(--xingtu-glass-bg);
+      border-color: var(--xingtu-glass-border);
+      box-shadow: var(--xingtu-glass-shadow);
+      backdrop-filter: var(--xingtu-glass-blur);
+      -webkit-backdrop-filter: var(--xingtu-glass-blur);
     }
 
     &__at-suggestion-header {
       background: transparent;
-      border-bottom-color: var(--color-border, #444);
+      border-bottom-color: var(--xingtu-glass-divider);
       color: var(--color-gray-50, #999);
     }
 
@@ -2081,12 +2075,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
 // Generation Type Dropdown Menu (portaled to body)
 .generation-type-dropdown__menu {
-  background: $stitch-glass-bg;
-  border: 1px solid $stitch-glass-border;
+  background: var(--xingtu-glass-bg);
+  border: 1px solid var(--xingtu-glass-border);
   border-radius: 12px;
-  box-shadow: $stitch-glass-shadow;
-  backdrop-filter: $stitch-glass-blur;
-  -webkit-backdrop-filter: $stitch-glass-blur;
+  box-shadow: var(--xingtu-glass-shadow);
+  backdrop-filter: var(--xingtu-glass-blur);
+  -webkit-backdrop-filter: var(--xingtu-glass-blur);
   padding: 0;
   min-width: 100px;
   overflow: hidden;
@@ -2100,7 +2094,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   font-size: 12px;
   font-weight: 500;
   color: $gray-dark;
-  border-bottom: 1px solid $gray-light;
+  border-bottom: 1px solid var(--xingtu-glass-divider);
   background: transparent;
 }
 
@@ -2122,17 +2116,17 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
   &:hover,
   &--highlighted {
-    background: $stitch-glass-hover;
+    background: var(--xingtu-glass-list-bg-hover);
   }
 
   &--selected {
-    background: rgba(22, 23, 24, 0.14);
+    background: var(--xingtu-glass-list-bg-selected);
     color: $text-dark;
     font-weight: 500;
 
     &:hover,
     &.generation-type-dropdown__item--highlighted {
-      background: rgba(22, 23, 24, 0.18);
+      background: var(--xingtu-glass-list-bg-selected-hover);
     }
   }
 }
@@ -2158,12 +2152,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
 // Skill Dropdown Menu (portaled to body)
 .skill-dropdown__menu {
-  background: $stitch-glass-bg;
-  border: 1px solid $stitch-glass-border;
+  background: var(--xingtu-glass-bg);
+  border: 1px solid var(--xingtu-glass-border);
   border-radius: 12px;
-  box-shadow: $stitch-glass-shadow;
-  backdrop-filter: $stitch-glass-blur;
-  -webkit-backdrop-filter: $stitch-glass-blur;
+  box-shadow: var(--xingtu-glass-shadow);
+  backdrop-filter: var(--xingtu-glass-blur);
+  -webkit-backdrop-filter: var(--xingtu-glass-blur);
   padding: 0;
   min-width: 120px;
   overflow: hidden;
@@ -2177,7 +2171,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   font-size: 12px;
   font-weight: 500;
   color: $gray-dark;
-  border-bottom: 1px solid $gray-light;
+  border-bottom: 1px solid var(--xingtu-glass-divider);
   background: transparent;
 }
 
@@ -2236,7 +2230,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
 .skill-dropdown__search {
   padding: 4px 8px;
-  border-bottom: 1px solid $gray-light;
+  border-bottom: 1px solid var(--xingtu-glass-divider);
 }
 
 .skill-dropdown__search-input {
@@ -2246,7 +2240,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   border: 1px solid $gray-light;
   border-radius: 4px;
   outline: none;
-  background: rgba(255, 255, 255, 0.42);
+  background: var(--xingtu-glass-control-bg-active);
   color: inherit;
 
   &:focus {
@@ -2254,7 +2248,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   }
 
   &::placeholder {
-    color: #999;
+    color: var(--xingtu-glass-text-tertiary);
   }
 }
 
@@ -2286,12 +2280,12 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
 // Count Dropdown Menu (portaled to body)
 .count-dropdown__menu {
-  background: $stitch-glass-bg;
-  border: 1px solid $stitch-glass-border;
+  background: var(--xingtu-glass-bg);
+  border: 1px solid var(--xingtu-glass-border);
   border-radius: 12px;
-  box-shadow: $stitch-glass-shadow;
-  backdrop-filter: $stitch-glass-blur;
-  -webkit-backdrop-filter: $stitch-glass-blur;
+  box-shadow: var(--xingtu-glass-shadow);
+  backdrop-filter: var(--xingtu-glass-blur);
+  -webkit-backdrop-filter: var(--xingtu-glass-blur);
   padding: 0;
   min-width: 80px;
   overflow: hidden;
@@ -2305,7 +2299,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   font-size: 12px;
   font-weight: 500;
   color: $gray-dark;
-  border-bottom: 1px solid $gray-light;
+  border-bottom: 1px solid var(--xingtu-glass-divider);
   background: transparent;
 }
 
@@ -2327,17 +2321,17 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
   &:hover,
   &--highlighted {
-    background: $stitch-glass-hover;
+    background: var(--xingtu-glass-list-bg-hover);
   }
 
   &--selected {
-    background: rgba(22, 23, 24, 0.14);
+    background: var(--xingtu-glass-list-bg-selected);
     color: $text-dark;
     font-weight: 500;
 
     &:hover,
     &.count-dropdown__item--highlighted {
-      background: rgba(22, 23, 24, 0.18);
+      background: var(--xingtu-glass-list-bg-selected-hover);
     }
   }
 }
@@ -2352,18 +2346,18 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
   .generation-type-dropdown__menu,
   .count-dropdown__menu,
   .skill-dropdown__menu {
-    background: $stitch-glass-bg;
-    border-color: $stitch-glass-border;
-    box-shadow: $stitch-glass-shadow;
-    backdrop-filter: $stitch-glass-blur;
-    -webkit-backdrop-filter: $stitch-glass-blur;
+    background: var(--xingtu-glass-bg);
+    border-color: var(--xingtu-glass-border);
+    box-shadow: var(--xingtu-glass-shadow);
+    backdrop-filter: var(--xingtu-glass-blur);
+    -webkit-backdrop-filter: var(--xingtu-glass-blur);
   }
 
   .generation-type-dropdown__header,
   .count-dropdown__header,
   .skill-dropdown__header {
     background: transparent;
-    border-bottom-color: var(--color-border, #444);
+    border-bottom-color: var(--xingtu-glass-divider);
     color: var(--color-gray-50, #999);
   }
 
@@ -2392,7 +2386,7 @@ $ai-input-small-expanded-max-height: $ai-input-small-line-height * 6 +
 
   .skill-dropdown__header {
     background: transparent;
-    border-bottom-color: var(--color-border, #444);
+    border-bottom-color: var(--xingtu-glass-divider);
     color: var(--color-gray-50, #999);
   }
 

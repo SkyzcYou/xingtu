@@ -9,17 +9,17 @@
   transition: box-shadow 0.2s ease;
 
   .tool-icon:hover {
-    background-color: rgba(255, 255, 255, 0.34);
+    background-color: var(--xingtu-glass-control-bg-hover);
   }
 
   .tool-icon_type_button {
     &.tool-icon--selected {
-      background: rgba(255, 255, 255, 0.58);
-      box-shadow: 0 0 0 1px rgba(22, 23, 24, 0.08);
+      background: var(--xingtu-glass-control-bg-selected);
+      box-shadow: 0 0 0 1px var(--xingtu-glass-control-ring);
     }
 
     &:active {
-      background-color: rgba(255, 255, 255, 0.42);
+      background-color: var(--xingtu-glass-control-bg-active);
     }
   }
 }

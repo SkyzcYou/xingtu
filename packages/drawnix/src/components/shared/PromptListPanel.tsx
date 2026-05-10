@@ -76,6 +76,8 @@ export interface PromptListPanelProps {
   onTitleClick?: () => void;
   /** 自定义类名 */
   className?: string;
+  /** 底部内容 */
+  footer?: React.ReactNode;
   /** 埋点来源面板 */
   analyticsSurface?: string;
   /** 埋点提示词类型，默认使用 item.modelType */
@@ -93,6 +95,7 @@ export const PromptListPanel: React.FC<PromptListPanelProps> = ({
   showCount = true,
   onTitleClick,
   className = '',
+  footer,
   analyticsSurface = 'prompt_list',
   analyticsPromptType,
 }) => {
@@ -232,6 +235,7 @@ export const PromptListPanel: React.FC<PromptListPanelProps> = ({
             />
           ))}
         </div>
+        {footer}
       </div>
       <UnifiedMediaViewer
         visible={previewVisible}

@@ -518,6 +518,27 @@
   }
 }
 
+.winbox-settings-window {
+  .wb-icon-content,
+  .wb-title {
+    color: var(--xingtu-glass-text-primary) !important;
+    text-shadow: none !important;
+  }
+}
+
+.winbox-glass-window {
+  background: var(--xingtu-window-glass-bg, var(--xingtu-glass-bg)) !important;
+  border: 1px solid var(--xingtu-glass-border) !important;
+  box-shadow: var(--xingtu-glass-shadow) !important;
+  backdrop-filter: var(--xingtu-window-glass-blur, var(--xingtu-glass-blur));
+  -webkit-backdrop-filter: var(--xingtu-window-glass-blur, var(--xingtu-glass-blur));
+
+  .wb-body,
+  .winbox-content-wrapper {
+    background: transparent !important;
+  }
+}
+
 // TDesign Select 组件在标题栏中的样式调整
 .winbox-react {
   .wb-header-custom {

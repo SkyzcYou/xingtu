@@ -8,11 +8,6 @@
 @import './common-variables';
 @import './toolbox-theme.scss'; // 工具箱主题变量
 
-$stitch-glass-bg: rgba(218, 220, 224, 0.5);
-$stitch-glass-border: rgba(22, 23, 24, 0.15);
-$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
-  0 4px 6px -4px rgba(0, 0, 0, 0.1);
-$stitch-glass-blur: blur(40px);
 
 @import '../components/tool-element/tool.component.scss';
 @import '../components/minimap/minimap.scss';
@@ -73,12 +68,12 @@ $stitch-glass-blur: blur(40px);
     left: 50%;
     transform: translateX(-50%);
     z-index: $z-unified-toolbar;
-    background: $stitch-glass-bg;
-    border: 1px solid $stitch-glass-border;
+    background: var(--xingtu-glass-bg);
+    border: 1px solid var(--xingtu-glass-border);
     border-radius: 24px;
-    box-shadow: $stitch-glass-shadow;
-    backdrop-filter: $stitch-glass-blur;
-    -webkit-backdrop-filter: $stitch-glass-blur;
+    box-shadow: var(--xingtu-glass-shadow);
+    backdrop-filter: var(--xingtu-glass-blur);
+    -webkit-backdrop-filter: var(--xingtu-glass-blur);
 
     // 移动端调整定位，位于工具栏右侧避免重叠
     @media (max-width: 768px) {
@@ -93,12 +88,12 @@ $stitch-glass-blur: blur(40px);
     left: 50%;
     transform: translateX(-50%);
     z-index: $z-unified-toolbar;
-    background: $stitch-glass-bg;
-    border: 1px solid $stitch-glass-border;
+    background: var(--xingtu-glass-bg);
+    border: 1px solid var(--xingtu-glass-border);
     border-radius: 24px;
-    box-shadow: $stitch-glass-shadow;
-    backdrop-filter: $stitch-glass-blur;
-    -webkit-backdrop-filter: $stitch-glass-blur;
+    box-shadow: var(--xingtu-glass-shadow);
+    backdrop-filter: var(--xingtu-glass-blur);
+    -webkit-backdrop-filter: var(--xingtu-glass-blur);
 
     // 移动端调整定位，位于工具栏右侧避免重叠
     @media (max-width: 768px) {
@@ -205,11 +200,11 @@ $stitch-glass-blur: blur(40px);
     max-width: 80px;
     overflow: visible; // 允许 Badge 角标溢出显示，滚动由 __scrollable 处理
     border-radius: 24px;
-    box-shadow: $stitch-glass-shadow;
-    background: $stitch-glass-bg;
-    backdrop-filter: $stitch-glass-blur;
-    -webkit-backdrop-filter: $stitch-glass-blur;
-    border: 1px solid $stitch-glass-border;
+    box-shadow: var(--xingtu-glass-shadow);
+    background: var(--xingtu-glass-bg);
+    backdrop-filter: var(--xingtu-glass-blur);
+    -webkit-backdrop-filter: var(--xingtu-glass-blur);
+    border: 1px solid var(--xingtu-glass-border);
 
     // 可滚动内容区域
     &__scrollable {
@@ -567,16 +562,16 @@ $stitch-glass-blur: blur(40px);
     min-width: 200px;
     max-width: 280px;
     padding: 8px;
-    background: $stitch-glass-bg;
-    border: 1px solid $stitch-glass-border;
+    background: var(--xingtu-glass-bg);
+    border: 1px solid var(--xingtu-glass-border);
     border-radius: 24px;
-    box-shadow: $stitch-glass-shadow;
-    backdrop-filter: $stitch-glass-blur;
-    -webkit-backdrop-filter: $stitch-glass-blur;
+    box-shadow: var(--xingtu-glass-shadow);
+    backdrop-filter: var(--xingtu-glass-blur);
+    -webkit-backdrop-filter: var(--xingtu-glass-blur);
 
     &__header {
       padding: 4px 8px 8px;
-      border-bottom: 1px solid rgba(22, 23, 24, 0.1);
+      border-bottom: 1px solid var(--xingtu-glass-divider);
       margin-bottom: 8px;
     }
 
@@ -595,17 +590,17 @@ $stitch-glass-blur: blur(40px);
     }
 
     .tool-icon:hover {
-      background-color: rgba(255, 255, 255, 0.34);
+      background-color: var(--xingtu-glass-control-bg-hover);
     }
 
     .tool-icon_type_button {
       &.tool-icon--selected {
-        background: rgba(255, 255, 255, 0.58);
-        box-shadow: 0 0 0 1px rgba(22, 23, 24, 0.08);
+        background: var(--xingtu-glass-control-bg-selected);
+        box-shadow: 0 0 0 1px var(--xingtu-glass-control-ring);
       }
 
       &:active {
-        background-color: rgba(255, 255, 255, 0.42);
+        background-color: var(--xingtu-glass-control-bg-active);
       }
     }
 
@@ -614,13 +609,13 @@ $stitch-glass-blur: blur(40px);
       transition: background-color 0.15s ease;
 
       &:hover {
-        background-color: rgba(255, 255, 255, 0.34);
+        background-color: var(--xingtu-glass-control-bg-hover);
       }
     }
 
     &__footer {
       padding: 8px 8px 4px;
-      border-top: 1px solid rgba(22, 23, 24, 0.1);
+      border-top: 1px solid var(--xingtu-glass-divider);
       margin-top: 8px;
     }
 
@@ -647,7 +642,7 @@ $stitch-glass-blur: blur(40px);
       transition: background-color 0.15s ease;
 
       &:hover {
-        background-color: rgba(255, 255, 255, 0.34);
+        background-color: var(--xingtu-glass-control-bg-hover);
       }
 
       .stack {
@@ -676,7 +671,7 @@ $stitch-glass-blur: blur(40px);
 
         &:hover,
         &.active {
-          background-color: rgba(255, 255, 255, 0.34);
+          background-color: var(--xingtu-glass-control-bg-hover);
         }
       }
 
@@ -831,12 +826,12 @@ $stitch-glass-blur: blur(40px);
 }
 
 .freehand-panel.island {
-  background: $stitch-glass-bg;
-  border: 1px solid $stitch-glass-border;
+  background: var(--xingtu-glass-bg);
+  border: 1px solid var(--xingtu-glass-border);
   border-radius: 16px;
-  box-shadow: $stitch-glass-shadow;
-  backdrop-filter: $stitch-glass-blur;
-  -webkit-backdrop-filter: $stitch-glass-blur;
+  box-shadow: var(--xingtu-glass-shadow);
+  backdrop-filter: var(--xingtu-glass-blur);
+  -webkit-backdrop-filter: var(--xingtu-glass-blur);
 }
 
 // Freehand panel divider

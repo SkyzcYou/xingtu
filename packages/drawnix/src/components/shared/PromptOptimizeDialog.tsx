@@ -678,8 +678,8 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
       resizable={!isMobile}
       movable={!isMobile}
       modal={false}
-      background="#ffffff"
-      className={`winbox-ai-generation winbox-prompt-optimize ${
+      background="transparent"
+      className={`winbox-ai-generation winbox-glass-window winbox-prompt-optimize ${
         hasOptimizedDraft ? 'winbox-prompt-optimize--split' : ''
       }`}
     >

@@ -65,6 +65,35 @@
   --xingtu-control-selected-ring: rgba(243, 156, 18, 0.18);
   --xingtu-control-selected-shadow: rgba(243, 156, 18, 0.16);
 
+  --xingtu-glass-bg: rgba(218, 220, 224, 0.5);
+  --xingtu-glass-border: rgba(22, 23, 24, 0.15);
+  --xingtu-glass-border-soft: rgba(22, 23, 24, 0.12);
+  --xingtu-glass-border-hover: rgba(22, 23, 24, 0.18);
+  --xingtu-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --xingtu-glass-blur: blur(40px);
+  --xingtu-window-glass-bg: rgba(229, 231, 235, 0.86);
+  --xingtu-window-glass-blur: blur(24px);
+  --xingtu-glass-control-bg: rgba(255, 255, 255, 0.24);
+  --xingtu-glass-control-bg-hover: rgba(255, 255, 255, 0.34);
+  --xingtu-glass-control-bg-active: rgba(255, 255, 255, 0.42);
+  --xingtu-glass-control-bg-selected: rgba(255, 255, 255, 0.58);
+  --xingtu-glass-control-bg-selected-hover: rgba(255, 255, 255, 0.68);
+  --xingtu-glass-control-ring: rgba(22, 23, 24, 0.08);
+  --xingtu-glass-list-bg-hover: rgba(22, 23, 24, 0.08);
+  --xingtu-glass-list-bg-selected: rgba(22, 23, 24, 0.14);
+  --xingtu-glass-list-bg-selected-hover: rgba(22, 23, 24, 0.18);
+  --xingtu-glass-list-selected-border: rgba(22, 23, 24, 0.36);
+  --xingtu-glass-divider: rgba(22, 23, 24, 0.1);
+  --xingtu-glass-field-bg: rgba(255, 255, 255, 0.42);
+  --xingtu-glass-field-bg-hover: rgba(255, 255, 255, 0.5);
+  --xingtu-glass-field-bg-focus: rgba(255, 255, 255, 0.58);
+  --xingtu-glass-focus-ring: rgba(255, 255, 255, 0.34);
+  --xingtu-glass-text-primary: #1e1e1e;
+  --xingtu-glass-text-secondary: rgba(30, 30, 30, 0.72);
+  --xingtu-glass-text-tertiary: rgba(30, 30, 30, 0.5);
+  --xingtu-glass-text-disabled: rgba(30, 30, 30, 0.38);
+
   --xingtu-generation-running-accent: #F39C12;
   --xingtu-generation-running-accent-strong: #E67E22;
   --xingtu-generation-running-accent-rgb: 243, 156, 18;
@@ -148,6 +177,35 @@
   --xingtu-control-selected-bg-hover: rgba(255, 255, 255, 0.68);
   --xingtu-control-selected-ring: rgba(22, 23, 24, 0.08);
   --xingtu-control-selected-shadow: rgba(0, 0, 0, 0.08);
+
+  --xingtu-glass-bg: rgba(218, 220, 224, 0.5);
+  --xingtu-glass-border: rgba(22, 23, 24, 0.15);
+  --xingtu-glass-border-soft: rgba(22, 23, 24, 0.12);
+  --xingtu-glass-border-hover: rgba(22, 23, 24, 0.18);
+  --xingtu-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --xingtu-glass-blur: blur(40px);
+  --xingtu-window-glass-bg: rgba(229, 231, 235, 0.86);
+  --xingtu-window-glass-blur: blur(24px);
+  --xingtu-glass-control-bg: rgba(255, 255, 255, 0.24);
+  --xingtu-glass-control-bg-hover: rgba(255, 255, 255, 0.34);
+  --xingtu-glass-control-bg-active: rgba(255, 255, 255, 0.42);
+  --xingtu-glass-control-bg-selected: rgba(255, 255, 255, 0.58);
+  --xingtu-glass-control-bg-selected-hover: rgba(255, 255, 255, 0.68);
+  --xingtu-glass-control-ring: rgba(22, 23, 24, 0.08);
+  --xingtu-glass-list-bg-hover: rgba(22, 23, 24, 0.08);
+  --xingtu-glass-list-bg-selected: rgba(22, 23, 24, 0.14);
+  --xingtu-glass-list-bg-selected-hover: rgba(22, 23, 24, 0.18);
+  --xingtu-glass-list-selected-border: rgba(22, 23, 24, 0.36);
+  --xingtu-glass-divider: rgba(22, 23, 24, 0.1);
+  --xingtu-glass-field-bg: rgba(255, 255, 255, 0.42);
+  --xingtu-glass-field-bg-hover: rgba(255, 255, 255, 0.5);
+  --xingtu-glass-field-bg-focus: rgba(255, 255, 255, 0.58);
+  --xingtu-glass-focus-ring: rgba(255, 255, 255, 0.34);
+  --xingtu-glass-text-primary: #1e1e1e;
+  --xingtu-glass-text-secondary: rgba(30, 30, 30, 0.72);
+  --xingtu-glass-text-tertiary: rgba(30, 30, 30, 0.5);
+  --xingtu-glass-text-disabled: rgba(30, 30, 30, 0.38);
 
   --xingtu-generation-running-accent: #111827;
   --xingtu-generation-running-accent-strong: #020617;

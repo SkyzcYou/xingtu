@@ -1,23 +1,26 @@
 .winbox-settings-window {
   .wb-header {
-    border-bottom-color: rgba(15, 23, 42, 0.08) !important;
+    border-bottom-color: var(--xingtu-glass-border-soft) !important;
+  }
+
+  .wb-icon-content {
+    color: var(--xingtu-glass-text-primary) !important;
   }
 
   .wb-title {
     font-size: 15px;
     font-weight: 700;
-    color: #0f172a;
+    color: var(--xingtu-glass-text-primary) !important;
+    text-shadow: none !important;
   }
 
   .wb-body {
     overflow: hidden;
-    background: #ffffff;
   }
 
   .winbox-content-wrapper {
     padding: 0 !important;
     overflow: hidden;
-    background: #ffffff;
   }
 }
 
@@ -43,12 +46,12 @@
   --sd-accent: var(--xingtu-theme-accent);
   --sd-accent-hover: var(--xingtu-theme-accent-hover);
   --sd-accent-soft: rgba(var(--xingtu-theme-accent-rgb), 0.1);
-  --sd-text: #0f172a;
-  --sd-muted: #64748b;
-  --sd-border: rgba(15, 23, 42, 0.08);
-  --sd-border-strong: rgba(15, 23, 42, 0.14);
-  --sd-surface: #ffffff;
-  --sd-surface-soft: #f7f8fa;
+  --sd-text: var(--xingtu-glass-text-primary);
+  --sd-muted: var(--xingtu-glass-text-secondary);
+  --sd-border: var(--xingtu-glass-border-soft);
+  --sd-border-strong: var(--xingtu-glass-list-selected-border);
+  --sd-surface: var(--xingtu-glass-control-bg);
+  --sd-surface-soft: var(--xingtu-glass-list-bg-hover);
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -56,7 +59,8 @@
   flex-direction: column;
   padding: 18px;
   box-sizing: border-box;
-  background: #ffffff;
+  background: transparent;
+  color: var(--sd-text);
   overflow: hidden;
 
   &__layout {
@@ -104,11 +108,11 @@
     transition: background-color 0.18s ease, color 0.18s ease;
 
     &:hover {
-      background: #f7f8fa;
+      background: var(--xingtu-glass-list-bg-hover);
     }
 
     &--active {
-      background: #f4f6f9;
+      background: var(--xingtu-glass-list-bg-selected);
     }
 
     &--active::before {
@@ -135,8 +139,8 @@
     display: flex;
     flex-direction: column;
     border-radius: 18px;
-    border: 1px solid rgba(15, 23, 42, 0.05);
-    background: #ffffff;
+    border: 1px solid var(--sd-border);
+    background: var(--sd-surface);
     overflow: hidden;
   }
 
@@ -157,7 +161,7 @@
   &__sidebar {
     min-width: 0;
     padding: 12px 12px 12px 14px;
-    border-right: 1px solid rgba(15, 23, 42, 0.05);
+    border-right: 1px solid var(--sd-border);
     overflow: hidden;
   }
 
@@ -266,12 +270,12 @@
 
     &:hover {
       border-color: transparent;
-      background: #f7f8fa;
+      background: var(--xingtu-glass-list-bg-hover);
     }
 
     &--active {
       border-color: transparent;
-      background: #f4f6f9;
+      background: var(--xingtu-glass-list-bg-selected);
     }
 
     &--active::before {
@@ -332,12 +336,12 @@
 
     &:hover {
       border-color: transparent;
-      background: #f7f8fa;
+      background: var(--xingtu-glass-list-bg-hover);
     }
 
     &--active {
       border-color: transparent;
-      background: #f4f6f9;
+      background: var(--xingtu-glass-list-bg-selected);
     }
 
     &--active::before {
@@ -524,7 +528,7 @@
     }
 
     &--muted {
-      background: #f1f5f9;
+      background: var(--sd-surface-soft);
       color: #475569;
     }
   }
@@ -545,7 +549,7 @@
     transition: background-color 0.18s ease, color 0.18s ease;
 
     &:hover {
-      background: #f7f8fa;
+      background: var(--xingtu-glass-list-bg-hover);
       color: var(--xingtu-theme-accent-hover);
     }
   }
@@ -600,7 +604,7 @@
     }
 
     .settings-dialog__section + .settings-dialog__section {
-      border-top: 1px solid rgba(15, 23, 42, 0.06);
+      border-top: 1px solid var(--sd-border);
     }
 
     .settings-dialog__section--compact {
@@ -637,9 +641,9 @@
     align-self: flex-start;
     min-height: 34px;
     padding: 0 12px;
-    border: 1px solid rgba(15, 23, 42, 0.08);
+    border: 1px solid var(--sd-border);
     border-radius: 999px;
-    background: #ffffff;
+    background: var(--sd-surface);
     color: #334155;
     font-size: 12px;
     font-weight: 700;
@@ -812,7 +816,7 @@
     box-sizing: border-box;
     font-size: 14px;
     color: var(--sd-text);
-    background: #fff;
+    background: var(--sd-surface);
     box-shadow: none;
     transition: border-color 0.18s ease, box-shadow 0.18s ease,
       background-color 0.18s ease;
@@ -823,7 +827,7 @@
 
     &:focus {
       outline: none;
-      background: #fff;
+      background: var(--sd-surface);
       border-color: rgba(var(--xingtu-theme-accent-rgb), 0.28);
       box-shadow: 0 0 0 3px rgba(var(--xingtu-theme-accent-rgb), 0.08);
     }
@@ -859,7 +863,7 @@
     transform: translateY(-50%);
 
     &:hover {
-      background: #f1f5f9;
+      background: var(--sd-surface-soft);
       color: #0f172a;
     }
 
@@ -884,14 +888,14 @@
     min-width: 0;
     height: 38px;
     padding: 0 12px;
-    border: 1px solid rgba(15, 23, 42, 0.08);
+    border: 1px solid var(--sd-border);
     border-radius: 12px;
-    background: #f8fafc;
+    background: var(--sd-surface-soft);
     color: #94a3b8;
     transition: border-color 0.18s ease, background-color 0.18s ease;
 
     &--disabled {
-      background: #f8fafc;
+      background: var(--sd-surface-soft);
       color: #cbd5e1;
     }
 
@@ -946,7 +950,7 @@
     gap: 10px;
     padding: 14px 16px 12px;
     border-radius: 16px;
-    background: #fbfcfd;
+    background: var(--sd-surface-soft);
   }
 
   &__model-type-header {
@@ -1146,7 +1150,7 @@
     min-height: 96px;
     padding: 18px;
     border-radius: 16px;
-    background: #f8fafc;
+    background: var(--sd-surface-soft);
     font-size: 12px;
     color: var(--sd-muted);
     text-align: center;
@@ -1253,7 +1257,7 @@
     padding: 16px;
     border-radius: 18px;
     border: 1px solid var(--sd-border);
-    background: #fff;
+    background: var(--sd-surface);
   }
 
   &__route-card-top {
@@ -1393,7 +1397,7 @@
   &__button {
     &--cancel {
       border-color: var(--sd-border);
-      background: #fff;
+      background: var(--sd-surface);
       color: #334155;
     }
 
@@ -1428,7 +1432,7 @@
   }
 
   &__ghost-button {
-    background: #fff;
+    background: var(--sd-surface);
     border-color: var(--sd-border);
     color: #334155;
   }
@@ -1462,7 +1466,7 @@
 
         .settings-dialog__sidebar {
           padding: 12px 12px 12px 14px;
-          border-right: 1px solid rgba(15, 23, 42, 0.05);
+          border-right: 1px solid var(--sd-border);
         }
 
         .settings-dialog__content-panel {
@@ -1489,7 +1493,7 @@
 
     .settings-dialog__nav-shell {
       padding: 0;
-      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+      border-bottom: 1px solid var(--sd-border);
     }
 
     .settings-dialog__nav-list {
@@ -1573,10 +1577,10 @@
       .settings-dialog__sidebar-list {
         gap: 0;
         padding: 0;
-        border: 1px solid rgba(15, 23, 42, 0.08);
+        border: 1px solid var(--sd-border);
         border-radius: 24px;
-        background: #ffffff;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+        background: var(--sd-surface);
+        box-shadow: 0 12px 28px rgba(15, 23, 24, 0.05);
         overflow: hidden;
       }
 
@@ -1614,16 +1618,16 @@
     .settings-dialog__provider-row {
       min-height: auto;
       border-radius: 20px;
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      background: #ffffff;
-      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+      border: 1px solid var(--sd-border);
+      background: var(--sd-surface);
+      box-shadow: 0 12px 28px rgba(15, 23, 24, 0.05);
     }
 
     .settings-dialog__sidebar-item {
       padding: 16px;
 
       &--active {
-        background: linear-gradient(180deg, #fffdf8 0%, #ffffff 100%);
+        background: linear-gradient(180deg, rgba(var(--xingtu-theme-accent-rgb), 0.08) 0%, var(--sd-surface) 100%);
         border-color: rgba(var(--xingtu-theme-accent-rgb), 0.22);
         box-shadow: 0 16px 32px rgba(var(--xingtu-theme-accent-rgb), 0.1);
       }
@@ -1637,7 +1641,7 @@
       padding: 12px;
 
       &--active {
-        background: linear-gradient(180deg, #fffdf8 0%, #ffffff 100%);
+        background: linear-gradient(180deg, rgba(var(--xingtu-theme-accent-rgb), 0.08) 0%, var(--sd-surface) 100%);
         border-color: rgba(var(--xingtu-theme-accent-rgb), 0.22);
         box-shadow: 0 16px 32px rgba(var(--xingtu-theme-accent-rgb), 0.1);
       }
@@ -1682,9 +1686,9 @@
       .settings-dialog__section {
         padding: 14px;
         border-radius: 22px;
-        border: 1px solid rgba(15, 23, 42, 0.08);
-        background: #ffffff;
-        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+        border: 1px solid var(--sd-border);
+        background: var(--sd-surface);
+        box-shadow: 0 14px 34px rgba(15, 23, 24, 0.05);
       }
 
       .settings-dialog__section + .settings-dialog__section {
@@ -1699,9 +1703,9 @@
       .settings-dialog__section {
         padding: 18px;
         border-radius: 24px;
-        border: 1px solid rgba(15, 23, 42, 0.08);
-        background: #ffffff;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+        border: 1px solid var(--sd-border);
+        background: var(--sd-surface);
+        box-shadow: 0 12px 28px rgba(15, 23, 24, 0.05);
       }
 
       .settings-dialog__section--canvas-card {
@@ -1769,7 +1773,7 @@
 
         .settings-dialog__sidebar {
           padding: 12px 12px 12px 14px;
-          border-right: 1px solid rgba(15, 23, 42, 0.05);
+          border-right: 1px solid var(--sd-border);
         }
 
         .settings-dialog__content-panel {
@@ -1804,7 +1808,7 @@
 
     &__nav-shell {
       padding: 0;
-      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+      border-bottom: 1px solid var(--sd-border);
     }
 
     &__nav-list {
@@ -1888,10 +1892,10 @@
       .settings-dialog__sidebar-list {
         gap: 0;
         padding: 0;
-        border: 1px solid rgba(15, 23, 42, 0.08);
+        border: 1px solid var(--sd-border);
         border-radius: 24px;
-        background: #ffffff;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+        background: var(--sd-surface);
+        box-shadow: 0 12px 28px rgba(15, 23, 24, 0.05);
         overflow: hidden;
       }
 
@@ -1934,16 +1938,16 @@
       min-height: auto;
       scroll-snap-align: none;
       border-radius: 20px;
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      background: #ffffff;
-      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+      border: 1px solid var(--sd-border);
+      background: var(--sd-surface);
+      box-shadow: 0 12px 28px rgba(15, 23, 24, 0.05);
     }
 
     &__sidebar-item {
       padding: 16px;
 
       &--active {
-        background: linear-gradient(180deg, #fffdf8 0%, #ffffff 100%);
+        background: linear-gradient(180deg, rgba(var(--xingtu-theme-accent-rgb), 0.08) 0%, var(--sd-surface) 100%);
         border-color: rgba(var(--xingtu-theme-accent-rgb), 0.22);
         box-shadow: 0 16px 32px rgba(var(--xingtu-theme-accent-rgb), 0.1);
       }
@@ -1957,7 +1961,7 @@
       padding: 12px 14px;
 
       &--active {
-        background: linear-gradient(180deg, #fffdf8 0%, #ffffff 100%);
+        background: linear-gradient(180deg, rgba(var(--xingtu-theme-accent-rgb), 0.08) 0%, var(--sd-surface) 100%);
         border-color: rgba(var(--xingtu-theme-accent-rgb), 0.22);
         box-shadow: 0 16px 32px rgba(var(--xingtu-theme-accent-rgb), 0.1);
       }
@@ -2007,9 +2011,9 @@
       .settings-dialog__section {
         padding: 16px;
         border-radius: 22px;
-        border: 1px solid rgba(15, 23, 42, 0.08);
-        background: #ffffff;
-        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+        border: 1px solid var(--sd-border);
+        background: var(--sd-surface);
+        box-shadow: 0 14px 34px rgba(15, 23, 24, 0.05);
       }
 
       .settings-dialog__section + .settings-dialog__section {
@@ -2024,9 +2028,9 @@
       .settings-dialog__section {
         padding: 18px;
         border-radius: 24px;
-        border: 1px solid rgba(15, 23, 42, 0.08);
-        background: #ffffff;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+        border: 1px solid var(--sd-border);
+        background: var(--sd-surface);
+        box-shadow: 0 12px 28px rgba(15, 23, 24, 0.05);
       }
 
       .settings-dialog__section--canvas-card {
@@ -2062,7 +2066,7 @@
       padding: 16px 18px;
       border-radius: 20px;
       background: rgba(255, 255, 255, 0.78);
-      border: 1px solid rgba(15, 23, 42, 0.06);
+      border: 1px solid var(--sd-border);
     }
 
     &__actions {

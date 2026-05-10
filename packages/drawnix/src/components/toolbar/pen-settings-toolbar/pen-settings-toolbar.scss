@@ -1,19 +1,14 @@
 // 主要定位样式在 index.scss 的 .drawnix 内定义
-$stitch-glass-bg: rgba(218, 220, 224, 0.5);
-$stitch-glass-border: rgba(22, 23, 24, 0.15);
-$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
-  0 4px 6px -4px rgba(0, 0, 0, 0.1);
-$stitch-glass-blur: blur(40px);
 
 .pen-settings-toolbar {
   display: flex;
   align-items: center;
-  background: $stitch-glass-bg;
-  border: 1px solid $stitch-glass-border;
+  background: var(--xingtu-glass-bg);
+  border: 1px solid var(--xingtu-glass-border);
   border-radius: 24px;
-  box-shadow: $stitch-glass-shadow;
-  backdrop-filter: $stitch-glass-blur;
-  -webkit-backdrop-filter: $stitch-glass-blur;
+  box-shadow: var(--xingtu-glass-shadow);
+  backdrop-filter: var(--xingtu-glass-blur);
+  -webkit-backdrop-filter: var(--xingtu-glass-blur);
   
   .island {
     display: flex;
@@ -85,7 +80,7 @@ $stitch-glass-blur: blur(40px);
     gap: 2px;
     margin-left: 4px;
     padding: 2px;
-    background: rgba(255, 255, 255, 0.24);
+    background: var(--xingtu-glass-control-bg);
     border-radius: 6px;
 
     .pen-stroke-style-button {
@@ -100,12 +95,12 @@ $stitch-glass-blur: blur(40px);
       transition: all 0.15s ease;
 
       &.active {
-        background: rgba(255, 255, 255, 0.58);
-        box-shadow: 0 0 0 1px rgba(22, 23, 24, 0.08);
+        background: var(--xingtu-glass-control-bg-selected);
+        box-shadow: 0 0 0 1px var(--xingtu-glass-control-ring);
       }
 
       &:hover:not(.active) {
-        background: rgba(255, 255, 255, 0.24);
+        background: var(--xingtu-glass-control-bg);
       }
     }
   }
@@ -118,16 +113,16 @@ $stitch-glass-blur: blur(40px);
     padding: 0 12px;
     width: 72px;
     height: 32px;
-    background: rgba(255, 255, 255, 0.42);
+    background: var(--xingtu-glass-control-bg-active);
     border-radius: 16px;
-    border: 1px solid rgba(22, 23, 24, 0.12);
+    border: 1px solid var(--xingtu-glass-border-soft);
     flex-shrink: 0;
     box-sizing: border-box;
     
     &:focus-within {
-      background: rgba(255, 255, 255, 0.58);
-      border-color: rgba(22, 23, 24, 0.18);
-      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.34);
+      background: var(--xingtu-glass-control-bg-selected);
+      border-color: var(--xingtu-glass-border-hover);
+      box-shadow: 0 0 0 3px var(--xingtu-glass-control-bg-hover);
     }
     
     .pen-width-input {
@@ -161,16 +156,16 @@ $stitch-glass-blur: blur(40px);
     padding: 0 12px;
     width: 72px;
     height: 32px;
-    background: rgba(255, 255, 255, 0.42);
+    background: var(--xingtu-glass-control-bg-active);
     border-radius: 16px;
-    border: 1px solid rgba(22, 23, 24, 0.12);
+    border: 1px solid var(--xingtu-glass-border-soft);
     flex-shrink: 0;
     box-sizing: border-box;
 
     &:focus-within {
-      background: rgba(255, 255, 255, 0.58);
-      border-color: rgba(22, 23, 24, 0.18);
-      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.34);
+      background: var(--xingtu-glass-control-bg-selected);
+      border-color: var(--xingtu-glass-border-hover);
+      box-shadow: 0 0 0 3px var(--xingtu-glass-control-bg-hover);
     }
 
     .size-picker-input {
@@ -201,7 +196,7 @@ $stitch-glass-blur: blur(40px);
   .pen-settings-divider {
     width: 1px;
     height: 24px;
-    background: rgba(22, 23, 24, 0.1);
+    background: var(--xingtu-glass-divider);
     margin: 0 8px;
     flex-shrink: 0;
   }
@@ -212,7 +207,7 @@ $stitch-glass-blur: blur(40px);
     align-items: center;
     gap: 2px;
     padding: 2px;
-    background: rgba(255, 255, 255, 0.24);
+    background: var(--xingtu-glass-control-bg);
     border-radius: 6px;
 
     .pen-anchor-type-button {
@@ -227,12 +222,12 @@ $stitch-glass-blur: blur(40px);
       transition: all 0.15s ease;
 
       &.active {
-        background: rgba(255, 255, 255, 0.58);
-        box-shadow: 0 0 0 1px rgba(22, 23, 24, 0.08);
+        background: var(--xingtu-glass-control-bg-selected);
+        box-shadow: 0 0 0 1px var(--xingtu-glass-control-ring);
       }
 
       &:hover:not(.active) {
-        background: rgba(255, 255, 255, 0.24);
+        background: var(--xingtu-glass-control-bg);
       }
     }
   }

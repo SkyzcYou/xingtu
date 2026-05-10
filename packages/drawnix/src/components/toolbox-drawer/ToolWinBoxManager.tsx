@@ -362,6 +362,10 @@ export const ToolWinBoxManager: React.FC = () => {
 
         // 计算窗口尺寸（移动端限制不超出屏幕）
         const windowSize = getWindowSize(tool, size);
+        const toolWindowSlug = tool.id.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+        const toolWindowClassName = `winbox-ai-generation winbox-tool-window winbox-tool-window--${toolWindowSlug}${
+          tool.id === 'prompt-history' ? ' winbox-glass-window' : ''
+        }`;
 
         return (
           <WinBoxWindow
@@ -390,8 +394,8 @@ export const ToolWinBoxManager: React.FC = () => {
               handleInsertToCanvas(instanceId, tool, rect)
             }
             minimizeTargetSelector={`[data-minimize-target="${instanceId}"]`}
-            className="winbox-ai-generation winbox-tool-window"
-            background="#ffffff"
+            className={toolWindowClassName}
+            background={tool.id === 'prompt-history' ? 'transparent' : '#ffffff'}
           >
             <div
               className="tool-window-content"

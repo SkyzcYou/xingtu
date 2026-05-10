@@ -8,14 +8,9 @@
 $accent-primary: var(--xingtu-theme-accent);
 $accent-dark: var(--xingtu-theme-accent-hover);
 $gray-light: #f3f4f6;
-$gray-medium: #9ca3af;
-$gray-dark: #6b7280;
-$text-dark: #1f2937;
-$stitch-glass-bg: rgba(218, 220, 224, 0.5);
-$stitch-glass-border: rgba(22, 23, 24, 0.15);
-$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
-  0 4px 6px -4px rgba(0, 0, 0, 0.1);
-$stitch-glass-blur: blur(40px);
+$gray-medium: var(--xingtu-glass-text-tertiary);
+$gray-dark: var(--xingtu-glass-text-secondary);
+$text-dark: var(--xingtu-glass-text-primary);
 
 .parameters-dropdown {
   position: relative;
@@ -77,12 +72,12 @@ $stitch-glass-blur: blur(40px);
   }
 
   &__menu {
-    background: $stitch-glass-bg;
-    border: 1px solid $stitch-glass-border;
+    background: var(--xingtu-glass-bg);
+    border: 1px solid var(--xingtu-glass-border);
     border-radius: 12px;
-    box-shadow: $stitch-glass-shadow;
-    backdrop-filter: $stitch-glass-blur;
-    -webkit-backdrop-filter: $stitch-glass-blur;
+    box-shadow: var(--xingtu-glass-shadow);
+    backdrop-filter: var(--xingtu-glass-blur);
+    -webkit-backdrop-filter: var(--xingtu-glass-blur);
     min-width: 200px;
     max-width: 320px;
     overflow: hidden;
@@ -110,7 +105,7 @@ $stitch-glass-blur: blur(40px);
     gap: 8px;
     padding: 10px 12px;
     background: transparent;
-    border-bottom: 1px solid var(--color-border, #e5e5e5);
+    border-bottom: 1px solid var(--xingtu-glass-divider);
     font-size: 12px;
     font-weight: 600;
     color: var(--color-text-secondary, #666);
@@ -127,7 +122,7 @@ $stitch-glass-blur: blur(40px);
     padding: 8px 0;
 
     &:not(:last-child) {
-      border-bottom: 1px solid var(--color-border, #eee);
+      border-bottom: 1px solid var(--xingtu-glass-divider);
     }
 
     &--highlighted {
@@ -139,7 +134,7 @@ $stitch-glass-blur: blur(40px);
   &__section-title {
     font-size: 11px;
     font-weight: 600;
-    color: var(--color-text-tertiary, #888);
+    color: var(--color-text-secondary, #666);
     padding: 0 4px 6px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -158,35 +153,36 @@ $stitch-glass-blur: blur(40px);
     align-items: center;
     gap: 4px;
     padding: 6px 10px;
-    background: var(--color-surface, #f5f5f5);
+    background: transparent;
     border: 1px solid transparent;
     border-radius: 6px;
     cursor: pointer;
     font-size: 12px;
-    color: var(--color-text, #333);
+    color: $text-dark;
     transition: all 0.15s ease;
     white-space: nowrap;
 
     &:hover {
-      background: rgba(var(--xingtu-theme-accent-rgb), 0.1);
-      border-color: rgba(var(--xingtu-theme-accent-rgb), 0.3);
+      background: var(--xingtu-glass-list-bg-hover);
+      border-color: var(--xingtu-glass-border-hover);
     }
 
     &--selected {
-      background: rgba(var(--xingtu-theme-accent-rgb), 0.15);
-      border-color: $accent-primary;
-      color: $accent-dark;
+      background: var(--xingtu-glass-list-bg-selected);
+      border-color: var(--xingtu-glass-list-selected-border);
+      color: $text-dark;
       font-weight: 600;
     }
 
     &--highlighted {
-      background: rgba(var(--xingtu-theme-accent-rgb), 0.1);
-      border-color: rgba(var(--xingtu-theme-accent-rgb), 0.5);
-      box-shadow: 0 0 0 2px rgba(var(--xingtu-theme-accent-rgb), 0.2);
+      background: var(--xingtu-glass-list-bg-hover);
+      border-color: var(--xingtu-glass-border-hover);
+      box-shadow: 0 0 0 2px var(--xingtu-glass-control-ring);
     }
 
     &--selected#{&}--highlighted {
-      box-shadow: 0 0 0 2px rgba(var(--xingtu-theme-accent-rgb), 0.3);
+      background: var(--xingtu-glass-list-bg-selected-hover);
+      box-shadow: 0 0 0 2px var(--xingtu-glass-control-ring);
     }
 
     &-label {
@@ -194,7 +190,7 @@ $stitch-glass-blur: blur(40px);
     }
 
     &-check {
-      color: $accent-primary;
+      color: $text-dark;
       flex-shrink: 0;
     }
   }
@@ -227,7 +223,7 @@ $stitch-glass-blur: blur(40px);
     }
 
     &::placeholder {
-      color: var(--color-text-tertiary, #999);
+      color: var(--xingtu-glass-text-tertiary);
     }
   }
 
@@ -281,11 +277,11 @@ $stitch-glass-blur: blur(40px);
     }
 
     &__menu {
-      background: $stitch-glass-bg;
-      border-color: $stitch-glass-border;
-      box-shadow: $stitch-glass-shadow;
-      backdrop-filter: $stitch-glass-blur;
-      -webkit-backdrop-filter: $stitch-glass-blur;
+      background: var(--xingtu-glass-bg);
+      border-color: var(--xingtu-glass-border);
+      box-shadow: var(--xingtu-glass-shadow);
+      backdrop-filter: var(--xingtu-glass-blur);
+      -webkit-backdrop-filter: var(--xingtu-glass-blur);
     }
 
     &__header {

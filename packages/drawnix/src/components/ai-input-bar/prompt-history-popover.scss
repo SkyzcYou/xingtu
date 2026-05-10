@@ -2,24 +2,25 @@
  * PromptHistoryPopover 样式
  */
 
-$stitch-glass-bg: rgba(218, 220, 224, 0.5);
-$stitch-glass-border: rgba(22, 23, 24, 0.15);
-$stitch-glass-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
-  0 4px 6px -4px rgba(0, 0, 0, 0.1);
-$stitch-glass-blur: blur(40px);
 
 .prompt-history-popover {
+  --prompt-history-popover-glass-bg: rgba(229, 231, 235, 0.95);
+  --prompt-history-popover-glass-blur: blur(40px);
+
   position: relative;
-  align-self: flex-start;
+  align-self: center;
   z-index: 10;
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 40px;
   flex-shrink: 0;
 
   &__actions {
     display: flex;
     flex-direction: column;
     align-items: center;
+    width: 40px;
     gap: 4px;
   }
 
@@ -34,13 +35,13 @@ $stitch-glass-blur: blur(40px);
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: var(--td-text-color-secondary, #666);
+    color: var(--xingtu-glass-text-secondary);
     cursor: pointer;
     transition: all 0.2s ease;
 
     &:hover {
       background: var(--td-bg-color-container-hover, rgba(0, 0, 0, 0.04));
-      color: var(--td-text-color-primary, #333);
+      color: var(--xingtu-glass-text-primary);
     }
   }
 
@@ -54,13 +55,13 @@ $stitch-glass-blur: blur(40px);
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: var(--td-text-color-secondary, #666);
+    color: var(--xingtu-glass-text-secondary);
     cursor: pointer;
     transition: all 0.2s ease;
 
     &:hover:not(:disabled) {
       background: var(--td-bg-color-container-hover, rgba(0, 0, 0, 0.04));
-      color: var(--td-text-color-primary, #333);
+      color: var(--xingtu-glass-text-primary);
     }
 
     &:disabled {
@@ -77,16 +78,114 @@ $stitch-glass-blur: blur(40px);
     z-index: 1000;
 
     .prompt-list-panel {
-      background: $stitch-glass-bg;
-      border: 1px solid $stitch-glass-border;
+      background: var(--prompt-history-popover-glass-bg);
+      border: 1px solid var(--xingtu-glass-border);
       border-radius: 12px;
-      box-shadow: $stitch-glass-shadow;
-      backdrop-filter: $stitch-glass-blur;
-      -webkit-backdrop-filter: $stitch-glass-blur;
+      box-shadow: var(--xingtu-glass-shadow);
+      backdrop-filter: var(--prompt-history-popover-glass-blur);
+      -webkit-backdrop-filter: var(--prompt-history-popover-glass-blur);
+      padding: 0;
+      overflow: hidden;
     }
 
     .prompt-list-panel__header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
       background: transparent;
+      border-bottom: 1px solid var(--xingtu-glass-divider);
+      color: var(--xingtu-glass-text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .prompt-list-panel__title {
+      color: var(--xingtu-theme-accent-hover);
+      font-size: inherit;
+      font-weight: 600;
+    }
+
+    .prompt-list-panel__title-button:hover {
+      color: var(--xingtu-theme-accent-hover);
+    }
+
+    .prompt-list-panel__count {
+      background: var(--xingtu-glass-control-bg);
+      color: var(--xingtu-glass-text-tertiary);
+    }
+
+    .prompt-list-panel__list {
+      padding: 4px;
+    }
+
+    .prompt-history-popover__panel-footer {
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      flex-shrink: 0;
+      padding: 8px;
+      border-top: 1px solid var(--xingtu-glass-divider);
+      background: rgba(229, 231, 235, 0.92);
+    }
+
+    .prompt-history-popover__open-library-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 32px;
+      padding: 0 12px;
+      border: 1px solid var(--xingtu-glass-border);
+      border-radius: 8px;
+      background: var(--xingtu-glass-control-bg-selected);
+      color: var(--xingtu-glass-text-primary);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+
+      &:hover {
+        background: var(--xingtu-glass-control-bg-selected-hover);
+        color: var(--xingtu-theme-accent-hover);
+      }
+    }
+
+    .prompt-list-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      color: var(--xingtu-glass-text-primary);
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.1s ease;
+
+      &:hover {
+        background: var(--xingtu-glass-list-bg-hover);
+      }
+    }
+
+    .prompt-list-item__text,
+    .prompt-list-item__hover-text {
+      color: var(--xingtu-glass-text-primary);
+    }
+
+    .prompt-list-item--preset .prompt-list-item__text,
+    .prompt-list-item__history-label,
+    .prompt-list-item__hover-hint,
+    .prompt-list-item__result-text {
+      color: var(--xingtu-glass-text-secondary);
+    }
+
+    .prompt-list-item__action {
+      color: var(--xingtu-glass-text-secondary);
+
+      &:hover {
+        background: var(--xingtu-glass-control-bg-hover);
+        color: var(--xingtu-glass-text-primary);
+      }
     }
   }
 }
