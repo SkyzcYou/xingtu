@@ -1,13 +1,8 @@
 {
-  "version": "0.7.1",
-  "buildTime": "2026-05-10T01:52:53.424Z",
+  "version": "0.7.2",
+  "buildTime": "2026-05-10T05:13:28.866Z",
   "gitCommit": "unknown",
   "changelog": [
-    "为绘图工具添加键盘快捷键调整大小功能",
-    "修复蒙版画笔导出和预览样式问题",
-    "support AI image mask editing",
-    "Stop idle-prefetch retries from blocking SW updates",
-    "keep send button visible",
-    "resume async image tasks after reload"
+    "修复批量导入图片弹窗显示异常"
   ]
 }

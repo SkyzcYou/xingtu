@@ -1,6 +1,19 @@
 {
   "versions": [
     {
+      "version": "0.7.2",
+      "date": "2026-05-10",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修复批量导入图片弹窗显示异常"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修复批量导入图片弹窗显示异常"
+    },
+    {
       "version": "0.7.1",
       "date": "2026-05-06",
       "changes": {
