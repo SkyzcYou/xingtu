@@ -8,7 +8,6 @@
 import React, {
   useState,
   useCallback,
-  useRef,
   useEffect,
   useMemo,
 } from 'react';
@@ -261,6 +260,7 @@ export const ParametersDropdown: React.FC<ParametersDropdownProps> = ({
       highlightedOptionIndex,
       selectedParams,
       onParamChange,
+      setIsOpen,
     ]
   );
 
@@ -297,6 +297,7 @@ export const ParametersDropdown: React.FC<ParametersDropdownProps> = ({
       placement={placement}
       minMenuHeight={240}
       maxMenuHeight={420}
+      menuMaxWidth={360}
     >
       {({ containerRef, menuRef, menuStyle, handleTriggerKeyDown }) => {
         return (

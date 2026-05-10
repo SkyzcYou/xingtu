@@ -33,6 +33,7 @@ export interface KeyboardDropdownProps {
   viewportPadding?: number;
   minMenuHeight?: number;
   maxMenuHeight?: number;
+  menuMaxWidth?: number;
   children: (props: KeyboardDropdownRenderProps) => React.ReactNode;
 }
 
@@ -87,6 +88,7 @@ export const KeyboardDropdown: React.FC<KeyboardDropdownProps> = ({
   viewportPadding = DEFAULT_VIEWPORT_PADDING,
   minMenuHeight = DEFAULT_MIN_MENU_HEIGHT,
   maxMenuHeight = DEFAULT_MAX_MENU_HEIGHT,
+  menuMaxWidth,
   children,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -177,21 +179,44 @@ export const KeyboardDropdown: React.FC<KeyboardDropdownProps> = ({
         0,
         Math.min(maxMenuHeight, availableHeight)
       );
+      const availableWidth = Math.max(
+        0,
+        window.innerWidth - viewportPadding * 2
+      );
+      const shouldUseViewportWidth = !!menuMaxWidth && window.innerWidth <= 640;
+      const maxAllowedWidth =
+        menuMaxWidth && !shouldUseViewportWidth
+          ? Math.min(menuMaxWidth, availableWidth)
+          : availableWidth;
+      const measuredMenuWidth =
+        menuRef.current?.getBoundingClientRect().width || rect.width;
+      const boundedMenuWidth = shouldUseViewportWidth
+        ? maxAllowedWidth
+        : Math.min(Math.max(measuredMenuWidth, rect.width), maxAllowedWidth);
+      const boundedLeft = Math.max(
+        viewportPadding,
+        Math.min(
+          rect.left,
+          window.innerWidth - boundedMenuWidth - viewportPadding
+        )
+      );
+      const baseMenuStyle: React.CSSProperties = {
+        position: 'fixed',
+        left: boundedLeft,
+        width: shouldUseViewportWidth ? maxAllowedWidth : undefined,
+        maxWidth: maxAllowedWidth,
+        maxHeight: boundedMaxHeight,
+        overflowY: 'auto',
+      };
       const nextMenuStyle: React.CSSProperties =
         resolvedPlacement === 'down'
           ? {
-              position: 'fixed',
-              left: rect.left,
+              ...baseMenuStyle,
               top: rect.bottom + offset,
-              maxHeight: boundedMaxHeight,
-              overflowY: 'auto',
             }
           : {
-              position: 'fixed',
-              left: rect.left,
+              ...baseMenuStyle,
               bottom: window.innerHeight - rect.top + offset,
-              maxHeight: boundedMaxHeight,
-              overflowY: 'auto',
             };
 
       if (shouldDebugDropdown()) {
@@ -205,10 +230,17 @@ export const KeyboardDropdown: React.FC<KeyboardDropdownProps> = ({
             width: rect.width,
           },
           viewportHeight: window.innerHeight,
+          viewportWidth: window.innerWidth,
           spaceAbove,
           spaceBelow,
           availableHeight,
+          availableWidth,
+          maxAllowedWidth,
+          shouldUseViewportWidth,
           boundedMaxHeight,
+          measuredMenuWidth,
+          boundedMenuWidth,
+          boundedLeft,
           maxMenuHeight,
           minMenuHeight,
           offset,
@@ -236,6 +268,7 @@ export const KeyboardDropdown: React.FC<KeyboardDropdownProps> = ({
   }, [
     isOpen,
     maxMenuHeight,
+    menuMaxWidth,
     minMenuHeight,
     offset,
     placement,

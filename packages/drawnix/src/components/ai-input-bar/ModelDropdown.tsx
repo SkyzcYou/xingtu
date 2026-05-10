@@ -600,6 +600,21 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
     ]
   );
 
+  const handleClose = useCallback(
+    (event?: React.MouseEvent<HTMLButtonElement>) => {
+      event?.preventDefault();
+      event?.stopPropagation();
+      closeContextMenu();
+      if (variant === 'form') {
+        setSearchQuery(currentModel?.label || selectedModel);
+      } else {
+        setSearchQuery('');
+      }
+      setIsOpen(false);
+    },
+    [closeContextMenu, currentModel, selectedModel, setIsOpen, variant]
+  );
+
   // 选择模型
   const handleSelect = useCallback(
     (model: ModelConfig) => {
@@ -953,6 +968,20 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
                   }
             }
           >
+            <div className="model-dropdown__mobile-header">
+              <div className="model-dropdown__mobile-title">
+                {language === 'zh' ? '选择模型' : 'Select Model'}
+              </div>
+              <button
+                type="button"
+                className="model-dropdown__mobile-close"
+                onClick={handleClose}
+                aria-label={language === 'zh' ? '关闭模型选择器' : 'Close model picker'}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
             {variant === 'minimal' ? (
               <div className="model-dropdown__toolbar">
                 {header ? (

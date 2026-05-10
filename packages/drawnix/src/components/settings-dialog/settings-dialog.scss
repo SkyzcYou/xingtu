@@ -24,6 +24,29 @@
   }
 }
 
+.winbox-settings-window--compact {
+  inset: 0 !important;
+  width: 100dvw !important;
+  height: 100dvh !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+
+  .wb-body {
+    height: auto !important;
+    min-height: 0;
+    overflow: hidden !important;
+  }
+
+  .winbox-content-wrapper {
+    height: 100% !important;
+    min-height: 0;
+    overflow: hidden !important;
+  }
+}
+
 @keyframes settings-dialog-spin {
   to {
     transform: rotate(360deg);
@@ -1449,11 +1472,19 @@
   }
 
   &--compact {
+    height: 100%;
+    min-height: 0;
     padding: 0;
+    overflow: hidden;
 
     .settings-dialog__layout {
-      grid-template-columns: 1fr;
-      gap: 14px;
+      display: grid;
+      height: 100%;
+      min-height: 0;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 0;
+      overflow: hidden;
     }
 
     .settings-dialog__workspace {
@@ -1484,19 +1515,31 @@
 
     .settings-dialog__main {
       width: 100%;
-      border-radius: 24px;
+      min-width: 0;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 0;
     }
 
     .settings-dialog__nav {
       width: 100%;
+      min-width: 0;
+      flex: 0 0 auto;
+      overflow: hidden;
     }
 
     .settings-dialog__nav-shell {
+      min-width: 0;
+      overflow: hidden;
       padding: 0;
       border-bottom: 1px solid var(--sd-border);
     }
 
     .settings-dialog__nav-list {
+      min-width: 0;
+      max-width: 100%;
       flex-direction: row;
       overflow-x: auto;
       justify-content: flex-start;
@@ -1511,7 +1554,7 @@
     }
 
     .settings-dialog__nav-item {
-      min-width: 108px;
+      min-width: min(108px, 34vw);
       min-height: 52px;
       flex: 0 0 auto;
       align-items: center;
@@ -1581,7 +1624,9 @@
         border-radius: 24px;
         background: var(--sd-surface);
         box-shadow: 0 12px 28px rgba(15, 23, 24, 0.05);
-        overflow: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
       }
 
       .settings-dialog__provider-row {
@@ -1604,9 +1649,12 @@
 
     .settings-dialog__sidebar-list {
       display: flex;
+      min-height: 0;
       flex-direction: column;
       gap: 10px;
-      overflow: auto;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
       padding: 4px 0 0;
 
       &::-webkit-scrollbar {
@@ -1667,7 +1715,11 @@
 
     .settings-dialog__content-panel,
     .settings-dialog__content-panel--canvas {
+      min-height: 0;
       gap: 12px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
       padding: 10px;
 
       > .settings-dialog__section,
@@ -1896,7 +1948,9 @@
         border-radius: 24px;
         background: var(--sd-surface);
         box-shadow: 0 12px 28px rgba(15, 23, 24, 0.05);
-        overflow: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
       }
 
       .settings-dialog__provider-row {
@@ -2099,8 +2153,16 @@
 
     &__content-panel,
     &__content-panel--canvas {
+      min-height: 0;
       gap: 12px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
       padding: 10px;
+    }
+
+    &__mobile-stage {
+      min-height: 0;
     }
 
     &__content-panel--providers {
@@ -2169,6 +2231,31 @@
     &__compact-back {
       width: 100%;
       justify-content: center;
+    }
+  }
+
+  &--compact {
+    .settings-dialog__content-panel--compact {
+      overflow: hidden;
+    }
+
+    .settings-dialog__mobile-stage {
+      min-height: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .settings-dialog__mobile-stage > .settings-dialog__sidebar-shell {
+      min-height: 0;
+      flex: 1;
+    }
+
+    .settings-dialog__sidebar-shell--catalog .settings-dialog__sidebar-list {
+      min-height: 0;
+      flex: 1;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
     }
   }
 }

@@ -663,7 +663,6 @@ export const SettingsDialog = ({
   const {
     isMobile: isMobileDevice,
     viewportWidth,
-    viewportHeight,
   } = useDeviceType();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const [dialogWidth, setDialogWidth] = useState(0);
@@ -3232,16 +3231,8 @@ export const SettingsDialog = ({
         onClose={handleWindowClose}
         width={isCompactLayout ? '100%' : '88%'}
         height={isCompactLayout ? '100%' : '88%'}
-        minWidth={
-          isCompactLayout
-            ? Math.max(320, Math.min(viewportWidth - 16, 640))
-            : 1080
-        }
-        minHeight={
-          isCompactLayout
-            ? Math.max(520, Math.min(viewportHeight - 16, 820))
-            : 680
-        }
+        minWidth={isCompactLayout ? 0 : 1080}
+        minHeight={isCompactLayout ? 0 : 680}
         x="center"
         y="center"
         maximizable={true}
@@ -3249,7 +3240,9 @@ export const SettingsDialog = ({
         resizable={!isCompactLayout}
         movable={!isCompactLayout}
         modal={false}
-        className="winbox-ai-generation winbox-glass-window winbox-tool-window winbox-settings-window"
+        className={`winbox-ai-generation winbox-glass-window winbox-tool-window winbox-settings-window ${
+          isCompactLayout ? 'winbox-settings-window--compact' : ''
+        }`}
         container={container}
         background="transparent"
       >

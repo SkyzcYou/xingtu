@@ -409,18 +409,22 @@
     // 移动端收起状态修饰符
     &--mobile-collapsed {
       @include tablet-and-below {
-        // 保持底部悬浮位置，只调整高度为自适应
         height: auto !important;
         min-height: 0 !important;
         max-height: none !important;
         overflow: visible !important;
 
-        // 隐藏所有常规内容
         .unified-toolbar__scrollable,
         .unified-toolbar__section,
         .unified-toolbar__mobile-toggle {
           display: none !important;
         }
+      }
+
+      @include mobile {
+        bottom: calc(
+          #{$safe-area-bottom} + var(--aitu-ai-input-bar-height, 68px) + 12px
+        );
       }
     }
 

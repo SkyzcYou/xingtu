@@ -60,7 +60,6 @@ import {
 } from '../../types/asset.types';
 import { MediaLibraryModal } from '../media-library/MediaLibraryModal';
 import { ModelDropdown } from './ModelDropdown';
-import { ModelHealthBadge } from '../shared/ModelHealthBadge';
 import { HoverTip } from '../shared/hover';
 import { ParametersDropdown } from './ParametersDropdown';
 import { PromptHistoryPopover } from './PromptHistoryPopover';
@@ -4500,6 +4499,38 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
       resizeAIInputTextarea(textarea, inputResizeMode);
     }, [inputResizeMode, isPromptManuallyExpanded, prompt, shouldKeepExpanded]);
+
+    useLayoutEffect(() => {
+      const element = containerRef.current;
+      if (!element) return;
+
+      const root = document.documentElement;
+      const updateHeight = () => {
+        root.style.setProperty(
+          '--aitu-ai-input-bar-height',
+          `${Math.ceil(element.getBoundingClientRect().height)}px`
+        );
+      };
+
+      updateHeight();
+      window.addEventListener('resize', updateHeight);
+
+      if (typeof ResizeObserver === 'undefined') {
+        return () => {
+          window.removeEventListener('resize', updateHeight);
+          root.style.removeProperty('--aitu-ai-input-bar-height');
+        };
+      }
+
+      const observer = new ResizeObserver(updateHeight);
+      observer.observe(element);
+
+      return () => {
+        observer.disconnect();
+        window.removeEventListener('resize', updateHeight);
+        root.style.removeProperty('--aitu-ai-input-bar-height');
+      };
+    }, []);
 
     return (
       <>
