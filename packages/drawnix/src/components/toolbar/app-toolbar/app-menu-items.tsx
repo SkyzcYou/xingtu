@@ -309,7 +309,7 @@ export const VersionInfo = () => {
   return (
     <MenuItem
       data-track="toolbar_click_menu_version"
-      onSelect={() => {}}
+      onSelect={() => undefined}
       aria-label={t('menu.version')}
     >
       <span style={{ color: '#666' }}>{t('menu.version')}：{version}</span>
@@ -322,10 +322,6 @@ interface UpdateCheckResultDetail {
   requestId?: string;
   status?: 'checking' | 'latest' | 'available' | 'failed';
   version?: string;
-}
-
-function formatUpdateMessage(template: string, version?: string): string {
-  return template.replace('{version}', version || '');
 }
 
 let updateCheckInFlight = false;
@@ -348,7 +344,7 @@ export const CheckUpdate = () => {
     updateCheckInFlight = true;
 
     const closeLoading = () => {
-      loadingInstance.then((instance) => instance?.close?.());
+      MessagePlugin.close(loadingInstance);
     };
 
     const cleanup = () => {
@@ -357,14 +353,14 @@ export const CheckUpdate = () => {
       updateCheckInFlight = false;
     };
 
-    const finish = (callback: () => void) => {
+    const finish = (callback?: () => void) => {
       if (settled) {
         return;
       }
       settled = true;
       closeLoading();
       cleanup();
-      callback();
+      callback?.();
     };
 
     const handleResult = (event: Event) => {
@@ -378,14 +374,7 @@ export const CheckUpdate = () => {
       }
 
       if (detail.status === 'available') {
-        finish(() => {
-          MessagePlugin.success(
-            formatUpdateMessage(
-              t('menu.checkUpdate.available'),
-              detail.version
-            )
-          );
-        });
+        finish();
         return;
       }
 

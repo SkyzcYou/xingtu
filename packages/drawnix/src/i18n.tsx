@@ -96,7 +96,6 @@ export interface Translations {
   'menu.checkUpdate': string;
   'menu.checkUpdate.checking': string;
   'menu.checkUpdate.latest': string;
-  'menu.checkUpdate.available': string;
   'menu.checkUpdate.failed': string;
 
   // Dialog translations
@@ -294,7 +293,6 @@ const translations: Record<Language, Translations> = {
     'menu.checkUpdate': '检查更新',
     'menu.checkUpdate.checking': '正在检查更新...',
     'menu.checkUpdate.latest': '当前已是最新版本',
-    'menu.checkUpdate.available': '发现新版本 v{version}，请在提示中确认更新',
     'menu.checkUpdate.failed': '检查更新失败，请稍后重试',
 
     // Dialog translations
@@ -489,7 +487,6 @@ const translations: Record<Language, Translations> = {
     'menu.checkUpdate': 'Check for Updates',
     'menu.checkUpdate.checking': 'Checking for updates...',
     'menu.checkUpdate.latest': 'You are on the latest version',
-    'menu.checkUpdate.available': 'New version v{version} is ready. Confirm from the update prompt.',
     'menu.checkUpdate.failed': 'Update check failed. Please try again later.',
 
     // Dialog translations

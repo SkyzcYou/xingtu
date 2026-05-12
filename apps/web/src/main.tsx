@@ -498,16 +498,42 @@ if (shouldUseServiceWorker) {
   // Global reference to service worker registration
   let swRegistration: ServiceWorkerRegistration | null = null;
 
-  const notifyUpdateReady = (version: string) => {
-    if (lastPendingVersionNotified === version) {
-      return;
-    }
-    lastPendingVersionNotified = version;
+  const setPendingUpdateReady = (version: string) => {
+    (
+      window as Window & {
+        __AITU_PENDING_UPDATE__?: { version: string } | null;
+      }
+    ).__AITU_PENDING_UPDATE__ = { version };
+  };
+
+  const clearPendingUpdateReady = () => {
+    (
+      window as Window & {
+        __AITU_PENDING_UPDATE__?: { version: string } | null;
+      }
+    ).__AITU_PENDING_UPDATE__ = null;
+  };
+
+  const dispatchUpdateReadyEvent = (version: string) => {
+    setPendingUpdateReady(version);
     window.dispatchEvent(
       new CustomEvent('sw-update-available', {
         detail: { version },
       })
     );
+  };
+
+  const notifyUpdateReady = (version: string) => {
+    if (lastPendingVersionNotified === version) {
+      return;
+    }
+    lastPendingVersionNotified = version;
+    dispatchUpdateReadyEvent(version);
+  };
+
+  const renotifyUpdateReady = (version: string) => {
+    lastPendingVersionNotified = version;
+    dispatchUpdateReadyEvent(version);
   };
 
   const handleRuntimeVersionState = (state: RuntimeSWVersionState) => {
@@ -518,8 +544,9 @@ if (shouldUseServiceWorker) {
       return;
     }
 
-    if (!state.pendingVersion) {
+    if (!state.pendingVersion && !pendingWorker && !swRegistration?.waiting) {
       lastPendingVersionNotified = null;
+      clearPendingUpdateReady();
     }
   };
 
@@ -692,7 +719,7 @@ if (shouldUseServiceWorker) {
   };
 
   const dispatchManualUpdateAvailable = (requestId: string, version: string) => {
-    notifyUpdateReady(version);
+    renotifyUpdateReady(version);
     dispatchManualUpdateCheckResult({
       requestId,
       status: 'available',

@@ -1,114 +1,138 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Dialog } from 'tdesign-react';
-import { useTaskQueue } from '../../hooks/useTaskQueue';
 import { RefreshIcon } from 'tdesign-icons-react';
-import { useI18n } from '../../i18n';
+import { useTaskQueue } from '../../hooks/useTaskQueue';
+import { hasActiveLLMTasksSync } from '../../utils/active-tasks';
 import './version-update-prompt.scss';
 
-export const VersionUpdatePrompt: React.FC = () => {
-  const [updateAvailable, setUpdateAvailable] = useState<{ version: string; changelog?: string[] } | null>(null);
+interface UpdateAvailableState {
+  version: string;
+  changelog?: string[];
+}
+
+function parseUpdateAvailableState(value: unknown): UpdateAvailableState | null {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const candidate = value as { version?: unknown; changelog?: unknown };
+  if (typeof candidate.version !== 'string') {
+    return null;
+  }
+
+  if (candidate.changelog === undefined) {
+    return { version: candidate.version };
+  }
+
+  if (
+    Array.isArray(candidate.changelog) &&
+    candidate.changelog.every((item) => typeof item === 'string')
+  ) {
+    return {
+      version: candidate.version,
+      changelog: candidate.changelog,
+    };
+  }
+
+  return null;
+}
+
+function getPendingUpdateReadyState(): UpdateAvailableState | null {
+  return parseUpdateAvailableState(
+    (
+      window as Window & {
+        __AITU_PENDING_UPDATE__?: unknown;
+      }
+    ).__AITU_PENDING_UPDATE__
+  );
+}
+
+function VersionUpdatePromptContent({
+  updateAvailable,
+}: {
+  updateAvailable: UpdateAvailableState;
+}) {
   const [showChangelog, setShowChangelog] = useState(false);
+  const [hasActiveTasks, setHasActiveTasks] = useState(() =>
+    hasActiveLLMTasksSync()
+  );
   const { activeTasks } = useTaskQueue();
-  // const { t } = useI18n(); // Assuming i18n is available, if not fallback to strings
 
   useEffect(() => {
-    // Listen for custom event from main.tsx
-    const handleUpdateAvailable = async (event: Event) => {
-      const customEvent = event as CustomEvent;
-      
-      const newVersion = customEvent.detail?.version;
-      
-      // 获取当前运行的版本（从 HTML meta 标签）
-      const currentVersionMeta = document.querySelector('meta[name="app-version"]');
-      const currentVersion = currentVersionMeta?.getAttribute('content');
-      
-      try {
-        // Fetch detailed version info (changelog)
-        const res = await fetch(`./version.json?t=${Date.now()}`);
-        if (res.ok) {
-          const data = await res.json();
-          
-          // 如果当前版本已经是最新版本，不显示更新提示
-          if (currentVersion && data.version === currentVersion) {
-            // console.log('[VersionUpdatePrompt] Already on latest version, skipping prompt');
-            return;
-          }
-          
-          // Use fetched data if versions match or if event didn't specify version
-          if (!newVersion || data.version === newVersion) {
-            setUpdateAvailable(data);
-            return;
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to fetch version.json:', error);
-      }
+    setHasActiveTasks(hasActiveLLMTasksSync());
+  }, [activeTasks]);
 
-      // 如果无法获取 version.json，但事件带了版本号，检查是否相同
-      if (currentVersion && newVersion && currentVersion === newVersion) {
-        return; // 已经是最新版本
-      }
-
-      // Fallback to event detail
-      setUpdateAvailable(customEvent.detail);
+  useEffect(() => {
+    let subscription: { unsubscribe: () => void } | null = null;
+    let cancelled = false;
+    const syncActiveTasks = () => {
+      setHasActiveTasks(hasActiveLLMTasksSync());
     };
 
-    window.addEventListener('sw-update-available', handleUpdateAvailable);
-
-    // 调试辅助：在开发环境下挂载手动触发方法
-    if (process.env.NODE_ENV === 'development') {
-      (window as any).__debugTriggerUpdate = (version = '9.9.9') => {
-        // console.log('[Debug] Triggering update prompt');
-        window.dispatchEvent(new CustomEvent('sw-update-available', { 
-          detail: { version } 
-        }));
-      };
-      // console.log('[VersionUpdatePrompt] Debug mode: run window.__debugTriggerUpdate() to test');
-    }
+    void import('../../services/workflow-submission-service')
+      .then(({ workflowSubmissionService }) => {
+        if (cancelled) {
+          return;
+        }
+        syncActiveTasks();
+        subscription = workflowSubmissionService.subscribeToAllEvents(
+          syncActiveTasks
+        );
+      })
+      .catch((error) => {
+        console.warn('[VersionUpdatePrompt] Failed to watch workflows:', error);
+      });
 
     return () => {
-      window.removeEventListener('sw-update-available', handleUpdateAvailable);
+      cancelled = true;
+      subscription?.unsubscribe();
     };
   }, []);
 
-  const handleUpdate = () => {
-    // Keep the prompt visible until the new SW actually takes over.
-    // Otherwise a failed COMMIT_UPGRADE looks like a successful update.
-    setShowChangelog(false);
-    // Dispatch event to notify main.tsx to proceed with upgrade
-    window.dispatchEvent(new CustomEvent('user-confirmed-upgrade'));
-  };
+  const handleUpdate = useCallback(() => {
+    if (hasActiveTasks) {
+      return;
+    }
 
-  // Only show if update is available AND no active tasks
-  if (!updateAvailable || activeTasks.length > 0) {
-    return null;
-  }
+    setShowChangelog(false);
+    window.dispatchEvent(new CustomEvent('user-confirmed-upgrade'));
+  }, [hasActiveTasks]);
+
+  const handleShowChangelog = useCallback(() => {
+    setShowChangelog(true);
+  }, []);
+
+  const handleCloseChangelog = useCallback(() => {
+    setShowChangelog(false);
+  }, []);
 
   return (
     <>
       <div className="version-update-prompt">
         <div className="version-update-prompt__content">
           <span className="version-update-prompt__text">
-            新版本 v{updateAvailable.version} 已就绪
+            {hasActiveTasks
+              ? `新版本 v${updateAvailable.version} 已就绪，任务完成后可更新`
+              : `新版本 v${updateAvailable.version} 已就绪`}
           </span>
           {updateAvailable.changelog && updateAvailable.changelog.length > 0 && (
             <Button
               theme="default"
               variant="text"
               size="small"
-              onClick={() => setShowChangelog(true)}
+              onClick={handleShowChangelog}
             >
               查看更新内容
             </Button>
           )}
-          <Button 
-            theme="primary" 
-            size="small" 
+          <Button
+            theme="primary"
+            size="small"
             onClick={handleUpdate}
             icon={<RefreshIcon />}
+            disabled={hasActiveTasks}
           >
-            立即更新
+            {hasActiveTasks ? '任务运行中' : '立即更新'}
           </Button>
         </div>
       </div>
@@ -116,22 +140,102 @@ export const VersionUpdatePrompt: React.FC = () => {
       <Dialog
         header={`新版本 v${updateAvailable.version} 更新内容`}
         visible={showChangelog}
-        onClose={() => setShowChangelog(false)}
+        onClose={handleCloseChangelog}
         width={600}
         footer={
-          <Button theme="primary" onClick={handleUpdate}>
-            立即更新
+          <Button
+            theme="primary"
+            onClick={handleUpdate}
+            disabled={hasActiveTasks}
+          >
+            {hasActiveTasks ? '任务运行中' : '立即更新'}
           </Button>
         }
       >
-        <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+        <div
+          style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}
+        >
           <ul style={{ paddingLeft: '20px', margin: 0 }}>
             {updateAvailable.changelog?.map((item, index) => (
-              <li key={index} style={{ marginBottom: '4px', lineHeight: '1.5' }}>{index + 1}. {item}</li>
+              <li
+                key={index}
+                style={{ marginBottom: '4px', lineHeight: '1.5' }}
+              >
+                {index + 1}. {item}
+              </li>
             ))}
           </ul>
         </div>
       </Dialog>
     </>
   );
+}
+
+export const VersionUpdatePrompt: React.FC = () => {
+  const [updateAvailable, setUpdateAvailable] =
+    useState<UpdateAvailableState | null>(null);
+
+  useEffect(() => {
+    const handleUpdateAvailable = async (event: Event) => {
+      const detail = parseUpdateAvailableState((event as CustomEvent).detail);
+      const newVersion = detail?.version;
+      const currentVersion = document
+        .querySelector('meta[name="app-version"]')
+        ?.getAttribute('content');
+
+      if (detail) {
+        if (currentVersion && currentVersion === detail.version) {
+          return;
+        }
+        setUpdateAvailable(detail);
+      }
+
+      try {
+        const res = await fetch(`./version.json?t=${Date.now()}`);
+        if (res.ok) {
+          const data = parseUpdateAvailableState(await res.json());
+          if (data && (!newVersion || data.version === newVersion)) {
+            if (currentVersion && data.version === currentVersion) {
+              return;
+            }
+
+            setUpdateAvailable(data);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to fetch version.json:', error);
+      }
+    };
+
+    window.addEventListener('sw-update-available', handleUpdateAvailable);
+
+    const pendingUpdate = getPendingUpdateReadyState();
+    if (pendingUpdate) {
+      void handleUpdateAvailable(
+        new CustomEvent('sw-update-available', { detail: pendingUpdate })
+      );
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      (window as Window & {
+        __debugTriggerUpdate?: (version?: string) => void;
+      }).__debugTriggerUpdate = (version = '9.9.9') => {
+        window.dispatchEvent(
+          new CustomEvent('sw-update-available', {
+            detail: { version },
+          })
+        );
+      };
+    }
+
+    return () => {
+      window.removeEventListener('sw-update-available', handleUpdateAvailable);
+    };
+  }, []);
+
+  if (!updateAvailable) {
+    return null;
+  }
+
+  return <VersionUpdatePromptContent updateAvailable={updateAvailable} />;
 };
