@@ -1,5 +1,6 @@
 import {
   DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+  DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
   type ProviderProfile,
 } from '../../utils/settings-manager';
 
@@ -17,6 +18,7 @@ export function createProviderProfileDraft(
     apiKey: '',
     authType: 'bearer',
     imageApiCompatibility: DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+    videoApiCompatibility: DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
     enabled: true,
     capabilities: {
       supportsModelsEndpoint: true,

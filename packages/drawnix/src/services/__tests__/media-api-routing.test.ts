@@ -5,6 +5,32 @@ import {
   resumeAsyncImagePolling,
   submitVideoGeneration,
 } from '../media-api';
+import type { ProviderModelBinding } from '../provider-routing/types';
+
+const xingliuVideoBinding: ProviderModelBinding = {
+  id: 'provider-a:seedance:video:openai.async.video',
+  profileId: 'provider-a',
+  modelId: 'doubao-seedance-2-0-fast-260128',
+  operation: 'video',
+  protocol: 'openai.async.video',
+  requestSchema: 'openai.video.form-input-reference',
+  responseSchema: 'openai.async.task',
+  submitPath: '/v1/videos',
+  pollPathTemplate: '/v1/videos/{taskId}',
+  baseUrlStrategy: 'trim-v1',
+  metadata: {
+    video: {
+      resolvedVideoApiCompatibility: 'xingliu-video',
+      defaultDuration: '5',
+      durationField: 'seconds',
+      allowedDurations: ['5', '10'],
+      strictDurationValidation: false,
+    },
+  },
+  priority: 320,
+  confidence: 'high',
+  source: 'template',
+};
 
 describe('media-api provider routing', () => {
   it('uses header auth and extra headers for sync image generation', async () => {
@@ -185,5 +211,122 @@ describe('media-api provider routing', () => {
 
     expect(remoteId).toBe('video-task-1');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('submits Xingliu text-to-video as JSON with minimum-cost metadata', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('https://video.example.com/v1/videos');
+      expect(init?.method).toBe('POST');
+      expect(init?.body).not.toBeInstanceOf(FormData);
+      const headers = init?.headers as Record<string, string>;
+      expect(headers['Content-Type']).toBe('application/json');
+
+      const body = JSON.parse(String(init?.body));
+      expect(body).toEqual({
+        model: 'doubao-seedance-2-0-fast-260128',
+        prompt: 'white ball rolling on a table',
+        seconds: '5',
+        metadata: {
+          resolution: '480p',
+          ratio: '16:9',
+          generate_audio: false,
+          watermark: false,
+        },
+      });
+      expect(body.size).toBeUndefined();
+
+      return new Response(
+        JSON.stringify({
+          id: 'video-task-1',
+          status: 'unknown',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    });
+
+    const remoteId = await submitVideoGeneration(
+      {
+        prompt: 'white ball rolling on a table',
+        model: 'doubao-seedance-2-0-fast-260128',
+        size: '1280x720',
+      },
+      {
+        apiKey: 'video-secret',
+        baseUrl: 'https://video.example.com/v1',
+        authType: 'bearer',
+        binding: xingliuVideoBinding,
+        fetchImpl,
+      }
+    );
+
+    expect(remoteId).toBe('video-task-1');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('submits Xingliu image-to-video as multipart image payload', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === 'data:image/png;base64,abc123') {
+        return new Response(new Blob(['ref'], { type: 'image/png' }), {
+          status: 200,
+        });
+      }
+
+      expect(String(input)).toBe('https://video.example.com/v1/videos');
+      expect(init?.method).toBe('POST');
+      expect(init?.body).toBeInstanceOf(FormData);
+      const formData = init?.body as FormData;
+      expect([...formData.keys()].sort()).toEqual([
+        'image',
+        'metadata',
+        'model',
+        'prompt',
+        'seconds',
+      ]);
+      expect(formData.get('model')).toBe('doubao-seedance-2-0-fast-260128');
+      expect(formData.get('prompt')).toBe('animate reference image');
+      expect(formData.get('seconds')).toBe('5');
+      expect(JSON.parse(String(formData.get('metadata')))).toEqual({
+        resolution: '480p',
+        ratio: '16:9',
+        generate_audio: false,
+        watermark: false,
+      });
+      expect(formData.get('image')).toBeInstanceOf(Blob);
+      expect(formData.has('input_reference')).toBe(false);
+      expect(formData.has('size')).toBe(false);
+
+      return new Response(
+        JSON.stringify({
+          id: 'video-task-1',
+          status: 'unknown',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    });
+
+    const remoteId = await submitVideoGeneration(
+      {
+        prompt: 'animate reference image',
+        model: 'doubao-seedance-2-0-fast-260128',
+        size: '1280x720',
+        referenceImages: ['data:image/png;base64,abc123'],
+      },
+      {
+        apiKey: 'video-secret',
+        baseUrl: 'https://video.example.com/v1',
+        authType: 'bearer',
+        binding: xingliuVideoBinding,
+        fetchImpl,
+      }
+    );
+
+    expect(remoteId).toBe('video-task-1');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });

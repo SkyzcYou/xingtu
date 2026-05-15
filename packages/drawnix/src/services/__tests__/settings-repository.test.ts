@@ -8,6 +8,7 @@ describe('settings-repository', () => {
   it('uses the saved legacy provider type and auth type in snapshots', async () => {
     vi.doMock('../../utils/settings-manager', () => ({
       DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: 'openai-gpt-image',
+      DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY: 'auto',
       LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: 'tuzi-gpt-image',
       LEGACY_DEFAULT_PROVIDER_PROFILE_ID: 'legacy-default',
       TUZI_DEFAULT_PROVIDER_NAME: '兔子 AI',
@@ -34,6 +35,7 @@ describe('settings-repository', () => {
             baseUrl: 'https://api.tu-zi.com/v1',
             apiKey: 'legacy-key',
             authType: 'query',
+            videoApiCompatibility: 'xingliu-video',
             enabled: true,
             capabilities: {
               supportsModelsEndpoint: true,
@@ -68,12 +70,14 @@ describe('settings-repository', () => {
       providerType: 'custom',
       authType: 'query',
       imageApiCompatibility: 'tuzi-gpt-image',
+      videoApiCompatibility: 'xingliu-video',
     });
   });
 
   it('preserves saved legacy image compatibility overrides in snapshots', async () => {
     vi.doMock('../../utils/settings-manager', () => ({
       DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: 'openai-gpt-image',
+      DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY: 'auto',
       LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: 'tuzi-gpt-image',
       LEGACY_DEFAULT_PROVIDER_PROFILE_ID: 'legacy-default',
       TUZI_DEFAULT_PROVIDER_NAME: '兔子 AI',
@@ -101,6 +105,7 @@ describe('settings-repository', () => {
             apiKey: 'legacy-key',
             authType: 'query',
             imageApiCompatibility: 'tuzi-gpt-image',
+            videoApiCompatibility: 'seedance-task',
             enabled: true,
             capabilities: {
               supportsModelsEndpoint: true,
@@ -131,6 +136,7 @@ describe('settings-repository', () => {
 
     expect(profiles[0]).toMatchObject({
       imageApiCompatibility: 'tuzi-gpt-image',
+      videoApiCompatibility: 'seedance-task',
     });
   });
 });

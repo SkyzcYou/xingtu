@@ -19,8 +19,11 @@ import {
 } from './utils';
 import { providerTransport } from '../provider-routing/provider-transport';
 import {
+  buildXingliuVideoMetadata,
   downloadVideoContentToLocalUrl,
   extractInlineVideoUrl,
+  isXingliuVideoBinding,
+  isXingliuVideoResultReady,
   resolveVideoPollPath,
   resolveVideoSubmission,
   shouldDownloadVideoContent,
@@ -30,6 +33,25 @@ import { prepareVideoReferenceImageBlob } from '../video-reference-image-utils';
 const DURATION_IN_MODEL_PREFIX = 'sora-2-';
 const durationEncodedInModel = (model?: string | null) =>
   Boolean(model && model.startsWith(DURATION_IN_MODEL_PREFIX));
+
+async function createFormDataBlob(blob: Blob): Promise<Blob> {
+  return new Blob([await blob.arrayBuffer()], { type: blob.type });
+}
+
+async function prepareFirstReferenceImageBlob(
+  referenceImages: string[],
+  fetchFn: typeof fetch,
+  size?: string,
+  signal?: AbortSignal
+): Promise<Blob> {
+  const response = await fetchFn(referenceImages[0], { signal });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch reference image: ${response.status}`);
+  }
+
+  const blob = await prepareVideoReferenceImageBlob(await response.blob(), size);
+  return createFormDataBlob(blob);
+}
 
 /**
  * 视频生成业务失败错误
@@ -68,46 +90,83 @@ export async function submitVideoGeneration(
     params.params as Record<string, string> | undefined
   );
 
-  // 构建 FormData
-  const formData = new FormData();
-  formData.append('model', submission.model);
-  formData.append('prompt', params.prompt);
+  const isXingliuVideo = isXingliuVideoBinding(
+    config.binding,
+    submission.bindingMetadata
+  );
+  let requestBody: BodyInit;
+  let requestHeaders: Record<string, string> | undefined;
 
-  if (
-    submission.duration &&
-    !durationEncodedInModel(submission.model)
-  ) {
-    formData.append(submission.durationField, String(submission.duration));
-  }
+  if (isXingliuVideo) {
+    const metadata = buildXingliuVideoMetadata(params.size, params.params);
+    if (params.referenceImages?.length) {
+      const formData = new FormData();
+      formData.append('model', submission.model);
+      formData.append('prompt', params.prompt);
+      if (submission.duration) {
+        formData.append('seconds', String(submission.duration));
+      }
+      formData.append('metadata', JSON.stringify(metadata));
+      formData.append(
+        'image',
+        await prepareFirstReferenceImageBlob(
+          params.referenceImages,
+          fetchFn,
+          params.size,
+          signal
+        ),
+        'reference-1.png'
+      );
+      requestBody = formData;
+    } else {
+      requestHeaders = { 'Content-Type': 'application/json' };
+      requestBody = JSON.stringify({
+        model: submission.model,
+        prompt: params.prompt,
+        ...(submission.duration ? { seconds: String(submission.duration) } : {}),
+        metadata,
+      });
+    }
+  } else {
+    const formData = new FormData();
+    formData.append('model', submission.model);
+    formData.append('prompt', params.prompt);
 
-  if (params.size) {
-    formData.append('size', params.size);
-  }
+    if (submission.duration && !durationEncodedInModel(submission.model)) {
+      formData.append(submission.durationField, String(submission.duration));
+    }
 
-  // 处理参考图片（体积控制在 1MB 内，与图片生成一致）
-  if (params.referenceImages && params.referenceImages.length > 0) {
-    for (let i = 0; i < params.referenceImages.length; i++) {
-      const refImage = params.referenceImages[i];
-      try {
-        const response = await fetchFn(refImage, { signal });
-        if (response.ok) {
-          let blob = await response.blob();
-          blob = await prepareVideoReferenceImageBlob(blob, params.size);
-          formData.append('input_reference', blob, `reference-${i + 1}.png`);
-        } else {
+    if (params.size) {
+      formData.append('size', params.size);
+    }
+
+    if (params.referenceImages && params.referenceImages.length > 0) {
+      for (let i = 0; i < params.referenceImages.length; i++) {
+        const refImage = params.referenceImages[i];
+        try {
+          const response = await fetchFn(refImage, { signal });
+          if (response.ok) {
+            let blob = await response.blob();
+            blob = await prepareVideoReferenceImageBlob(blob, params.size);
+            formData.append('input_reference', blob, `reference-${i + 1}.png`);
+          } else {
+            formData.append('input_reference', refImage);
+          }
+        } catch {
           formData.append('input_reference', refImage);
         }
-      } catch {
-        formData.append('input_reference', refImage);
       }
     }
+
+    requestBody = formData;
   }
 
   const response = await providerTransport.send(providerContext, {
-    path: '/v1/videos',
+    path: isXingliuVideo ? config.binding?.submitPath || '/v1/videos' : '/v1/videos',
     baseUrlStrategy: config.binding?.baseUrlStrategy,
     method: 'POST',
-    body: formData,
+    headers: requestHeaders,
+    body: requestBody,
     signal,
     fetcher: fetchFn,
   });
@@ -232,7 +291,11 @@ export async function pollVideoUntilComplete(
       onProgress?.(progress);
 
       // 检查完成状态
-      if (status === 'completed' || status === 'succeeded') {
+      if (
+        status === 'completed' ||
+        status === 'succeeded' ||
+        isXingliuVideoResultReady(data as Record<string, any>, config.binding)
+      ) {
         onProgress?.(100);
         return data;
       }

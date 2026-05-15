@@ -753,6 +753,71 @@ describe('provider routing', () => {
     ]);
   });
 
+  it('routes Xingliu video format seedance models through generic video binding', () => {
+    const bindings = inferBindingsForProviderModel(
+      {
+        id: 'provider-a',
+        name: 'Provider A',
+        providerType: 'openai-compatible',
+        baseUrl: 'https://api-a.example.com/v1',
+        apiKey: 'key-a',
+        authType: 'bearer',
+        videoApiCompatibility: 'xingliu-video',
+      },
+      {
+        id: 'doubao-seedance-2-0-1080p',
+        label: 'Doubao Seedance 2.0',
+        type: 'video',
+        vendor: ModelVendor.DOUBAO,
+      }
+    );
+
+    expect(bindings.map((binding) => binding.protocol)).toEqual([
+      'openai.async.video',
+    ]);
+    expect(bindings.map((binding) => binding.requestSchema)).toEqual([
+      'openai.video.form-input-reference',
+    ]);
+    expect(bindings[0]).toMatchObject({
+      submitPath: '/v1/videos',
+      pollPathTemplate: '/v1/videos/{taskId}',
+      baseUrlStrategy: 'trim-v1',
+    });
+    expect(bindings[0]?.metadata?.video).toMatchObject({
+      videoApiCompatibility: 'xingliu-video',
+      resolvedVideoApiCompatibility: 'xingliu-video',
+      defaultDuration: '5',
+      durationField: 'seconds',
+    });
+  });
+
+  it('does not emit Seedance form-auto binding for Xingliu seedance runtime ids', () => {
+    const bindings = inferBindingsForProviderModel(
+      {
+        id: 'provider-a',
+        name: 'Provider A',
+        providerType: 'openai-compatible',
+        baseUrl: 'https://api-a.example.com/v1',
+        apiKey: 'key-a',
+        authType: 'bearer',
+        videoApiCompatibility: 'xingliu-video',
+      },
+      {
+        id: 'seedance-nsfw',
+        label: 'Seedance NSFW',
+        type: 'video',
+        vendor: ModelVendor.DOUBAO,
+      }
+    );
+
+    expect(bindings.map((binding) => binding.requestSchema)).not.toContain(
+      'seedance.video.form-auto'
+    );
+    expect(bindings.map((binding) => binding.requestSchema)).toContain(
+      'openai.video.form-input-reference'
+    );
+  });
+
   it('keeps pricing /v1/videos binding as video when scenario is not async-image', () => {
     const bindings = inferBindingsForProviderModel(
       {

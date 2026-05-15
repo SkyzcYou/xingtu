@@ -118,10 +118,18 @@ export interface VideoGenerationResult {
 export interface VideoStatusResponse {
   id: string;
   model?: string;
-  status: 'queued' | 'in_progress' | 'completed' | 'failed' | 'succeeded' | 'error';
+  status:
+    | 'queued'
+    | 'in_progress'
+    | 'completed'
+    | 'failed'
+    | 'succeeded'
+    | 'error'
+    | 'unknown';
   progress?: number;
   video_url?: string;
   url?: string;
+  metadata?: { url?: string };
   width?: number;
   height?: number;
   seconds?: string;

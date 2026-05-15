@@ -10,6 +10,7 @@ import {
 } from '../../constants/model-config';
 import {
   DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+  DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
   LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
   TUZI_DEFAULT_PROVIDER_NAME,
@@ -112,6 +113,7 @@ function toProviderProfileSnapshot(
     | 'apiKey'
     | 'authType'
     | 'imageApiCompatibility'
+    | 'videoApiCompatibility'
     | 'extraHeaders'
   >
 ): ProviderProfileSnapshot {
@@ -128,6 +130,8 @@ function toProviderProfileSnapshot(
     ),
     imageApiCompatibility:
       profile.imageApiCompatibility || DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+    videoApiCompatibility:
+      profile.videoApiCompatibility || DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
     extraHeaders: profile.extraHeaders,
   };
 }
@@ -210,6 +214,9 @@ function buildLegacyProfileSnapshot(): ProviderProfileSnapshot {
     imageApiCompatibility:
       existingLegacyProfile?.imageApiCompatibility ||
       legacyImageApiCompatibilityFallback,
+    videoApiCompatibility:
+      existingLegacyProfile?.videoApiCompatibility ||
+      DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
   };
 }
 

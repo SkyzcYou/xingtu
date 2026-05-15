@@ -41,6 +41,14 @@ function getCompactEnumSummaryLabel(
     return value === 'image2video' ? '图生' : '文生';
   }
 
+  if (paramId === 'generate_audio') {
+    return value === 'true' ? '音频开' : '音频关';
+  }
+
+  if (paramId === 'watermark') {
+    return value === 'true' ? '水印开' : '水印关';
+  }
+
   if (paramId === 'mode') {
     return value;
   }

@@ -19,10 +19,17 @@ export type ImageApiCompatibility =
   | 'tuzi-gpt-image'
   | 'openai-compatible-basic';
 
+export type VideoApiCompatibility =
+  | 'auto'
+  | 'seedance-task'
+  | 'xingliu-video';
+
 export const DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: ImageApiCompatibility =
   'openai-gpt-image';
 export const LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: ImageApiCompatibility =
   'tuzi-gpt-image';
+export const DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY: VideoApiCompatibility =
+  'auto';
 
 export interface ProviderCapabilities {
   supportsModelsEndpoint: boolean;
@@ -43,6 +50,7 @@ export interface ProviderProfile {
   apiKey: string;
   authType: ProviderAuthType;
   imageApiCompatibility?: ImageApiCompatibility;
+  videoApiCompatibility?: VideoApiCompatibility;
   extraHeaders?: Record<string, string>;
   enabled: boolean;
   capabilities: ProviderCapabilities;

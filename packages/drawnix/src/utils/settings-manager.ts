@@ -12,6 +12,7 @@ import type { VideoAPIConfig } from './config-indexeddb-writer';
 import type { ProviderPricingCache } from './model-pricing-types';
 import {
   DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+  DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
   LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
   type AppSettings,
   type GeminiSettings,
@@ -27,6 +28,7 @@ import {
   type RouteConfig,
   type SettingsMigrations,
   type TtsSettings,
+  type VideoApiCompatibility,
 } from './settings-types';
 import {
   getDefaultAudioModel,
@@ -40,6 +42,7 @@ import {
 
 export {
   DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+  DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
   LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
   type AppSettings,
   type GeminiSettings,
@@ -55,6 +58,7 @@ export {
   type RouteConfig,
   type SettingsMigrations,
   type TtsSettings,
+  type VideoApiCompatibility,
 } from './settings-types';
 
 // 设置类型定义集中在 settings-types.ts，本文件保留运行时设置管理逻辑。
@@ -377,6 +381,31 @@ class SettingsManager {
     return this.normalizeImageApiCompatibility(value);
   }
 
+  private normalizeVideoApiCompatibility(
+    value?: VideoApiCompatibility | string | null
+  ): VideoApiCompatibility {
+    if (
+      value === 'auto' ||
+      value === 'seedance-task' ||
+      value === 'xingliu-video'
+    ) {
+      return value;
+    }
+
+    return 'auto';
+  }
+
+  private normalizeStoredVideoApiCompatibility(
+    value?: VideoApiCompatibility | string | null,
+    fallback: VideoApiCompatibility = DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY
+  ): VideoApiCompatibility {
+    if (value === undefined || value === null || value === '') {
+      return fallback;
+    }
+
+    return this.normalizeVideoApiCompatibility(value);
+  }
+
   private normalizeSettingsMigrations(value: unknown): SettingsMigrations {
     const migrations =
       value && typeof value === 'object'
@@ -506,6 +535,9 @@ class SettingsManager {
         profile?.imageApiCompatibility,
         this.getLegacyDefaultImageApiCompatibilityFallback(baseUrl)
       ),
+      videoApiCompatibility: this.normalizeStoredVideoApiCompatibility(
+        profile?.videoApiCompatibility
+      ),
       enabled: true,
       capabilities: { ...DEFAULT_PROVIDER_CAPABILITIES },
     };
@@ -540,6 +572,9 @@ class SettingsManager {
       ),
       imageApiCompatibility: this.normalizeStoredImageApiCompatibility(
         profile?.imageApiCompatibility
+      ),
+      videoApiCompatibility: this.normalizeStoredVideoApiCompatibility(
+        profile?.videoApiCompatibility
       ),
       extraHeaders: this.normalizeStringRecord(profile?.extraHeaders),
       enabled: profile?.enabled !== false,
@@ -581,6 +616,9 @@ class SettingsManager {
       imageApiCompatibility: this.normalizeStoredImageApiCompatibility(
         profile?.imageApiCompatibility
       ),
+      videoApiCompatibility: this.normalizeStoredVideoApiCompatibility(
+        profile?.videoApiCompatibility
+      ),
       extraHeaders: this.normalizeStringRecord(profile?.extraHeaders),
       enabled: profile?.enabled !== false,
       capabilities: this.normalizeCapabilities(profile?.capabilities),
@@ -620,6 +658,9 @@ class SettingsManager {
       ),
       imageApiCompatibility: this.normalizeStoredImageApiCompatibility(
         profile?.imageApiCompatibility
+      ),
+      videoApiCompatibility: this.normalizeStoredVideoApiCompatibility(
+        profile?.videoApiCompatibility
       ),
       extraHeaders: this.normalizeStringRecord(profile?.extraHeaders),
       enabled: profile?.enabled !== false,
@@ -705,6 +746,9 @@ class SettingsManager {
           ),
           imageApiCompatibility: this.normalizeStoredImageApiCompatibility(
             profile.imageApiCompatibility
+          ),
+          videoApiCompatibility: this.normalizeStoredVideoApiCompatibility(
+            profile.videoApiCompatibility
           ),
           extraHeaders: this.normalizeStringRecord(profile.extraHeaders),
           enabled: profile.enabled !== false,

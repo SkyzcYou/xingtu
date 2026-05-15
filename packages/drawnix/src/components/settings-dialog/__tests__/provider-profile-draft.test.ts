@@ -9,15 +9,15 @@ describe('createProviderProfileDraft', () => {
         href: 'https://example.com/app',
       },
       history: {
-        replaceState: () => {},
+        replaceState: vi.fn(),
       },
       dispatchEvent: () => true,
     });
     vi.stubGlobal('localStorage', {
       getItem: () => null,
-      setItem: () => {},
-      removeItem: () => {},
-      clear: () => {},
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
     });
   });
 
@@ -33,6 +33,7 @@ describe('createProviderProfileDraft', () => {
       providerType: 'openai-compatible',
       authType: 'bearer',
       imageApiCompatibility: 'openai-gpt-image',
+      videoApiCompatibility: 'auto',
       enabled: true,
       capabilities: {
         supportsModelsEndpoint: true,

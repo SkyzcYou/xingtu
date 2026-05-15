@@ -58,6 +58,7 @@ import {
   createModelRef,
   createRouteConfig,
   DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+  DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
   DEFAULT_INVOCATION_PRESET_ID,
   geminiSettings,
   getRouteModelId,
@@ -75,6 +76,7 @@ import {
   type ModelRef,
   type ProviderProfile,
   type RouteConfig,
+  type VideoApiCompatibility,
 } from '../../utils/settings-manager';
 import {
   DISCOVERY_VENDOR_ORDER,
@@ -147,6 +149,12 @@ const IMAGE_API_COMPATIBILITY_OPTIONS: ImageApiCompatibility[] = [
   'openai-gpt-image',
   'tuzi-gpt-image',
   'openai-compatible-basic',
+];
+
+const VIDEO_API_COMPATIBILITY_OPTIONS: VideoApiCompatibility[] = [
+  'auto',
+  'seedance-task',
+  'xingliu-video',
 ];
 
 const ROUTE_LABELS: Record<ModelType, string> = {
@@ -279,6 +287,21 @@ const IMAGE_API_COMPATIBILITY_META: Record<
   },
 };
 
+const VIDEO_API_COMPATIBILITY_META: Record<
+  VideoApiCompatibility,
+  { label: string }
+> = {
+  auto: {
+    label: '自动',
+  },
+  'seedance-task': {
+    label: 'Seedance 专用格式',
+  },
+  'xingliu-video': {
+    label: '星流视频格式',
+  },
+};
+
 function normalizeImageApiCompatibilityForDisplay(
   value?: ImageApiCompatibility | string | null
 ): ImageApiCompatibility {
@@ -293,6 +316,20 @@ function normalizeImageApiCompatibilityForDisplay(
 
   if (value === 'tuzi-compatible') {
     return 'tuzi-gpt-image';
+  }
+
+  return 'auto';
+}
+
+function normalizeVideoApiCompatibilityForDisplay(
+  value?: VideoApiCompatibility | string | null
+): VideoApiCompatibility {
+  if (
+    value === 'auto' ||
+    value === 'seedance-task' ||
+    value === 'xingliu-video'
+  ) {
+    return value;
   }
 
   return 'auto';
@@ -332,6 +369,24 @@ function getImageApiCompatibilityHint(
   }
 
   return `同一个图片模型在不同 API Key 或网关下可能需要不同接口格式；当前已固定为 ${IMAGE_API_COMPATIBILITY_META[storedCompatibility].label}。`;
+}
+
+function getVideoApiCompatibilityHint(
+  profile: Pick<ProviderProfile, 'videoApiCompatibility'>
+): string {
+  const storedCompatibility = normalizeVideoApiCompatibilityForDisplay(
+    profile.videoApiCompatibility
+  );
+
+  if (storedCompatibility === 'seedance-task') {
+    return '强制使用 Seedance 专用格式，会将逻辑模型名转换为 doubao-..._分辨率。';
+  }
+
+  if (storedCompatibility === 'xingliu-video') {
+    return '适用于星流 /v1/videos；Seedance/Doubao 视频模型会走通用视频接口，并保持模型名不变。';
+  }
+
+  return '默认保持当前视频路由逻辑；Seedance 逻辑模型会使用 Seedance 专用适配器。';
 }
 
 const PROVIDER_AVATAR_THEMES = [
@@ -718,6 +773,9 @@ export const SettingsDialog = ({
   const selectedImageApiCompatibilityHint = selectedProfile
     ? getImageApiCompatibilityHint(selectedProfile)
     : '同一个图片模型在不同 API Key 或网关下可能需要不同接口格式；不确定时使用自动。';
+  const selectedVideoApiCompatibilityHint = selectedProfile
+    ? getVideoApiCompatibilityHint(selectedProfile)
+    : '不确定时使用自动。';
   const selectedPreset =
     presetsDraft.find((preset) => preset.id === selectedPresetId) ||
     presetsDraft[0] ||
@@ -2243,6 +2301,35 @@ export const SettingsDialog = ({
               </select>
               <span className="settings-dialog__field-hint">
                 {selectedImageApiCompatibilityHint}
+              </span>
+            </div>
+
+            <div className="settings-dialog__field settings-dialog__field--column settings-dialog__field--full">
+              <label className="settings-dialog__label settings-dialog__label--stacked">
+                视频接口格式
+              </label>
+              <select
+                className="settings-dialog__select"
+                value={
+                  selectedProfile.videoApiCompatibility ||
+                  DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY
+                }
+                onChange={(event) =>
+                  updateProfile(selectedProfile.id, (profile) => ({
+                    ...profile,
+                    videoApiCompatibility: event.target
+                      .value as VideoApiCompatibility,
+                  }))
+                }
+              >
+                {VIDEO_API_COMPATIBILITY_OPTIONS.map((compatibility) => (
+                  <option key={compatibility} value={compatibility}>
+                    {VIDEO_API_COMPATIBILITY_META[compatibility].label}
+                  </option>
+                ))}
+              </select>
+              <span className="settings-dialog__field-hint">
+                {selectedVideoApiCompatibilityHint}
               </span>
             </div>
 

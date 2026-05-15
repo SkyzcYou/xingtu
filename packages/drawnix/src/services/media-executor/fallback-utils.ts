@@ -23,6 +23,7 @@ import {
 import {
   downloadVideoContentToLocalUrl,
   extractInlineVideoUrl,
+  isXingliuVideoResultReady,
   resolveVideoPollPath,
   shouldDownloadVideoContent,
 } from '../video-binding-utils';
@@ -160,7 +161,11 @@ export async function pollVideoStatus(
     const progress = data.progress || 0;
     onProgress(progress / 100);
 
-    if (status === 'completed' || status === 'succeeded') {
+    if (
+      status === 'completed' ||
+      status === 'succeeded' ||
+      isXingliuVideoResultReady(data, config.binding)
+    ) {
       const inlineUrl = extractInlineVideoUrl(data);
       const url =
         inlineUrl ||

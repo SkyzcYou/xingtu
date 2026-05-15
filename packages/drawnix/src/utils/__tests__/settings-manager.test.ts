@@ -38,7 +38,7 @@ function mockSettingsManagerDeps() {
 
   vi.doMock('../config-indexeddb-writer', () => ({
     configIndexedDBWriter: {
-      saveConfig: async () => {},
+      saveConfig: vi.fn(async () => undefined),
     },
   }));
 }
@@ -61,7 +61,7 @@ describe('settings-manager', () => {
           href: 'https://example.com/app',
         },
         history: {
-          replaceState: () => {},
+          replaceState: vi.fn(),
         },
         dispatchEvent: () => true,
       });
@@ -72,7 +72,7 @@ describe('settings-manager', () => {
           href: 'https://example.com/app',
         },
         history: {
-          replaceState: () => {},
+          replaceState: vi.fn(),
         },
         dispatchEvent: () => true,
       });
@@ -121,6 +121,7 @@ describe('settings-manager', () => {
             apiKey: 'auto-key',
             authType: 'bearer',
             imageApiCompatibility: 'auto',
+            videoApiCompatibility: 'auto',
             enabled: true,
             capabilities: {},
           },
@@ -142,6 +143,7 @@ describe('settings-manager', () => {
             apiKey: 'custom-key',
             authType: 'bearer',
             imageApiCompatibility: 'tuzi-compatible',
+            videoApiCompatibility: 'xingliu-video',
             enabled: true,
             capabilities: {},
           },
@@ -153,6 +155,7 @@ describe('settings-manager', () => {
             apiKey: 'invalid-key',
             authType: 'bearer',
             imageApiCompatibility: 'unknown-mode',
+            videoApiCompatibility: 'unknown-mode' as any,
             enabled: true,
             capabilities: {},
           },
@@ -163,6 +166,7 @@ describe('settings-manager', () => {
     const {
       providerProfilesSettings,
       DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+      DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
       LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
       LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
       TUZI_CODEX_PROVIDER_PROFILE_ID,
@@ -184,36 +188,43 @@ describe('settings-manager', () => {
       providerType: 'custom',
       authType: 'query',
       imageApiCompatibility: LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+      videoApiCompatibility: DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
     });
     expect(tuziOriginProfile).toMatchObject({
       providerType: 'gemini-compatible',
       authType: 'header',
       pricingGroup: 'default',
       imageApiCompatibility: 'tuzi-gpt-image',
+      videoApiCompatibility: DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
     });
     expect(tuziCodexProfile).toMatchObject({
       pricingGroup: 'codex',
       imageApiCompatibility: DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+      videoApiCompatibility: DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
     });
     expect(
       profiles.find((profile) => profile.id === 'custom-auto')
     ).toMatchObject({
       imageApiCompatibility: 'auto',
+      videoApiCompatibility: 'auto',
     });
     expect(
       profiles.find((profile) => profile.id === 'custom-missing')
     ).toMatchObject({
       imageApiCompatibility: DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
+      videoApiCompatibility: DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
     });
     expect(
       profiles.find((profile) => profile.id === 'custom-provider')
     ).toMatchObject({
       imageApiCompatibility: 'tuzi-gpt-image',
+      videoApiCompatibility: 'xingliu-video',
     });
     expect(
       profiles.find((profile) => profile.id === 'invalid-provider')
     ).toMatchObject({
       imageApiCompatibility: 'auto',
+      videoApiCompatibility: 'auto',
     });
 
     await providerProfilesSettings.update([
@@ -226,6 +237,7 @@ describe('settings-manager', () => {
         apiKey: 'custom-key',
         authType: 'bearer',
         imageApiCompatibility: 'tuzi-compatible' as any,
+        videoApiCompatibility: 'xingliu-video',
         enabled: true,
         capabilities: {
           supportsModelsEndpoint: true,
@@ -244,6 +256,7 @@ describe('settings-manager', () => {
 
     expect(updatedCustomProfile).toMatchObject({
       imageApiCompatibility: 'tuzi-gpt-image',
+      videoApiCompatibility: 'xingliu-video',
     });
   });
 

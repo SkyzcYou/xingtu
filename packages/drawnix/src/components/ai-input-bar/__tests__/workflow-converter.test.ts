@@ -286,6 +286,35 @@ describe('workflow-converter', () => {
 
         expect(workflow.steps[0].args.seconds).toBe('5');
       });
+
+      it('应该透传视频生成参数', () => {
+        const params = createMockParams({
+          generationType: 'video',
+          modelId: 'doubao-seedance-2-0-fast-260128',
+          prompt: '白色小球在桌面滚动',
+          size: '480p',
+          duration: '5',
+          extraParams: {
+            aspect_ratio: '9:16',
+            generate_audio: 'true',
+            watermark: 'true',
+          },
+        });
+
+        const workflow = convertDirectGenerationToWorkflow(params);
+
+        expect(workflow.steps[0].args).toMatchObject({
+          model: 'doubao-seedance-2-0-fast-260128',
+          prompt: '白色小球在桌面滚动',
+          size: '480p',
+          seconds: '5',
+          params: {
+            aspect_ratio: '9:16',
+            generate_audio: 'true',
+            watermark: 'true',
+          },
+        });
+      });
     });
 
     describe('音频生成场景', () => {

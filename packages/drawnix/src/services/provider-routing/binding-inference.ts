@@ -4,7 +4,10 @@ import {
   type ModelConfig,
 } from '../../constants/model-config';
 import type { PricingEndpointInfo } from '../../utils/model-pricing-types';
-import type { ImageApiCompatibility } from '../../utils/settings-types';
+import type {
+  ImageApiCompatibility,
+  VideoApiCompatibility,
+} from '../../utils/settings-types';
 import {
   OFFICIAL_GPT_IMAGE_EDIT_REQUEST_SCHEMA,
   TUZI_GPT_IMAGE_EDIT_REQUEST_SCHEMA,
@@ -258,6 +261,34 @@ function resolveImageApiCompatibility(
   }
 
   return 'openai-compatible-basic';
+}
+
+function normalizeVideoApiCompatibilityMode(
+  value?: VideoApiCompatibility | string | null
+): VideoApiCompatibility {
+  if (
+    value === 'auto' ||
+    value === 'seedance-task' ||
+    value === 'xingliu-video'
+  ) {
+    return value;
+  }
+
+  return 'auto';
+}
+
+function resolveVideoApiCompatibility(
+  profile: ProviderProfileSnapshot
+): Exclude<VideoApiCompatibility, 'auto'> {
+  const configured = normalizeVideoApiCompatibilityMode(
+    profile.videoApiCompatibility
+  );
+
+  if (configured !== 'auto') {
+    return configured;
+  }
+
+  return 'seedance-task';
 }
 
 function hasAnyTag(model: ModelConfig, candidates: string[]): boolean {
@@ -578,6 +609,12 @@ function inferVideoBindings(
   model: ModelConfig
 ): ProviderModelBinding[] {
   const bindings: ProviderModelBinding[] = [];
+  const videoApiCompatibility = normalizeVideoApiCompatibilityMode(
+    profile.videoApiCompatibility
+  );
+  const resolvedVideoApiCompatibility = resolveVideoApiCompatibility(profile);
+  const useXingliuVideoFormat =
+    isSeedanceModel(model) && resolvedVideoApiCompatibility === 'xingliu-video';
 
   if (isStandardKlingVideoModel(model)) {
     bindings.push(
@@ -610,7 +647,7 @@ function inferVideoBindings(
     );
   }
 
-  if (isSeedanceModel(model)) {
+  if (isSeedanceModel(model) && !useXingliuVideoFormat) {
     bindings.push(
       buildBinding(profile, model, {
         protocol: 'seedance.task',
@@ -618,6 +655,12 @@ function inferVideoBindings(
         responseSchema: 'seedance.video.task',
         submitPath: '/videos',
         pollPathTemplate: '/videos/{taskId}',
+        metadata: {
+          video: {
+            videoApiCompatibility,
+            resolvedVideoApiCompatibility,
+          },
+        },
         priority: 610,
         confidence: 'high',
         source: 'template',
@@ -667,7 +710,8 @@ function inferVideoBindings(
 
   if (
     profile.providerType === 'openai-compatible' ||
-    profile.providerType === 'custom'
+    profile.providerType === 'custom' ||
+    useXingliuVideoFormat
   ) {
     const soraDownloadMetadata = isSoraModel(model)
       ? {
@@ -682,8 +726,11 @@ function inferVideoBindings(
         protocol: 'openai.async.video',
         requestSchema: 'openai.video.form-input-reference',
         responseSchema: 'openai.async.task',
-        submitPath: '/videos',
-        pollPathTemplate: '/videos/{taskId}',
+        submitPath: useXingliuVideoFormat ? '/v1/videos' : '/videos',
+        baseUrlStrategy: useXingliuVideoFormat ? 'trim-v1' : undefined,
+        pollPathTemplate: useXingliuVideoFormat
+          ? '/v1/videos/{taskId}'
+          : '/videos/{taskId}',
         metadata:
           isSoraModel(model) && isOfficialOpenAIProfile(profile)
             ? {
@@ -695,6 +742,18 @@ function inferVideoBindings(
                   strictDurationValidation: true,
                   resultMode: 'download-content',
                   downloadPathTemplate: '/videos/{taskId}/content',
+                },
+              }
+            : useXingliuVideoFormat
+            ? {
+                video: {
+                  videoApiCompatibility,
+                  resolvedVideoApiCompatibility,
+                  allowedDurations: ['5', '10'],
+                  defaultDuration: '5',
+                  durationMode: 'request-param',
+                  durationField: 'seconds',
+                  strictDurationValidation: false,
                 },
               }
             : soraDownloadMetadata,

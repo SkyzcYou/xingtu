@@ -1805,6 +1805,7 @@ export const VIDEO_PARAMS: ParamConfig[] = [
     ],
     defaultValue: '5',
     compatibleModels: SEEDANCE_MODEL_IDS,
+    compatibleTags: ['seedance'],
     modelType: 'video',
   },
   // Seedance 分辨率参数（480p/720p/1080p）
@@ -1821,6 +1822,7 @@ export const VIDEO_PARAMS: ParamConfig[] = [
     ],
     defaultValue: '720p',
     compatibleModels: SEEDANCE_MODEL_IDS,
+    compatibleTags: ['seedance'],
     modelType: 'video',
   },
   // Seedance 宽高比参数
@@ -1842,6 +1844,37 @@ export const VIDEO_PARAMS: ParamConfig[] = [
     ],
     defaultValue: '16:9',
     compatibleModels: SEEDANCE_MODEL_IDS,
+    compatibleTags: ['seedance'],
+    modelType: 'video',
+  },
+  {
+    id: 'generate_audio',
+    label: '生成音频',
+    shortLabel: '音频',
+    description: '星流 Seedance 是否生成音频；项目默认关闭以降低成本',
+    valueType: 'enum',
+    options: [
+      { value: 'false', label: '关闭' },
+      { value: 'true', label: '开启' },
+    ],
+    defaultValue: 'false',
+    compatibleModels: SEEDANCE_MODEL_IDS,
+    compatibleTags: ['seedance'],
+    modelType: 'video',
+  },
+  {
+    id: 'watermark',
+    label: '水印',
+    shortLabel: '水印',
+    description: '星流 Seedance 是否添加水印；项目默认关闭',
+    valueType: 'enum',
+    options: [
+      { value: 'false', label: '关闭' },
+      { value: 'true', label: '开启' },
+    ],
+    defaultValue: 'false',
+    compatibleModels: SEEDANCE_MODEL_IDS,
+    compatibleTags: ['seedance'],
     modelType: 'video',
   },
   {

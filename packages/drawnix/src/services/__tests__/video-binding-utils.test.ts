@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { inferBindingsForProviderModel } from '../provider-routing';
 import {
+  buildXingliuVideoMetadata,
+  extractInlineVideoUrl,
   getEffectiveVideoCompatibleParams,
   getEffectiveVideoModelConfig,
   resolveVideoPollPath,
@@ -9,6 +11,7 @@ import {
 } from '../video-binding-utils';
 import {
   clearRuntimeModelConfigs,
+  getCompatibleParams,
   ModelVendor,
   setRuntimeModelConfigs,
   type ModelConfig,
@@ -344,5 +347,82 @@ describe('video binding utils', () => {
       '10',
     ]);
     expect(config.defaultSize).toBe('1280x720');
+  });
+
+  it('exposes Seedance video params for runtime model ids', () => {
+    setRuntimeModelConfigs([
+      {
+        id: 'doubao-seedance-2-0-fast-260128',
+        label: 'Seedance 2.0 Fast',
+        type: 'video',
+        vendor: ModelVendor.DOUBAO,
+      },
+    ]);
+
+    const params = getCompatibleParams('doubao-seedance-2-0-fast-260128');
+
+    expect(params.map((param) => param.id)).toEqual(
+      expect.arrayContaining([
+        'duration',
+        'size',
+        'aspect_ratio',
+        'generate_audio',
+        'watermark',
+      ])
+    );
+  });
+
+  it('extracts inline video urls from Xingliu metadata', () => {
+    expect(
+      extractInlineVideoUrl({ metadata: { url: 'https://cdn.example.com/video.mp4' } })
+    ).toBe('https://cdn.example.com/video.mp4');
+    expect(extractInlineVideoUrl({ metadata: { url: '' } })).toBeUndefined();
+  });
+
+  it('builds minimum-cost Xingliu video metadata from pixel size', () => {
+    expect(buildXingliuVideoMetadata('1280x720', {})).toEqual({
+      resolution: '480p',
+      ratio: '16:9',
+      generate_audio: false,
+      watermark: false,
+    });
+  });
+
+  it('builds Xingliu video metadata from resolution and ratio size', () => {
+    expect(buildXingliuVideoMetadata('720p@9:16', {})).toMatchObject({
+      resolution: '720p',
+      ratio: '9:16',
+    });
+  });
+
+  it('allows Xingliu video metadata params to override defaults', () => {
+    expect(
+      buildXingliuVideoMetadata('1280x720', {
+        xingliu_resolution: '720p',
+        aspectRatio: '1:1',
+        generate_audio: 'true',
+        watermark: true,
+      })
+    ).toEqual({
+      resolution: '720p',
+      ratio: '1:1',
+      generate_audio: true,
+      watermark: true,
+    });
+  });
+
+  it('maps selected Xingliu Seedance params into metadata', () => {
+    expect(
+      buildXingliuVideoMetadata('480p', {
+        aspect_ratio: '9:16',
+        generate_audio: 'true',
+        watermark: 'true',
+      })
+    ).toEqual({
+      resolution: '480p',
+      ratio: '9:16',
+      generate_audio: true,
+      watermark: true,
+    });
   });
 });

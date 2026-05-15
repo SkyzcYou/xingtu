@@ -140,6 +140,20 @@ function getExplicitSoraMode(
   return null;
 }
 
+function getSoraWebAllowedDurations(
+  modelId: string | null | undefined,
+  baseDurations: string[]
+): string[] {
+  const normalized = modelId?.toLowerCase();
+  if (normalized === 'sora-2') {
+    return ['10', '15'];
+  }
+  if (normalized === 'sora-2-pro') {
+    return ['10', '15', '25'];
+  }
+  return baseDurations;
+}
+
 function buildStaticSoraMetadata(
   modelId?: string | null
 ): ProviderVideoBindingMetadata | null {
@@ -149,7 +163,10 @@ function buildStaticSoraMetadata(
 
   const config = getVideoModelConfig(modelId || 'sora-2');
   const fixedDurationMatch = (modelId || '').match(FIXED_SORA_DURATION_MODEL_PATTERN);
-  const allowedDurations = config.durationOptions.map((option) => option.value);
+  const baseDurations = config.durationOptions.map((option) => option.value);
+  const allowedDurations = fixedDurationMatch?.[1]
+    ? [fixedDurationMatch[1]]
+    : getSoraWebAllowedDurations(modelId, baseDurations);
 
   return {
     allowedDurations,
@@ -254,6 +271,140 @@ export interface ResolvedVideoSubmission {
   bindingMetadata: ProviderVideoBindingMetadata | null;
 }
 
+export interface XingliuVideoMetadata {
+  resolution: string;
+  ratio: string;
+  generate_audio: boolean;
+  watermark: boolean;
+}
+
+function getFirstStringParam(
+  params: Record<string, unknown> | null | undefined,
+  keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = params?.[key];
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    const normalized = String(value).trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return undefined;
+}
+
+function getBooleanParam(
+  params: Record<string, unknown> | null | undefined,
+  keys: string[]
+): boolean | undefined {
+  for (const key of keys) {
+    const value = params?.[key];
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['true', '1', 'yes', 'on'].includes(normalized)) {
+        return true;
+      }
+      if (['false', '0', 'no', 'off'].includes(normalized)) {
+        return false;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function getAspectRatio(width: number, height: number): string | undefined {
+  if (!width || !height) {
+    return undefined;
+  }
+
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+  const divisor = gcd(width, height);
+  return `${width / divisor}:${height / divisor}`;
+}
+
+function normalizeXingliuRatio(value?: string): string | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const match = normalized.match(/^(\d+)\s*[:x]\s*(\d+)$/);
+  if (!match) {
+    return normalized;
+  }
+
+  return getAspectRatio(Number(match[1]), Number(match[2]));
+}
+
+function parseXingliuSize(size?: string | null): Partial<XingliuVideoMetadata> {
+  const normalized = size?.trim().toLowerCase();
+  if (!normalized) {
+    return {};
+  }
+
+  const resolutionRatioMatch = normalized.match(
+    /^(\d{3,4}p)(?:\s*@\s*(\d+\s*[:x]\s*\d+))?$/
+  );
+  if (resolutionRatioMatch) {
+    return {
+      resolution: resolutionRatioMatch[1],
+      ratio: normalizeXingliuRatio(resolutionRatioMatch[2]),
+    };
+  }
+
+  const pixelMatch = normalized.match(/^(\d+)\s*x\s*(\d+)$/);
+  if (pixelMatch) {
+    return {
+      ratio: getAspectRatio(Number(pixelMatch[1]), Number(pixelMatch[2])),
+    };
+  }
+
+  return {
+    ratio: normalizeXingliuRatio(normalized),
+  };
+}
+
+export function isXingliuVideoBinding(
+  binding?: ProviderModelBinding | null,
+  metadata?: ProviderVideoBindingMetadata | null
+): boolean {
+  const videoMetadata = metadata ?? binding?.metadata?.video ?? null;
+  return videoMetadata?.resolvedVideoApiCompatibility === 'xingliu-video';
+}
+
+export function buildXingliuVideoMetadata(
+  size?: string | null,
+  params?: Record<string, unknown> | null
+): XingliuVideoMetadata {
+  const parsedSize = parseXingliuSize(size);
+  const resolution = getFirstStringParam(params, [
+    'resolution',
+    'xingliu_resolution',
+    'xingliuResolution',
+  ]);
+  const ratio = getFirstStringParam(params, [
+    'ratio',
+    'aspect_ratio',
+    'aspectRatio',
+  ]);
+
+  return {
+    resolution: resolution || parsedSize.resolution || '480p',
+    ratio: normalizeXingliuRatio(ratio) || parsedSize.ratio || '16:9',
+    generate_audio:
+      getBooleanParam(params, ['generate_audio', 'generateAudio']) ?? false,
+    watermark: getBooleanParam(params, ['watermark']) ?? false,
+  };
+}
+
 export function getResolvedVideoBindingMetadata(
   modelId?: string | null,
   binding?: ProviderModelBinding | null,
@@ -330,6 +481,7 @@ export function getEffectiveVideoCompatibleParams(
   const plan = resolveInvocationPlanFromRoute('video', modelRef || modelId);
   const metadata = getResolvedVideoBindingMetadata(modelId, plan?.binding || null, params);
   const selectedKlingAction = resolveSelectedKlingAction(params);
+  const isXingliuVideo = isXingliuVideoBinding(plan?.binding || null, metadata);
   const effectiveConfig = getEffectiveVideoModelConfigForSelection(
     modelId,
     modelRef,
@@ -346,63 +498,86 @@ export function getEffectiveVideoCompatibleParams(
         return false;
       }
 
+      if (
+        param.compatibleTags?.includes('seedance') &&
+        (param.id === 'generate_audio' || param.id === 'watermark')
+      ) {
+        return isXingliuVideo;
+      }
+
       return true;
     })
     .map((param) => {
-    if (
-      plan?.binding?.protocol === 'kling.video' &&
-      metadata?.versionField === param.id &&
-      param.valueType === 'enum'
-    ) {
-      const actionScopedOptions =
-        (selectedKlingAction &&
-          metadata.versionOptionsByAction?.[selectedKlingAction]) ||
-        metadata.versionOptions ||
-        [];
-      const options =
-        actionScopedOptions.length > 0
-          ? buildDynamicEnumOptions(param, actionScopedOptions)
-          : param.options;
-      const defaultValue =
-        actionScopedOptions.length > 0
-          ? actionScopedOptions.includes(metadata.defaultVersion || '')
-            ? metadata.defaultVersion
-            : actionScopedOptions.includes(param.defaultValue || '')
-              ? param.defaultValue
-              : actionScopedOptions[0]
-          : param.defaultValue;
+      if (
+        plan?.binding?.protocol === 'kling.video' &&
+        metadata?.versionField === param.id &&
+        param.valueType === 'enum'
+      ) {
+        const actionScopedOptions =
+          (selectedKlingAction &&
+            metadata.versionOptionsByAction?.[selectedKlingAction]) ||
+          metadata.versionOptions ||
+          [];
+        const options =
+          actionScopedOptions.length > 0
+            ? buildDynamicEnumOptions(param, actionScopedOptions)
+            : param.options;
+        const defaultValue =
+          actionScopedOptions.length > 0
+            ? actionScopedOptions.includes(metadata.defaultVersion || '')
+              ? metadata.defaultVersion
+              : actionScopedOptions.includes(param.defaultValue || '')
+                ? param.defaultValue
+                : actionScopedOptions[0]
+            : param.defaultValue;
+
+        return {
+          ...param,
+          options,
+          defaultValue,
+        };
+      }
+
+      if (param.id === 'size') {
+        if (isXingliuVideo && param.compatibleTags?.includes('seedance')) {
+          const resolutionOrder = ['480p', '720p', '1080p'];
+          const getResolutionIndex = (value: string) => {
+            const index = resolutionOrder.indexOf(value);
+            return index === -1 ? resolutionOrder.length : index;
+          };
+          const options = [...(param.options || [])].sort(
+            (a, b) => getResolutionIndex(a.value) - getResolutionIndex(b.value)
+          );
+          return {
+            ...param,
+            options,
+            defaultValue: '480p',
+          };
+        }
+
+        return {
+          ...param,
+          options: effectiveConfig.sizeOptions.map((option) => ({
+            value: option.value,
+            label: option.label,
+          })),
+          defaultValue: effectiveConfig.defaultSize,
+        };
+      }
+
+      if (param.id !== 'duration') {
+        return param;
+      }
 
       return {
         ...param,
-        options,
-        defaultValue,
-      };
-    }
-
-    if (param.id === 'size') {
-      return {
-        ...param,
-        options: effectiveConfig.sizeOptions.map((option) => ({
+        options: effectiveConfig.durationOptions.map((option) => ({
           value: option.value,
           label: option.label,
         })),
-        defaultValue: effectiveConfig.defaultSize,
+        defaultValue: effectiveConfig.defaultDuration,
       };
-    }
-
-    if (param.id !== 'duration') {
-      return param;
-    }
-
-    return {
-      ...param,
-      options: effectiveConfig.durationOptions.map((option) => ({
-        value: option.value,
-        label: option.label,
-      })),
-      defaultValue: effectiveConfig.defaultDuration,
-    };
-  });
+    });
 }
 
 export function getDefaultVideoExtraParams(
@@ -467,10 +642,31 @@ export function resolveVideoSubmission(
   };
 }
 
+function getNonEmptyUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized ? normalized : undefined;
+}
+
 export function extractInlineVideoUrl(
   payload: Record<string, any> | null | undefined
 ): string | undefined {
-  return payload?.video_url || payload?.url || payload?.output?.url;
+  return (
+    getNonEmptyUrl(payload?.video_url) ||
+    getNonEmptyUrl(payload?.url) ||
+    getNonEmptyUrl(payload?.output?.url) ||
+    getNonEmptyUrl(payload?.metadata?.url)
+  );
+}
+
+export function isXingliuVideoResultReady(
+  payload: Record<string, any> | null | undefined,
+  binding?: ProviderModelBinding | null
+): boolean {
+  return isXingliuVideoBinding(binding) && Boolean(extractInlineVideoUrl(payload));
 }
 
 function resolveTemplatePath(

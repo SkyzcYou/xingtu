@@ -33,6 +33,10 @@ function getDefaultImagePollingMaxAttempts(interval: number): number {
   return Math.ceil(IMAGE_GENERATION_TIMEOUT_MS / Math.max(interval, 1));
 }
 
+async function createFormDataBlob(blob: Blob): Promise<Blob> {
+  return new Blob([await blob.arrayBuffer()], { type: blob.type });
+}
+
 function normalizeImageResultUrl(
   item: Record<string, unknown>
 ): string | undefined {
@@ -225,7 +229,11 @@ export async function generateImageAsync(
         const response = await fetchFn(refImage, { signal });
         if (response.ok) {
           const blob = await response.blob();
-          formData.append('input_reference', blob, `reference-${i}.png`);
+          formData.append(
+            'input_reference',
+            await createFormDataBlob(blob),
+            `reference-${i}.png`
+          );
         }
       } catch (e) {
         console.warn(`[ImageAPI] Failed to fetch reference image ${i}:`, e);
@@ -236,7 +244,11 @@ export async function generateImageAsync(
     try {
       const response = await fetchFn(params.maskImage, { signal });
       if (response.ok) {
-        formData.append('mask', await response.blob(), 'mask.png');
+        formData.append(
+          'mask',
+          await createFormDataBlob(await response.blob()),
+          'mask.png'
+        );
       }
     } catch (e) {
       console.warn('[ImageAPI] Failed to fetch mask image:', e);

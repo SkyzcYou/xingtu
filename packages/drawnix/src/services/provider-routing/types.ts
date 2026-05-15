@@ -3,6 +3,7 @@ import type {
   ImageApiCompatibility,
   ModelRef,
   ProviderProfile,
+  VideoApiCompatibility,
 } from '../../utils/settings-types';
 
 export type ProviderOperation = ModelType;
@@ -20,7 +21,7 @@ export type ProviderProtocol =
   | 'kling.video'
   | 'seedance.task'
   | 'happyhorse.video'
-  | (string & {});
+  | (string & Record<never, never>);
 
 export type ProviderBindingConfidence = 'high' | 'medium' | 'low';
 
@@ -35,6 +36,8 @@ export type ProviderTextImageInputMode =
   | 'google-inline-data';
 
 export interface ProviderVideoBindingMetadata {
+  videoApiCompatibility?: VideoApiCompatibility;
+  resolvedVideoApiCompatibility?: Exclude<VideoApiCompatibility, 'auto'>;
   allowedDurations?: string[];
   defaultDuration?: string;
   durationMode?: ProviderVideoDurationMode;
@@ -96,6 +99,7 @@ export interface ProviderProfileSnapshot
     | 'baseUrl'
     | 'apiKey'
     | 'imageApiCompatibility'
+    | 'videoApiCompatibility'
     | 'extraHeaders'
   > {
   authType: ProviderAuthStrategy;

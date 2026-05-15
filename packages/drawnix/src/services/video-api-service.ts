@@ -24,8 +24,11 @@ import {
   updateLLMApiLogMetadata,
 } from './media-executor/llm-api-logger';
 import {
+  buildXingliuVideoMetadata,
   downloadVideoContentToLocalUrl,
   extractInlineVideoUrl,
+  isXingliuVideoBinding,
+  isXingliuVideoResultReady,
   resolveVideoPollPath,
   resolveVideoSubmission,
   shouldDownloadVideoContent,
@@ -60,7 +63,8 @@ export interface VideoSubmitResponse {
     | 'completed'
     | 'failed'
     | 'succeeded'
-    | 'error';
+    | 'error'
+    | 'unknown';
   progress: number;
   created_at: number;
   seconds: string;
@@ -80,11 +84,13 @@ export interface VideoQueryResponse {
     | 'completed'
     | 'failed'
     | 'succeeded'
-    | 'error';
+    | 'error'
+    | 'unknown';
   seconds: string;
   progress?: number; // Optional - API may not return progress when status is 'queued'
   video_url?: string;
   url?: string;
+  metadata?: { url?: string };
   created_at: number;
   error?: string | { code: string; message: string };
 }
@@ -135,6 +141,42 @@ function resolveVideoPlanContext(routeModel?: string | ModelRef | null): {
   };
 }
 
+async function prepareReferenceImageBlob(
+  url: string,
+  size?: string,
+  signal?: AbortSignal
+): Promise<Blob | null> {
+  const imageData = await unifiedCacheService.getImageForAI(url);
+  const processedUrl = imageData.value;
+
+  if (!processedUrl.startsWith('data:') && !processedUrl.startsWith('http')) {
+    console.warn(
+      '[VideoAPI] Unknown URL format after processing, skipping:',
+      processedUrl?.substring(0, 50)
+    );
+    return null;
+  }
+
+  const response = await fetch(processedUrl, signal ? { signal } : undefined);
+  return prepareVideoReferenceImageBlob(await response.blob(), size);
+}
+
+function getFirstVideoReference(
+  params: VideoGenerationParams
+): UploadedVideoImage | null {
+  if (params.inputReferences?.length) {
+    return [...params.inputReferences].sort((a, b) => a.slot - b.slot)[0] || null;
+  }
+
+  return params.inputReference
+    ? {
+        slot: 0,
+        url: params.inputReference,
+        name: 'reference.png',
+      }
+    : null;
+}
+
 /**
  * Video API Service
  * Manages video generation with async polling
@@ -174,123 +216,88 @@ class VideoAPIService {
       params.params as Record<string, string> | undefined
     );
 
-    const formData = new FormData();
-    formData.append('model', submission.model);
-    formData.append('prompt', params.prompt);
+    const isXingliuVideo = isXingliuVideoBinding(
+      binding,
+      submission.bindingMetadata
+    );
+    let requestBody: BodyInit;
+    let requestHeaders: Record<string, string> | undefined;
 
-    if (submission.duration) {
-      formData.append(submission.durationField, submission.duration);
-    }
+    if (isXingliuVideo) {
+      const metadata = buildXingliuVideoMetadata(params.size, params.params);
+      const reference = getFirstVideoReference(params);
 
-    if (params.size) {
-      formData.append('size', params.size);
-    }
-
-    // Handle multiple images - all models use input_reference
-    // For veo3.1, multiple images can be passed with same field name (first frame, last frame)
-    // console.log('[VideoAPI] Processing inputReferences:', params.inputReferences);
-    if (params.inputReferences && params.inputReferences.length > 0) {
-      // Sort by slot to ensure correct order (slot 0 = first frame, slot 1 = last frame)
-      const sortedImages = [...params.inputReferences].sort(
-        (a, b) => a.slot - b.slot
-      );
-
-      for (const imageRef of sortedImages) {
-        // console.log('[VideoAPI] Processing image:', { slot: imageRef.slot, url: imageRef.url?.substring(0, 50), name: imageRef.name });
-
-        if (!imageRef.url) {
-          // console.log('[VideoAPI] Skipping image - no URL');
-          continue;
+      if (reference?.url) {
+        const formData = new FormData();
+        formData.append('model', submission.model);
+        formData.append('prompt', params.prompt);
+        if (submission.duration) {
+          formData.append('seconds', submission.duration);
         }
+        formData.append('metadata', JSON.stringify(metadata));
 
-        const fieldName = 'input_reference';
-        // console.log('[VideoAPI] Using field name:', fieldName, 'for model:', params.model, 'slot:', imageRef.slot);
-
-        // 处理图片：虚拟路径和远程 URL 都需要转换为 base64/blob
-        // 使用 getImageForAI 统一处理，它会自动处理虚拟路径和远程 URL
-        const imageData = await unifiedCacheService.getImageForAI(imageRef.url);
-        const processedUrl = imageData.value;
-        // console.log(`[VideoAPI] Image processed: ${imageData.type === 'base64' ? 'converted to base64' : 'using URL'}`);
-
-        // Convert to blob and append
-        if (processedUrl.startsWith('data:')) {
-          // console.log('[VideoAPI] Converting data URL to blob...');
-          const response = await fetch(processedUrl);
-          const blob = await prepareVideoReferenceImageBlob(
-            await response.blob(),
-            params.size
-          );
-          // console.log('[VideoAPI] Appending blob:', { fieldName, blobSize: blob.size, fileName: imageRef.name || 'image.png' });
-          formData.append(fieldName, blob, imageRef.name || 'image.png');
-        } else if (processedUrl.startsWith('http')) {
-          // console.log('[VideoAPI] Fetching remote URL...');
-          const response = await fetch(processedUrl);
-          const blob = await prepareVideoReferenceImageBlob(
-            await response.blob(),
-            params.size
-          );
-          // console.log('[VideoAPI] Appending blob:', { fieldName, blobSize: blob.size, fileName: imageRef.name || 'image.png' });
-          formData.append(fieldName, blob, imageRef.name || 'image.png');
-        } else {
-          console.warn(
-            '[VideoAPI] Unknown URL format after processing, skipping:',
-            processedUrl?.substring(0, 50)
-          );
+        const blob = await prepareReferenceImageBlob(reference.url, params.size);
+        if (!blob) {
+          throw new Error('视频参考图处理失败');
         }
+        formData.append('image', blob, reference.name || 'reference.png');
+        requestBody = formData;
+      } else {
+        requestHeaders = { 'Content-Type': 'application/json' };
+        requestBody = JSON.stringify({
+          model: submission.model,
+          prompt: params.prompt,
+          ...(submission.duration ? { seconds: submission.duration } : {}),
+          metadata,
+        });
       }
-    }
-    // Legacy single image support
-    else if (params.inputReference) {
-      // 处理图片：虚拟路径和远程 URL 都需要转换为 base64/blob
-      // 使用 getImageForAI 统一处理，它会自动处理虚拟路径和远程 URL
-      const imageData = await unifiedCacheService.getImageForAI(
-        params.inputReference
-      );
-      const processedUrl = imageData.value;
-      // console.log(`[VideoAPI] Legacy image processed: ${imageData.type === 'base64' ? 'converted to base64' : 'using URL'}`);
+    } else {
+      const formData = new FormData();
+      formData.append('model', submission.model);
+      formData.append('prompt', params.prompt);
 
-      if (processedUrl.startsWith('data:')) {
-        const response = await fetch(processedUrl);
-        const blob = await prepareVideoReferenceImageBlob(
-          await response.blob(),
+      if (submission.duration) {
+        formData.append(submission.durationField, submission.duration);
+      }
+
+      if (params.size) {
+        formData.append('size', params.size);
+      }
+
+      if (params.inputReferences && params.inputReferences.length > 0) {
+        const sortedImages = [...params.inputReferences].sort(
+          (a, b) => a.slot - b.slot
+        );
+
+        for (const imageRef of sortedImages) {
+          if (!imageRef.url) {
+            continue;
+          }
+
+          const blob = await prepareReferenceImageBlob(imageRef.url, params.size);
+          if (blob) {
+            formData.append('input_reference', blob, imageRef.name || 'image.png');
+          }
+        }
+      } else if (params.inputReference) {
+        const blob = await prepareReferenceImageBlob(
+          params.inputReference,
           params.size
         );
-        formData.append('input_reference', blob, 'reference.png');
-      } else if (processedUrl.startsWith('http')) {
-        const response = await fetch(processedUrl);
-        const blob = await prepareVideoReferenceImageBlob(
-          await response.blob(),
-          params.size
-        );
-        formData.append('input_reference', blob, 'reference.png');
-      } else {
-        console.warn(
-          '[VideoAPI] Unknown URL format after processing, skipping:',
-          processedUrl?.substring(0, 50)
-        );
+        if (blob) {
+          formData.append('input_reference', blob, 'reference.png');
+        }
       }
-    }
 
-    // Log FormData summary before sending
-    // console.log('[VideoAPI] FormData summary:');
-    const formDataEntries: Record<string, string> = {};
-    formData.forEach((value, key) => {
-      if (value instanceof Blob) {
-        formDataEntries[
-          key
-        ] = `[Blob: ${value.size} bytes, type: ${value.type}]`;
-      } else {
-        formDataEntries[key] = String(value);
-      }
-    });
-    // console.log('[VideoAPI] FormData entries:', formDataEntries);
-    // console.log('[VideoAPI] Sending request to:', `${this.baseUrl}/v1/videos`);
+      requestBody = formData;
+    }
 
     const response = await providerTransport.send(providerContext, {
-      path: '/videos',
+      path: binding?.submitPath || '/videos',
       baseUrlStrategy: binding?.baseUrlStrategy,
       method: 'POST',
-      body: formData,
+      headers: requestHeaders,
+      body: requestBody,
     });
 
     if (!response.ok) {
@@ -447,6 +454,7 @@ class VideoAPIService {
     // console.log('[VideoAPI] Resuming polling for video:', videoId);
 
     const { onProgress } = options;
+    const { binding } = resolveVideoPlanContext(options.routeModel);
 
     // For resumed tasks, check status immediately first (video may already be completed)
     // console.log('[VideoAPI] Checking status immediately for resumed task...');
@@ -470,7 +478,10 @@ class VideoAPIService {
     }
 
     // If already completed, return immediately
-    if (immediateStatus.status === 'completed') {
+    if (
+      immediateStatus.status === 'completed' ||
+      isXingliuVideoResultReady(immediateStatus as Record<string, any>, binding)
+    ) {
       return this.resolveCompletedVideoStatus(
         videoId,
         immediateStatus,
@@ -506,6 +517,7 @@ class VideoAPIService {
     options: PollingOptions = {}
   ): Promise<VideoQueryResponse> {
     const { interval = 5000, maxAttempts = 1080, onProgress } = options;
+    const { binding } = resolveVideoPlanContext(options.routeModel);
 
     let attempts = 0;
     let consecutiveErrors = 0;
@@ -542,7 +554,10 @@ class VideoAPIService {
           onProgress(progress, status.status);
         }
 
-        if (status.status === 'completed') {
+        if (
+          status.status === 'completed' ||
+          isXingliuVideoResultReady(status as Record<string, any>, binding)
+        ) {
           return this.resolveCompletedVideoStatus(
             videoId,
             status,

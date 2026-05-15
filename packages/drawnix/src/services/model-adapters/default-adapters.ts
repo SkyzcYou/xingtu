@@ -5,6 +5,7 @@ import {
   extractAudioGenerationResult,
 } from '../audio-api-service';
 import { videoAPIService } from '../video-api-service';
+import { isXingliuVideoBinding } from '../video-binding-utils';
 import { getFileExtension, normalizeImageDataUrl } from '@aitu/utils';
 import {
   DEFAULT_AUDIO_MODEL_ID,
@@ -226,8 +227,9 @@ export const geminiVideoAdapter: VideoModelAdapter = {
   },
   supportedModels: videoModelIds,
   defaultModel: DEFAULT_VIDEO_MODEL_ID,
-  async generateVideo(_context, request: VideoGenerationRequest) {
+  async generateVideo(context, request: VideoGenerationRequest) {
     const model = (request.model || DEFAULT_VIDEO_MODEL_ID) as any;
+    const isXingliuVideo = isXingliuVideoBinding(context.binding);
     const durationEncoded =
       model && model.startsWith('sora-2-') && /\d+s$/.test(model);
     const adapterParams = request.params
@@ -241,7 +243,7 @@ export const geminiVideoAdapter: VideoModelAdapter = {
       ? undefined
       : request.duration
       ? String(request.duration)
-      : model?.toString().startsWith('sora')
+      : model?.toString().startsWith('sora') || isXingliuVideo
       ? undefined
       : '8';
     const size = request.size || '1280x720';
