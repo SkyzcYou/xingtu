@@ -1,3 +1,17 @@
+## 6.7.7 (2026-05-16)
+
+### 🚀 Features
+
+- 接入 Ferriskey OIDC MVP (c00d22d3)
+
+### 🔧 Chores
+
+- 统一星图品牌与链接 (7caec3d1)
+
+### ❤️  Thank You
+
+- SkyzcYou <youzhengcai@gmail.com>
+
 ## 6.7.6 (2026-05-16)
 
 ### 🚀 Features
