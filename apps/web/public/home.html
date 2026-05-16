@@ -218,7 +218,7 @@
       }
       .dashboard-link { padding: 8px 14px; border-radius: 999px; font-size: 13px; transition: border-color 0.2s, background 0.2s; }
       .dashboard-link:hover, .dashboard-link:focus-visible { border-color: rgba(82, 230, 255, 0.56); background: rgba(82, 230, 255, 0.1); outline: none; }
-      .avatar { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; color: #111827; font-weight: 800; background: linear-gradient(135deg, #52e6ff, #8b5cf6 55%, #f39c12); }
+      .avatar { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; color: #111827; font-weight: 800; text-decoration: none; background: linear-gradient(135deg, #52e6ff, #8b5cf6 55%, #f39c12); }
 
       .hero { display: flex; position: relative; min-height: calc(100vh - 64px); padding: 0 0 64px; flex-direction: column; justify-content: center; text-align: center; }
       .hero-copy { position: relative; width: min(980px, 100%); margin: 0 auto; isolation: isolate; }
@@ -360,7 +360,7 @@
         <div class="nav-actions">
           <a class="dashboard-link" href="/">工作台</a>
           <a class="dashboard-link" href="/en/home.html" hreflang="en" lang="en">English</a>
-          <span class="avatar" aria-hidden="true">X</span>
+          <a class="avatar" href="/auth-login.html" aria-label="登录 Xingtu">X</a>
         </div>
       </nav>
 

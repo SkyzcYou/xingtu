@@ -90,6 +90,9 @@ const POST_BOOT_PREFETCH_EXTENSIONS = new Set([
 ]);
 const PRECACHE_ALWAYS_INCLUDE = new Set([
   '/index.html',
+  '/auth-login.html',
+  '/auth-callback.html',
+  '/auth-user.html',
   '/manifest.json',
   '/favicon.ico',
 ]);
@@ -1071,6 +1074,12 @@ export default defineConfig({
       transformMixedEsModules: true,
     },
     rollupOptions: {
+      input: {
+        index: path.resolve(__dirname, 'index.html'),
+        authLogin: path.resolve(__dirname, 'auth-login.html'),
+        authCallback: path.resolve(__dirname, 'auth-callback.html'),
+        authUser: path.resolve(__dirname, 'auth-user.html'),
+      },
       output: {
         manualChunks(id, context) {
           return resolveManualChunk(id, context);

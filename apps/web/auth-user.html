@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xingtu 用户信息</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+        background: #050508;
+        color: #f7fbff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background:
+          radial-gradient(circle at 18% 18%, rgba(82, 230, 255, 0.18), transparent 28%),
+          radial-gradient(circle at 78% 24%, rgba(139, 92, 246, 0.2), transparent 30%),
+          linear-gradient(180deg, #080914 0%, #050508 100%);
+      }
+      .page {
+        width: min(100% - 32px, 880px);
+        margin: 0 auto;
+        padding: 52px 0;
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 28px;
+      }
+      .header img {
+        width: 40px;
+        height: 40px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(32px, 5vw, 52px);
+        letter-spacing: -0.06em;
+      }
+      .card {
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 28px;
+        padding: 28px;
+        background: rgba(255, 255, 255, 0.06);
+        box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 24px 80px rgba(0, 0, 0, 0.35);
+      }
+      .muted {
+        color: #b9c3d4;
+        line-height: 1.7;
+      }
+      .grid {
+        display: grid;
+        gap: 12px;
+        margin-top: 22px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: minmax(120px, 180px) 1fr;
+        gap: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .label {
+        color: #93a4bb;
+      }
+      .value {
+        word-break: break-word;
+      }
+      .roles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .role {
+        border: 1px solid rgba(82, 230, 255, 0.26);
+        border-radius: 999px;
+        padding: 5px 9px;
+        background: rgba(82, 230, 255, 0.08);
+        color: #dff9ff;
+        font-size: 12px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 24px;
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 0 16px;
+        border: 1px solid rgba(82, 230, 255, 0.32);
+        border-radius: 999px;
+        color: #f7fbff;
+        background: rgba(82, 230, 255, 0.1);
+        text-decoration: none;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .button.secondary {
+        border-color: rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .button.danger {
+        border-color: rgba(248, 113, 113, 0.32);
+        background: rgba(248, 113, 113, 0.1);
+      }
+      @media (max-width: 640px) {
+        .row { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="header">
+        <img src="/icons/favicon-new.svg" alt="Xingtu 星图" />
+        <h1>用户信息</h1>
+      </div>
+      <section id="auth-content" class="card" aria-live="polite">
+        <p class="muted">正在读取登录状态...</p>
+      </section>
+    </main>
+    <script type="module" src="/src/auth/user.ts"></script>
+  </body>
+</html>
