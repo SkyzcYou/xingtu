@@ -29,6 +29,20 @@ const KLING_CAMERA_PARAM_IDS = new Set([
   'camera_roll',
   'camera_zoom',
 ]);
+const XINGLIU_VIDEO_RESOLUTIONS = ['480p', '720p', '1080p'];
+const XINGLIU_VIDEO_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'];
+const XINGLIU_VIDEO_RATIO_VALUES = new Set<string>(XINGLIU_VIDEO_RATIOS);
+
+interface XingliuSeedanceCapability {
+  resolutions: string[];
+  defaultResolution: string;
+  durations: string[];
+  defaultDuration: string;
+  showGenerateAudio: boolean;
+  defaultGenerateAudio: string;
+  showWatermark: boolean;
+  defaultWatermark: string;
+}
 
 function normalizeStringParams(
   params?: Record<string, unknown> | null
@@ -84,6 +98,49 @@ function buildDynamicEnumOptions(
     value,
     label: optionLabels.get(value) || value,
   }));
+}
+
+function resolveXingliuSeedanceCapability(
+  modelId?: string | null
+): XingliuSeedanceCapability {
+  const normalized = modelId?.toLowerCase() || '';
+  let resolutions = XINGLIU_VIDEO_RESOLUTIONS;
+
+  if (
+    normalized === 'seedance-nsfw' ||
+    normalized.includes('720p') ||
+    normalized.includes('fast') ||
+    normalized.includes('1-5') ||
+    normalized.includes('1.5')
+  ) {
+    resolutions = XINGLIU_VIDEO_RESOLUTIONS.slice(0, 2);
+  }
+
+  if (normalized === 'seedance-nsfw') {
+    resolutions = XINGLIU_VIDEO_RESOLUTIONS.slice(0, 1);
+  }
+
+  if (normalized.includes('1080p')) {
+    resolutions = XINGLIU_VIDEO_RESOLUTIONS;
+  }
+
+  return {
+    resolutions,
+    defaultResolution: resolutions[0],
+    durations: ['5', '10'],
+    defaultDuration: '5',
+    showGenerateAudio: true,
+    defaultGenerateAudio: 'false',
+    showWatermark: true,
+    defaultWatermark: 'false',
+  };
+}
+
+function resolveXingliuResolution(
+  value: string | undefined,
+  capability: XingliuSeedanceCapability
+): string | undefined {
+  return value && capability.resolutions.includes(value) ? value : undefined;
 }
 
 function isSoraModel(modelId?: string | null): boolean {
@@ -337,11 +394,11 @@ function normalizeXingliuRatio(value?: string): string | undefined {
   }
 
   const match = normalized.match(/^(\d+)\s*[:x]\s*(\d+)$/);
-  if (!match) {
-    return normalized;
-  }
+  const ratio = match
+    ? getAspectRatio(Number(match[1]), Number(match[2]))
+    : normalized;
 
-  return getAspectRatio(Number(match[1]), Number(match[2]));
+  return ratio && XINGLIU_VIDEO_RATIO_VALUES.has(ratio) ? ratio : undefined;
 }
 
 function parseXingliuSize(size?: string | null): Partial<XingliuVideoMetadata> {
@@ -363,7 +420,9 @@ function parseXingliuSize(size?: string | null): Partial<XingliuVideoMetadata> {
   const pixelMatch = normalized.match(/^(\d+)\s*x\s*(\d+)$/);
   if (pixelMatch) {
     return {
-      ratio: getAspectRatio(Number(pixelMatch[1]), Number(pixelMatch[2])),
+      ratio: normalizeXingliuRatio(
+        getAspectRatio(Number(pixelMatch[1]), Number(pixelMatch[2]))
+      ),
     };
   }
 
@@ -382,9 +441,11 @@ export function isXingliuVideoBinding(
 
 export function buildXingliuVideoMetadata(
   size?: string | null,
-  params?: Record<string, unknown> | null
+  params?: Record<string, unknown> | null,
+  modelId?: string | null
 ): XingliuVideoMetadata {
   const parsedSize = parseXingliuSize(size);
+  const capability = resolveXingliuSeedanceCapability(modelId);
   const resolution = getFirstStringParam(params, [
     'resolution',
     'xingliu_resolution',
@@ -397,7 +458,10 @@ export function buildXingliuVideoMetadata(
   ]);
 
   return {
-    resolution: resolution || parsedSize.resolution || '480p',
+    resolution:
+      resolveXingliuResolution(resolution, capability) ||
+      resolveXingliuResolution(parsedSize.resolution, capability) ||
+      capability.defaultResolution,
     ratio: normalizeXingliuRatio(ratio) || parsedSize.ratio || '16:9',
     generate_audio:
       getBooleanParam(params, ['generate_audio', 'generateAudio']) ?? false,
@@ -482,6 +546,7 @@ export function getEffectiveVideoCompatibleParams(
   const metadata = getResolvedVideoBindingMetadata(modelId, plan?.binding || null, params);
   const selectedKlingAction = resolveSelectedKlingAction(params);
   const isXingliuVideo = isXingliuVideoBinding(plan?.binding || null, metadata);
+  const xingliuSeedanceCapability = resolveXingliuSeedanceCapability(modelId);
   const effectiveConfig = getEffectiveVideoModelConfigForSelection(
     modelId,
     modelRef,
@@ -498,11 +563,13 @@ export function getEffectiveVideoCompatibleParams(
         return false;
       }
 
-      if (
-        param.compatibleTags?.includes('seedance') &&
-        (param.id === 'generate_audio' || param.id === 'watermark')
-      ) {
-        return isXingliuVideo;
+      if (param.compatibleTags?.includes('seedance')) {
+        if (param.id === 'generate_audio') {
+          return isXingliuVideo && xingliuSeedanceCapability.showGenerateAudio;
+        }
+        if (param.id === 'watermark') {
+          return isXingliuVideo && xingliuSeedanceCapability.showWatermark;
+        }
       }
 
       return true;
@@ -540,18 +607,13 @@ export function getEffectiveVideoCompatibleParams(
 
       if (param.id === 'size') {
         if (isXingliuVideo && param.compatibleTags?.includes('seedance')) {
-          const resolutionOrder = ['480p', '720p', '1080p'];
-          const getResolutionIndex = (value: string) => {
-            const index = resolutionOrder.indexOf(value);
-            return index === -1 ? resolutionOrder.length : index;
-          };
-          const options = [...(param.options || [])].sort(
-            (a, b) => getResolutionIndex(a.value) - getResolutionIndex(b.value)
-          );
           return {
             ...param,
-            options,
-            defaultValue: '480p',
+            options: buildDynamicEnumOptions(
+              param,
+              xingliuSeedanceCapability.resolutions
+            ),
+            defaultValue: xingliuSeedanceCapability.defaultResolution,
           };
         }
 
@@ -565,18 +627,65 @@ export function getEffectiveVideoCompatibleParams(
         };
       }
 
-      if (param.id !== 'duration') {
-        return param;
+      if (
+        param.id === 'aspect_ratio' &&
+        isXingliuVideo &&
+        param.compatibleTags?.includes('seedance')
+      ) {
+        return {
+          ...param,
+          options: buildDynamicEnumOptions(param, XINGLIU_VIDEO_RATIOS),
+          defaultValue: XINGLIU_VIDEO_RATIOS.includes(param.defaultValue || '')
+            ? param.defaultValue
+            : '16:9',
+        };
       }
 
-      return {
-        ...param,
-        options: effectiveConfig.durationOptions.map((option) => ({
-          value: option.value,
-          label: option.label,
-        })),
-        defaultValue: effectiveConfig.defaultDuration,
-      };
+      if (param.id === 'duration') {
+        if (isXingliuVideo && param.compatibleTags?.includes('seedance')) {
+          return {
+            ...param,
+            options: buildDynamicEnumOptions(
+              param,
+              xingliuSeedanceCapability.durations
+            ),
+            defaultValue: xingliuSeedanceCapability.defaultDuration,
+          };
+        }
+
+        return {
+          ...param,
+          options: effectiveConfig.durationOptions.map((option) => ({
+            value: option.value,
+            label: option.label,
+          })),
+          defaultValue: effectiveConfig.defaultDuration,
+        };
+      }
+
+      if (
+        param.id === 'generate_audio' &&
+        isXingliuVideo &&
+        param.compatibleTags?.includes('seedance')
+      ) {
+        return {
+          ...param,
+          defaultValue: xingliuSeedanceCapability.defaultGenerateAudio,
+        };
+      }
+
+      if (
+        param.id === 'watermark' &&
+        isXingliuVideo &&
+        param.compatibleTags?.includes('seedance')
+      ) {
+        return {
+          ...param,
+          defaultValue: xingliuSeedanceCapability.defaultWatermark,
+        };
+      }
+
+      return param;
     });
 }
 

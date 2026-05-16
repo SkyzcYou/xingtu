@@ -98,7 +98,11 @@ export async function submitVideoGeneration(
   let requestHeaders: Record<string, string> | undefined;
 
   if (isXingliuVideo) {
-    const metadata = buildXingliuVideoMetadata(params.size, params.params);
+    const metadata = buildXingliuVideoMetadata(
+      params.size,
+      params.params,
+      model
+    );
     if (params.referenceImages?.length) {
       const formData = new FormData();
       formData.append('model', submission.model);

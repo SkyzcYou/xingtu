@@ -177,6 +177,41 @@ describe('video-api-service', () => {
     });
   });
 
+  it('falls back from unsupported historical Xingliu video params', async () => {
+    const sendMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 'video-task-1',
+          status: 'unknown',
+          model: 'doubao-seedance-2-0-fast-260128',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      )
+    );
+    mockVideoPlan(xingliuVideoBinding, sendMock);
+
+    const { videoAPIService } = await import('../video-api-service');
+    await videoAPIService.submitVideoGeneration({
+      model: 'doubao-seedance-2-0-fast-260128',
+      prompt: 'white ball rolling on a table',
+      size: '1080p',
+      params: {
+        aspect_ratio: 'adaptive',
+        xingliu_resolution: '1080p',
+      },
+    });
+
+    expect(JSON.parse(String(sendMock.mock.calls[0]?.[1].body))).toMatchObject({
+      metadata: {
+        resolution: '480p',
+        ratio: '16:9',
+      },
+    });
+  });
+
   it('keeps non-Xingliu video submissions on multipart form data', async () => {
     const sendMock = vi.fn().mockResolvedValueOnce(
       new Response(

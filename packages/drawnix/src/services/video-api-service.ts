@@ -224,7 +224,11 @@ class VideoAPIService {
     let requestHeaders: Record<string, string> | undefined;
 
     if (isXingliuVideo) {
-      const metadata = buildXingliuVideoMetadata(params.size, params.params);
+      const metadata = buildXingliuVideoMetadata(
+        params.size,
+        params.params,
+        params.model
+      );
       const reference = getFirstVideoReference(params);
 
       if (reference?.url) {

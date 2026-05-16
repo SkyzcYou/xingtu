@@ -425,4 +425,20 @@ describe('video binding utils', () => {
       watermark: true,
     });
   });
+
+  it('falls back when Xingliu receives unsupported Seedance params', () => {
+    expect(
+      buildXingliuVideoMetadata(
+        '1080p',
+        {
+          aspect_ratio: 'adaptive',
+          xingliu_resolution: '1080p',
+        },
+        'doubao-seedance-2-0-fast-260128'
+      )
+    ).toMatchObject({
+      resolution: '480p',
+      ratio: '16:9',
+    });
+  });
 });

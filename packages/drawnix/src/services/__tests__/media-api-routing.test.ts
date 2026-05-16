@@ -266,6 +266,46 @@ describe('media-api provider routing', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it('filters unsupported Xingliu metadata in shared video API', async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.metadata).toMatchObject({
+        resolution: '480p',
+        ratio: '16:9',
+      });
+
+      return new Response(
+        JSON.stringify({
+          id: 'video-task-1',
+          status: 'unknown',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    });
+
+    await submitVideoGeneration(
+      {
+        prompt: 'white ball rolling on a table',
+        model: 'doubao-seedance-2-0-fast-260128',
+        size: '1080p',
+        params: {
+          aspect_ratio: 'adaptive',
+          xingliu_resolution: '1080p',
+        },
+      },
+      {
+        apiKey: 'video-secret',
+        baseUrl: 'https://video.example.com/v1',
+        authType: 'bearer',
+        binding: xingliuVideoBinding,
+        fetchImpl,
+      }
+    );
+  });
+
   it('submits Xingliu image-to-video as multipart image payload', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === 'data:image/png;base64,abc123') {
