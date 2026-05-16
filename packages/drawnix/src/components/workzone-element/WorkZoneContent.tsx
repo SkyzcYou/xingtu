@@ -327,7 +327,14 @@ export const WorkZoneContent: React.FC<WorkZoneContentProps> = ({
 
   return (
     <div
-      className={`workzone-content workzone-content--${workflowStatus.status} ${className}`}
+      className={[
+        'workzone-content',
+        `workzone-content--${workflowStatus.status}`,
+        `workzone-content--${workflow.generationType}`,
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
     >
       {/* 头部 */}
       <div className="workzone-content__header">
