@@ -186,8 +186,8 @@ function buildAudioDownloadMetadata(options: {
     prompt: options.prompt,
     tags: options.tags,
     coverUrl: options.coverUrl,
-    artist: options.artist || 'Aitu',
-    album: options.album || 'Aitu Generated',
+    artist: options.artist || 'Xingtu',
+    album: options.album || 'Xingtu Generated',
   };
 }
 

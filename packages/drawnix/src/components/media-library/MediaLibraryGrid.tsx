@@ -1221,7 +1221,7 @@ export function MediaLibraryGrid({
         posterUrl: asset.thumbnail,
         prompt: asset.prompt,
         artist: asset.modelName,
-        album: asset.type === AssetType.AUDIO ? 'Aitu Generated' : undefined,
+        album: asset.type === AssetType.AUDIO ? 'Xingtu Generated' : undefined,
       }));
     },
     []

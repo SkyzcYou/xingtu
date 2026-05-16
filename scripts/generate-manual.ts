@@ -52,14 +52,14 @@ interface Page {
   html: string;
 }
 
-const SITE_URL = 'https://opentu.ai';
-const SITE_NAME = 'Opentu';
+const SITE_URL = 'https://xingtu.live';
+const SITE_NAME = 'Xingtu';
 const MANUAL_PATH = '/user-manual';
 const MANUAL_BASE_URL = `${SITE_URL}${MANUAL_PATH}`;
-const DEFAULT_OG_IMAGE = `${SITE_URL}/product_showcase/aitu-01.png`;
+const DEFAULT_OG_IMAGE = `${SITE_URL}/product_showcase/case-1.png`;
 
 const PAGE_OG_IMAGES: Record<string, string> = {
-  'ai-generation-image-generation': `${SITE_URL}/product_showcase/aitu-01.png`,
+  'ai-generation-image-generation': `${SITE_URL}/product_showcase/case-1.png`,
   'drawing-flowchart': `${SITE_URL}/product_showcase/流程图.gif`,
   'drawing-mindmap': `${SITE_URL}/product_showcase/思维导图.gif`,
 };
@@ -280,7 +280,7 @@ function getPageDescription(page: Page, siteDescription: string): string {
   }
 
   if (page.slug === 'index') {
-    return 'Opentu 用户手册首页，了解 AI 应用平台、画布工作区、AI 绘图、AI 视频生成、流程图、思维导图、素材库与任务工作流的核心用法。';
+    return 'Xingtu 用户手册首页，了解 AI 应用平台、画布工作区、AI 绘图、AI 视频生成、流程图、思维导图、素材库与任务工作流的核心用法。';
   }
 
   const summary = extractSummaryFromMarkdown(page.content);
@@ -295,7 +295,7 @@ function getPageDescription(page: Page, siteDescription: string): string {
 function getPageKeywords(page: Page, config: Config): string {
   const categoryName = page.meta.category ? config.categories[page.meta.category]?.name : '';
   const values = [
-    'Opentu',
+    'Xingtu',
     page.meta.title,
     categoryName,
     '用户手册',

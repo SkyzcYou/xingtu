@@ -1,10 +1,10 @@
-# Excalidraw vs Aitu（开图）深度对比分析报告
+# Excalidraw vs Xingtu 星图深度对比分析报告
 
 ## 一、总体架构对比
 
 ### 1.1 包结构与模块划分
 
-| 维度 | Excalidraw | Aitu（开图） |
+| 维度 | Excalidraw | Xingtu 星图 |
 |------|-----------|-------------|
 | **Monorepo 工具** | Yarn Workspaces | Nx + pnpm Workspaces |
 | **核心包数量** | 5 个分层包 | 3 个包 + 1 个应用 |
@@ -24,7 +24,7 @@
 excalidraw-app (Web 应用层：协作/Firebase/分享)
 ```
 
-**Aitu 包结构：**
+**Xingtu 包结构：**
 ```
 packages/drawnix (核心白板库：components/plugins/services/hooks/engine)
 packages/react-board (React Board 封装，基于 @plait/core)
@@ -32,11 +32,11 @@ packages/react-text (文本渲染组件)
 apps/web (Web 应用 + Service Worker)
 ```
 
-**可借鉴点：** Excalidraw 的 `@excalidraw/math` 和 `@excalidraw/element` 拆分非常干净，math 包不依赖 React，element 包不依赖 UI，便于测试和复用。Aitu 可考虑将数学运算和元素逻辑从 drawnix 中抽离，减轻核心包的体积。
+**可借鉴点：** Excalidraw 的 `@excalidraw/math` 和 `@excalidraw/element` 拆分非常干净，math 包不依赖 React，element 包不依赖 UI，便于测试和复用。Xingtu 可考虑将数学运算和元素逻辑从 drawnix 中抽离，减轻核心包的体积。
 
 ### 1.2 渲染架构
 
-| 维度 | Excalidraw | Aitu |
+| 维度 | Excalidraw | Xingtu |
 |------|-----------|------|
 | **渲染技术** | 双 Canvas（Static + Interactive） | SVG（@plait/core） |
 | **静态层** | Canvas2D 绘制所有元素 | SVG DOM 元素 |
@@ -53,7 +53,7 @@ apps/web (Web 应用 + Service Worker)
 
 ### 1.3 状态管理
 
-| 维度 | Excalidraw | Aitu |
+| 维度 | Excalidraw | Xingtu |
 |------|-----------|------|
 | **UI 状态** | Jotai atom + `jotai-scope` 隔离 | React Context（6 个 Context） |
 | **服务状态** | Jotai atom + 独立 store（非 React 可访问） | RxJS Subject/Observable |
@@ -67,11 +67,11 @@ const { useAtom, useSetAtom, useAtomValue, useStore, Provider } = createIsolatio
 export const editorJotaiStore = createStore(); // 非 React 代码也能访问
 ```
 
-**可借鉴点：** Aitu 的 Context 模式在组件层级浅时工作良好，但跨组件深层传递时不够便捷。如果未来需要支持多画板实例，可参考 Jotai 隔离方案。
+**可借鉴点：** Xingtu 的 Context 模式在组件层级浅时工作良好，但跨组件深层传递时不够便捷。如果未来需要支持多画板实例，可参考 Jotai 隔离方案。
 
 ### 1.4 命令/动作系统
 
-| 维度 | Excalidraw | Aitu |
+| 维度 | Excalidraw | Xingtu |
 |------|-----------|------|
 | **模式** | ActionManager 注册表（命令模式） | withXxx 插件模式 |
 | **命令数** | 70+ Action | 27 个插件 |
@@ -93,15 +93,15 @@ const action: Action = {
 };
 ```
 
-**可借鉴点：** Action 系统将命令的定义（label/icon/shortcut/predicate）与执行（perform）统一封装，命令面板和工具栏都能复用。Aitu 的 `with-hotkey.ts` 将快捷键硬编码在一个文件中，扩展性较弱。
+**可借鉴点：** Action 系统将命令的定义（label/icon/shortcut/predicate）与执行（perform）统一封装，命令面板和工具栏都能复用。Xingtu 的 `with-hotkey.ts` 将快捷键硬编码在一个文件中，扩展性较弱。
 
 ---
 
 ## 二、功能对比矩阵
 
-### 2.1 Excalidraw 有而 Aitu 无的功能
+### 2.1 Excalidraw 有而 Xingtu 无的功能
 
-| 功能 | 实现复杂度 | 用户价值 | 优先级 | 与 Aitu 兼容性 |
+| 功能 | 实现复杂度 | 用户价值 | 优先级 | 与 Xingtu 兼容性 |
 |------|-----------|---------|--------|---------------|
 | **命令面板** | ★★☆ | ★★★ | 高 | 高（纯 UI 组件） |
 | **画布元素搜索** | ★★☆ | ★★★ | 高 | 高（遍历 @plait 元素） |
@@ -117,7 +117,7 @@ const action: Action = {
 | **字体子集化** | ★★★ | ★☆☆ | 低 | 高（WASM Worker 独立） |
 | **跟随模式** | ★★☆ | ★☆☆ | 低 | 低（依赖实时协作） |
 
-### 2.2 Aitu 独有优势
+### 2.2 Xingtu 独有优势
 
 | 功能 | 说明 |
 |------|------|
@@ -149,7 +149,7 @@ const action: Action = {
 - **键盘导航**：Arrow Up/Down 循环，Enter 执行，字母键自动聚焦搜索框
 - **lastUsed 记忆**：Jotai atom 持久化最近使用的命令
 
-**Aitu 融合建议：**
+**Xingtu 融合建议：**
 
 ```typescript
 // 1. 定义命令接口
@@ -194,7 +194,7 @@ class CommandRegistry {
 - **小字放大**：当 `fontSize * zoom < 14px` 时自动放大到可读级别
 - **nonce 机制**：防止过期搜索结果覆盖新结果
 
-**Aitu 融合建议：**
+**Xingtu 融合建议：**
 
 ```typescript
 // 1. 搜索 @plait 元素中的文本内容
@@ -270,7 +270,7 @@ type GapSnap = {
 - 参考点仅计算可见且非选中的元素
 - 排除绑定到容器的文本元素和单独箭头
 
-**Aitu 融合建议：**
+**Xingtu 融合建议：**
 
 ```typescript
 // 需要在 @plait 的拖拽流程中注入吸附计算
@@ -332,7 +332,7 @@ LassoTrail extends AnimatedTrail
 - 组选择处理
 - Shift 键追加选择
 
-**Aitu 融合建议：**
+**Xingtu 融合建议：**
 
 ```typescript
 // 1. 在 @plait 中添加套索工具模式
@@ -385,7 +385,7 @@ class PlaitLassoTool {
 - Frame 裁剪：通过 `clip-path` 限制子元素的可见区域
 - Group 感知：不允许 Frame 和普通元素混在同一个 Group 中
 
-**Aitu 融合难度**：**高**。需要 @plait 框架层面支持 `frameId` 概念和裁剪渲染。可能需要：
+**Xingtu 融合难度**：**高**。需要 @plait 框架层面支持 `frameId` 概念和裁剪渲染。可能需要：
 1. 扩展 `PlaitElement` 类型添加 `frameId` 字段
 2. 在 @plait 渲染管线中注入 SVG `<clipPath>` 裁剪
 3. 拖拽事件中添加 Frame 成员关系更新逻辑
@@ -399,7 +399,7 @@ class PlaitLassoTool {
 - 障碍物避让：中点落在任何 AABB 内则跳过
 - `FixedSegment`：用户可手动调整某些线段位置
 
-**Aitu 融合难度**：**高**。需要：
+**Xingtu 融合难度**：**高**。需要：
 1. 实现 A* 寻路算法（~400 行）
 2. 构建非均匀网格系统
 3. 与 @plait 的箭头元素系统集成
@@ -431,7 +431,7 @@ AnimatedTrail（单条轨迹）
   └── AnimationFrameHandler 统一调度
 ```
 
-**Aitu 融合建议**：激光笔是纯前端功能，不依赖协作。可在 Plait SVG 层上叠加一个透明 SVG overlay，通过 `requestAnimationFrame` 驱动衰减动画。实现复杂度约 200 行。
+**Xingtu 融合建议**：激光笔是纯前端功能，不依赖协作。可在 Plait SVG 层上叠加一个透明 SVG overlay，通过 `requestAnimationFrame` 驱动衰减动画。实现复杂度约 200 行。
 
 ### 4.5 标签页同步（Tab Sync）
 
@@ -442,7 +442,7 @@ AnimatedTrail（单条轨迹）
 - 场景更新使用 `CaptureUpdateAction.NEVER` 避免干扰撤销历史
 - `visibilitychange` / `blur` 时 flush 保存
 
-**Aitu 融合建议**：
+**Xingtu 融合建议**：
 
 ```typescript
 // 极简实现
@@ -484,7 +484,7 @@ setInterval(() => {
 - **加密**：AES-128-GCM，密钥存于 URL hash（端到端加密，服务器不可见）
 - **光标同步**：33ms volatile 消息
 
-**Aitu 现状**：GitHub Gist 异步同步，非实时。引入实时协作需要：
+**Xingtu 现状**：GitHub Gist 异步同步，非实时。引入实时协作需要：
 1. WebSocket 服务端
 2. 状态同步协议（推荐 Yjs/CRDT 而非自研 reconcile）
 3. 光标/选区广播
@@ -500,7 +500,7 @@ setInterval(() => {
 - 自动推断列角色（标签列 vs 数值列）
 - 生成原生元素：矩形（柱形图）/ 线段+圆点（折线图）/ 文本标签 / 坐标轴
 
-**Aitu 融合**：可监听粘贴事件，检测 TSV 格式数据，将其转为 @plait 元素。约 300 行代码。
+**Xingtu 融合**：可监听粘贴事件，检测 TSV 格式数据，将其转为 @plait 元素。约 300 行代码。
 
 ### 5.3 字体子集化
 
@@ -510,7 +510,7 @@ setInterval(() => {
 - 先复制 ArrayBuffer 再 transfer（保证降级安全）
 - 全局 `shouldUseWorkers` 标志，一次失败永久降级
 
-**用途**：导出 SVG/PDF 时嵌入字体子集，减小文件体积。Aitu 如果需要高质量导出可以引入。
+**用途**：导出 SVG/PDF 时嵌入字体子集，减小文件体积。Xingtu 如果需要高质量导出可以引入。
 
 ### 5.4 跟随模式
 

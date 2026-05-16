@@ -1947,7 +1947,7 @@ async function debugListGists() {
     // Filter for sync gists
     const syncGists = gists.filter(
       (g) =>
-        g.description?.includes('Opentu') ||
+        g.description?.includes('Xingtu') ||
         Object.keys(g.files).some(
           (f) =>
             (f.startsWith('board_') && f.endsWith('.json')) ||

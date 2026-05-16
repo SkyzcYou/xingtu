@@ -7,8 +7,8 @@ The site SHALL provide an English SEO homepage with localized visible content, m
 - **WHEN** a crawler requests `/en/home.html`
 - **THEN** the response contains an English HTML document
 - **AND** the document declares `lang="en"`
-- **AND** the document includes indexable metadata and structured data for OpenTu
-- **AND** the canonical URL points to `https://opentu.ai/en/home.html`
+- **AND** the document includes indexable metadata and structured data for Xingtu
+- **AND** the canonical URL points to `https://xingtu.live/en/home.html`
 
 ### Requirement: Localized homepage alternates
 The localized SEO homepages SHALL expose reciprocal alternate-language links.
@@ -23,5 +23,5 @@ The XML sitemap SHALL include the English homepage and its localized alternate r
 
 #### Scenario: Sitemap lists localized homepages
 - **WHEN** a crawler reads `/sitemap.xml`
-- **THEN** the sitemap includes `https://opentu.ai/en/home.html`
+- **THEN** the sitemap includes `https://xingtu.live/en/home.html`
 - **AND** the Chinese and English homepage entries include reciprocal localized alternates

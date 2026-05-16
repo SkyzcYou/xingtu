@@ -13,7 +13,7 @@ import { toolWindowService } from '../services/tool-window-service';
  * 从 URL 参数中解析并打开工具
  *
  * @example
- * // 访问 https://opentu.ai/?tool=ai-image
+ * // 访问 https://xingtu.live/?tool=ai-image
  * // 会自动全屏打开 AI 图片生成工具并设为常驻
  *
  * useToolFromUrl();

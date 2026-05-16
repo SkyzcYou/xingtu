@@ -397,8 +397,8 @@ export const DialogTaskList: React.FC<DialogTaskListProps> = ({
                 typeof task.params.tags === 'string'
                   ? task.params.tags
                   : undefined,
-              artist: task.params.model || task.params.mv || 'Aitu',
-              album: 'Aitu Generated',
+              artist: task.params.model || task.params.mv || 'Xingtu',
+              album: 'Xingtu Generated',
             })) ?? [];
         const fallbackUrls = task.result!.urls?.length
           ? task.result!.urls
@@ -423,8 +423,8 @@ export const DialogTaskList: React.FC<DialogTaskListProps> = ({
                   typeof task.params.tags === 'string'
                     ? task.params.tags
                     : undefined,
-                artist: task.params.model || task.params.mv || 'Aitu',
-                album: 'Aitu Generated',
+                artist: task.params.model || task.params.mv || 'Xingtu',
+                album: 'Xingtu Generated',
               }));
         items.push(...mediaItems);
       } else {

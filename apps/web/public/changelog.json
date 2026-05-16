@@ -620,7 +620,7 @@
       "date": "2026-04-25",
       "changes": {
         "features": [
-          "新增 OpenTu SEO 首页"
+          "新增 Xingtu SEO 首页"
         ],
         "fixes": [],
         "improvements": [
@@ -628,7 +628,7 @@
         ]
       },
       "type": "patch",
-      "highlights": "新增 OpenTu SEO 首页"
+      "highlights": "新增 Xingtu SEO 首页"
     },
     {
       "version": "0.6.75",

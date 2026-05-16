@@ -14,7 +14,7 @@ PPT 大纲视图每页只有提示词和优化入口。用户在编辑提示词�
 
 ## 实现要点
 
-- 无图时显示 AI 图片生成 icon，点击沿用 `handleRegenerateSlide` 打开图片生成弹窗。
+- 无图时显示 AI 图片生成 icon，点击沿用 `handleRegenerateSlide` 打星图片生成弹窗。
 - 有图时显示当前生效图片的小缩略图，hover 后展示大图预览。
 - 图片生成中、失败、禁用状态只通过轻量 class 表达，不引入新状态源。
 - 大图预览使用 `loading="lazy"` 和 `decoding="async"`，减少主线程压力。

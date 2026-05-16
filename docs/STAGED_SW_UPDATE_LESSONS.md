@@ -1061,7 +1061,7 @@
 预热/预缓存时，为了统一源站与 CDN 地址，会把静态资源写入成“同源归一化 key”，例如：
 
 - 请求地址：`https://cdn.jsdelivr.net/npm/aitu-app@0.6.67/assets/a.js`
-- 实际缓存 key：`https://pr.opentu.ai/assets/a.js`
+- 实际缓存 key：`https://xingtu.live/assets/a.js`
 
 如果运行时读取仍只按原始请求 URL 查：
 
@@ -1210,7 +1210,7 @@
 
 #### 1. 根路径注册 SW 会破坏 release 目录隔离
 
-如果在 `https://opentu.ai/releases/0.6.68/` 页面里执行：
+如果在 `https://xingtu.live/releases/0.6.68/` 页面里执行：
 
 ```ts
 navigator.serviceWorker.register('/sw.js')

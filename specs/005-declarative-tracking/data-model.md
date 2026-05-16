@@ -74,7 +74,7 @@ type TrackEventType = 'click' | 'hover' | 'focus' | 'blur' | 'input' | 'submit';
   },
   "metadata": {
     "timestamp": 1701849600000,
-    "url": "https://opentu.ai/editor",
+    "url": "https://xingtu.live/editor",
     "version": "1.2.3",
     "sessionId": "abc123-session",
     "eventType": "click"

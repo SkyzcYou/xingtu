@@ -18,7 +18,7 @@ that return raw base64 image payloads instead of normal remote URLs.
 1. Open Whistle and paste the contents of `mock-image-base64.rules` into the
    Rules editor.
 2. Make sure HTTPS capture is enabled for `api.tu-zi.com`.
-3. In AITU, keep the image Base URL pointed at `https://api.tu-zi.com/v1`
+3. In Xingtu, keep the image Base URL pointed at `https://api.tu-zi.com/v1`
    unless you intentionally use another domain.
 4. Add one of the marker strings above to the prompt text and submit an image
    generation request.

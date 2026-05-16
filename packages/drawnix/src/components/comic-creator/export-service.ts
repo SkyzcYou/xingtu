@@ -497,7 +497,7 @@ export async function exportComicAsPptx(
     height: pageSize.height,
   });
   pptx.layout = 'COMIC_IMAGE_ONLY';
-  pptx.author = 'Aitu';
+  pptx.author = 'Xingtu';
   pptx.subject = 'Comic export';
   pptx.title = record.title;
 

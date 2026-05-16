@@ -88,9 +88,9 @@ function generateNpmPackageJson(version) {
   const npmPackage = {
     name: CONFIG.packageName,
     version: version,
-    description: 'Opentu static assets for CDN (HTML not included)',
+    description: 'Xingtu static assets for CDN (HTML not included)',
     keywords: [
-      'aitu',
+      'xingtu',
       'whiteboard',
       'mindmap',
       'flowchart',
@@ -99,14 +99,7 @@ function generateNpmPackageJson(version) {
       'image-generation',
       'video-generation'
     ],
-    homepage: 'https://opentu.ai',
-    repository: {
-      type: 'git',
-      url: 'https://github.com/ljquan/aitu.git'
-    },
-    bugs: {
-      url: 'https://github.com/ljquan/aitu/issues'
-    },
+    homepage: 'https://xingtu.live',
     license: 'MIT',
     author: 'ljquan',
     files: [
@@ -127,7 +120,7 @@ function generateNpmPackageJson(version) {
 
 // 生成 README
 function generateReadme(version) {
-  return `# Opentu (开图) - AI 图片视频创作工具
+  return `# Xingtu 星图 - AI 图片视频创作工具
 
 [![npm version](https://img.shields.io/npm/v/${CONFIG.packageName}.svg)](https://www.npmjs.com/package/${CONFIG.packageName})
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -167,9 +160,9 @@ npx serve ./node_modules/${CONFIG.packageName}
 npx http-server ./node_modules/${CONFIG.packageName}
 \`\`\`
 
-## 源代码
+## 官网
 
-GitHub: [https://github.com/ljquan/aitu](https://github.com/ljquan/aitu)
+[xingtu.live](https://xingtu.live)
 
 ## 许可证
 
@@ -179,7 +172,7 @@ MIT License
 
 // 主流程
 async function main() {
-  log('\n🚀 Opentu npm 发布脚本\n', 'blue');
+  log('\n🚀 Xingtu npm 发布脚本\n', 'blue');
   
   if (isDryRun) {
     logWarning('DRY RUN 模式 - 不会实际发布');

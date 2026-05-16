@@ -180,8 +180,8 @@ export async function applyAudioMetadataToBlob(
   const title = metadata.title?.trim();
   const prompt = metadata.prompt?.trim();
   const tags = metadata.tags?.trim();
-  const artist = metadata.artist?.trim() || 'Aitu';
-  const album = metadata.album?.trim() || 'Aitu Generated';
+  const artist = metadata.artist?.trim() || 'Xingtu';
+  const album = metadata.album?.trim() || 'Xingtu Generated';
   const year = metadata.year?.trim() || String(new Date().getFullYear());
 
   const frames = (

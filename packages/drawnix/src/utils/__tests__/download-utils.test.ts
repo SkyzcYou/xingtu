@@ -123,7 +123,7 @@ describe('download-utils', () => {
       prompt: '舒缓钢琴曲',
       coverUrl: '/covers/asset-cover.png',
       artist: 'suno-v4',
-      album: 'Aitu Generated',
+      album: 'Xingtu Generated',
     });
   });
 

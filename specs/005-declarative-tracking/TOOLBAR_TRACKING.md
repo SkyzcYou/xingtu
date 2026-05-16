@@ -171,7 +171,7 @@ Each event will include metadata from the declarative tracking system:
 ```json
 {
   "version": "0.2.1",
-  "url": "https://opentu.ai/editor",
+  "url": "https://xingtu.live/editor",
   "timestamp": 1701849600000,
   "sessionId": "session-abc123",
   "eventType": "click",

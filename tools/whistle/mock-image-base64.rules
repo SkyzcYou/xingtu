@@ -1,4 +1,4 @@
-# Mock AITU image-generation responses so we can reproduce models returning raw
+# Mock Xingtu image-generation responses so we can reproduce models returning raw
 # base64 image payloads instead of normal remote URLs.
 #
 # Recommended usage:

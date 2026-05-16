@@ -1844,8 +1844,8 @@ export const PopupToolbar = () => {
                           prompt: element.prompt,
                           tags: element.tags,
                           coverUrl: element.previewImageUrl,
-                          artist: element.modelVersion || 'Aitu',
-                          album: 'Aitu Generated',
+                          artist: element.modelVersion || 'Xingtu',
+                          album: 'Xingtu Generated',
                         },
                       });
                     }
