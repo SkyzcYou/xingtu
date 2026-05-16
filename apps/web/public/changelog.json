@@ -1,6 +1,190 @@
 {
   "versions": [
     {
+      "version": "6.7.6",
+      "date": "2026-05-16",
+      "changes": {
+        "features": [
+          "定制星流视频参数",
+          "支持供应商视频参数配置",
+          "优化星图首页视觉叙事",
+          "统一星图毛玻璃浮层与窗口样式",
+          "优化中性毛玻璃主题与画布交互",
+          "添加中性主题与毛玻璃样式",
+          "为绘图工具添加键盘快捷键调整大小功能",
+          "support AI image mask editing",
+          "优化长提示词输入框展开体验",
+          "优化长提示词输入框展开体验",
+          "add image generate-again prefill",
+          "为视频生成 prompt 添加参考图用途说明",
+          "支持异步图片生成和生成素材重置",
+          "add image generate-again prefill",
+          "添加目标总时长配置并优化UI与错误处理",
+          "优化价格展示增加Bussiness",
+          "优化视频工作流批量生成",
+          "add image 3d transform panel",
+          "refresh Xingtu brand assets",
+          "move feedback QR codes into message center",
+          "在历史记录中显示创建时间并调整排序",
+          "新增 HappyHorse 视频模型支持并重构工作流外壳",
+          "完善多图生成视觉提示词工作流",
+          "优化多图生成提示词预览",
+          "支持完整环境备份与覆盖恢复",
+          "添加PPT生成参考图片支持并修复React组件卸载问题",
+          "add message center drawer",
+          "add manual update check in app menu",
+          "update API key help defaults and support prompt",
+          "add QR support options for API key help",
+          "update browser tab title branding",
+          "update default OpenAI image model",
+          "hide pricing UI from provider settings",
+          "Update boot screen brand text",
+          "Update feedback QR code asset",
+          "Update left menu website entry"
+        ],
+        "fixes": [
+          "跟随主题优化玻璃样式",
+          "修复手动检查更新确认入口丢失",
+          "优化输入栏弹窗与设置窗口适配",
+          "修复批量导入图片弹窗显示异常",
+          "修复蒙版画笔导出和预览样式问题",
+          "keep send button visible",
+          "resume async image tasks after reload",
+          "优化参考图描述和提示词优先级协议",
+          "allow hand panning while drawing",
+          "修复隐藏灵感板后输入框圆角",
+          "address regenerate prefill review findings",
+          "移除生成视频时重复的提示词构建逻辑",
+          "强化爆款视频首尾帧角色一致性",
+          "绑定异步任务供应商路由",
+          "parallelize character reference generation",
+          "pass image transform context to AI",
+          "prevent false refresh interruption failures",
+          "prevent first-party assets from using jsdelivr",
+          "优化页面卡片布局并修复提示词回填逻辑",
+          "强化历史收藏入口并放宽 AI 并发",
+          "防止复制粘贴事件在可编辑元素中触发",
+          "修正任务队列批量序号显示",
+          "修复多图生成队列参数并记录经验",
+          "优化媒体预览缩放同步",
+          "优化媒体预览自适应展示",
+          "修复 Milkdown 节点上下文注册顺序",
+          "改进部署包关键资源检查逻辑",
+          "修复图片生成完成后画布自动插入卡住",
+          "改进动态导入错误恢复机制并优化错误处理",
+          "guard toImage fetch failures",
+          "avoid upstream cdn entry assets for fork build",
+          "recover image auto-insert completion",
+          "resolve merge leftovers for gpt-image-2",
+          "restore gpt-image-2 as default image model",
+          "use local support QR in error boundary",
+          "normalize gpt-image-2 image sizes",
+          "Correct embedded website toolbar link"
+        ],
+        "improvements": [
+          "更新版本号至0.9.6并同步构建时间",
+          "调整星图本地版本线",
+          "更新版本号至0.9.2并刷新构建时间",
+          "保留星图上游差异配置",
+          "更新应用版本号至0.6.99并同步构建时间",
+          "补充视频主体引用经验",
+          "disable PostHog reporting by default",
+          "refresh web version build time",
+          "更新应用版本号至0.6.95并刷新构建时间",
+          "更新应用版本号至0.6.94并刷新构建时间",
+          "更新应用版本号至0.6.92并同步构建时间",
+          "同步 0.6.91 Web 版本元数据",
+          "更新应用版本号至0.6.89",
+          "添加 mermaid 依赖用于图表渲染",
+          "更新应用版本号至0.6.88并同步构建时间",
+          "更新应用版本号至0.6.87并同步构建时间",
+          "update public branding to Xingtu",
+          "Stop idle-prefetch retries from blocking SW updates",
+          "Refresh docs, CI, and Docker build",
+          "perf(changelog): 限制解析的版本数量以避免内存问题",
+          "Refine compose deployment defaults",
+          "Add Docker build and ECS deployment config"
+        ]
+      },
+      "type": "major",
+      "highlights": "定制星流视频参数"
+    },
+    {
+      "version": "0.9.6",
+      "date": "2026-05-06",
+      "changes": {
+        "features": [
+          "为绘图工具添加键盘快捷键调整大小功能"
+        ],
+        "fixes": [],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "为绘图工具添加键盘快捷键调整大小功能"
+    },
+    {
+      "version": "0.9.5",
+      "date": "2026-05-06",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修复蒙版画笔导出和预览样式问题"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修复蒙版画笔导出和预览样式问题"
+    },
+    {
+      "version": "0.9.4",
+      "date": "2026-05-06",
+      "changes": {
+        "features": [],
+        "fixes": [],
+        "improvements": [
+          "Stop idle-prefetch retries from blocking SW updates"
+        ]
+      },
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.9.3",
+      "date": "2026-05-06",
+      "changes": {
+        "features": [
+          "support AI image mask editing"
+        ],
+        "fixes": [
+          "keep send button visible",
+          "resume async image tasks after reload"
+        ],
+        "improvements": [
+          "更新版本号至0.9.2并刷新构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "support AI image mask editing"
+    },
+    {
+      "version": "0.9.2",
+      "date": "2026-05-04",
+      "changes": {
+        "features": [
+          "优化长提示词输入框展开体验",
+          "add image generate-again prefill"
+        ],
+        "fixes": [
+          "优化参考图描述和提示词优先级协议",
+          "allow hand panning while drawing",
+          "address regenerate prefill review findings"
+        ],
+        "improvements": []
+      },
+      "type": "minor",
+      "highlights": "优化长提示词输入框展开体验"
+    },
+    {
       "version": "0.7.3",
       "date": "2026-05-10",
       "changes": {
@@ -13,7 +197,7 @@
         "improvements": []
       },
       "type": "patch",
-      "highlights": "优化输入栏弹窗与设置窗口适配"
+      "highlights": "统一星图毛玻璃浮层与窗口样式"
     },
     {
       "version": "0.7.2",
@@ -29,30 +213,19 @@
       "highlights": "修复批量导入图片弹窗显示异常"
     },
     {
-      "version": "0.7.1",
-      "date": "2026-05-06",
+      "version": "0.7.0",
+      "date": "2026-05-03",
       "changes": {
-        "features": [
-          "为绘图工具添加键盘快捷键调整大小功能",
-          "support AI image mask editing",
-          "优化长提示词输入框展开体验",
-          "add image generate-again prefill"
-        ],
+        "features": [],
         "fixes": [
-          "修复蒙版画笔导出和预览样式问题",
-          "keep send button visible",
-          "resume async image tasks after reload",
-          "优化参考图描述和提示词优先级协议",
-          "allow hand panning while drawing",
-          "address regenerate prefill review findings"
+          "allow hand panning while drawing"
         ],
         "improvements": [
-          "Stop idle-prefetch retries from blocking SW updates",
-          "从上游 0.9.5 调整为星图本地 0.7.x 版本线"
+          "更新应用版本号至0.6.99并同步构建时间"
         ]
       },
       "type": "minor",
-      "highlights": "为绘图工具添加键盘快捷键调整大小功能"
+      "highlights": "allow hand panning while drawing"
     },
     {
       "version": "0.6.99",
@@ -705,66 +878,6 @@
       },
       "type": "patch",
       "highlights": "关闭页面时兜底恢复画布快照"
-    },
-    {
-      "version": "0.6.45",
-      "date": "2026-04-22",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "提前显示常驻工具图标",
-          "处理打开文件取消后的空返回"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "提前显示常驻工具图标"
-    },
-    {
-      "version": "0.6.44",
-      "date": "2026-04-22",
-      "changes": {
-        "features": [
-          "增强提示词优化器并修复画布输入框交互"
-        ],
-        "fixes": [
-          "收敛 PostHog error tracking 噪音并补齐运行时容错"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "增强提示词优化器并修复画布输入框交互"
-    },
-    {
-      "version": "0.6.43",
-      "date": "2026-04-21",
-      "changes": {
-        "features": [
-          "add keyboard shortcuts during pen creation",
-          "扩展 gpt-image-2 图片比例支持"
-        ],
-        "fixes": [
-          "修复版本更新后懒加载 chunk 失效白屏"
-        ],
-        "improvements": [
-          "更新版本号至0.6.41并修复错误处理"
-        ]
-      },
-      "type": "patch",
-      "highlights": "add keyboard shortcuts during pen creation"
-    },
-    {
-      "version": "0.6.42",
-      "date": "2026-04-21",
-      "changes": {
-        "features": [],
-        "fixes": [],
-        "improvements": [
-          "更新版本号至0.6.41并修复错误处理"
-        ]
-      },
-      "type": "patch",
-      "highlights": "构建修复与稳定性改进"
     }
   ]
 }
