@@ -115,6 +115,14 @@ function writeStoredToolbarLeft(left: number, isMobileOrTablet = false) {
   }
 }
 
+function createAvatarSeed() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `avatar-${Date.now()}-${Math.random()}`;
+}
+
 function syncToolbarPositionVars(left: number, toolbarEl: HTMLElement | null) {
   if (typeof document === 'undefined') {
     return;
@@ -190,6 +198,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
     const [toolbarLeft, setToolbarLeft] = useState(() =>
       readStoredToolbarLeft(isMobileOrTablet)
     );
+    const [avatarSeed] = useState(createAvatarSeed);
     const [isToolbarDragging, setIsToolbarDragging] = useState(false);
     const [isTaskPanelAnimationReady, setIsTaskPanelAnimationReady] =
       useState(false);
@@ -512,7 +521,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
               >
                 <ChevronUp size={18} />
               </button>
-              <CanvasAvatarPlaceholder />
+              <CanvasAvatarPlaceholder seed={avatarSeed} />
               <button
                 type="button"
                 className={classNames('unified-toolbar__collapsed-btn', {
@@ -552,7 +561,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
 
           {/* 顶部固定区域 - 用户头像、应用菜单、撤销、重做 */}
           <div className="unified-toolbar__section unified-toolbar__section--fixed-top">
-            <CanvasAvatarPlaceholder />
+            <CanvasAvatarPlaceholder seed={avatarSeed} />
             <AppToolbar
               embedded={true}
               iconMode={isIconMode || isMobileOrTablet}

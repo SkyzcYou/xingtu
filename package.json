@@ -91,6 +91,7 @@
     "localforage": "^1.10.0",
     "lucide-react": "^0.562.0",
     "oidc-client-ts": "^3.5.0",
+    "planet-avatar": "^0.1.0",
     "postmessage-duplex": "^1.2.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",

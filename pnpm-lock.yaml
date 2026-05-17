@@ -68,6 +68,9 @@ importers:
       oidc-client-ts:
         specifier: ^3.5.0
         version: 3.5.0
+      planet-avatar:
+        specifier: ^0.1.0
+        version: 0.1.0(react@18.3.1)(vue@3.5.27(typescript@5.4.5))
       postmessage-duplex:
         specifier: ^1.2.0
         version: 1.2.0
@@ -5643,6 +5646,17 @@ packages:
   pkg-types@2.3.0:
     resolution: {integrity: sha512-SIqCzDRg0s9npO5XQ3tNZioRY1uK06lA41ynBC1YmFTmnY6FjUjVt6s4LoADmwoig1qqD0oK8h1p/8mlMx8Oig==}
 
+  planet-avatar@0.1.0:
+    resolution: {integrity: sha512-FtRx2rbbuuas5mA6WHA1LeTJORJqHG2FNEJKTvU4hGJ43ZWFVFDyGCeoTZKBd5AC+stgZ24Wrkvrm367rcfZOw==}
+    peerDependencies:
+      react: '>=18'
+      vue: '>=3'
+    peerDependenciesMeta:
+      react:
+        optional: true
+      vue:
+        optional: true
+
   playwright-core@1.57.0:
     resolution: {integrity: sha512-agTcKlMw/mjBWOnD6kFZttAAGHgi/Nw0CZ2o6JqWSbMlI219lAFLZZCyqByTsvVAJq5XA5H8cA6PrvBRpBWEuQ==}
     engines: {node: '>=18'}
@@ -10176,6 +10190,13 @@ snapshots:
       '@vue/shared': 3.5.27
       csstype: 3.2.3
 
+  '@vue/server-renderer@3.5.27(vue@3.5.27(typescript@5.4.5))':
+    dependencies:
+      '@vue/compiler-ssr': 3.5.27
+      '@vue/shared': 3.5.27
+      vue: 3.5.27(typescript@5.4.5)
+    optional: true
+
   '@vue/server-renderer@3.5.27(vue@3.5.27(typescript@5.8.2))':
     dependencies:
       '@vue/compiler-ssr': 3.5.27
@@ -13773,6 +13794,11 @@ snapshots:
       exsolve: 1.0.8
       pathe: 2.0.3
 
+  planet-avatar@0.1.0(react@18.3.1)(vue@3.5.27(typescript@5.4.5)):
+    optionalDependencies:
+      react: 18.3.1
+      vue: 3.5.27(typescript@5.4.5)
+
   playwright-core@1.57.0: {}
 
   playwright@1.57.0:
@@ -15219,6 +15245,17 @@ snapshots:
       - yaml
 
   vscode-uri@3.1.0: {}
+
+  vue@3.5.27(typescript@5.4.5):
+    dependencies:
+      '@vue/compiler-dom': 3.5.27
+      '@vue/compiler-sfc': 3.5.27
+      '@vue/runtime-dom': 3.5.27
+      '@vue/server-renderer': 3.5.27(vue@3.5.27(typescript@5.4.5))
+      '@vue/shared': 3.5.27
+    optionalDependencies:
+      typescript: 5.4.5
+    optional: true
 
   vue@3.5.27(typescript@5.8.2):
     dependencies:
