@@ -16,8 +16,7 @@ import { Island } from '../island';
 import { BottomActionsSection } from './bottom-actions-section';
 import { useViewportScale } from '../../hooks/useViewportScale';
 import { useDeviceType } from '../../hooks/useDeviceType';
-import { AIImageIcon, AIVideoIcon } from '../icons';
-import { DialogType, useDrawnix } from '../../hooks/use-drawnix';
+import { MessageHornIcon, TaskIcon } from '../icons';
 import { HoverTip } from '../shared/hover';
 
 const TaskQueuePanel = lazy(() =>
@@ -436,18 +435,6 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
       setIsMobileCollapsed((prev) => !prev);
     }, []);
 
-    // 获取对话框控制
-    const { openDialog } = useDrawnix();
-
-    // AI 按钮点击处理
-    const handleAIImageClick = useCallback(() => {
-      openDialog(DialogType.aiImageGeneration);
-    }, [openDialog]);
-
-    const handleAIVideoClick = useCallback(() => {
-      openDialog(DialogType.aiVideoGeneration);
-    }, [openDialog]);
-
     return (
       <>
         {/* 任务队列面板 - 只在首次展开后才渲染 */}
@@ -502,27 +489,35 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
             <div className="unified-toolbar__collapsed-shortcuts">
               {/* 展开按钮 */}
               <button
+                type="button"
                 className="unified-toolbar__collapsed-btn unified-toolbar__collapsed-btn--toggle"
                 onClick={handleMobileToggle}
                 aria-label="展开工具栏"
               >
                 <ChevronUp size={18} />
               </button>
-              {/* AI 图片生成 */}
               <button
-                className="unified-toolbar__collapsed-btn"
-                onClick={handleAIImageClick}
-                aria-label="AI 图片生成"
+                type="button"
+                className={classNames('unified-toolbar__collapsed-btn', {
+                  'unified-toolbar__collapsed-btn--selected': messageDrawerOpen,
+                })}
+                onClick={onMessageDrawerToggle}
+                aria-label="消息中心"
               >
-                <AIImageIcon />
+                <span className="message-button__icon">
+                  <MessageHornIcon />
+                  <span className="message-button__dot" />
+                </span>
               </button>
-              {/* AI 视频生成 */}
               <button
-                className="unified-toolbar__collapsed-btn"
-                onClick={handleAIVideoClick}
-                aria-label="AI 视频生成"
+                type="button"
+                className={classNames('unified-toolbar__collapsed-btn', {
+                  'unified-toolbar__collapsed-btn--selected': taskPanelExpanded,
+                })}
+                onClick={handleTaskPanelToggle}
+                aria-label="任务队列"
               >
-                <AIVideoIcon />
+                <TaskIcon />
               </button>
             </div>
           )}

@@ -456,7 +456,8 @@
       outline: none; // 移除焦点边框
 
       &:hover,
-      &:active {
+      &:active,
+      &--selected {
         background: var(--color-surface-high, rgba(0, 0, 0, 0.05));
       }
 
