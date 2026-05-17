@@ -1,3 +1,18 @@
+## 6.7.10 (2026-05-17)
+
+### 🚀 Features
+
+- 支持头像账户菜单入口 (a03092c7)
+- 使用星球头像生成器 (64cb63eb)
+
+### 🔧 Chores
+
+- style(工具栏): 内嵌头像并恢复移动拖动 (47cdd2ee)
+
+### ❤️  Thank You
+
+- SkyzcYou <youzhengcai@gmail.com>
+
 ## 6.7.9 (2026-05-17)
 
 ### 🚀 Features
