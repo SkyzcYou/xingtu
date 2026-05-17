@@ -1,3 +1,19 @@
+## 6.7.9 (2026-05-17)
+
+### 🚀 Features
+
+- 隐藏菜单并添加品牌触发 (ee0a4c6a)
+
+### 🔧 Chores
+
+- style(移动端): 调整折叠工具栏快捷入口 (1101e940)
+- style(移动端): 固定工具栏到左上角 (c62453b6)
+- style(界面): 优化品牌标识与模型标签提示 (bdd81461)
+
+### ❤️  Thank You
+
+- SkyzcYou <youzhengcai@gmail.com>
+
 ## 6.7.8 (2026-05-17)
 
 ### 🔧 Chores
