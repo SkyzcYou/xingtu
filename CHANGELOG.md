@@ -1,3 +1,14 @@
+## 6.7.8 (2026-05-17)
+
+### 🔧 Chores
+
+- style(对话抽屉): 完成主题化与宽度联动 (322adce4)
+- style(画布): 主题化 WorkZone 进度卡片 (3651893f)
+
+### ❤️  Thank You
+
+- SkyzcYou <youzhengcai@gmail.com>
+
 ## 6.7.7 (2026-05-16)
 
 ### 🚀 Features

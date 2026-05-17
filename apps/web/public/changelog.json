@@ -1,6 +1,12 @@
 {
   "versions": [
     {
+      "version": "6.7.8",
+      "date": "2026-05-17",
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
       "version": "6.7.7",
       "date": "2026-05-16",
       "changes": {
@@ -866,19 +872,6 @@
       },
       "type": "patch",
       "highlights": "修正首屏资源 CDN 回退路径归一化 (2d3da03e)"
-    },
-    {
-      "version": "0.6.53",
-      "date": "2026-04-22",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "修正首屏 loading 与 CDN 优先加载链路 (1b898a46)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "修正首屏 loading 与 CDN 优先加载链路 (1b898a46)"
     }
   ]
 }
