@@ -7,7 +7,8 @@ import React, {
   useRef,
 } from 'react';
 import classNames from 'classnames';
-import { ATTACHED_ELEMENT_CLASS_NAME } from '@plait/core';
+import { ATTACHED_ELEMENT_CLASS_NAME, PlaitBoard } from '@plait/core';
+import { useBoard } from '@plait-board/react-board';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { AppToolbar } from './app-toolbar/app-toolbar';
 import { CreationToolbar } from './creation-toolbar';
@@ -15,9 +16,13 @@ import { UnifiedToolbarProps } from './toolbar.types';
 import { Island } from '../island';
 import { BottomActionsSection } from './bottom-actions-section';
 import { CanvasAvatarPlaceholder } from '../canvas-avatar-placeholder';
+import { Popover, PopoverContent, PopoverTrigger } from '../popover/popover';
+import Menu from '../menu/menu';
+import MenuItem from '../menu/menu-item';
 import { useViewportScale } from '../../hooks/useViewportScale';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import { MessageHornIcon, TaskIcon } from '../icons';
+import { Z_INDEX } from '../../constants/z-index';
 import { HoverTip } from '../shared/hover';
 
 const TaskQueuePanel = lazy(() =>
@@ -190,6 +195,8 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
     minimizedToolsBarEnabled = false,
     onEnableToolWindows,
   }) => {
+    const board = useBoard();
+    const popoverContainer = PlaitBoard.getBoardContainer(board);
     // 检测设备类型
     const { isMobile: isSmallScreen, isTablet } = useDeviceType();
     const isMobileOrTablet = isSmallScreen || isTablet;
@@ -199,6 +206,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
       readStoredToolbarLeft(isMobileOrTablet)
     );
     const [avatarSeed] = useState(createAvatarSeed);
+    const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
     const [isToolbarDragging, setIsToolbarDragging] = useState(false);
     const [isTaskPanelAnimationReady, setIsTaskPanelAnimationReady] =
       useState(false);
@@ -212,6 +220,8 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
       startX: number;
       startLeft: number;
     } | null>(null);
+    const avatarMenuPointerHandledRef = useRef(false);
+    const mobileTogglePointerHandledRef = useRef(false);
 
     const effectiveToolbarLeft = toolbarLeft;
 
@@ -462,6 +472,82 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
       setIsMobileCollapsed((prev) => !prev);
     }, []);
 
+    const handleMobileTogglePointerDown = useCallback(
+      (event: React.PointerEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        mobileTogglePointerHandledRef.current = true;
+        handleMobileToggle();
+      },
+      [handleMobileToggle]
+    );
+
+    const handleMobileToggleKeyDown = useCallback(
+      (event: React.KeyboardEvent<HTMLButtonElement>) => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        handleMobileToggle();
+      },
+      [handleMobileToggle]
+    );
+
+    const handleAvatarMenuSelect = useCallback(() => {
+      setAvatarMenuOpen(false);
+    }, []);
+
+    const renderAvatarMenu = () => (
+      <Popover
+        sideOffset={12}
+        open={avatarMenuOpen}
+        onOpenChange={setAvatarMenuOpen}
+        placement="right-start"
+      >
+        <PopoverTrigger asChild>
+          <CanvasAvatarPlaceholder
+            seed={avatarSeed}
+            selected={avatarMenuOpen}
+            aria-label="账户菜单"
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              avatarMenuPointerHandledRef.current = true;
+              setAvatarMenuOpen((prev) => !prev);
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (avatarMenuPointerHandledRef.current) {
+                avatarMenuPointerHandledRef.current = false;
+                return;
+              }
+              setAvatarMenuOpen((prev) => !prev);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              setAvatarMenuOpen((prev) => !prev);
+            }}
+          />
+        </PopoverTrigger>
+        <PopoverContent
+          container={popoverContainer}
+          style={{ zIndex: Z_INDEX.POPOVER_APP }}
+        >
+          <Menu onSelect={handleAvatarMenuSelect} onClose={handleAvatarMenuSelect}>
+            <MenuItem onSelect={handleAvatarMenuSelect} aria-label="个人资料">
+              个人资料
+            </MenuItem>
+            <MenuItem onSelect={handleAvatarMenuSelect} aria-label="登出">
+              登出
+            </MenuItem>
+          </Menu>
+        </PopoverContent>
+      </Popover>
+    );
+
     return (
       <>
         {/* 任务队列面板 - 只在首次展开后才渲染 */}
@@ -516,12 +602,21 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
               <button
                 type="button"
                 className="unified-toolbar__collapsed-btn unified-toolbar__collapsed-btn--toggle"
-                onClick={handleMobileToggle}
+                onPointerDown={handleMobileTogglePointerDown}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (mobileTogglePointerHandledRef.current) {
+                    mobileTogglePointerHandledRef.current = false;
+                    return;
+                  }
+                  handleMobileToggle();
+                }}
+                onKeyDown={handleMobileToggleKeyDown}
                 aria-label="展开工具栏"
               >
                 <ChevronUp size={18} />
               </button>
-              <CanvasAvatarPlaceholder seed={avatarSeed} />
+              {renderAvatarMenu()}
               <button
                 type="button"
                 className={classNames('unified-toolbar__collapsed-btn', {
@@ -552,7 +647,11 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
           {isMobileOrTablet && !isMobileCollapsed && (
             <button
               className="unified-toolbar__mobile-toggle unified-toolbar__mobile-toggle--expanded"
-              onClick={handleMobileToggle}
+              onPointerDown={handleMobileTogglePointerDown}
+              onClick={(event) => {
+                event.stopPropagation();
+              }}
+              onKeyDown={handleMobileToggleKeyDown}
               aria-label="收起工具栏"
             >
               <ChevronDown size={18} />
@@ -561,7 +660,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
 
           {/* 顶部固定区域 - 用户头像、应用菜单、撤销、重做 */}
           <div className="unified-toolbar__section unified-toolbar__section--fixed-top">
-            <CanvasAvatarPlaceholder seed={avatarSeed} />
+            {!(isMobileOrTablet && isMobileCollapsed) && renderAvatarMenu()}
             <AppToolbar
               embedded={true}
               iconMode={isIconMode || isMobileOrTablet}

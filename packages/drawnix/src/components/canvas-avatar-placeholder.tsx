@@ -1,14 +1,23 @@
-import { useMemo } from 'react';
+import {
+  forwardRef,
+  useMemo,
+  type ButtonHTMLAttributes,
+} from 'react';
 import { ATTACHED_ELEMENT_CLASS_NAME } from '@plait/core';
 import { createPlanetAvatarDataUri } from 'planet-avatar';
 import { Z_INDEX } from '../constants/z-index';
 import './canvas-avatar-placeholder.scss';
 
-export interface CanvasAvatarPlaceholderProps {
+export interface CanvasAvatarPlaceholderProps
+  extends ButtonHTMLAttributes<HTMLButtonElement> {
   seed: string | number;
+  selected?: boolean;
 }
 
-export const CanvasAvatarPlaceholder = ({ seed }: CanvasAvatarPlaceholderProps) => {
+export const CanvasAvatarPlaceholder = forwardRef<
+  HTMLButtonElement,
+  CanvasAvatarPlaceholderProps
+>(({ seed, selected = false, className, style, ...props }, ref) => {
   const src = useMemo(
     () =>
       createPlanetAvatarDataUri({
@@ -18,11 +27,23 @@ export const CanvasAvatarPlaceholder = ({ seed }: CanvasAvatarPlaceholderProps) 
       }),
     [seed]
   );
+  const avatarClassName = [
+    'canvas-avatar-placeholder',
+    ATTACHED_ELEMENT_CLASS_NAME,
+    selected ? 'canvas-avatar-placeholder--selected' : '',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
-    <div
-      className={`canvas-avatar-placeholder ${ATTACHED_ELEMENT_CLASS_NAME}`}
-      style={{ zIndex: Z_INDEX.VIEW_NAVIGATION }}
+    <button
+      {...props}
+      ref={ref}
+      type="button"
+      className={avatarClassName}
+      style={{ ...style, zIndex: Z_INDEX.VIEW_NAVIGATION }}
+      aria-label={props['aria-label'] ?? '账户菜单'}
       data-testid="canvas-avatar-placeholder"
     >
       <span className="canvas-avatar-placeholder__inner">
@@ -33,6 +54,8 @@ export const CanvasAvatarPlaceholder = ({ seed }: CanvasAvatarPlaceholderProps) 
           draggable={false}
         />
       </span>
-    </div>
+    </button>
   );
-};
+});
+
+CanvasAvatarPlaceholder.displayName = 'CanvasAvatarPlaceholder';
