@@ -5,6 +5,7 @@
  */
 
 import React, { createContext, useContext, useRef, useCallback, useState, type MutableRefObject } from 'react';
+import { CHAT_CONSTANTS } from '../constants/CHAT_CONSTANTS';
 import type { ChatDrawerRef, WorkflowMessageData, WorkflowMessageParams, AgentLogEntry } from '../types/chat.types';
 
 /** 选中内容类型 */
@@ -51,9 +52,16 @@ export interface ChatDrawerProviderProps {
 }
 
 // 默认抽屉宽度
-const DEFAULT_DRAWER_WIDTH = typeof window !== 'undefined' 
-  ? Math.max(375, window.innerWidth * 0.5) 
-  : 600;
+const DEFAULT_DRAWER_WIDTH =
+  typeof window !== 'undefined'
+    ? Math.min(
+        CHAT_CONSTANTS.DRAWER_MAX_WIDTH,
+        Math.max(
+          CHAT_CONSTANTS.DRAWER_MIN_WIDTH,
+          Math.floor(window.innerWidth * CHAT_CONSTANTS.DRAWER_DEFAULT_WIDTH_RATIO)
+        )
+      )
+    : CHAT_CONSTANTS.DRAWER_MAX_WIDTH;
 
 /**
  * ChatDrawer Provider

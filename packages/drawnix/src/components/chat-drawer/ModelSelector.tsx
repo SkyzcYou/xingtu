@@ -313,7 +313,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
       const menu = (
         <div
           ref={dropdownRef}
-          className="model-selector__dropdown"
+          className="model-selector__dropdown chat-drawer-themed-portal"
           style={{
             position: 'fixed',
             zIndex: Z_INDEX.DROPDOWN_PORTAL,

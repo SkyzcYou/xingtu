@@ -8,11 +8,11 @@ export const CHAT_CONSTANTS = {
   /** 会话标题最大长度 */
   MAX_TITLE_LENGTH: 30,
   /** 抽屉最小宽度 */
-  DRAWER_MIN_WIDTH: 320,
+  DRAWER_MIN_WIDTH: 375,
   /** 抽屉最大宽度 */
-  DRAWER_MAX_WIDTH: 500,
+  DRAWER_MAX_WIDTH: 440,
   /** 抽屉默认宽度比例 */
-  DRAWER_DEFAULT_WIDTH_RATIO: 0.3,
+  DRAWER_DEFAULT_WIDTH_RATIO: 0.34,
 } as const;
 
 /** 存储键常量 */

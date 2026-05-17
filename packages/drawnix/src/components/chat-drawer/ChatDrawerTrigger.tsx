@@ -21,7 +21,7 @@ export const ChatDrawerTrigger: React.FC<ChatDrawerTriggerProps> = React.memo(
     const style: React.CSSProperties = {
       right:
         isOpen && drawerWidth
-          ? `calc(var(--aitu-toolbar-right-dock-width, 0px) + ${drawerWidth - 18}px)`
+          ? `calc(var(--aitu-toolbar-right-dock-width, 0px) + ${drawerWidth}px - var(--chat-drawer-trigger-width, 32px))`
           : 'var(--aitu-toolbar-right-dock-width, 0px)',
     };
 
@@ -39,7 +39,7 @@ export const ChatDrawerTrigger: React.FC<ChatDrawerTriggerProps> = React.memo(
           aria-expanded={isOpen}
           style={style}
         >
-          <ChevronLeftIcon size={16} className="chat-drawer-trigger__icon" />
+          <ChevronLeftIcon size={18} className="chat-drawer-trigger__icon" />
         </button>
       </HoverTip>
     );

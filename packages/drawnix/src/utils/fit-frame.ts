@@ -79,10 +79,16 @@ function fitRectInViewport(
   const chatDrawerEl = document.querySelector(
     '.chat-drawer--open'
   ) as HTMLElement | null;
-  const rightOccluded = Math.max(
-    toolbarOcclusion.right,
-    chatDrawerEl ? chatDrawerEl.offsetWidth : 0
-  );
+  const chatDrawerOcclusion = chatDrawerEl
+    ? Math.max(
+        0,
+        Math.round(
+          container.getBoundingClientRect().right -
+            chatDrawerEl.getBoundingClientRect().left
+        )
+      )
+    : 0;
+  const rightOccluded = Math.max(toolbarOcclusion.right, chatDrawerOcclusion);
 
   const availableWidth =
     totalWidth - leftOccluded - rightOccluded - FIT_PADDING * 2;

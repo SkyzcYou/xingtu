@@ -21,6 +21,8 @@ import { ChatDrawerTrigger } from './ChatDrawerTrigger';
 import { ModelSelector } from './ModelSelector';
 import { EnhancedChatInput } from './EnhancedChatInput';
 import { chatStorageService } from '../../services/chat-storage-service';
+import { CHAT_CONSTANTS } from '../../constants/CHAT_CONSTANTS';
+import { LS_KEYS } from '../../constants/storage-keys';
 import { useChatHandler } from '../../hooks/useChatHandler';
 import {
   createModelRef,
@@ -96,12 +98,19 @@ function getToolDescription(
   }
 }
 
-// 抽屉宽度缓存 key
-const DRAWER_WIDTH_CACHE_KEY = 'chat-drawer-width';
-// 默认宽度（与 SCSS 中的 50vw 对应）
-const DEFAULT_DRAWER_WIDTH = Math.max(375, window.innerWidth * 0.5);
-// 最小宽度
-const MIN_DRAWER_WIDTH = 375;
+const getDrawerMaxWidth = () =>
+  Math.max(CHAT_CONSTANTS.DRAWER_MIN_WIDTH, window.innerWidth - 60);
+
+const clampDrawerWidth = (width: number) =>
+  Math.max(
+    CHAT_CONSTANTS.DRAWER_MIN_WIDTH,
+    Math.min(width, getDrawerMaxWidth())
+  );
+
+const getDefaultDrawerWidth = () =>
+  clampDrawerWidth(
+    Math.floor(window.innerWidth * CHAT_CONSTANTS.DRAWER_DEFAULT_WIDTH_RATIO)
+  );
 
 export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
   ({ defaultOpen = false, onOpenChange }, ref) => {
@@ -116,14 +125,21 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
 
     // 抽屉宽度状态（从缓存初始化）
     const [drawerWidth, setDrawerWidth] = useState(() => {
-      const cached = localStorage.getItem(DRAWER_WIDTH_CACHE_KEY);
+      const cached = localStorage.getItem(LS_KEYS.CHAT_DRAWER_WIDTH);
       if (cached) {
         const width = parseInt(cached, 10);
-        if (!isNaN(width) && width >= MIN_DRAWER_WIDTH) {
-          return Math.min(width, window.innerWidth - 60);
+        if (!isNaN(width) && width >= CHAT_CONSTANTS.DRAWER_MIN_WIDTH) {
+          const clampedWidth = clampDrawerWidth(width);
+          if (clampedWidth !== width) {
+            localStorage.setItem(
+              LS_KEYS.CHAT_DRAWER_WIDTH,
+              String(clampedWidth)
+            );
+          }
+          return clampedWidth;
         }
       }
-      return DEFAULT_DRAWER_WIDTH;
+      return getDefaultDrawerWidth();
     });
     // 是否正在拖动
     const [isDragging, setIsDragging] = useState(false);
@@ -184,17 +200,13 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
 
       const handleMouseMove = (e: MouseEvent) => {
         const newWidth = window.innerWidth - e.clientX;
-        const clampedWidth = Math.max(
-          MIN_DRAWER_WIDTH,
-          Math.min(newWidth, window.innerWidth - 60)
-        );
-        setDrawerWidth(clampedWidth);
+        setDrawerWidth(clampDrawerWidth(newWidth));
       };
 
       const handleMouseUp = () => {
         setIsDragging(false);
         // 保存到缓存
-        localStorage.setItem(DRAWER_WIDTH_CACHE_KEY, String(drawerWidth));
+        localStorage.setItem(LS_KEYS.CHAT_DRAWER_WIDTH, String(drawerWidth));
       };
 
       document.addEventListener('mousemove', handleMouseMove);
@@ -214,15 +226,12 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
     // 窗口大小变化时调整宽度
     useEffect(() => {
       const handleResize = () => {
-        const maxWidth = window.innerWidth - 60;
-        if (drawerWidth > maxWidth) {
-          setDrawerWidth(maxWidth);
-        }
+        setDrawerWidth((width) => clampDrawerWidth(width));
       };
 
       window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
-    }, [drawerWidth]);
+    }, []);
 
     // 开始拖动
     const handleResizeStart = useCallback((e: React.MouseEvent) => {

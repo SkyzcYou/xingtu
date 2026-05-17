@@ -62,7 +62,7 @@
     position: relative;
     aspect-ratio: 1;
     overflow: hidden;
-    background-color: rgba(0, 0, 0, 0.05);
+    background-color: var(--chat-media-placeholder-bg);
   }
 
   &__image {
