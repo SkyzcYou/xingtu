@@ -439,6 +439,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         onMiddleTabChange={handleVendorChange}
         searchQuery={filterKeyword}
         compact
+        showTabTooltip
       >
         <div className="ai-model-selector__list">
           {displayedModels.map((model, index) => {

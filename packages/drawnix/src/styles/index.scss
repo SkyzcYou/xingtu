@@ -52,6 +52,7 @@
     height: 100%;
     min-width: 0; // Prevent flex item from overflowing
   }
+
   .pencil-mode-toolbar {
     position: absolute;
     top: 82px;
@@ -884,6 +885,7 @@
     // 输入栏和导航
     .ai-input-bar,
     .view-navigation,
+    .view-navigation-brand-mark,
     .version-update-prompt,
     // 弹出层
     .command-palette,

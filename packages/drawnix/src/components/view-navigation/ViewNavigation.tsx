@@ -37,6 +37,8 @@ const EDGE_MARGIN = 10;
 // 自动隐藏延迟（毫秒）
 const AUTO_HIDE_DELAY = 3000;
 
+declare const __APP_VERSION__: string;
+
 const getViewportSnapshot = (board?: PlaitBoard) => {
   const origination = board
     ? getViewportOrigination(board) || board.viewport.origination
@@ -60,8 +62,9 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
   // 首次进入页面时默认展示 minimap
   const [minimapExpanded, setMinimapExpanded] = useState(true);
   const [manuallyExpanded, setManuallyExpanded] = useState(false);
+  const [brandTop, setBrandTop] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   // 用于检测 viewport 变化
   const lastViewportRef = useRef<
     ReturnType<typeof getViewportSnapshot> | null
@@ -83,6 +86,53 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
 
     return EDGE_MARGIN;
   }, [isDrawerOpen, drawerWidth]);
+
+  const updateBrandTop = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const zoomRect = container
+      .querySelector<HTMLElement>('.view-navigation__zoom')
+      ?.getBoundingClientRect();
+    const minimapRect = container
+      .querySelector<HTMLElement>('.view-navigation__minimap .minimap__content')
+      ?.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const visualBottom = Math.max(
+      zoomRect?.bottom ?? 0,
+      minimapRect?.bottom ?? 0,
+      containerRect.top
+    );
+
+    setBrandTop(Math.round(visualBottom + 3));
+  }, []);
+
+  useEffect(() => {
+    const frameId = requestAnimationFrame(updateBrandTop);
+    const timeoutId = window.setTimeout(updateBrandTop, 240);
+    window.addEventListener('resize', updateBrandTop);
+
+    const element = containerRef.current;
+    if (typeof ResizeObserver === 'undefined' || !element) {
+      return () => {
+        cancelAnimationFrame(frameId);
+        window.clearTimeout(timeoutId);
+        window.removeEventListener('resize', updateBrandTop);
+      };
+    }
+
+    const observer = new ResizeObserver(() => updateBrandTop());
+    observer.observe(element);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      window.clearTimeout(timeoutId);
+      window.removeEventListener('resize', updateBrandTop);
+      observer.disconnect();
+    };
+  }, [minimapExpanded, showMinimap, updateBrandTop]);
 
   // 缩放操作
   const handleZoomOut = useCallback(() => {
@@ -229,17 +279,29 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
 
   // 当前缩放百分比
   const zoomPercentage = Math.round((board?.viewport?.zoom || 1) * 100);
+  const appVersion =
+    typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__
+      ? __APP_VERSION__
+      : '0.0.0';
+
+  const handleBrandMarkInteraction = useCallback(
+    (event: React.SyntheticEvent<HTMLDivElement>) => {
+      event.stopPropagation();
+    },
+    []
+  );
 
   return (
-    <div
-      className={`view-navigation ${ATTACHED_ELEMENT_CLASS_NAME}`}
-      style={{
-        right: rightOffset,
-        zIndex: Z_INDEX.VIEW_NAVIGATION,
-      }}
-      ref={containerRef}
-      data-testid="view-navigation"
-    >
+    <>
+      <div
+        className={`view-navigation ${ATTACHED_ELEMENT_CLASS_NAME}`}
+        style={{
+          right: rightOffset,
+          zIndex: Z_INDEX.VIEW_NAVIGATION,
+        }}
+        ref={containerRef}
+        data-testid="view-navigation"
+      >
       {/* 缩放控制区域 */}
       <div className="view-navigation__zoom">
         <HoverTip content={t('zoom.out')} showArrow={false}>
@@ -343,6 +405,7 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
         )}
       </div>
 
+
       {/* Minimap - 展开时显示 */}
       {showMinimap && minimapExpanded && (
         <div className="view-navigation__minimap">
@@ -360,7 +423,21 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
           />
         </div>
       )}
-    </div>
+      </div>
+      <div
+        className={`view-navigation-brand-mark ${ATTACHED_ELEMENT_CLASS_NAME}`}
+        style={{
+          right: rightOffset,
+          top: brandTop ?? 56,
+          zIndex: Z_INDEX.VIEW_NAVIGATION,
+        }}
+        onPointerDown={handleBrandMarkInteraction}
+        onClick={handleBrandMarkInteraction}
+        onDoubleClick={handleBrandMarkInteraction}
+      >
+        {`xingtu.live - v${appVersion}`}
+      </div>
+    </>
   );
 };
 

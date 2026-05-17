@@ -9,6 +9,7 @@
  */
 
 import React, { useCallback } from 'react';
+import { HoverTip } from './hover';
 import './vendor-tab-panel.scss';
 
 export interface VendorTab {
@@ -37,6 +38,8 @@ export interface VendorTabPanelProps {
   children: React.ReactNode;
   /** 紧凑模式（标签宽度缩小） */
   compact?: boolean;
+  /** 第一列标签 hover 时展示完整名称 */
+  showTabTooltip?: boolean;
   /** 第一列底部扩展区 */
   tabsFooter?: React.ReactNode;
 }
@@ -51,6 +54,7 @@ export const VendorTabPanel: React.FC<VendorTabPanelProps> = ({
   searchQuery,
   children,
   compact = false,
+  showTabTooltip = false,
   tabsFooter,
 }) => {
   const isSearching = !!searchQuery?.trim();
@@ -81,9 +85,8 @@ export const VendorTabPanel: React.FC<VendorTabPanelProps> = ({
           <div className="vendor-tab-panel__tabs-list">
             {tabs.map(({ id, label, count, icon }) => {
               const isActive = activeTab === id;
-              return (
+              const tabButton = (
                 <button
-                  key={id}
                   className={`vendor-tab-panel__tab ${
                     isActive ? 'vendor-tab-panel__tab--active' : ''
                   }`}
@@ -96,6 +99,17 @@ export const VendorTabPanel: React.FC<VendorTabPanelProps> = ({
                   <span className="vendor-tab-panel__tab-label">{label}</span>
                   <span className="vendor-tab-panel__tab-count">{count}</span>
                 </button>
+              );
+
+              return (
+                <HoverTip
+                  key={id}
+                  content={label}
+                  disabled={!showTabTooltip}
+                  showArrow={false}
+                >
+                  {tabButton}
+                </HoverTip>
               );
             })}
           </div>

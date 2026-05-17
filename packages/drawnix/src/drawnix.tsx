@@ -137,6 +137,7 @@ import {
 import { syncEditedPPTSlideImage } from './utils/frame-insertion-utils';
 import type { MediaLibraryModalProps } from './types/asset.types';
 import { SelectionMode } from './types/asset.types';
+
 const DeferredAIInputBar = lazy(() =>
   import('./components/startup/DeferredAIInputBar').then((module) => ({
     default: module.DeferredAIInputBar,
