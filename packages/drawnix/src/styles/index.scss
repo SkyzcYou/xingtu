@@ -343,10 +343,10 @@
     // 平板及以下 (max-width: 768px) - 简化工具栏
     @include tablet-and-below {
       left: $mobile-spacing;
-      top: auto;
-      bottom: calc(#{$safe-area-bottom} + 70px); // 给 AI 输入栏留出空间
+      top: calc(#{$safe-area-top} + #{$mobile-spacing});
+      bottom: auto;
       height: auto;
-      max-height: calc(100vh - 160px); // 限制最大高度
+      max-height: calc(100vh - #{$safe-area-top} - #{$safe-area-bottom} - 16px);
       width: 38px; // 固定宽度，确保收起和展开状态一致（以收起状态为准）
       max-width: 38px;
       border-radius: 24px;
@@ -380,8 +380,9 @@
     // 移动端竖屏 (max-width: 640px) - 最小化工具栏
     @include mobile {
       left: $mobile-spacing;
-      bottom: calc(#{$safe-area-bottom} + 80px); // 更多空间给 AI 输入栏
-      max-height: calc(100vh - 180px);
+      top: calc(#{$safe-area-top} + #{$mobile-spacing});
+      bottom: auto;
+      max-height: calc(100vh - #{$safe-area-top} - #{$safe-area-bottom} - 16px);
 
       // 更紧凑的布局
       &__scrollable {
@@ -422,11 +423,6 @@
         }
       }
 
-      @include mobile {
-        bottom: calc(
-          #{$safe-area-bottom} + var(--aitu-ai-input-bar-height, 68px) + 12px
-        );
-      }
     }
 
     // 移动端收起状态快捷按钮区域
