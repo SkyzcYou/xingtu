@@ -21,6 +21,7 @@ import { Z_INDEX } from '../../constants/z-index';
 import { useI18n } from '../../i18n';
 import { fitAllPPTFrames, fitFrame } from '../../utils/fit-frame';
 import { HoverTip } from '../shared/hover';
+import { useConfirmDialog } from '../dialog/ConfirmDialog';
 import { isFrameElement } from '../../types/frame.types';
 import { requestOpenPPTEditor } from '../../services/ppt/ppt-ui-events';
 import './view-navigation.scss';
@@ -36,6 +37,8 @@ export interface ViewNavigationProps {
 const EDGE_MARGIN = 10;
 // 自动隐藏延迟（毫秒）
 const AUTO_HIDE_DELAY = 3000;
+const DEBUG_PANEL_CLICK_THRESHOLD = 5;
+const DEBUG_PANEL_CLICK_WINDOW_MS = 1600;
 
 declare const __APP_VERSION__: string;
 
@@ -64,6 +67,8 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
   const [manuallyExpanded, setManuallyExpanded] = useState(false);
   const [brandTop, setBrandTop] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const brandClickRef = useRef({ count: 0, firstClickAt: 0 });
+  const { confirm, confirmDialog } = useConfirmDialog({ container });
 
   // 用于检测 viewport 变化
   const lastViewportRef = useRef<
@@ -284,8 +289,46 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
       ? __APP_VERSION__
       : '0.0.0';
 
-  const handleBrandMarkInteraction = useCallback(
-    (event: React.SyntheticEvent<HTMLDivElement>) => {
+  const handleBrandMarkPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.stopPropagation();
+    },
+    []
+  );
+
+  const handleBrandMarkClick = useCallback(
+    async (event: React.MouseEvent<HTMLDivElement>) => {
+      event.stopPropagation();
+
+      const now = Date.now();
+      const clickState = brandClickRef.current;
+      if (now - clickState.firstClickAt > DEBUG_PANEL_CLICK_WINDOW_MS) {
+        clickState.count = 0;
+        clickState.firstClickAt = now;
+      }
+
+      clickState.count += 1;
+      if (clickState.count < DEBUG_PANEL_CLICK_THRESHOLD) {
+        return;
+      }
+
+      clickState.count = 0;
+      clickState.firstClickAt = 0;
+
+      const confirmed = await confirm({
+        title: '是否进入日志/调式页面',
+        confirmText: '进入',
+        cancelText: '取消',
+      });
+      if (confirmed) {
+        window.location.href = './sw-debug.html';
+      }
+    },
+    [confirm]
+  );
+
+  const handleBrandMarkDoubleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
       event.stopPropagation();
     },
     []
@@ -431,12 +474,13 @@ export const ViewNavigation: React.FC<ViewNavigationProps> = ({
           top: brandTop ?? 56,
           zIndex: Z_INDEX.VIEW_NAVIGATION,
         }}
-        onPointerDown={handleBrandMarkInteraction}
-        onClick={handleBrandMarkInteraction}
-        onDoubleClick={handleBrandMarkInteraction}
+        onPointerDown={handleBrandMarkPointerDown}
+        onClick={handleBrandMarkClick}
+        onDoubleClick={handleBrandMarkDoubleClick}
       >
         {`xingtu.live - v${appVersion}`}
       </div>
+      {confirmDialog}
     </>
   );
 };
