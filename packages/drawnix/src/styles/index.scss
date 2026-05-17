@@ -342,7 +342,7 @@
 
     // 平板及以下 (max-width: 768px) - 简化工具栏
     @include tablet-and-below {
-      left: $mobile-spacing;
+      left: var(--aitu-toolbar-left, #{$mobile-spacing});
       top: calc(#{$safe-area-top} + #{$mobile-spacing});
       bottom: auto;
       height: auto;
@@ -350,10 +350,6 @@
       width: 38px; // 固定宽度，确保收起和展开状态一致（以收起状态为准）
       max-width: 38px;
       border-radius: 24px;
-
-      .unified-toolbar__drag-handle {
-        display: none;
-      }
 
       // 移动端强制使用图标模式
       .tool-icon__label {
@@ -379,7 +375,7 @@
 
     // 移动端竖屏 (max-width: 640px) - 最小化工具栏
     @include mobile {
-      left: $mobile-spacing;
+      left: var(--aitu-toolbar-left, #{$mobile-spacing});
       top: calc(#{$safe-area-top} + #{$mobile-spacing});
       bottom: auto;
       max-height: calc(100vh - #{$safe-area-top} - #{$safe-area-bottom} - 16px);

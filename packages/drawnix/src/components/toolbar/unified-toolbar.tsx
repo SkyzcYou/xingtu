@@ -14,6 +14,7 @@ import { CreationToolbar } from './creation-toolbar';
 import { UnifiedToolbarProps } from './toolbar.types';
 import { Island } from '../island';
 import { BottomActionsSection } from './bottom-actions-section';
+import { CanvasAvatarPlaceholder } from '../canvas-avatar-placeholder';
 import { useViewportScale } from '../../hooks/useViewportScale';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import { MessageHornIcon, TaskIcon } from '../icons';
@@ -33,6 +34,7 @@ const TOOLBAR_MIN_HEIGHT = 460;
 const AI_BUTTON_IDS = ['ai-image', 'ai-video'];
 
 const TOOLBAR_LEFT_STORAGE_KEY = 'aitu-toolbar-left';
+const TOOLBAR_MOBILE_LEFT_STORAGE_KEY = 'aitu-toolbar-mobile-left';
 const TOOLBAR_DEFAULT_LEFT = 0;
 const TOOLBAR_MOBILE_LEFT = 8;
 const TOOLBAR_VIEWPORT_GAP = 0;
@@ -63,35 +65,51 @@ function getToolbarDockSide(
   return left + toolbarWidth / 2 > window.innerWidth / 2 ? 'right' : 'left';
 }
 
-function readStoredToolbarLeft() {
+function getToolbarStorageKey(isMobileOrTablet: boolean) {
+  return isMobileOrTablet
+    ? TOOLBAR_MOBILE_LEFT_STORAGE_KEY
+    : TOOLBAR_LEFT_STORAGE_KEY;
+}
+
+function getDefaultToolbarLeft(isMobileOrTablet: boolean) {
+  return isMobileOrTablet ? TOOLBAR_MOBILE_LEFT : TOOLBAR_DEFAULT_LEFT;
+}
+
+function readStoredToolbarLeft(isMobileOrTablet = false) {
+  const defaultLeft = getDefaultToolbarLeft(isMobileOrTablet);
   if (typeof window === 'undefined') {
-    return TOOLBAR_DEFAULT_LEFT;
+    return defaultLeft;
   }
 
   try {
-    const raw = window.localStorage.getItem(TOOLBAR_LEFT_STORAGE_KEY);
+    const raw = window.localStorage.getItem(
+      getToolbarStorageKey(isMobileOrTablet)
+    );
     if (!raw) {
-      return TOOLBAR_DEFAULT_LEFT;
+      return defaultLeft;
     }
 
     const parsed = Number(raw);
     if (!Number.isFinite(parsed)) {
-      return TOOLBAR_DEFAULT_LEFT;
+      return defaultLeft;
     }
 
     return clampToolbarLeft(parsed);
   } catch {
-    return TOOLBAR_DEFAULT_LEFT;
+    return defaultLeft;
   }
 }
 
-function writeStoredToolbarLeft(left: number) {
+function writeStoredToolbarLeft(left: number, isMobileOrTablet = false) {
   if (typeof window === 'undefined') {
     return;
   }
 
   try {
-    window.localStorage.setItem(TOOLBAR_LEFT_STORAGE_KEY, String(left));
+    window.localStorage.setItem(
+      getToolbarStorageKey(isMobileOrTablet),
+      String(left)
+    );
   } catch {
     // localStorage 可能被禁用，拖动仍可在当前页面生效
   }
@@ -164,9 +182,14 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
     minimizedToolsBarEnabled = false,
     onEnableToolWindows,
   }) => {
+    // 检测设备类型
+    const { isMobile: isSmallScreen, isTablet } = useDeviceType();
+    const isMobileOrTablet = isSmallScreen || isTablet;
     const [isIconMode, setIsIconMode] = useState(false);
     const [isMobileCollapsed, setIsMobileCollapsed] = useState(true); // 移动端默认收起
-    const [toolbarLeft, setToolbarLeft] = useState(readStoredToolbarLeft);
+    const [toolbarLeft, setToolbarLeft] = useState(() =>
+      readStoredToolbarLeft(isMobileOrTablet)
+    );
     const [isToolbarDragging, setIsToolbarDragging] = useState(false);
     const [isTaskPanelAnimationReady, setIsTaskPanelAnimationReady] =
       useState(false);
@@ -181,18 +204,19 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
       startLeft: number;
     } | null>(null);
 
-    // 检测设备类型
-    const { isMobile: isSmallScreen, isTablet } = useDeviceType();
-    const isMobileOrTablet = isSmallScreen || isTablet;
-    const effectiveToolbarLeft = isMobileOrTablet
-      ? TOOLBAR_MOBILE_LEFT
-      : toolbarLeft;
+    const effectiveToolbarLeft = toolbarLeft;
 
     // fixed 定位保留 CSS 安全区偏移，hook 只补偿页面缩放
     useViewportScale(containerRef, {
       enablePositionTracking: false,
       enableScaleCompensation: true,
     });
+
+    useEffect(() => {
+      const nextLeft = readStoredToolbarLeft(isMobileOrTablet);
+      toolbarLeftRef.current = nextLeft;
+      setToolbarLeft(nextLeft);
+    }, [isMobileOrTablet]);
 
     useEffect(() => {
       toolbarLeftRef.current = effectiveToolbarLeft;
@@ -221,10 +245,6 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
     }, [isToolbarDragging]);
 
     useEffect(() => {
-      if (isMobileOrTablet) {
-        return;
-      }
-
       const handleResize = () => {
         const toolbarWidth =
           containerRef.current?.getBoundingClientRect().width ||
@@ -238,7 +258,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
       return () => {
         window.removeEventListener('resize', handleResize);
       };
-    }, [isMobileOrTablet]);
+    }, []);
 
     useEffect(() => {
       if (!taskPanelExpanded) {
@@ -261,7 +281,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
 
     const handleToolbarDragStart = useCallback(
       (event: React.PointerEvent<HTMLButtonElement>) => {
-        if (isMobileOrTablet || event.button !== 0) {
+        if (event.button !== 0) {
           return;
         }
 
@@ -276,7 +296,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
         event.currentTarget.setPointerCapture(event.pointerId);
         setIsToolbarDragging(true);
       },
-      [isMobileOrTablet]
+      []
     );
 
     const handleToolbarDragMove = useCallback(
@@ -311,26 +331,24 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
         document.documentElement.classList.remove('aitu-toolbar-dragging');
         setIsToolbarDragging(false);
         setToolbarLeft(toolbarLeftRef.current);
-        writeStoredToolbarLeft(toolbarLeftRef.current);
+        writeStoredToolbarLeft(toolbarLeftRef.current, isMobileOrTablet);
 
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId);
         }
       },
-      []
+      [isMobileOrTablet]
     );
 
     const handleToolbarPositionReset = useCallback(
       (event: React.MouseEvent<HTMLButtonElement>) => {
-        if (isMobileOrTablet) {
-          return;
-        }
-
         event.preventDefault();
         event.stopPropagation();
-        toolbarLeftRef.current = TOOLBAR_DEFAULT_LEFT;
-        setToolbarLeft(TOOLBAR_DEFAULT_LEFT);
-        writeStoredToolbarLeft(TOOLBAR_DEFAULT_LEFT);
+
+        const defaultLeft = getDefaultToolbarLeft(isMobileOrTablet);
+        toolbarLeftRef.current = defaultLeft;
+        setToolbarLeft(defaultLeft);
+        writeStoredToolbarLeft(defaultLeft, isMobileOrTablet);
       },
       [isMobileOrTablet]
     );
@@ -468,21 +486,19 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
           padding={0}
           data-testid="unified-toolbar"
         >
-          {!isMobileOrTablet && (
-            <HoverTip content="拖动工具栏位置，双击复位" showArrow={false}>
-              <button
-                type="button"
-                className="unified-toolbar__drag-handle"
-                aria-label="拖动工具栏位置，双击复位"
-                data-testid="toolbar-drag-handle"
-                onPointerDown={handleToolbarDragStart}
-                onPointerMove={handleToolbarDragMove}
-                onPointerUp={finishToolbarDrag}
-                onPointerCancel={finishToolbarDrag}
-                onDoubleClick={handleToolbarPositionReset}
-              />
-            </HoverTip>
-          )}
+          <HoverTip content="拖动工具栏位置，双击复位" showArrow={false}>
+            <button
+              type="button"
+              className="unified-toolbar__drag-handle"
+              aria-label="拖动工具栏位置，双击复位"
+              data-testid="toolbar-drag-handle"
+              onPointerDown={handleToolbarDragStart}
+              onPointerMove={handleToolbarDragMove}
+              onPointerUp={finishToolbarDrag}
+              onPointerCancel={finishToolbarDrag}
+              onDoubleClick={handleToolbarPositionReset}
+            />
+          </HoverTip>
 
           {/* 移动端收起状态的快捷按钮区域 */}
           {isMobileOrTablet && isMobileCollapsed && (
@@ -496,6 +512,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
               >
                 <ChevronUp size={18} />
               </button>
+              <CanvasAvatarPlaceholder />
               <button
                 type="button"
                 className={classNames('unified-toolbar__collapsed-btn', {
@@ -533,8 +550,9 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
             </button>
           )}
 
-          {/* 顶部固定区域 - 应用工具分区（菜单、撤销、重做） */}
+          {/* 顶部固定区域 - 用户头像、应用菜单、撤销、重做 */}
           <div className="unified-toolbar__section unified-toolbar__section--fixed-top">
+            <CanvasAvatarPlaceholder />
             <AppToolbar
               embedded={true}
               iconMode={isIconMode || isMobileOrTablet}
