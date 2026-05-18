@@ -68,6 +68,7 @@ export type DrawnixState = {
   dialogInitialDataByType?: DialogInitialDataByType;
   openCleanConfirm: boolean;
   openSettings: boolean;
+  openProfile: boolean;
   openCommandPalette?: boolean;
   openCanvasSearch?: boolean;
   toolSettingsVersion?: number;

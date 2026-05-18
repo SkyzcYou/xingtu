@@ -63,6 +63,7 @@ export interface UnifiedToolbarProps {
   onOpenMediaLibrary?: (config?: Partial<MediaLibraryConfig> & {
     selectButtonText?: string;
   }) => void;
+  onOpenProfile?: () => void;
   /**
    * 延后功能层是否已启用
    */

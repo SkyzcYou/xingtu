@@ -191,6 +191,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
     onOpenBackupRestore,
     onOpenCloudSync,
     onOpenMediaLibrary,
+    onOpenProfile,
     deferredFeaturesEnabled = false,
     minimizedToolsBarEnabled = false,
     onEnableToolWindows,
@@ -497,6 +498,10 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
       setAvatarMenuOpen(false);
     }, []);
 
+    const handleProfileMenuSelect = useCallback(() => {
+      onOpenProfile?.();
+    }, [onOpenProfile]);
+
     const renderAvatarMenu = () => (
       <Popover
         sideOffset={12}
@@ -537,7 +542,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
           style={{ zIndex: Z_INDEX.POPOVER_APP }}
         >
           <Menu onSelect={handleAvatarMenuSelect} onClose={handleAvatarMenuSelect}>
-            <MenuItem onSelect={handleAvatarMenuSelect} aria-label="个人资料">
+            <MenuItem onSelect={handleProfileMenuSelect} aria-label="个人资料">
               个人资料
             </MenuItem>
             <MenuItem onSelect={handleAvatarMenuSelect} aria-label="登出">

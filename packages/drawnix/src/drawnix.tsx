@@ -190,6 +190,11 @@ const SettingsDialog = lazy(() =>
     default: module.SettingsDialog,
   }))
 );
+const ProfileDialog = lazy(() =>
+  import('./components/profile-dialog/profile-dialog').then((module) => ({
+    default: module.ProfileDialog,
+  }))
+);
 const UnifiedMediaViewer = lazy(() =>
   import('./components/shared/media-preview/UnifiedMediaViewer').then(
     (module) => ({
@@ -299,6 +304,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       dialogInitialDataByType: {},
       openCleanConfirm: false,
       openSettings: false,
+      openProfile: false,
     };
   });
 
@@ -1047,6 +1053,11 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   currentBoardId,
 }) => {
   const { setAppState: updateState } = useDrawnix();
+  const handleOpenProfile = useCallback(() => {
+    updateState((prev) =>
+      prev.openProfile ? prev : { ...prev, openProfile: true }
+    );
+  }, [updateState]);
   const { chatDrawerRef } = useChatDrawer();
   const { language } = useI18n();
   const playbackError = useCanvasAudioPlaybackSelector((state) => state.error);
@@ -1643,6 +1654,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
             onOpenCloudSync={handleOpenCloudSync}
             onKnowledgeBaseToggle={handleKnowledgeBaseToggle}
             onOpenMediaLibrary={handleOpenMediaLibrary}
+            onOpenProfile={handleOpenProfile}
             deferredFeaturesEnabled={toolWindowManagerEnabled}
             minimizedToolsBarEnabled={minimizedToolsBarEnabled}
             onEnableToolWindows={enableToolWindows}
@@ -1667,6 +1679,11 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
           {appState.openSettings && (
             <Suspense fallback={null}>
               <SettingsDialog container={containerRef.current}></SettingsDialog>
+            </Suspense>
+          )}
+          {appState.openProfile && (
+            <Suspense fallback={null}>
+              <ProfileDialog container={containerRef.current} />
             </Suspense>
           )}
           <CleanConfirm container={containerRef.current}></CleanConfirm>
