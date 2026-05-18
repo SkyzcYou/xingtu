@@ -10,7 +10,7 @@ import './canvas-avatar-placeholder.scss';
 
 export interface CanvasAvatarPlaceholderProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
-  seed: string | number;
+  seed?: string | number | null;
   selected?: boolean;
 }
 
@@ -18,14 +18,17 @@ export const CanvasAvatarPlaceholder = forwardRef<
   HTMLButtonElement,
   CanvasAvatarPlaceholderProps
 >(({ seed, selected = false, className, style, ...props }, ref) => {
+  const hasSeed = seed !== null && seed !== undefined && String(seed).length > 0;
   const src = useMemo(
     () =>
-      createPlanetAvatarDataUri({
-        seed,
-        size: 28,
-        title: '用户头像',
-      }),
-    [seed]
+      hasSeed
+        ? createPlanetAvatarDataUri({
+            seed,
+            size: 28,
+            title: '用户头像',
+          })
+        : null,
+    [hasSeed, seed]
   );
   const avatarClassName = [
     'canvas-avatar-placeholder',
@@ -47,12 +50,18 @@ export const CanvasAvatarPlaceholder = forwardRef<
       data-testid="canvas-avatar-placeholder"
     >
       <span className="canvas-avatar-placeholder__inner">
-        <img
-          className="canvas-avatar-placeholder__image"
-          src={src}
-          alt="用户头像"
-          draggable={false}
-        />
+        {src ? (
+          <img
+            className="canvas-avatar-placeholder__image"
+            src={src}
+            alt="用户头像"
+            draggable={false}
+          />
+        ) : (
+          <span className="canvas-avatar-placeholder__emoji" aria-hidden="true">
+            🪐
+          </span>
+        )}
       </span>
     </button>
   );

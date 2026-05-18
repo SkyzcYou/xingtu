@@ -7,8 +7,7 @@ import React, {
   useRef,
 } from 'react';
 import classNames from 'classnames';
-import { ATTACHED_ELEMENT_CLASS_NAME, PlaitBoard } from '@plait/core';
-import { useBoard } from '@plait-board/react-board';
+import { ATTACHED_ELEMENT_CLASS_NAME } from '@plait/core';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { AppToolbar } from './app-toolbar/app-toolbar';
 import { CreationToolbar } from './creation-toolbar';
@@ -16,18 +15,24 @@ import { UnifiedToolbarProps } from './toolbar.types';
 import { Island } from '../island';
 import { BottomActionsSection } from './bottom-actions-section';
 import { CanvasAvatarPlaceholder } from '../canvas-avatar-placeholder';
-import { Popover, PopoverContent, PopoverTrigger } from '../popover/popover';
-import Menu from '../menu/menu';
-import MenuItem from '../menu/menu-item';
 import { useViewportScale } from '../../hooks/useViewportScale';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import { MessageHornIcon, TaskIcon } from '../icons';
-import { Z_INDEX } from '../../constants/z-index';
 import { HoverTip } from '../shared/hover';
+import {
+  loadOidcProfileViewModel,
+  type OidcProfileViewModel,
+} from '../../services/auth/oidc-session';
 
 const TaskQueuePanel = lazy(() =>
   import('../task-queue/TaskQueuePanel').then((module) => ({
     default: module.TaskQueuePanel,
+  }))
+);
+
+const ProfilePanel = lazy(() =>
+  import('../profile-dialog/ProfilePanel').then((module) => ({
+    default: module.ProfilePanel,
   }))
 );
 
@@ -120,12 +125,9 @@ function writeStoredToolbarLeft(left: number, isMobileOrTablet = false) {
   }
 }
 
-function createAvatarSeed() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-
-  return `avatar-${Date.now()}-${Math.random()}`;
+function getSignedInAvatarSeed() {
+  const profile = loadOidcProfileViewModel();
+  return profile.status === 'signed-in' ? profile.avatarSeed : null;
 }
 
 function syncToolbarPositionVars(left: number, toolbarEl: HTMLElement | null) {
@@ -188,16 +190,15 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
     onToolboxDrawerToggle,
     taskPanelExpanded = false,
     onTaskPanelToggle,
+    profilePanelExpanded = false,
+    onProfilePanelToggle,
     onOpenBackupRestore,
     onOpenCloudSync,
     onOpenMediaLibrary,
-    onOpenProfile,
     deferredFeaturesEnabled = false,
     minimizedToolsBarEnabled = false,
     onEnableToolWindows,
   }) => {
-    const board = useBoard();
-    const popoverContainer = PlaitBoard.getBoardContainer(board);
     // 检测设备类型
     const { isMobile: isSmallScreen, isTablet } = useDeviceType();
     const isMobileOrTablet = isSmallScreen || isTablet;
@@ -206,12 +207,16 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
     const [toolbarLeft, setToolbarLeft] = useState(() =>
       readStoredToolbarLeft(isMobileOrTablet)
     );
-    const [avatarSeed] = useState(createAvatarSeed);
-    const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+    const [avatarSeed, setAvatarSeed] = useState<string | null>(
+      getSignedInAvatarSeed
+    );
     const [isToolbarDragging, setIsToolbarDragging] = useState(false);
     const [isTaskPanelAnimationReady, setIsTaskPanelAnimationReady] =
       useState(false);
+    const [isProfilePanelAnimationReady, setIsProfilePanelAnimationReady] =
+      useState(false);
     const hasEverExpanded = useRef(false);
+    const hasProfilePanelEverExpanded = useRef(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollableRef = useRef<HTMLDivElement>(null);
     const hasScrolledToAI = useRef(false);
@@ -221,7 +226,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
       startX: number;
       startLeft: number;
     } | null>(null);
-    const avatarMenuPointerHandledRef = useRef(false);
+    const avatarPointerHandledRef = useRef(false);
     const mobileTogglePointerHandledRef = useRef(false);
 
     const effectiveToolbarLeft = toolbarLeft;
@@ -298,6 +303,25 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
         cancelAnimationFrame(frameId);
       };
     }, [taskPanelExpanded]);
+
+    useEffect(() => {
+      if (!profilePanelExpanded) {
+        setIsProfilePanelAnimationReady(false);
+        return;
+      }
+
+      if (!hasProfilePanelEverExpanded.current) {
+        return;
+      }
+
+      const frameId = requestAnimationFrame(() => {
+        setIsProfilePanelAnimationReady(true);
+      });
+
+      return () => {
+        cancelAnimationFrame(frameId);
+      };
+    }, [profilePanelExpanded]);
 
     const handleToolbarDragStart = useCallback(
       (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -494,63 +518,69 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
       [handleMobileToggle]
     );
 
-    const handleAvatarMenuSelect = useCallback(() => {
-      setAvatarMenuOpen(false);
+    const handleProfilePanelToggle = useCallback(() => {
+      if (!profilePanelExpanded && !hasProfilePanelEverExpanded.current) {
+        hasProfilePanelEverExpanded.current = true;
+      }
+      if (!profilePanelExpanded) {
+        setIsProfilePanelAnimationReady(false);
+      }
+      onProfilePanelToggle?.();
+    }, [onProfilePanelToggle, profilePanelExpanded]);
+
+    const handleProfilePanelClose = useCallback(() => {
+      if (profilePanelExpanded) {
+        setIsProfilePanelAnimationReady(false);
+        onProfilePanelToggle?.();
+      }
+    }, [onProfilePanelToggle, profilePanelExpanded]);
+
+    const handleProfileChange = useCallback((profile: OidcProfileViewModel) => {
+      setAvatarSeed(profile.status === 'signed-in' ? profile.avatarSeed : null);
     }, []);
 
-    const handleProfileMenuSelect = useCallback(() => {
-      onOpenProfile?.();
-    }, [onOpenProfile]);
+    const handleAvatarPointerDown = useCallback(
+      (event: React.PointerEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        avatarPointerHandledRef.current = true;
+        handleProfilePanelToggle();
+      },
+      [handleProfilePanelToggle]
+    );
 
-    const renderAvatarMenu = () => (
-      <Popover
-        sideOffset={12}
-        open={avatarMenuOpen}
-        onOpenChange={setAvatarMenuOpen}
-        placement="right-start"
-      >
-        <PopoverTrigger asChild>
-          <CanvasAvatarPlaceholder
-            seed={avatarSeed}
-            selected={avatarMenuOpen}
-            aria-label="账户菜单"
-            onPointerDown={(event) => {
-              event.stopPropagation();
-              avatarMenuPointerHandledRef.current = true;
-              setAvatarMenuOpen((prev) => !prev);
-            }}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (avatarMenuPointerHandledRef.current) {
-                avatarMenuPointerHandledRef.current = false;
-                return;
-              }
-              setAvatarMenuOpen((prev) => !prev);
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' && event.key !== ' ') {
-                return;
-              }
-              event.preventDefault();
-              event.stopPropagation();
-              setAvatarMenuOpen((prev) => !prev);
-            }}
-          />
-        </PopoverTrigger>
-        <PopoverContent
-          container={popoverContainer}
-          style={{ zIndex: Z_INDEX.POPOVER_APP }}
-        >
-          <Menu onSelect={handleAvatarMenuSelect} onClose={handleAvatarMenuSelect}>
-            <MenuItem onSelect={handleProfileMenuSelect} aria-label="个人资料">
-              个人资料
-            </MenuItem>
-            <MenuItem onSelect={handleAvatarMenuSelect} aria-label="登出">
-              登出
-            </MenuItem>
-          </Menu>
-        </PopoverContent>
-      </Popover>
+    const handleAvatarClick = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        if (avatarPointerHandledRef.current) {
+          avatarPointerHandledRef.current = false;
+          return;
+        }
+        handleProfilePanelToggle();
+      },
+      [handleProfilePanelToggle]
+    );
+
+    const handleAvatarKeyDown = useCallback(
+      (event: React.KeyboardEvent<HTMLButtonElement>) => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        handleProfilePanelToggle();
+      },
+      [handleProfilePanelToggle]
+    );
+
+    const renderAvatarTrigger = () => (
+      <CanvasAvatarPlaceholder
+        seed={avatarSeed}
+        selected={profilePanelExpanded}
+        aria-label={profilePanelExpanded ? '关闭个人资料' : '打开个人资料'}
+        onPointerDown={handleAvatarPointerDown}
+        onClick={handleAvatarClick}
+        onKeyDown={handleAvatarKeyDown}
+      />
     );
 
     return (
@@ -561,6 +591,15 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
             <TaskQueuePanel
               expanded={taskPanelExpanded && isTaskPanelAnimationReady}
               onClose={handleTaskPanelClose}
+            />
+          </Suspense>
+        )}
+        {hasProfilePanelEverExpanded.current && (
+          <Suspense fallback={null}>
+            <ProfilePanel
+              expanded={profilePanelExpanded && isProfilePanelAnimationReady}
+              onClose={handleProfilePanelClose}
+              onProfileChange={handleProfileChange}
             />
           </Suspense>
         )}
@@ -621,7 +660,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
               >
                 <ChevronUp size={18} />
               </button>
-              {renderAvatarMenu()}
+              {renderAvatarTrigger()}
               <button
                 type="button"
                 className={classNames('unified-toolbar__collapsed-btn', {
@@ -665,7 +704,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
 
           {/* 顶部固定区域 - 用户头像、应用菜单、撤销、重做 */}
           <div className="unified-toolbar__section unified-toolbar__section--fixed-top">
-            {!(isMobileOrTablet && isMobileCollapsed) && renderAvatarMenu()}
+            {!(isMobileOrTablet && isMobileCollapsed) && renderAvatarTrigger()}
             <AppToolbar
               embedded={true}
               iconMode={isIconMode || isMobileOrTablet}

@@ -190,11 +190,6 @@ const SettingsDialog = lazy(() =>
     default: module.SettingsDialog,
   }))
 );
-const ProfileDialog = lazy(() =>
-  import('./components/profile-dialog/profile-dialog').then((module) => ({
-    default: module.ProfileDialog,
-  }))
-);
 const UnifiedMediaViewer = lazy(() =>
   import('./components/shared/media-preview/UnifiedMediaViewer').then(
     (module) => ({
@@ -258,6 +253,9 @@ const shouldAutoCloseToolboxDrawer = (): boolean =>
 const shouldAutoCloseTaskDrawer = (): boolean =>
   !getDrawerPinned(DRAWER_PIN_KEYS.task);
 
+const shouldAutoCloseProfileDrawer = (): boolean =>
+  !getDrawerPinned(DRAWER_PIN_KEYS.profile);
+
 function detectMobileViewport(): boolean {
   if (typeof window === 'undefined') {
     return false;
@@ -304,7 +302,6 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       dialogInitialDataByType: {},
       openCleanConfirm: false,
       openSettings: false,
-      openProfile: false,
     };
   });
 
@@ -313,6 +310,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   const [projectDrawerOpen, setProjectDrawerOpen] = useState(false);
   const [toolboxDrawerOpen, setToolboxDrawerOpen] = useState(false);
   const [taskPanelExpanded, setTaskPanelExpanded] = useState(false);
+  const [profilePanelExpanded, setProfilePanelExpanded] = useState(false);
   const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false);
   const [mediaLibraryConfig, setMediaLibraryConfig] =
     useState<MediaLibraryOpenConfig>({
@@ -341,6 +339,9 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     }
     if (shouldAutoCloseTaskDrawer()) {
       setTaskPanelExpanded(false);
+    }
+    if (shouldAutoCloseProfileDrawer()) {
+      setProfilePanelExpanded(false);
     }
     setMediaLibraryOpen(false);
   }, []);
@@ -448,6 +449,9 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     if (shouldAutoCloseTaskDrawer()) {
       setTaskPanelExpanded(false);
     }
+    if (shouldAutoCloseProfileDrawer()) {
+      setProfilePanelExpanded(false);
+    }
     setMediaLibraryOpen(false);
     setMessageDrawerOpen(true);
   }, [enableToolWindows, messageDrawerOpen]);
@@ -467,6 +471,9 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     if (shouldAutoCloseTaskDrawer()) {
       setTaskPanelExpanded(false);
     }
+    if (shouldAutoCloseProfileDrawer()) {
+      setProfilePanelExpanded(false);
+    }
     setMediaLibraryOpen(false);
     setProjectDrawerOpen(true);
   }, [enableToolWindows, projectDrawerOpen]);
@@ -480,6 +487,9 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       }
       if (shouldAutoCloseTaskDrawer()) {
         setTaskPanelExpanded(false);
+      }
+      if (shouldAutoCloseProfileDrawer()) {
+        setProfilePanelExpanded(false);
       }
       setMediaLibraryOpen(false);
       setProjectDrawerOpen(true);
@@ -505,6 +515,9 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     if (shouldAutoCloseTaskDrawer()) {
       setTaskPanelExpanded(false);
     }
+    if (shouldAutoCloseProfileDrawer()) {
+      setProfilePanelExpanded(false);
+    }
     setMediaLibraryOpen(false);
     setToolboxDrawerOpen(true);
   }, [enableToolWindows, toolboxDrawerOpen]);
@@ -524,9 +537,33 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     if (shouldAutoCloseToolboxDrawer()) {
       setToolboxDrawerOpen(false);
     }
+    if (shouldAutoCloseProfileDrawer()) {
+      setProfilePanelExpanded(false);
+    }
     setMediaLibraryOpen(false);
     setTaskPanelExpanded(true);
   }, [enableDeferredRuntime, taskPanelExpanded]);
+
+  const handleProfilePanelToggle = useCallback(() => {
+    enableDeferredRuntime(TOOL_WINDOW_GROUPS);
+    if (profilePanelExpanded) {
+      setProfilePanelExpanded(false);
+      return;
+    }
+
+    setMessageDrawerOpen(false);
+    if (shouldAutoCloseProjectDrawer()) {
+      setProjectDrawerOpen(false);
+    }
+    if (shouldAutoCloseToolboxDrawer()) {
+      setToolboxDrawerOpen(false);
+    }
+    if (shouldAutoCloseTaskDrawer()) {
+      setTaskPanelExpanded(false);
+    }
+    setMediaLibraryOpen(false);
+    setProfilePanelExpanded(true);
+  }, [enableDeferredRuntime, profilePanelExpanded]);
 
   // 打开素材库（用于缓存满提示）
   const handleOpenMediaLibrary = useCallback(
@@ -540,6 +577,9 @@ export const Drawnix: React.FC<DrawnixProps> = ({
         }
         if (shouldAutoCloseTaskDrawer()) {
           setTaskPanelExpanded(false);
+        }
+        if (shouldAutoCloseProfileDrawer()) {
+          setProfilePanelExpanded(false);
         }
         setMediaLibraryOpen(false);
       } else {
@@ -865,6 +905,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     messageDrawerOpen ||
     projectDrawerOpen ||
     toolboxDrawerOpen ||
+    profilePanelExpanded ||
     mediaLibraryOpen ||
     backupRestoreOpen ||
     cloudSyncOpen;
@@ -892,6 +933,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                       projectDrawerOpen={projectDrawerOpen}
                       toolboxDrawerOpen={toolboxDrawerOpen}
                       taskPanelExpanded={taskPanelExpanded}
+                      profilePanelExpanded={profilePanelExpanded}
                       mediaLibraryOpen={mediaLibraryOpen}
                       mediaLibraryConfig={mediaLibraryConfig}
                       backupRestoreOpen={backupRestoreOpen}
@@ -908,6 +950,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                       handleToolboxDrawerToggle={handleToolboxDrawerToggle}
                       handleKnowledgeBaseToggle={handleKnowledgeBaseToggle}
                       handleTaskPanelToggle={handleTaskPanelToggle}
+                      handleProfilePanelToggle={handleProfilePanelToggle}
                       handleOpenMediaLibrary={handleOpenMediaLibrary}
                       handleOpenBackupRestore={handleOpenBackupRestore}
                       handleOpenCloudSync={handleOpenCloudSync}
@@ -915,6 +958,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                       setProjectDrawerOpen={setProjectDrawerOpen}
                       setToolboxDrawerOpen={setToolboxDrawerOpen}
                       setTaskPanelExpanded={setTaskPanelExpanded}
+                      setProfilePanelExpanded={setProfilePanelExpanded}
                       setMediaLibraryOpen={setMediaLibraryOpen}
                       setBackupRestoreOpen={setBackupRestoreOpen}
                       cloudSyncOpen={cloudSyncOpen}
@@ -959,6 +1003,7 @@ interface DrawnixContentProps {
   projectDrawerOpen: boolean;
   toolboxDrawerOpen: boolean;
   taskPanelExpanded: boolean;
+  profilePanelExpanded: boolean;
   mediaLibraryOpen: boolean;
   mediaLibraryConfig: MediaLibraryOpenConfig;
   backupRestoreOpen: boolean;
@@ -982,6 +1027,7 @@ interface DrawnixContentProps {
   handleToolboxDrawerToggle: () => void;
   handleKnowledgeBaseToggle: () => void;
   handleTaskPanelToggle: () => void;
+  handleProfilePanelToggle: () => void;
   handleOpenMediaLibrary: (config?: MediaLibraryOpenConfig) => void;
   handleOpenBackupRestore: () => void;
   handleOpenCloudSync: () => void;
@@ -989,6 +1035,7 @@ interface DrawnixContentProps {
   setProjectDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setToolboxDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setTaskPanelExpanded: React.Dispatch<React.SetStateAction<boolean>>;
+  setProfilePanelExpanded: React.Dispatch<React.SetStateAction<boolean>>;
   setMediaLibraryOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setBackupRestoreOpen: React.Dispatch<React.SetStateAction<boolean>>;
   cloudSyncOpen: boolean;
@@ -1013,6 +1060,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   projectDrawerOpen,
   toolboxDrawerOpen,
   taskPanelExpanded,
+  profilePanelExpanded,
   mediaLibraryOpen,
   mediaLibraryConfig,
   backupRestoreOpen,
@@ -1037,6 +1085,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   handleToolboxDrawerToggle,
   handleKnowledgeBaseToggle,
   handleTaskPanelToggle,
+  handleProfilePanelToggle,
   handleOpenMediaLibrary,
   handleOpenBackupRestore,
   handleOpenCloudSync,
@@ -1044,6 +1093,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   setProjectDrawerOpen,
   setToolboxDrawerOpen,
   setTaskPanelExpanded,
+  setProfilePanelExpanded,
   setMediaLibraryOpen,
   setBackupRestoreOpen,
   setCloudSyncOpen,
@@ -1053,11 +1103,6 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   currentBoardId,
 }) => {
   const { setAppState: updateState } = useDrawnix();
-  const handleOpenProfile = useCallback(() => {
-    updateState((prev) =>
-      prev.openProfile ? prev : { ...prev, openProfile: true }
-    );
-  }, [updateState]);
   const { chatDrawerRef } = useChatDrawer();
   const { language } = useI18n();
   const playbackError = useCanvasAudioPlaybackSelector((state) => state.error);
@@ -1571,6 +1616,9 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
       if (taskPanelExpanded && shouldAutoCloseTaskDrawer()) {
         setTaskPanelExpanded(false);
       }
+      if (profilePanelExpanded && shouldAutoCloseProfileDrawer()) {
+        setProfilePanelExpanded(false);
+      }
     };
 
     const container = containerRef.current;
@@ -1590,10 +1638,12 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
     projectDrawerOpen,
     toolboxDrawerOpen,
     taskPanelExpanded,
+    profilePanelExpanded,
     setMessageDrawerOpen,
     setProjectDrawerOpen,
     setToolboxDrawerOpen,
     setTaskPanelExpanded,
+    setProfilePanelExpanded,
   ]);
 
   return (
@@ -1650,11 +1700,12 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
             onToolboxDrawerToggle={handleToolboxDrawerToggle}
             taskPanelExpanded={taskPanelExpanded}
             onTaskPanelToggle={handleTaskPanelToggle}
+            profilePanelExpanded={profilePanelExpanded}
+            onProfilePanelToggle={handleProfilePanelToggle}
             onOpenBackupRestore={handleOpenBackupRestore}
             onOpenCloudSync={handleOpenCloudSync}
             onKnowledgeBaseToggle={handleKnowledgeBaseToggle}
             onOpenMediaLibrary={handleOpenMediaLibrary}
-            onOpenProfile={handleOpenProfile}
             deferredFeaturesEnabled={toolWindowManagerEnabled}
             minimizedToolsBarEnabled={minimizedToolsBarEnabled}
             onEnableToolWindows={enableToolWindows}
@@ -1679,11 +1730,6 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
           {appState.openSettings && (
             <Suspense fallback={null}>
               <SettingsDialog container={containerRef.current}></SettingsDialog>
-            </Suspense>
-          )}
-          {appState.openProfile && (
-            <Suspense fallback={null}>
-              <ProfileDialog container={containerRef.current} />
             </Suspense>
           )}
           <CleanConfirm container={containerRef.current}></CleanConfirm>

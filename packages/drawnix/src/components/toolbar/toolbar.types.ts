@@ -46,6 +46,14 @@ export interface UnifiedToolbarProps {
    */
   onTaskPanelToggle?: () => void;
   /**
+   * (可选) 个人资料侧边栏是否展开
+   */
+  profilePanelExpanded?: boolean;
+  /**
+   * (可选) 个人资料侧边栏展开/关闭切换回调
+   */
+  onProfilePanelToggle?: () => void;
+  /**
    * (可选) 备份恢复对话框打开回调
    */
   onOpenBackupRestore?: () => void;
@@ -63,7 +71,6 @@ export interface UnifiedToolbarProps {
   onOpenMediaLibrary?: (config?: Partial<MediaLibraryConfig> & {
     selectButtonText?: string;
   }) => void;
-  onOpenProfile?: () => void;
   /**
    * 延后功能层是否已启用
    */

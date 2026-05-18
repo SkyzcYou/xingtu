@@ -2,6 +2,7 @@ export const DRAWER_PIN_KEYS = {
   project: 'drawnix-drawer-pin-project',
   toolbox: 'drawnix-drawer-pin-toolbox',
   task: 'drawnix-drawer-pin-task',
+  profile: 'drawnix-drawer-pin-profile',
 } as const;
 
 export type DrawerPinKey =
