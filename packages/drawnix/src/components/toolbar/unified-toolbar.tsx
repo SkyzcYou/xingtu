@@ -310,10 +310,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
         return;
       }
 
-      if (!hasProfilePanelEverExpanded.current) {
-        return;
-      }
-
+      hasProfilePanelEverExpanded.current = true;
       const frameId = requestAnimationFrame(() => {
         setIsProfilePanelAnimationReady(true);
       });
@@ -594,7 +591,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
             />
           </Suspense>
         )}
-        {hasProfilePanelEverExpanded.current && (
+        {(hasProfilePanelEverExpanded.current || profilePanelExpanded) && (
           <Suspense fallback={null}>
             <ProfilePanel
               expanded={profilePanelExpanded && isProfilePanelAnimationReady}

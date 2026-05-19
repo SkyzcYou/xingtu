@@ -106,19 +106,6 @@ function readStoredUser(): StoredOidcUser | null {
   return null;
 }
 
-export function storeOidcSessionStorageValue(storageValue: string): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  if (!parseStoredUser(storageValue)) {
-    return false;
-  }
-
-  window.sessionStorage.setItem(getExpectedUserKey(), storageValue);
-  return true;
-}
-
 function toText(value: unknown): string {
   if (typeof value === 'string') {
     return value.trim();

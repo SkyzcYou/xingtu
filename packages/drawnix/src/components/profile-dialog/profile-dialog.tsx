@@ -1,14 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { LogIn, LogOut, RefreshCw } from 'lucide-react';
 import { CanvasAvatarPlaceholder } from '../canvas-avatar-placeholder';
 import {
-  OIDC_LOGIN_CHANNEL_NAME,
-  isOidcLoginCompleteMessage,
-} from '../../services/auth/oidc-login-message';
-import {
   clearOidcSession,
   loadOidcProfileViewModel,
-  storeOidcSessionStorageValue,
   type OidcProfileViewModel,
 } from '../../services/auth/oidc-session';
 import './profile-dialog.scss';
@@ -30,31 +25,31 @@ function ProfileRow({ label, children }: { label: string; children: ReactNode })
 }
 
 function getStatusText(status: OidcProfileViewModel['status']): string {
-  if (status === 'signed-in') {
-    return '账户已登录';
-  }
-  if (status === 'expired') {
-    return '登录状态已过期';
-  }
-  return '暂未登录';
+  return status === 'expired' ? '需要登录' : '未登录';
 }
 
-function getLoginPopupFeatures(): string {
-  if (typeof window === 'undefined') {
-    return 'popup,width=520,height=720';
-  }
+function getSignedOutTitle(status: OidcProfileViewModel['status']): string {
+  return status === 'expired' ? '请重新登录' : '登录账户';
+}
 
-  const width = 520;
-  const height = 720;
-  const left = Math.max(
-    0,
-    Math.round(window.screenX + (window.outerWidth - width) / 2)
-  );
-  const top = Math.max(
-    0,
-    Math.round(window.screenY + (window.outerHeight - height) / 2)
-  );
-  return `popup,width=${width},height=${height},left=${left},top=${top}`;
+function getSignedOutDescription(status: OidcProfileViewModel['status']): string {
+  return status === 'expired'
+    ? '为保护账户安全，请重新登录后继续使用。'
+    : '登录后可使用账户相关服务。';
+}
+
+const AUTH_LOGIN_PATH = '/auth-login.html';
+const AUTH_RETURN_URL_PARAM = 'returnUrl';
+const PROFILE_PANEL_RETURN_PARAM = 'profilePanel';
+const PROFILE_PANEL_RETURN_VALUE = '1';
+
+function buildAuthLoginUrl(): string {
+  const returnUrl = new URL(window.location.href);
+  returnUrl.searchParams.set(PROFILE_PANEL_RETURN_PARAM, PROFILE_PANEL_RETURN_VALUE);
+  const returnPath = `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`;
+  const loginUrl = new URL(AUTH_LOGIN_PATH, window.location.origin);
+  loginUrl.searchParams.set(AUTH_RETURN_URL_PARAM, returnPath);
+  return `${loginUrl.pathname}${loginUrl.search}`;
 }
 
 export const ProfileContent = ({
@@ -63,7 +58,6 @@ export const ProfileContent = ({
   className,
   onProfileChange,
 }: ProfileContentProps) => {
-  const loginPopupRef = useRef<Window | null>(null);
   const [profile, setProfile] = useState<OidcProfileViewModel>(() =>
     loadOidcProfileViewModel()
   );
@@ -91,82 +85,12 @@ export const ProfileContent = ({
     setLoginError(null);
   }, [refreshProfile]);
 
-  const handleLoginMessage = useCallback(
-    (data: unknown) => {
-      if (!isOidcLoginCompleteMessage(data)) {
-        return;
-      }
-
-      if (!data.ok) {
-        setLoginPending(false);
-        setLoginFeedback(null);
-        setLoginError(data.error);
-        return;
-      }
-
-      if (!storeOidcSessionStorageValue(data.storageValue)) {
-        setLoginPending(false);
-        setLoginFeedback(null);
-        setLoginError('登录结果无效，请重新登录。');
-        return;
-      }
-
-      loginPopupRef.current?.close();
-      loginPopupRef.current = null;
-      refreshProfile();
-      setLoginPending(false);
-      setLoginError(null);
-      setLoginFeedback('登录成功，账户信息已更新。');
-    },
-    [refreshProfile]
-  );
-
   const handleLogin = useCallback(() => {
     setLoginPending(true);
     setLoginError(null);
-    setLoginFeedback('已打开登录窗口，请在新窗口中完成登录。');
-
-    const popup = window.open(
-      '/auth-login.html?mode=popup',
-      'xingtu-trust-login',
-      getLoginPopupFeatures()
-    );
-
-    if (!popup) {
-      setLoginPending(false);
-      setLoginFeedback(null);
-      setLoginError('浏览器阻止了登录窗口，请允许弹出窗口后重试。');
-      return;
-    }
-
-    loginPopupRef.current = popup;
-    popup.focus();
+    setLoginFeedback('正在前往安全登录页面...');
+    window.location.assign(buildAuthLoginUrl());
   }, []);
-
-  useEffect(() => {
-    if (!active && !loginPending) {
-      return;
-    }
-
-    const handleWindowMessage = (event: MessageEvent<unknown>) => {
-      if (event.origin !== window.location.origin) {
-        return;
-      }
-      handleLoginMessage(event.data);
-    };
-
-    let channel: BroadcastChannel | null = null;
-    if (typeof BroadcastChannel !== 'undefined') {
-      channel = new BroadcastChannel(OIDC_LOGIN_CHANNEL_NAME);
-      channel.onmessage = (event) => handleLoginMessage(event.data);
-    }
-
-    window.addEventListener('message', handleWindowMessage);
-    return () => {
-      window.removeEventListener('message', handleWindowMessage);
-      channel?.close();
-    };
-  }, [active, handleLoginMessage, loginPending]);
 
   useEffect(() => {
     if (active) {
@@ -195,15 +119,11 @@ export const ProfileContent = ({
           disabled
         />
         <div className="profile-dialog__identity">
-          <div className="profile-dialog__status">{getStatusText(profile.status)}</div>
-          <h2>{isSignedIn ? profile.displayName : getStatusText(profile.status)}</h2>
-          <p>
-            {isSignedIn
-              ? '以下为当前账户的基本信息。'
-              : isExpired
-              ? '登录状态已过期，请重新登录以继续使用账户服务。'
-              : '登录后可查看账户信息并使用账户相关服务。'}
-          </p>
+          {!isSignedIn && (
+            <div className="profile-dialog__status">{getStatusText(profile.status)}</div>
+          )}
+          <h2>{isSignedIn ? profile.displayName : getSignedOutTitle(profile.status)}</h2>
+          {!isSignedIn && <p>{getSignedOutDescription(profile.status)}</p>}
         </div>
       </section>
 
@@ -211,28 +131,9 @@ export const ProfileContent = ({
         <section className="profile-dialog__panel" aria-label="账户信息">
           <ProfileRow label="用户名">{profile.displayName}</ProfileRow>
           <ProfileRow label="邮箱">{profile.email}</ProfileRow>
-          <ProfileRow label="账户 ID">{profile.subject}</ProfileRow>
-          <ProfileRow label="登录状态">
-            {profile.hasAccessToken ? '已验证' : '未验证'}
-          </ProfileRow>
-          <ProfileRow label="有效期至">{profile.expiresAtText}</ProfileRow>
-          <ProfileRow label="权限">
-            {profile.roles.length > 0 ? (
-              <div className="profile-dialog__roles">
-                {profile.roles.slice(0, 40).map((role) => (
-                  <span key={role} className="profile-dialog__role">
-                    {role}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              '暂无特殊权限'
-            )}
-          </ProfileRow>
         </section>
       ) : (
         <section className="profile-dialog__empty" aria-label="登录提示">
-          <p>{isExpired ? '登录状态已过期。' : '当前尚未登录账户。'}</p>
           <button
             type="button"
             className="profile-dialog__primary-action"
@@ -258,7 +159,7 @@ export const ProfileContent = ({
       <footer className="profile-dialog__footer">
         <button type="button" className="profile-dialog__button" onClick={handleRefresh}>
           <RefreshCw size={15} />
-          刷新状态
+          刷新
         </button>
         {isSignedIn && (
           <button

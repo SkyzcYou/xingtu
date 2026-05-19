@@ -18,6 +18,19 @@ function isSafeLocalPath(value: string): boolean {
   return value.startsWith('/') && !value.startsWith('//') && !value.includes('\\');
 }
 
+export const DEFAULT_AUTH_RETURN_URL = '/auth-user.html';
+
+export function getSafeLocalReturnUrl(
+  value: unknown,
+  fallback = DEFAULT_AUTH_RETURN_URL
+): string {
+  if (typeof value !== 'string' || !isSafeLocalPath(value)) {
+    return fallback;
+  }
+
+  return value;
+}
+
 export const ferriskeyBaseUrl = trimTrailingSlashes(
   getEnvString('VITE_FERRISKEY_BASE_URL', DEFAULT_FERRISKEY_BASE_URL)
 );
@@ -55,13 +68,8 @@ export function isActiveUser(user: User | null): user is User {
 
 export function getSafeReturnUrl(state: unknown): string {
   if (typeof state !== 'object' || state === null || !('returnUrl' in state)) {
-    return '/auth-user.html';
+    return DEFAULT_AUTH_RETURN_URL;
   }
 
-  const returnUrl = (state as { returnUrl?: unknown }).returnUrl;
-  if (typeof returnUrl !== 'string' || !isSafeLocalPath(returnUrl)) {
-    return '/auth-user.html';
-  }
-
-  return returnUrl;
+  return getSafeLocalReturnUrl((state as { returnUrl?: unknown }).returnUrl);
 }

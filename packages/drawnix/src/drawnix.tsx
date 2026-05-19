@@ -256,6 +256,31 @@ const shouldAutoCloseTaskDrawer = (): boolean =>
 const shouldAutoCloseProfileDrawer = (): boolean =>
   !getDrawerPinned(DRAWER_PIN_KEYS.profile);
 
+const PROFILE_PANEL_RETURN_PARAM = 'profilePanel';
+const PROFILE_PANEL_RETURN_VALUE = '1';
+
+function consumeProfilePanelReturnParam(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const url = new URL(window.location.href);
+  if (
+    url.searchParams.get(PROFILE_PANEL_RETURN_PARAM) !==
+    PROFILE_PANEL_RETURN_VALUE
+  ) {
+    return false;
+  }
+
+  url.searchParams.delete(PROFILE_PANEL_RETURN_PARAM);
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${url.pathname}${url.search}${url.hash}`
+  );
+  return true;
+}
+
 function detectMobileViewport(): boolean {
   if (typeof window === 'undefined') {
     return false;
@@ -631,6 +656,26 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       boardRef.current = board;
     }
   }, [board, appState, stableSetAppState]);
+
+  useEffect(() => {
+    if (!consumeProfilePanelReturnParam()) {
+      return;
+    }
+
+    enableDeferredRuntime(TOOL_WINDOW_GROUPS);
+    setMessageDrawerOpen(false);
+    if (shouldAutoCloseProjectDrawer()) {
+      setProjectDrawerOpen(false);
+    }
+    if (shouldAutoCloseToolboxDrawer()) {
+      setToolboxDrawerOpen(false);
+    }
+    if (shouldAutoCloseTaskDrawer()) {
+      setTaskPanelExpanded(false);
+    }
+    setMediaLibraryOpen(false);
+    setProfilePanelExpanded(true);
+  }, [enableDeferredRuntime]);
 
   useEffect(() => {
     const shouldLoadImmediately = new URLSearchParams(
