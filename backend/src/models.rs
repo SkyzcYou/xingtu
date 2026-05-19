@@ -1,0 +1,83 @@
+use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
+use serde::Serialize;
+use sqlx::FromRow;
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaymentStatus {
+    Pending,
+    Paid,
+    Refunded,
+    Frozen,
+}
+
+impl PaymentStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PaymentStatus::Pending => "pending",
+            PaymentStatus::Paid => "paid",
+            PaymentStatus::Refunded => "refunded",
+            PaymentStatus::Frozen => "frozen",
+        }
+    }
+
+    pub fn from_qingke_status(status: i32) -> Self {
+        match status {
+            1 => PaymentStatus::Paid,
+            2 => PaymentStatus::Refunded,
+            3 => PaymentStatus::Frozen,
+            _ => PaymentStatus::Pending,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct PaymentOrder {
+    pub id: Uuid,
+    pub out_trade_no: String,
+    pub qingke_trade_no: Option<String>,
+    pub api_trade_no: Option<String>,
+    pub name: String,
+    #[serde(with = "rust_decimal::serde::str")]
+    pub amount: Decimal,
+    pub pay_channel: String,
+    pub status: String,
+    pub param: Option<String>,
+    pub buyer: Option<String>,
+    pub notify_payload: Option<serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub paid_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaymentOrderResponse {
+    pub out_trade_no: String,
+    pub qingke_trade_no: Option<String>,
+    pub api_trade_no: Option<String>,
+    pub name: String,
+    pub amount: String,
+    pub pay_channel: String,
+    pub status: String,
+    pub paid_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<PaymentOrder> for PaymentOrderResponse {
+    fn from(order: PaymentOrder) -> Self {
+        Self {
+            out_trade_no: order.out_trade_no,
+            qingke_trade_no: order.qingke_trade_no,
+            api_trade_no: order.api_trade_no,
+            name: order.name,
+            amount: order.amount.to_string(),
+            pay_channel: order.pay_channel,
+            status: order.status,
+            paid_at: order.paid_at,
+            created_at: order.created_at,
+            updated_at: order.updated_at,
+        }
+    }
+}

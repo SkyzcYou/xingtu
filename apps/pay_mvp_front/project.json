@@ -1,0 +1,54 @@
+{
+  "name": "pay_mvp_front",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/pay_mvp_front/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vite serve --host 0.0.0.0",
+        "cwd": "apps/pay_mvp_front"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "nx run pay_mvp_front:typecheck",
+          "nx run pay_mvp_front:build-app"
+        ],
+        "parallel": false
+      }
+    },
+    "build-app": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vite build",
+        "cwd": "apps/pay_mvp_front"
+      }
+    },
+    "preview": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vite preview",
+        "cwd": "apps/pay_mvp_front"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint .",
+        "cwd": "apps/pay_mvp_front"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p tsconfig.app.json --noEmit",
+        "cwd": "apps/pay_mvp_front"
+      }
+    }
+  }
+}
