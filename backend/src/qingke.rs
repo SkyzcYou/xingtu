@@ -12,9 +12,11 @@ use rsa::{
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 const SIGN_TYPE: &str = "RSA";
+const QINGKE_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const QINGKE_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Clone)]
 pub struct QingkeClient {
@@ -64,7 +66,10 @@ impl QingkeClient {
         Ok(Self {
             api_base: config.qingke_api_base.trim_end_matches('/').to_string(),
             pid: config.qingke_pid.clone(),
-            client: Client::new(),
+            client: Client::builder()
+                .connect_timeout(QINGKE_CONNECT_TIMEOUT)
+                .timeout(QINGKE_REQUEST_TIMEOUT)
+                .build()?,
             merchant_private_key: Arc::new(parse_private_key(
                 &config.qingke_merchant_private_key_pem,
             )?),
@@ -171,8 +176,16 @@ impl QingkeClient {
             .post(format!("{}{}", self.api_base, path))
             .form(params)
             .send()
-            .await?
-            .error_for_status()?;
+            .await
+            .map_err(|error| {
+                tracing::warn!(?error, path, "qingke request failed");
+                AppError::external("青科支付请求超时或失败")
+            })?
+            .error_for_status()
+            .map_err(|error| {
+                tracing::warn!(?error, path, "qingke returned error status");
+                AppError::external("青科支付返回错误状态")
+            })?;
         let value = response.json::<Value>().await?;
         value_to_string_map(value)
     }

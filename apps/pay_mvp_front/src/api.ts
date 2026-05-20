@@ -1,5 +1,5 @@
 const API_BASE_URL =
-  import.meta.env.VITE_PAYMENT_API_BASE_URL || 'http://localhost:8080';
+  import.meta.env.VITE_PAYMENT_API_BASE_URL || 'https://api.xingtu.live';
 
 export interface PaymentOrder {
   out_trade_no: string;
