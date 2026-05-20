@@ -1,0 +1,43 @@
+services:
+  xingtu-api-migrate:
+    image: ${XINGTU_API_IMAGE:-xingtu-api:latest}
+    pull_policy: always
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    command: >
+      sh -c 'for file in /app/migrations/*.sql; do echo "Applying $$file"; psql "$$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$$file"; done'
+    restart: "no"
+
+  xingtu-api:
+    image: ${XINGTU_API_IMAGE:-xingtu-api:latest}
+    pull_policy: always
+    network_mode: host
+    environment:
+      SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
+      SERVER_PORT: ${SERVER_PORT:-7201}
+      RUST_LOG: ${RUST_LOG:-info}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      QINGKE_API_BASE: ${QINGKE_API_BASE:-https://pay.xianlai.work}
+      QINGKE_PID: ${QINGKE_PID:?QINGKE_PID is required}
+      QINGKE_MERCHANT_PRIVATE_KEY_PEM: ${QINGKE_MERCHANT_PRIVATE_KEY_PEM:?QINGKE_MERCHANT_PRIVATE_KEY_PEM is required}
+      QINGKE_PLATFORM_PUBLIC_KEY_PEM: ${QINGKE_PLATFORM_PUBLIC_KEY_PEM:?QINGKE_PLATFORM_PUBLIC_KEY_PEM is required}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://api.xingtu.live}
+      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-https://xingtu.live,https://www.xingtu.live,http://localhost:7200,http://localhost:5174}
+      TRUST_BASE_URL: ${TRUST_BASE_URL:-https://trust-api.skyzcstack.space}
+      TRUST_REALM: ${TRUST_REALM:-xing}
+      TRUST_CLIENT_ID: ${TRUST_CLIENT_ID:-xingtu}
+    depends_on:
+      xingtu-api-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${SERVER_PORT:-7201}/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
