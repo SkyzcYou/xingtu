@@ -245,22 +245,22 @@ export const Settings = () => {
 };
 Settings.displayName = 'Settings';
 
-export const GitHubLink = () => {
+export const WebsiteHomeLink = () => {
   const { t } = useI18n();
   return (
     <MenuItem
       icon={<WebsiteIcon />}
-      data-track="toolbar_click_menu_github"
+      data-track="toolbar_click_menu_website_home"
       onSelect={() => {
-        window.open('https://ai.skyzcstack.space', '_blank');
+        window.open('/home.html', '_blank');
       }}
-      aria-label={t('menu.github')}
+      aria-label={t('menu.websiteHome')}
     >
-      {t('menu.github')}
+      {t('menu.websiteHome')}
     </MenuItem>
   );
 };
-GitHubLink.displayName = 'GitHubLink';
+WebsiteHomeLink.displayName = 'WebsiteHomeLink';
 
 export const QuickCommands = () => {
   const { appState, setAppState } = useDrawnix();

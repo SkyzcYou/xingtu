@@ -167,12 +167,12 @@ export const AppToolbar: React.FC<AppToolbarProps> = ({
           type="icon"
           icon={<WebsiteIcon />}
           visible={true}
-          tooltip={t('menu.github')}
+          tooltip={t('menu.websiteHome')}
           tooltipPlacement="right"
-          aria-label={t('menu.github')}
-          data-track="toolbar_click_github"
+          aria-label={t('menu.websiteHome')}
+          data-track="toolbar_click_website_home"
           onPointerUp={() => {
-            window.open('https://ai.skyzcstack.space', '_blank');
+            window.open('/home.html', '_blank');
           }}
         />
       </div>

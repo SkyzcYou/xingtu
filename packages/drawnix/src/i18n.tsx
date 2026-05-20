@@ -78,7 +78,7 @@ export interface Translations {
   'menu.exportImage.png': string;
   'menu.exportImage.jpg': string;
   'menu.cleanBoard': string;
-  'menu.github': string;
+  'menu.websiteHome': string;
   'menu.settings': string;
   'menu.backupRestore': string;
   'menu.cloudSync': string;
@@ -275,7 +275,7 @@ const translations: Record<Language, Translations> = {
     'menu.exportImage.png': 'PNG',
     'menu.exportImage.jpg': 'JPG',
     'menu.cleanBoard': '清除画布',
-    'menu.github': '官网',
+    'menu.websiteHome': '网站首页',
     'menu.settings': '设置',
     'menu.backupRestore': '备份 / 恢复',
     'menu.cloudSync': '云端同步',
@@ -469,7 +469,7 @@ const translations: Record<Language, Translations> = {
     'menu.exportImage.png': 'PNG',
     'menu.exportImage.jpg': 'JPG',
     'menu.cleanBoard': 'Clear Board',
-    'menu.github': 'Website',
+    'menu.websiteHome': 'Website Home',
     'menu.settings': 'Settings',
     'menu.backupRestore': 'Backup / Restore',
     'menu.cloudSync': 'Cloud Sync',
