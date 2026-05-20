@@ -13,6 +13,8 @@ pub enum AppError {
     #[error("{0}")]
     BadRequest(String),
     #[error("{0}")]
+    Unauthorized(String),
+    #[error("{0}")]
     NotFound(String),
     #[error("{0}")]
     External(String),
@@ -25,6 +27,10 @@ pub enum AppError {
 impl AppError {
     pub fn bad_request(message: impl Into<String>) -> Self {
         Self::BadRequest(message.into())
+    }
+
+    pub fn unauthorized(message: impl Into<String>) -> Self {
+        Self::Unauthorized(message.into())
     }
 
     pub fn not_found(message: impl Into<String>) -> Self {
@@ -49,6 +55,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let status = match &self {
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            AppError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             AppError::NotFound(_) => StatusCode::NOT_FOUND,
             AppError::External(_) => StatusCode::BAD_GATEWAY,
             AppError::Config(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -68,8 +75,8 @@ impl From<sqlx::Error> for AppError {
 
 impl From<reqwest::Error> for AppError {
     fn from(error: reqwest::Error) -> Self {
-        tracing::warn!(?error, "qingke request failed");
-        Self::external("qingke request failed")
+        tracing::warn!(?error, "external request failed");
+        Self::external("external request failed")
     }
 }
 

@@ -201,6 +201,14 @@ export function loadOidcProfileViewModel(): OidcProfileViewModel {
   };
 }
 
+export function getOidcAccessToken(): string | null {
+  const user = readStoredUser();
+  if (getStatus(user) !== 'signed-in') {
+    return null;
+  }
+  return user?.access_token || null;
+}
+
 export function clearOidcSession(): void {
   if (typeof window === 'undefined') {
     return;

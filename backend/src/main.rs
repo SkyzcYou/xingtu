@@ -4,6 +4,7 @@ mod error;
 mod models;
 mod qingke;
 mod routes;
+mod trust;
 
 use axum::http::{HeaderValue, Method};
 use config::AppConfig;
@@ -12,10 +13,11 @@ use routes::AppState;
 use std::{net::SocketAddr, time::Duration};
 use tokio::net::TcpListener;
 use tower_http::{
-    cors::{Any, CorsLayer},
+    cors::{AllowOrigin, Any, CorsLayer},
     trace::TraceLayer,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use trust::TrustClient;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,6 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::from_env()?;
     let pool = db::create_pool(&config.database_url).await?;
     let qingke = QingkeClient::new(&config)?;
+    let trust = TrustClient::new(&config);
     let addr: SocketAddr = format!("{}:{}", config.server_host, config.server_port).parse()?;
 
     let cors = build_cors_layer(&config.cors_allowed_origin)?;
@@ -35,6 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pool,
         config,
         qingke,
+        trust,
     })
     .layer(TraceLayer::new_for_http())
     .layer(cors);
@@ -53,11 +57,18 @@ fn build_cors_layer(origin: &str) -> Result<CorsLayer, Box<dyn std::error::Error
         .allow_headers(Any)
         .max_age(Duration::from_secs(3600));
 
-    if origin == "*" {
-        Ok(layer.allow_origin(Any))
-    } else {
-        Ok(layer.allow_origin(origin.parse::<HeaderValue>()?))
+    if origin.trim() == "*" {
+        return Ok(layer.allow_origin(Any));
     }
+
+    let origins = origin
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::parse::<HeaderValue>)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(layer.allow_origin(AllowOrigin::list(origins)))
 }
 
 async fn shutdown_signal() {

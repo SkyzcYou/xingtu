@@ -12,6 +12,9 @@ pub struct AppConfig {
     pub qingke_platform_public_key_pem: String,
     pub public_base_url: String,
     pub cors_allowed_origin: String,
+    pub trust_base_url: String,
+    pub trust_realm: String,
+    pub trust_client_id: String,
 }
 
 impl AppConfig {
@@ -36,6 +39,11 @@ impl AppConfig {
                 .trim_end_matches('/')
                 .to_string(),
             cors_allowed_origin: env_or("CORS_ALLOWED_ORIGIN", "http://localhost:5174"),
+            trust_base_url: env_or("TRUST_BASE_URL", "https://trust-api.skyzcstack.space")
+                .trim_end_matches('/')
+                .to_string(),
+            trust_realm: env_or("TRUST_REALM", "xing"),
+            trust_client_id: env_or("TRUST_CLIENT_ID", "xingtu"),
         })
     }
 }
