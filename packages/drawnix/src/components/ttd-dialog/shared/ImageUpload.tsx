@@ -9,9 +9,12 @@ import {
   AssetSource,
 } from '../../../types/asset.types';
 import { useAssets } from '../../../contexts/AssetContext';
-import { compressImageBlob, getCompressionStrategy } from '@aitu/utils';
 import { HoverCard } from '../../shared';
 import { Z_INDEX } from '../../../constants/z-index';
+
+const MAX_IMAGE_SIZE_BYTES = 25 * 1024 * 1024;
+const COMPRESSION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+const MAX_MEDIA_LIBRARY_BATCH_COUNT = 10;
 
 export interface ImageFile {
   file?: File;
@@ -55,7 +58,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
         file.type.startsWith('image/')
       );
       const sizeValidFiles = formatValidFiles.filter(
-        (file) => file.size <= 25 * 1024 * 1024
+        (file) => file.size <= MAX_IMAGE_SIZE_BYTES
       );
 
       if (sizeValidFiles.length === 0) {
@@ -76,7 +79,8 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
           let fileToAdd: Blob = file;
 
           // Compress if file is 10-25MB
-          if (file.size > 10 * 1024 * 1024) {
+          if (file.size > COMPRESSION_THRESHOLD_BYTES) {
+            const { compressImageBlob, getCompressionStrategy } = await import('@aitu/utils');
             const strategy = getCompressionStrategy(file.size / (1024 * 1024));
             const msgId = MessagePlugin.loading({
               content:
@@ -196,33 +200,97 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     return imageSrcMap.get(index) || '';
   };
 
-  const handleMediaLibrarySelect = async (asset: Asset) => {
-    // Need to fetch the actual blob data from the blob URL
-    // and convert it to base64 data URL for API compatibility
-    try {
-      const response = await fetch(asset.url);
-      const blob = await response.blob();
+  const assetToImageFile = async (asset: Asset): Promise<ImageFile> => {
+    if (asset.size && asset.size > MAX_IMAGE_SIZE_BYTES) {
+      throw new Error(`Asset exceeds 25MB limit: ${asset.name}`);
+    }
 
-      // Convert blob to base64 data URL
+    const response = await fetch(asset.url);
+    let blob = await response.blob();
+
+    if (blob.size > MAX_IMAGE_SIZE_BYTES) {
+      throw new Error(`Asset exceeds 25MB limit: ${asset.name}`);
+    }
+
+    if (blob.size > COMPRESSION_THRESHOLD_BYTES) {
+      const { compressImageBlob, getCompressionStrategy } = await import('@aitu/utils');
+      const strategy = getCompressionStrategy(blob.size / (1024 * 1024));
+      blob = await compressImageBlob(blob, strategy.targetSizeMB);
+    }
+
+    const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        const newImage: ImageFile = {
-          url: reader.result as string, // base64 data URL
-          name: asset.name,
-        };
-
-        if (multiple) {
-          onImagesChange([...images, newImage]);
-        } else {
-          onImagesChange([newImage]);
-        }
-
-        setShowMediaLibrary(false);
-        onError?.(null);
-      };
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
       reader.readAsDataURL(blob);
+    });
+
+    return {
+      url: dataUrl,
+      name: asset.name,
+    };
+  };
+
+  const handleMediaLibrarySelect = async (asset: Asset) => {
+    try {
+      const newImage = await assetToImageFile(asset);
+
+      if (multiple) {
+        onImagesChange([...images, newImage]);
+      } else {
+        onImagesChange([newImage]);
+      }
+
+      setShowMediaLibrary(false);
+      onError?.(null);
     } catch (error) {
       console.error('[ImageUpload] Failed to convert asset to base64:', error);
+      onError?.(language === 'zh' ? '加载图片失败' : 'Failed to load image');
+      setShowMediaLibrary(false);
+    }
+  };
+
+  const handleMediaLibrarySelectMultiple = async (assets: Asset[]) => {
+    if (assets.length === 0) return;
+
+    try {
+      const selectedAssets = assets.slice(0, MAX_MEDIA_LIBRARY_BATCH_COUNT);
+      const newImages: ImageFile[] = [];
+
+      if (assets.length > MAX_MEDIA_LIBRARY_BATCH_COUNT) {
+        MessagePlugin.warning({
+          content:
+            language === 'zh'
+              ? `最多可批量使用 ${MAX_MEDIA_LIBRARY_BATCH_COUNT} 张图片，已自动截取`
+              : `Up to ${MAX_MEDIA_LIBRARY_BATCH_COUNT} images can be used at once`,
+          duration: 3,
+        });
+      }
+
+      for (const asset of selectedAssets) {
+        try {
+          newImages.push(await assetToImageFile(asset));
+        } catch (err) {
+          console.error('[ImageUpload] Failed to convert asset:', asset.name, err);
+        }
+      }
+
+      if (newImages.length === 0) {
+        onError?.(language === 'zh' ? '加载图片失败' : 'Failed to load image');
+        setShowMediaLibrary(false);
+        return;
+      }
+
+      if (multiple) {
+        onImagesChange([...images, ...newImages]);
+      } else {
+        onImagesChange(newImages.slice(0, 1));
+      }
+
+      setShowMediaLibrary(false);
+      onError?.(null);
+    } catch (error) {
+      console.error('[ImageUpload] Failed to batch convert assets:', error);
       onError?.(language === 'zh' ? '加载图片失败' : 'Failed to load image');
       setShowMediaLibrary(false);
     }
@@ -402,6 +470,8 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
           mode={SelectionMode.SELECT}
           filterType={AssetType.IMAGE}
           onSelect={handleMediaLibrarySelect}
+          onSelectMultiple={multiple ? handleMediaLibrarySelectMultiple : undefined}
+          batchSelectButtonText={multiple ? '批量插入对话框' : undefined}
         />
       )}
     </div>

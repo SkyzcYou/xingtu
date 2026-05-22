@@ -100,6 +100,7 @@ export interface ProviderProfileSnapshot
     | 'apiKey'
     | 'imageApiCompatibility'
     | 'videoApiCompatibility'
+    | 'preferAsyncImageEndpoint'
     | 'extraHeaders'
   > {
   authType: ProviderAuthStrategy;

@@ -51,6 +51,7 @@ export interface ProviderProfile {
   authType: ProviderAuthType;
   imageApiCompatibility?: ImageApiCompatibility;
   videoApiCompatibility?: VideoApiCompatibility;
+  preferAsyncImageEndpoint?: boolean;
   extraHeaders?: Record<string, string>;
   enabled: boolean;
   capabilities: ProviderCapabilities;

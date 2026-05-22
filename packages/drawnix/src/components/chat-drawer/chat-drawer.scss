@@ -12,7 +12,7 @@ $drawer-min-width: 375px;
 $drawer-default-max-width: 440px;
 $border-radius: 12px;
 $drawer-header-height: 108px; // 增加了高度以适应新设计
-$drawer-input-height: 160px;
+$drawer-input-max-height: 280px;
 
 // ============================================================================
 // Chat Drawer Container
@@ -113,9 +113,7 @@ $drawer-input-height: 160px;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition:
-    transform $animation-duration ease-out,
-    opacity 160ms ease-out,
+  transition: transform $animation-duration ease-out, opacity 160ms ease-out,
     visibility 0s linear $animation-duration;
   color-scheme: light; // 强制光照模式配色，防止紫色干扰
 
@@ -124,9 +122,7 @@ $drawer-input-height: 160px;
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    transition:
-      transform $animation-duration ease-out,
-      opacity 160ms ease-out;
+    transition: transform $animation-duration ease-out, opacity 160ms ease-out;
   }
 
   &--dragging {
@@ -358,7 +354,9 @@ $drawer-input-height: 160px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    height: calc(100vh - #{$drawer-header-height});
+    flex: 1;
+    min-height: 0;
+    height: auto;
   }
 
   &__close-btn {
@@ -970,9 +968,7 @@ $drawer-input-height: 160px;
     }
 
     &__content {
-      height: calc(
-        100vh - #{$drawer-header-height} - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
-      );
+      min-height: 0;
     }
   }
 
@@ -994,9 +990,11 @@ $drawer-input-height: 160px;
   .enhanced-chat-input {
     padding: $spacing-sm $spacing-md;
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + #{$spacing-sm});
+    max-height: min(42vh, 260px);
 
-    &__form {
-      padding: 6px;
+    .ai-input-composer-shell--drawer {
+      padding: 8px 10px;
+      border-radius: 16px;
     }
 
     &__textarea {
@@ -1004,7 +1002,7 @@ $drawer-input-height: 160px;
       font-size: 15px;
     }
 
-    &__send {
+    .ai-input-bar__send-btn {
       width: 36px;
       height: 36px;
       min-width: 36px;
@@ -1081,11 +1079,11 @@ $drawer-input-height: 160px;
   // 输入区域更紧凑
   .enhanced-chat-input {
     padding: $spacing-xs $spacing-sm;
-    max-height: 140px;
+    max-height: min(46vh, 220px);
 
-    &__form {
-      padding: 4px;
-      border-radius: 12px;
+    .ai-input-composer-shell--drawer {
+      padding: 6px;
+      border-radius: 14px;
     }
 
     &__textarea {
@@ -1156,7 +1154,7 @@ $drawer-input-height: 160px;
       height: 28px;
     }
 
-    &__send {
+    .ai-input-bar__send-btn {
       width: 32px;
       height: 32px;
       min-width: 32px;
@@ -1184,7 +1182,9 @@ $drawer-input-height: 160px;
 .chat-section {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - #{$drawer-header-height} - #{$drawer-input-height});
+  flex: 1;
+  min-height: 0;
+  height: auto;
   overflow: hidden;
   padding: 0 !important;
 }
@@ -1218,460 +1218,22 @@ $drawer-input-height: 160px;
     flex-direction: row-reverse;
     align-self: flex-end;
 
-    &:not(.user-bubble) {
-      .chat-message-content {
-        color: var(--chat-user-bubble-color);
-        background: var(--chat-user-bubble-bg);
-        border-radius: $border-radius $border-radius 4px $border-radius;
-        border: 1px solid var(--chat-user-bubble-border);
-        box-shadow: var(--chat-user-bubble-shadow);
-      }
-
-      .chat-message-content::selection,
-      .chat-message-content *::selection {
-        color: var(--chat-user-selection-color);
-        background-color: var(--chat-user-selection-bg);
-      }
-    }
-  }
-
-  &--assistant {
-    align-self: flex-start;
-
-    .chat-message-content {
-      background: var(--chat-card-bg);
-      border-radius: $border-radius $border-radius $border-radius 4px;
-      border: 1px solid var(--chat-card-border);
-      box-shadow: var(--chat-card-shadow);
-    }
-  }
-
-  // Error message styling
-  &--error {
-    .chat-message-content {
-      background: var(--td-error-color-1);
-      border: 1px solid var(--td-error-color-3);
-      color: var(--td-error-color-7);
-    }
-
-    .chat-message-avatar {
-      background: var(--td-error-color-1);
-      color: var(--td-error-color);
-    }
-  }
-}
-
-.chat-message-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--td-bg-color-secondarycontainer);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-
-  svg {
-    width: 18px;
-    height: 18px;
-    color: var(--td-text-color-secondary);
-  }
-}
-
-.chat-message-content {
-  padding: $spacing-md $spacing-lg;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--td-text-color-primary);
-  word-break: break-word;
-  user-select: text;
-  cursor: text;
-
-  // 选中时的高亮样式
-  &::selection {
-    background-color: var(--chat-accent-bg-active);
-  }
-
-  // Markdown styles
-  p {
-    margin: 0 0 $spacing-sm;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
-
-  pre {
-    margin: $spacing-md 0;
-    padding: $spacing-md;
-    background: var(--td-bg-color-page);
-    border-radius: 8px;
-    overflow-x: auto;
-    font-size: 13px;
-
-    code {
-      background: none;
-      padding: 0;
-    }
-  }
-
-  code {
-    background: var(--td-bg-color-page);
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 13px;
-    font-family: 'SF Mono', Monaco, monospace;
-  }
-
-  ul,
-  ol {
-    margin: $spacing-sm 0;
-    padding-left: $spacing-xl;
-  }
-
-  blockquote {
-    margin: $spacing-md 0;
-    padding-left: $spacing-md;
-    border-left: 3px solid var(--chat-accent-border-strong);
-    color: var(--td-text-color-secondary);
-  }
-}
-
-.chat-message-actions {
-  flex-basis: 100%;
-  display: flex;
-  justify-content: flex-end;
-  flex-direction: row !important;
-  align-items: center;
-  gap: 8px;
-  margin-top: 0;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  --spacing: 5px;
-
-  .chat-message:hover & {
-    opacity: 1;
-  }
-
-  .chat-message--user & {
-    margin-left: 0;
-    justify-content: flex-end;
-
-    .chat-message-content {
-      padding: 0 !important;
-    }
-  }
-
-  button {
-    padding: 6px 12px;
-    background: var(--td-bg-color-container);
-    border: 1px solid var(--td-component-border);
-    border-radius: 6px;
-    cursor: pointer;
-    color: var(--td-text-color-secondary);
-    font-size: 12px;
-    transition: all 0.2s ease;
-
-    &:hover {
-      background: var(--td-bg-color-container-hover);
-      color: var(--td-text-color-primary);
-      border-color: var(--chat-accent-border-strong);
-    }
-  }
-}
-
-.chat-loading {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-  padding: $spacing-lg;
-  color: var(--td-text-color-secondary);
-  font-size: 14px;
-
-  &--full {
-    flex: 1;
-    height: 100%;
-    justify-content: center;
-    flex-direction: column;
-  }
-
-  &__spinner {
-    width: 16px;
-    height: 16px;
-    border: 2px solid var(--td-bg-color-secondarycontainer);
-    border-top-color: var(--chat-accent-border-strong);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.chat-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: $spacing-xl;
-  text-align: center;
-
-  h3 {
-    margin: 0 0 $spacing-sm;
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--td-text-color-primary);
-  }
-
-  p {
-    margin: 0;
-    color: var(--td-text-color-placeholder);
-    font-size: 14px;
-  }
-}
-
-.chat-input {
-  padding: $spacing-lg $spacing-xl;
-  border-top: 1px solid var(--td-component-border);
-  background: var(--td-bg-color-container);
-}
-
-.chat-input-form {
-  display: flex;
-  align-items: flex-end;
-  gap: $spacing-md;
-  background: var(--td-bg-color-container);
-  border-radius: 16px;
-  padding: 8px;
-  box-shadow: var(--chat-input-shell-shadow);
-  transition: all 0.3s ease;
-
-  &:focus-within {
-    box-shadow: var(--chat-accent-shadow-elevated);
-  }
-
-  &textarea:focus {
-    border: none !important;
-  }
-}
-
-.chat-input-field {
-  flex: 1;
-  width: 100%;
-  min-height: 44px;
-  max-height: 120px;
-  padding: 8px;
-  background: transparent;
-  border: none;
-  border-radius: 12px;
-  resize: none;
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--td-text-color-primary);
-  outline: none;
-  transition: all 0.2s ease;
-
-  &::placeholder {
-    color: var(--td-text-color-placeholder);
-  }
-}
-
-.chat-input-submit {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--chat-primary-action-bg);
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  color: var(--chat-primary-action-color);
-  transition: all 0.3s ease;
-  box-shadow: var(--chat-primary-action-shadow);
-
-  &:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: var(--chat-accent-shadow-elevated);
-  }
-
-  &:active:not(:disabled) {
-    transform: translateY(0);
-  }
-
-  &:disabled {
-    background: var(--td-bg-color-component-disabled);
-    color: var(--td-text-color-disabled);
-    cursor: not-allowed;
-    box-shadow: none;
-  }
-
-  svg {
-    width: 20px;
-    height: 20px;
-  }
-}
-
-// ============================================================================
-// Enhanced Chat Input
-// ============================================================================
-
-.enhanced-chat-input {
-  position: relative;
-  flex-shrink: 0;
-  max-height: $drawer-input-height;
-  padding: $spacing-md $spacing-lg;
-  border-top: 1px solid var(--chat-card-border);
-  background: color-mix(in srgb, var(--chat-drawer-bg) 88%, var(--chat-card-bg));
-  overflow-y: auto;
-
-  // 选中内容预览（对齐 AIInputBar 样式）
-  &__selection {
-    display: flex;
-    flex-wrap: wrap;
-    gap: $spacing-sm;
-    padding-bottom: $spacing-sm;
-    margin-bottom: $spacing-sm;
-    border-bottom: 1px dashed var(--td-component-border);
-    align-items: center;
-  }
-
-  &__selection-item {
-    position: relative;
-    width: 36px;
-    height: 36px;
-    border-radius: 4px;
-    overflow: hidden;
-    background: var(--chat-media-placeholder-bg);
-    flex-shrink: 0;
-    cursor: pointer;
-    transition: transform 0.15s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    &:hover {
-      transform: scale(1.05);
-    }
-
-    img,
-    video {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      background: var(--chat-media-placeholder-bg);
-    }
-
-    &--graphics {
-      border: 1px solid var(--chat-accent-border-strong);
-    }
-
-    &--video {
-      border: 2px solid var(--chat-accent-border-strong);
-    }
-
-    &--text {
-      width: auto;
-      height: auto;
-      min-width: 64px;
-      max-width: 180px;
-      padding: 8px 12px;
-      background: var(--chat-accent-bg-subtle);
-      border: 1px solid var(--chat-accent-border);
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-    }
-  }
-
-  &__form {
-    display: flex;
-    align-items: flex-start;
-    gap: $spacing-sm;
-    background: var(--chat-card-bg);
-    border-radius: 16px;
-    padding: 8px;
-    border: 1px solid var(--chat-card-border);
-    box-shadow: var(--chat-card-shadow);
-    transition: all 0.3s ease;
-
-    &:focus-within {
-      border-color: var(--chat-accent-border-strong);
-      box-shadow: var(--chat-accent-shadow-elevated);
-    }
-  }
-
-  &__input-wrapper {
-    position: relative;
-    flex: 1;
-  }
-
-  // 高亮背景层 - 显示模型/参数/个数标签的背景色块
-  &__highlight-layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    padding: 10px 12px;
-    font-size: 14px;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    word-break: break-word;
-    pointer-events: none;
-    font-family: inherit;
-    overflow: hidden;
-    z-index: 1;
-    box-sizing: border-box;
-  }
-
-  &__highlight-text {
-    color: transparent;
-  }
-
-  &__highlight-tag {
-    color: transparent;
-    border-radius: 3px;
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
     padding: 0 2px;
-    margin: 0 -2px;
-
-    // 图片模型标签 - 红色背景
-    &--image {
-      background: var(--chat-highlight-image-bg);
-    }
-
-    &--video {
-      background: rgba(var(--xingtu-generation-running-video-accent-rgb, 90, 79, 207), 0.14);
-    }
-
-    // 参数标签 - 紫色背景
-    &--param {
-      background: var(--chat-highlight-param-bg);
-    }
-
-    // 个数标签 - 蓝色背景
-    &--count {
-      background: var(--chat-highlight-count-bg);
-    }
+    margin: 0;
+    border-bottom: none;
+    align-items: center;
   }
 
   &__textarea {
     position: relative;
     z-index: 2;
     width: 100%;
-    min-height: 88px;
+    min-height: 52px;
     max-height: 120px;
-    padding: 10px 12px;
+    padding: 8px 10px 4px;
     background: transparent;
     border: none;
-    border-radius: 12px;
+    border-radius: 0;
     resize: none;
     font-size: 14px;
     line-height: 1.5;
@@ -1685,44 +1247,6 @@ $drawer-input-height: 160px;
     }
   }
 
-  &__send {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--chat-disabled-action-bg);
-    border: none;
-    border-radius: 50%;
-    color: var(--chat-disabled-action-color);
-    cursor: not-allowed;
-    transition: all 0.2s ease;
-    flex-shrink: 0;
-
-    &--active {
-      background: var(--chat-primary-action-bg);
-      color: var(--chat-primary-action-color);
-      cursor: pointer;
-      box-shadow: var(--chat-primary-action-shadow);
-
-      &:hover {
-        filter: brightness(0.96);
-        transform: scale(1.05);
-      }
-    }
-
-    &:disabled {
-      background: var(--chat-disabled-action-bg);
-      color: var(--chat-disabled-action-color);
-      cursor: not-allowed;
-      box-shadow: none;
-    }
-
-    svg {
-      width: 20px;
-      height: 20px;
-    }
-  }
 }
 
 // Mermaid Renderer Styles

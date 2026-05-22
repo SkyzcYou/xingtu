@@ -53,6 +53,8 @@ import { SelectionMode, Asset, AssetType } from '../../types/asset.types';
 import { insertImageFromUrl } from '../../data/image';
 import { insertVideoFromUrl } from '../../data/video';
 import { insertAudioFromUrl } from '../../data/audio';
+import { executeCanvasInsertion } from '../../services/canvas-operations';
+import { logCanvasInsertionDebug } from '../../utils/canvas-insertion-layout';
 import { Popover, PopoverContent, PopoverTrigger } from '../popover/popover';
 import { FreehandShape } from '../../plugins/freehand/type';
 import { PenShape } from '../../plugins/pen/type';
@@ -313,18 +315,70 @@ export const CreationToolbar: React.FC<ToolbarSectionProps> = ({
     [board]
   );
 
+  const handleInsertMultipleAssets = useCallback(
+    async (assets: Asset[]) => {
+      if (assets.length === 0) return;
+
+      logCanvasInsertionDebug('[CanvasInsertion][Toolbar] batch assets begin', {
+        source: 'creation-toolbar',
+        strategy: 'shared-batch-layout',
+        assetsCount: assets.length,
+        assetTypes: assets.map((asset) => asset.type),
+        zoom: (board as any)?.viewport?.zoom || 1,
+      });
+
+      const insertionResult = await executeCanvasInsertion({
+        items: assets.map((asset) => {
+          if (asset.type === AssetType.IMAGE) {
+            return { type: 'image' as const, content: asset.url };
+          }
+
+          if (asset.type === AssetType.VIDEO) {
+            return { type: 'video' as const, content: asset.url };
+          }
+
+          return {
+            type: 'audio' as const,
+            content: asset.url,
+            metadata: {
+              title: asset.name,
+              duration: asset.duration,
+              previewImageUrl: asset.thumbnail,
+              prompt: asset.prompt,
+              mv: asset.modelName,
+              clipId: asset.clipId,
+              providerTaskId: asset.providerTaskId,
+            },
+          };
+        }),
+      });
+
+      if (insertionResult.success) {
+        const insertedCount =
+          (insertionResult.data as { insertedCount?: number } | undefined)
+            ?.insertedCount ?? assets.length;
+        MessagePlugin.success(`已成功插入 ${insertedCount} 个素材到画板`);
+      } else {
+        MessagePlugin.error(insertionResult.error || '插入素材失败');
+      }
+    },
+    [board]
+  );
+
   // 打开素材库
   const handleOpenMediaLibrary = useCallback(() => {
     if (onOpenMediaLibrary) {
       onOpenMediaLibrary({
         mode: SelectionMode.SELECT,
         onSelect: handleInsertAsset,
+        onSelectMultiple: handleInsertMultipleAssets,
         selectButtonText: '插入',
+        batchSelectButtonText: '批量插入画布',
       });
       return;
     }
     setMediaLibraryOpen(true);
-  }, [handleInsertAsset, onOpenMediaLibrary]);
+  }, [handleInsertAsset, handleInsertMultipleAssets, onOpenMediaLibrary]);
 
   // 关闭素材库
   const handleCloseMediaLibrary = useCallback(() => {
@@ -856,8 +910,8 @@ export const CreationToolbar: React.FC<ToolbarSectionProps> = ({
     (
       buttonId: string,
       index: number,
-      isVisible: boolean = true,
-      visibleIndex: number = -1
+      isVisible = true,
+      visibleIndex = -1
     ) => {
       const buttonElement = renderButtonById(buttonId, index);
       if (!buttonElement) return null;
@@ -918,7 +972,9 @@ export const CreationToolbar: React.FC<ToolbarSectionProps> = ({
         onClose={handleCloseMediaLibrary}
         mode={SelectionMode.SELECT}
         onSelect={handleInsertAsset}
+        onSelectMultiple={handleInsertMultipleAssets}
         selectButtonText="插入"
+        batchSelectButtonText="批量插入画布"
       />
     </Suspense>
   ) : null;

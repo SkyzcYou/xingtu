@@ -114,6 +114,7 @@ function toProviderProfileSnapshot(
     | 'authType'
     | 'imageApiCompatibility'
     | 'videoApiCompatibility'
+    | 'preferAsyncImageEndpoint'
     | 'extraHeaders'
   >
 ): ProviderProfileSnapshot {
@@ -132,6 +133,7 @@ function toProviderProfileSnapshot(
       profile.imageApiCompatibility || DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
     videoApiCompatibility:
       profile.videoApiCompatibility || DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
+    preferAsyncImageEndpoint: profile.preferAsyncImageEndpoint ?? false,
     extraHeaders: profile.extraHeaders,
   };
 }
@@ -217,6 +219,8 @@ function buildLegacyProfileSnapshot(): ProviderProfileSnapshot {
     videoApiCompatibility:
       existingLegacyProfile?.videoApiCompatibility ||
       DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY,
+    preferAsyncImageEndpoint:
+      existingLegacyProfile?.preferAsyncImageEndpoint ?? false,
   };
 }
 

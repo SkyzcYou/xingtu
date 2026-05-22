@@ -45,6 +45,8 @@ import { SelectionMode, Asset, AssetType } from '../../../types/asset.types';
 import { insertImageFromUrl } from '../../../data/image';
 import { insertVideoFromUrl } from '../../../data/video';
 import { insertAudioFromUrl } from '../../../data/audio';
+import { executeCanvasInsertion } from '../../../services/canvas-operations';
+import { logCanvasInsertionDebug } from '../../../utils/canvas-insertion-layout';
 import { MessagePlugin } from 'tdesign-react';
 import './quick-creation-toolbar.scss';
 
@@ -62,7 +64,9 @@ export interface QuickCreationToolbarProps {
     mode?: SelectionMode;
     filterType?: AssetType;
     onSelect?: (asset: Asset) => void | Promise<void>;
+    onSelectMultiple?: (assets: Asset[]) => void | Promise<void>;
     selectButtonText?: string;
+    batchSelectButtonText?: string;
   }) => void;
 }
 
@@ -231,13 +235,65 @@ export const QuickCreationToolbar: React.FC<QuickCreationToolbarProps> = ({
     }
   };
 
+  const handleInsertMultipleAssets = async (assets: Asset[]) => {
+    if (assets.length === 0) return;
+
+    logCanvasInsertionDebug('[CanvasInsertion][Toolbar] batch assets begin', {
+      source: 'quick-creation-toolbar',
+      strategy: 'shared-batch-layout',
+      assetsCount: assets.length,
+      assetTypes: assets.map((asset) => asset.type),
+      zoom: (board as any)?.viewport?.zoom || 1,
+    });
+
+    const insertionResult = await executeCanvasInsertion({
+      items: assets.map((asset) => {
+        if (asset.type === AssetType.IMAGE) {
+          return { type: 'image' as const, content: asset.url };
+        }
+
+        if (asset.type === AssetType.VIDEO) {
+          return { type: 'video' as const, content: asset.url };
+        }
+
+        return {
+          type: 'audio' as const,
+          content: asset.url,
+          metadata: {
+            title: asset.name,
+            duration: asset.duration,
+            previewImageUrl: asset.thumbnail,
+            prompt: asset.prompt,
+            mv: asset.modelName,
+            clipId: asset.clipId,
+            providerTaskId: asset.providerTaskId,
+          },
+        };
+      }),
+    });
+
+    if (insertionResult.success) {
+      const insertedCount =
+        (insertionResult.data as { insertedCount?: number } | undefined)
+          ?.insertedCount ?? assets.length;
+      MessagePlugin.success(`已成功插入 ${insertedCount} 个素材到画板`);
+    } else {
+      MessagePlugin.error(insertionResult.error || '插入素材失败');
+    }
+
+    setMediaLibraryOpen(false);
+    onClose();
+  };
+
   const handleMediaLibraryClick = () => {
     resetAllPopovers();
     if (onOpenMediaLibrary) {
       onOpenMediaLibrary({
         mode: SelectionMode.SELECT,
         onSelect: handleInsertAsset,
+        onSelectMultiple: handleInsertMultipleAssets,
         selectButtonText: t('toolbar.insert' as any) || '插入',
+        batchSelectButtonText: '批量插入画布',
       });
       onClose();
       return;
@@ -452,7 +508,9 @@ export const QuickCreationToolbar: React.FC<QuickCreationToolbarProps> = ({
             }}
             mode={SelectionMode.SELECT}
             onSelect={handleInsertAsset}
+            onSelectMultiple={handleInsertMultipleAssets}
             selectButtonText={t('toolbar.insert' as any) || '插入'}
+            batchSelectButtonText="批量插入画布"
           />
         </Suspense>
       )}

@@ -649,6 +649,10 @@ function resolveIdlePrefetchGroup(id: string): IdlePrefetchGroup | undefined {
     return 'media-viewer';
   }
 
+  if (normalizedId.includes('/packages/drawnix/src/tools/tool-ids.ts')) {
+    return undefined;
+  }
+
   if (
     normalizedId.includes(
       '/packages/drawnix/src/components/startup/DrawnixDeferredRuntime.tsx'
@@ -664,9 +668,6 @@ function resolveIdlePrefetchGroup(id: string): IdlePrefetchGroup | undefined {
     ) ||
     normalizedId.includes(
       '/packages/drawnix/src/services/font-manager-service'
-    ) ||
-    normalizedId.includes(
-      '/packages/drawnix/src/utils/model-pricing-service'
     ) ||
     normalizedId.includes('/packages/drawnix/src/hooks/useTaskStorage') ||
     normalizedId.includes('/packages/drawnix/src/hooks/useTaskExecutor') ||
@@ -686,6 +687,7 @@ function resolveIdlePrefetchGroup(id: string): IdlePrefetchGroup | undefined {
     normalizedId.includes(
       '/packages/drawnix/src/services/tool-window-service'
     ) ||
+    normalizedId.includes('/packages/drawnix/src/services/toolbox-service') ||
     normalizedId.includes('/packages/drawnix/src/tools/') ||
     normalizedId.includes('/packages/drawnix/src/components/backup-restore/') ||
     normalizedId.includes(

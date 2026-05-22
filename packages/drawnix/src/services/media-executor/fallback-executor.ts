@@ -54,7 +54,6 @@ import {
   buildImageRequestBody,
   parseImageResponse,
   pollVideoStatus,
-  isAsyncImageModel,
   generateAsyncImage,
   ensureBase64ForAI,
   cacheRemoteUrl,
@@ -210,45 +209,16 @@ export class FallbackMediaExecutor implements IMediaExecutor {
     const startTime = Date.now();
     const modelName = model || config.imageConfig.modelName;
 
-    // 专用 adapter 路由（mj-imagine 等非 gemini 模型）
-    const imageAdapter = resolveAdapterForInvocation(
+    // 异步图片模型：使用 /v1/videos 接口（仅当 binding 为 async-image 时）
+    const imagePlanForAsync = resolveInvocationPlanFromRoute(
       'image',
-      modelName,
-      modelRef || null,
+      modelRef || modelName,
       invocationOptions
     );
-    if (imageAdapter && imageAdapter.kind === 'image') {
-      return executeImageViaAdapter(
-        taskId,
-        imageAdapter,
-        {
-          prompt,
-          model: modelName,
-          modelRef: modelRef || null,
-          size,
-          resolution: params.resolution,
-          quality,
-          count,
-          referenceImages,
-          generationMode:
-            params.generationMode ||
-            (shouldUseEditSchema ? 'image_to_image' : 'text_to_image'),
-          maskImage: params.maskImage,
-          inputFidelity: params.inputFidelity,
-          background: params.background,
-          outputFormat: params.outputFormat,
-          outputCompression: params.outputCompression,
-          params: params.params,
-          assetMetadata: params.assetMetadata,
-          preferredRequestSchema: invocationOptions.preferredRequestSchema,
-        },
-        options,
-        startTime
-      );
-    }
-
-    // 异步图片模型：使用 /v1/videos 接口（与 SW 模式一致）
-    if (isAsyncImageModel(modelName)) {
+    if (
+      imagePlanForAsync?.binding.protocol === 'openai.async.media' ||
+      imagePlanForAsync?.binding.requestSchema === 'openai.async.image.form'
+    ) {
       return this.generateAsyncImageTask(
         taskId,
         {
@@ -461,10 +431,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         const maskData = await unifiedCacheService.getImageForAI(
           params.maskImage
         );
-        processedMaskImage = await ensureBase64ForAI(
-          maskData,
-          options?.signal
-        );
+        processedMaskImage = await ensureBase64ForAI(maskData, options?.signal);
       }
 
       // 调用异步图片生成

@@ -158,17 +158,74 @@
       "highlights": "定制星流视频参数 (07dcf8d3)"
     },
     {
+      "version": "0.9.9",
+      "date": "2026-05-18",
+      "changes": {
+        "features": [
+          "供应商设置增加「图片优先使用异步接口」开关"
+        ],
+        "fixes": [
+          "异步接口开关持久化 + 图片任务刷新后恢复轮询"
+        ],
+        "improvements": [
+          "修复：同步聊天抽屉素材库批量选择",
+          "更新应用版本到 0.9.8"
+        ]
+      },
+      "type": "patch",
+      "highlights": "供应商设置增加「图片优先使用异步接口」开关"
+    },
+    {
+      "version": "0.9.8",
+      "date": "2026-05-17",
+      "changes": {
+        "features": [
+          "添加批量插入功能"
+        ],
+        "fixes": [
+          "split batch media action copy by target context",
+          "support bulk media insertion and image generation compatibility"
+        ],
+        "improvements": [
+          "Refactor canvas batch insertion to viewport flow layout",
+          "修复对话输入框内层描边并抽出共享壳",
+          "聊天抽屉图片预览收口到列表层",
+          "补充首屏壳层与 chunk 守门经验",
+          "修复素材库配色与多选架构，补充UI规范和架构说明",
+          "修复：蒙版预览缓存不进入素材库",
+          "Bump web app version to 0.9.7"
+        ]
+      },
+      "type": "patch",
+      "highlights": "添加批量插入功能"
+    },
+    {
+      "version": "0.9.7",
+      "date": "2026-05-09",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修复批量导入图片弹窗显示异常"
+        ],
+        "improvements": [
+          "更新版本号至0.9.6并同步构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "修复批量导入图片弹窗显示异常"
+    },
+    {
       "version": "0.9.6",
       "date": "2026-05-06",
       "changes": {
         "features": [
-          "为绘图工具添加键盘快捷键调整大小功能 (26049f2d)"
+          "为绘图工具添加键盘快捷键调整大小功能"
         ],
         "fixes": [],
         "improvements": []
       },
       "type": "patch",
-      "highlights": "为绘图工具添加键盘快捷键调整大小功能 (26049f2d)"
+      "highlights": "为绘图工具添加键盘快捷键调整大小功能"
     },
     {
       "version": "0.9.5",
@@ -176,12 +233,12 @@
       "changes": {
         "features": [],
         "fixes": [
-          "修复蒙版画笔导出和预览样式问题 (69f94d26)"
+          "修复蒙版画笔导出和预览样式问题"
         ],
         "improvements": []
       },
       "type": "patch",
-      "highlights": "修复蒙版画笔导出和预览样式问题 (69f94d26)"
+      "highlights": "修复蒙版画笔导出和预览样式问题"
     },
     {
       "version": "0.9.4",
@@ -190,7 +247,7 @@
         "features": [],
         "fixes": [],
         "improvements": [
-          "Stop idle-prefetch retries from blocking SW updates (d2d51319)"
+          "Stop idle-prefetch retries from blocking SW updates"
         ]
       },
       "type": "patch",
@@ -201,36 +258,703 @@
       "date": "2026-05-06",
       "changes": {
         "features": [
-          "support AI image mask editing (3a33e873)"
+          "support AI image mask editing"
         ],
         "fixes": [
-          "keep send button visible (ef75dadb)",
-          "resume async image tasks after reload (4ed9402f)"
+          "keep send button visible",
+          "resume async image tasks after reload"
         ],
         "improvements": [
-          "更新版本号至0.9.2并刷新构建时间 (0c4b383d)"
+          "更新版本号至0.9.2并刷新构建时间"
         ]
       },
       "type": "patch",
-      "highlights": "support AI image mask editing (3a33e873)"
+      "highlights": "support AI image mask editing"
     },
     {
       "version": "0.9.2",
       "date": "2026-05-04",
       "changes": {
         "features": [
-          "优化长提示词输入框展开体验 (241a18fe)",
-          "add image generate-again prefill (9812fd10)"
+          "优化长提示词输入框展开体验",
+          "add image generate-again prefill"
         ],
         "fixes": [
-          "优化参考图描述和提示词优先级协议 (457cc0e7)",
-          "allow hand panning while drawing (7beb5c86)",
-          "address regenerate prefill review findings (ff39ffef)"
+          "优化参考图描述和提示词优先级协议",
+          "allow hand panning while drawing",
+          "address regenerate prefill review findings"
         ],
         "improvements": []
       },
       "type": "minor",
-      "highlights": "优化长提示词输入框展开体验 (241a18fe)"
+      "highlights": "优化长提示词输入框展开体验"
+    },
+    {
+      "version": "0.7.0",
+      "date": "2026-05-03",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "allow hand panning while drawing"
+        ],
+        "improvements": [
+          "更新应用版本号至0.6.99并同步构建时间"
+        ]
+      },
+      "type": "minor",
+      "highlights": "allow hand panning while drawing"
+    },
+    {
+      "version": "0.6.99",
+      "date": "2026-05-03",
+      "changes": {
+        "features": [
+          "为视频生成 prompt 添加参考图用途说明",
+          "支持异步图片生成和生成素材重置",
+          "添加目标总时长配置并优化UI与错误处理"
+        ],
+        "fixes": [
+          "移除生成视频时重复的提示词构建逻辑",
+          "强化爆款视频首尾帧角色一致性",
+          "绑定异步任务供应商路由"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "为视频生成 prompt 添加参考图用途说明"
+    },
+    {
+      "version": "0.6.98",
+      "date": "2026-05-02",
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.6.97",
+      "date": "2026-05-02",
+      "changes": {
+        "features": [
+          "优化价格展示增加Bussiness"
+        ],
+        "fixes": [
+          "parallelize character reference generation"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "优化价格展示增加Bussiness"
+    },
+    {
+      "version": "0.6.96",
+      "date": "2026-05-01",
+      "changes": {
+        "features": [
+          "优化视频工作流批量生成",
+          "add image 3d transform panel"
+        ],
+        "fixes": [
+          "pass image transform context to AI"
+        ],
+        "improvements": [
+          "补充视频主体引用经验",
+          "更新应用版本号至0.6.95并刷新构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "优化视频工作流批量生成"
+    },
+    {
+      "version": "0.6.95",
+      "date": "2026-04-30",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "优化页面卡片布局并修复提示词回填逻辑"
+        ],
+        "improvements": [
+          "更新应用版本号至0.6.94并刷新构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "优化页面卡片布局并修复提示词回填逻辑"
+    },
+    {
+      "version": "0.6.94",
+      "date": "2026-04-30",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "强化历史收藏入口并放宽 AI 并发"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "强化历史收藏入口并放宽 AI 并发"
+    },
+    {
+      "version": "0.6.93",
+      "date": "2026-04-30",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "防止复制粘贴事件在可编辑元素中触发"
+        ],
+        "improvements": [
+          "更新应用版本号至0.6.92并同步构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "防止复制粘贴事件在可编辑元素中触发"
+    },
+    {
+      "version": "0.6.92",
+      "date": "2026-04-30",
+      "changes": {
+        "features": [
+          "在历史记录中显示创建时间并调整排序",
+          "新增 HappyHorse 视频模型支持并重构工作流外壳",
+          "完善多图生成视觉提示词工作流",
+          "优化多图生成提示词预览"
+        ],
+        "fixes": [
+          "修正任务队列批量序号显示",
+          "修复多图生成队列参数并记录经验",
+          "优化媒体预览缩放同步",
+          "优化媒体预览自适应展示",
+          "修复 Milkdown 节点上下文注册顺序"
+        ],
+        "improvements": [
+          "同步 0.6.91 Web 版本元数据",
+          "Refresh docs, CI, and Docker build",
+          "perf(changelog): 限制解析的版本数量以避免内存问题"
+        ]
+      },
+      "type": "patch",
+      "highlights": "在历史记录中显示创建时间并调整排序"
+    },
+    {
+      "version": "0.6.91",
+      "date": "2026-04-29",
+      "changes": {
+        "features": [
+          "支持完整环境备份与覆盖恢复"
+        ],
+        "fixes": [
+          "改进部署包关键资源检查逻辑"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "支持完整环境备份与覆盖恢复"
+    },
+    {
+      "version": "0.6.90",
+      "date": "2026-04-29",
+      "changes": {
+        "features": [],
+        "fixes": [],
+        "improvements": [
+          "更新应用版本号至0.6.89"
+        ]
+      },
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.6.89",
+      "date": "2026-04-29",
+      "changes": {
+        "features": [
+          "添加PPT生成参考图片支持并修复React组件卸载问题"
+        ],
+        "fixes": [
+          "修复图片生成完成后画布自动插入卡住"
+        ],
+        "improvements": [
+          "添加 mermaid 依赖用于图表渲染",
+          "更新应用版本号至0.6.88并同步构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "添加PPT生成参考图片支持并修复React组件卸载问题"
+    },
+    {
+      "version": "0.6.88",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "改进动态导入错误恢复机制并优化错误处理",
+          "guard toImage fetch failures"
+        ],
+        "improvements": [
+          "更新应用版本号至0.6.87并同步构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "改进动态导入错误恢复机制并优化错误处理"
+    },
+    {
+      "version": "0.6.87",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [
+          "为 API Key 输入框添加显示/隐藏切换功能"
+        ],
+        "fixes": [
+          "stabilize GPT image generation requests",
+          "retry failed image generation anchors"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "为 API Key 输入框添加显示/隐藏切换功能"
+    },
+    {
+      "version": "0.6.86",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [],
+        "fixes": [],
+        "improvements": [
+          "更新版本号至 0.6.85 并同步构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.6.85",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [
+          "增强懒加载资源恢复与SEO优化"
+        ],
+        "fixes": [
+          "修复 default 分组迁移类型检查",
+          "调整 default 分组 GPT Image 默认路由"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "增强懒加载资源恢复与SEO优化"
+    },
+    {
+      "version": "0.6.84",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [],
+        "fixes": [],
+        "improvements": [
+          "perf: slim startup dependencies without visual regressions"
+        ]
+      },
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.6.83",
+      "date": "2026-04-28",
+      "changes": {
+        "features": [
+          "优化懒加载和构建配置，添加分析埋点"
+        ],
+        "fixes": [],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "优化懒加载和构建配置，添加分析埋点"
+    },
+    {
+      "version": "0.6.82",
+      "date": "2026-04-27",
+      "changes": {
+        "features": [],
+        "fixes": [],
+        "improvements": [
+          "更新应用版本号至0.6.81并同步构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.6.81",
+      "date": "2026-04-27",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修复画布批量拖拽媒体定位",
+          "收敛静态循环依赖",
+          "选中PPT页面时素材插入页面内",
+          "自动重排删除后的 PPT 页面",
+          "改进API认证错误处理以区分缺失与无效凭证",
+          "修复图片骨架屏加载期间透明度计算逻辑",
+          "support right dock drawer avoidance"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修复画布批量拖拽媒体定位"
+    },
+    {
+      "version": "0.6.80",
+      "date": "2026-04-27",
+      "changes": {
+        "features": [
+          "启用 GPT-5.5 模型配置"
+        ],
+        "fixes": [
+          "tighten media cache warnings",
+          "refine left floating toolbar drawer alignment",
+          "clear task failure badge after viewing",
+          "优化素材库渲染性能",
+          "完善 PPT 标题文件名和媒体导出"
+        ],
+        "improvements": [
+          "更新应用版本号至0.6.79并同步构建时间",
+          "Add home SEO alternates and SW prefetch"
+        ]
+      },
+      "type": "patch",
+      "highlights": "启用 GPT-5.5 模型配置"
+    },
+    {
+      "version": "0.6.79",
+      "date": "2026-04-26",
+      "changes": {
+        "features": [
+          "添加提示词历史工具并集成到AI输入栏",
+          "为歌曲创作页面添加提示词优化功能"
+        ],
+        "fixes": [
+          "sync prompt history selectors",
+          "本地开发默认启用 Service Worker",
+          "确保虚拟图片链接在当前页由 SW 接管",
+          "恢复画布图片稳定虚拟 URL 缓存链路",
+          "修复粘贴图片画布展示兜底"
+        ],
+        "improvements": [
+          "slim npm dependencies",
+          "移除开发调试日志并添加PPT与提示词分析文档"
+        ]
+      },
+      "type": "patch",
+      "highlights": "添加提示词历史工具并集成到AI输入栏"
+    },
+    {
+      "version": "0.6.78",
+      "date": "2026-04-26",
+      "changes": {
+        "features": [
+          "add PPT common prompt history",
+          "add PPT outline image preview action",
+          "分离公共提示词与单页提示词，优化幻灯片生成流程",
+          "add ppt outline generation flow",
+          "改造提示词优化多轮交互",
+          "优化 PPT 编辑与生成模型体验"
+        ],
+        "fixes": [
+          "align model dropdown checkmark",
+          "优化 PPT 大纲提示词与替换逻辑",
+          "优化 PPT 生图可见文字提示词",
+          "避免关闭 SW 时通道初始化超时",
+          "用 WinBox 承载优化弹窗",
+          "调整默认文本模型与选择器顺序",
+          "提升 PPT 生图风格一致性",
+          "ensure PPT media displays fully",
+          "稳定 PPT 生图历史顺序",
+          "统一 PPT 页面客户术语",
+          "修复生图插入重试重复插入问题",
+          "修复 GPT Image 编辑尺寸映射",
+          "align prompt preview flows and refresh default samples",
+          "autosize ai input textarea"
+        ],
+        "improvements": [
+          "更新应用版本号至0.6.77并刷新构建时间",
+          "优化提示词预览与内置提示词"
+        ]
+      },
+      "type": "patch",
+      "highlights": "add PPT common prompt history"
+    },
+    {
+      "version": "0.6.77",
+      "date": "2026-04-25",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修复非根路径部署时的资源加载问题",
+          "增强 Vite 构建文件句柄重试"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修复非根路径部署时的资源加载问题"
+    },
+    {
+      "version": "0.6.76",
+      "date": "2026-04-25",
+      "changes": {
+        "features": [
+          "新增 OpenTu SEO 首页"
+        ],
+        "fixes": [],
+        "improvements": [
+          "更新版本号至0.6.75并同步构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "新增 OpenTu SEO 首页"
+    },
+    {
+      "version": "0.6.75",
+      "date": "2026-04-25",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "离线时跳过 idle prefetch 清单预热"
+        ],
+        "improvements": [
+          "更新应用版本号至0.6.74并同步构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "离线时跳过 idle prefetch 清单预热"
+    },
+    {
+      "version": "0.6.74",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [
+          "添加UI交互埋点并优化剪贴板权限检测",
+          "为缓存失败的媒体添加下载提示角标"
+        ],
+        "fixes": [
+          "修复离线 CDN 资源缓存回退"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "添加UI交互埋点并优化剪贴板权限检测"
+    },
+    {
+      "version": "0.6.73",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修复版本更新条假升级与 SW 提交时序"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修复版本更新条假升级与 SW 提交时序"
+    },
+    {
+      "version": "0.6.72",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "确保更新安装时所有预缓存资源就绪后再提示升级"
+        ],
+        "improvements": [
+          "perf(sw): 优化空闲预取机制并移除调试日志"
+        ]
+      },
+      "type": "patch",
+      "highlights": "确保更新安装时所有预缓存资源就绪后再提示升级"
+    },
+    {
+      "version": "0.6.70",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [
+          "完善 GPT Image 兼容链路"
+        ],
+        "fixes": [
+          "收口预缓存并补齐按需工具离线资源",
+          "接力完整离线补齐并清理 drawnix tsc",
+          "修正跨域静态资源离线缓存命中",
+          "修正按需资源预缓存与预热分组",
+          "限制 app shell 仅匹配根壳页面",
+          "修复离线模式下懒加载模块资源未预热",
+          "修复 GPT Image 适配器 readonly 元组类型不兼容和灵感图缺少 imageQuality 默认值"
+        ],
+        "improvements": [
+          "更新版本号至0.6.69并刷新构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "完善 GPT Image 兼容链路"
+    },
+    {
+      "version": "0.6.68",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修正跨域静态资源离线缓存命中"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修正跨域静态资源离线缓存命中"
+    },
+    {
+      "version": "0.6.66",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修正按需资源预缓存与预热分组"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修正按需资源预缓存与预热分组"
+    },
+    {
+      "version": "0.6.65",
+      "date": "2026-04-24",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "限制 app shell 仅匹配根壳页面",
+          "修复离线模式下懒加载模块资源未预热"
+        ],
+        "improvements": [
+          "更新版本号至0.6.64并修正回滚脚本参数顺序"
+        ]
+      },
+      "type": "patch",
+      "highlights": "限制 app shell 仅匹配根壳页面"
+    },
+    {
+      "version": "0.6.64",
+      "date": "2026-04-23",
+      "changes": {
+        "features": [
+          "添加CDN恢复探测和详细日志记录"
+        ],
+        "fixes": [
+          "修复 LLM API Logger 的 IDB 连接关闭导致大模型调用失败",
+          "HTML 缓存双 key 存储，导航请求直接命中"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "添加CDN恢复探测和详细日志记录"
+    },
+    {
+      "version": "0.6.60",
+      "date": "2026-04-23",
+      "changes": {
+        "features": [
+          "支持多供应商分组的模型健康状态显示"
+        ],
+        "fixes": [
+          "稳定 service worker 分阶段加载与版本提交协议"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "支持多供应商分组的模型健康状态显示"
+    },
+    {
+      "version": "0.6.59",
+      "date": "2026-04-23",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "增强错误上下文收集并修复资源错误跟踪",
+          "修正 SW 静态资源版本命中与启动页提示",
+          "统一 PostHog 版本上下文",
+          "老用户沿用旧版壳并修正图层锁定失效路径",
+          "将 SW 升级切换改为整包 ready 后再接管",
+          "恢复 Gemini 图片模型的 generateContent 路由策略"
+        ],
+        "improvements": [
+          "更新版本号至0.6.55并刷新构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "增强错误上下文收集并修复资源错误跟踪"
+    },
+    {
+      "version": "0.6.57",
+      "date": "2026-04-23",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "老用户沿用旧版壳并修正图层锁定失效路径"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "老用户沿用旧版壳并修正图层锁定失效路径"
+    },
+    {
+      "version": "0.6.56",
+      "date": "2026-04-23",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "将 SW 升级切换改为整包 ready 后再接管"
+        ],
+        "improvements": [
+          "更新版本号至0.6.55并刷新构建时间"
+        ]
+      },
+      "type": "patch",
+      "highlights": "将 SW 升级切换改为整包 ready 后再接管"
+    },
+    {
+      "version": "0.6.55",
+      "date": "2026-04-23",
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
+      "version": "0.6.54",
+      "date": "2026-04-22",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修正首屏资源 CDN 回退路径归一化"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修正首屏资源 CDN 回退路径归一化"
+    },
+    {
+      "version": "0.6.53",
+      "date": "2026-04-22",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "修正首屏 loading 与 CDN 优先加载链路"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "修正首屏 loading 与 CDN 优先加载链路"
+    },
+    {
+      "version": "0.6.46",
+      "date": "2026-04-22",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "关闭页面时兜底恢复画布快照",
+          "前置首屏加载并修复素材库插入画布链路"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "关闭页面时兜底恢复画布快照"
     },
     {
       "version": "0.7.3",
@@ -259,627 +983,6 @@
       },
       "type": "patch",
       "highlights": "修复批量导入图片弹窗显示异常"
-    },
-    {
-      "version": "0.7.0",
-      "date": "2026-05-03",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "allow hand panning while drawing (60c4828b)"
-        ],
-        "improvements": [
-          "更新应用版本号至0.6.99并同步构建时间 (60daf04e)"
-        ]
-      },
-      "type": "minor",
-      "highlights": "allow hand panning while drawing (60c4828b)"
-    },
-    {
-      "version": "0.6.99",
-      "date": "2026-05-03",
-      "changes": {
-        "features": [
-          "为视频生成 prompt 添加参考图用途说明 (95b7722d)",
-          "支持异步图片生成和生成素材重置 (d5fdb613)",
-          "添加目标总时长配置并优化UI与错误处理 (abff6536)"
-        ],
-        "fixes": [
-          "移除生成视频时重复的提示词构建逻辑 (7edd47d9)",
-          "强化爆款视频首尾帧角色一致性 (743a7afa)",
-          "绑定异步任务供应商路由 (3a56d795)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "为视频生成 prompt 添加参考图用途说明 (95b7722d)"
-    },
-    {
-      "version": "0.6.98",
-      "date": "2026-05-02",
-      "type": "patch",
-      "highlights": "构建修复与稳定性改进"
-    },
-    {
-      "version": "0.6.97",
-      "date": "2026-05-02",
-      "changes": {
-        "features": [
-          "优化价格展示增加Bussiness (a2ba39ae)"
-        ],
-        "fixes": [
-          "parallelize character reference generation (1b17f80a)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "优化价格展示增加Bussiness (a2ba39ae)"
-    },
-    {
-      "version": "0.6.96",
-      "date": "2026-05-01",
-      "changes": {
-        "features": [
-          "优化视频工作流批量生成 (80732a5d)",
-          "add image 3d transform panel (97fc60e4)"
-        ],
-        "fixes": [
-          "pass image transform context to AI (e642f466)"
-        ],
-        "improvements": [
-          "补充视频主体引用经验 (24363fcd)",
-          "更新应用版本号至0.6.95并刷新构建时间 (a6a8aed9)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "优化视频工作流批量生成 (80732a5d)"
-    },
-    {
-      "version": "0.6.95",
-      "date": "2026-04-30",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "优化页面卡片布局并修复提示词回填逻辑 (4770cf33)"
-        ],
-        "improvements": [
-          "更新应用版本号至0.6.94并刷新构建时间 (34659c05)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "优化页面卡片布局并修复提示词回填逻辑 (4770cf33)"
-    },
-    {
-      "version": "0.6.94",
-      "date": "2026-04-30",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "强化历史收藏入口并放宽 AI 并发 (4e952541)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "强化历史收藏入口并放宽 AI 并发 (4e952541)"
-    },
-    {
-      "version": "0.6.93",
-      "date": "2026-04-30",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "防止复制粘贴事件在可编辑元素中触发 (00d767f4)"
-        ],
-        "improvements": [
-          "更新应用版本号至0.6.92并同步构建时间 (abf59634)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "防止复制粘贴事件在可编辑元素中触发 (00d767f4)"
-    },
-    {
-      "version": "0.6.92",
-      "date": "2026-04-30",
-      "changes": {
-        "features": [
-          "在历史记录中显示创建时间并调整排序 (db7d44a4)",
-          "新增 HappyHorse 视频模型支持并重构工作流外壳 (7f297f5e)",
-          "完善多图生成视觉提示词工作流 (0f11b9c7)",
-          "优化多图生成提示词预览 (459b4e31)"
-        ],
-        "fixes": [
-          "修正任务队列批量序号显示 (ae172b8d)",
-          "修复多图生成队列参数并记录经验 (dac73844)",
-          "优化媒体预览缩放同步 (269c02d5)",
-          "优化媒体预览自适应展示 (d30183f2)",
-          "修复 Milkdown 节点上下文注册顺序 (a8bf269d)"
-        ],
-        "improvements": [
-          "同步 0.6.91 Web 版本元数据 (50fe68d0)",
-          "Refresh docs, CI, and Docker build (a614f3e5)",
-          "perf(changelog): 限制解析的版本数量以避免内存问题 (647d77b7)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "在历史记录中显示创建时间并调整排序 (db7d44a4)"
-    },
-    {
-      "version": "0.6.91",
-      "date": "2026-04-29",
-      "changes": {
-        "features": [
-          "支持完整环境备份与覆盖恢复 (9e593e94)"
-        ],
-        "fixes": [
-          "改进部署包关键资源检查逻辑 (1a457d02)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "支持完整环境备份与覆盖恢复 (9e593e94)"
-    },
-    {
-      "version": "0.6.90",
-      "date": "2026-04-29",
-      "changes": {
-        "features": [],
-        "fixes": [],
-        "improvements": [
-          "更新应用版本号至0.6.89 (9ebe98d3)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "构建修复与稳定性改进"
-    },
-    {
-      "version": "0.6.89",
-      "date": "2026-04-29",
-      "changes": {
-        "features": [
-          "添加PPT生成参考图片支持并修复React组件卸载问题 (b470e504)"
-        ],
-        "fixes": [
-          "修复图片生成完成后画布自动插入卡住 (e383c362)"
-        ],
-        "improvements": [
-          "添加 mermaid 依赖用于图表渲染 (2999f6f1)",
-          "更新应用版本号至0.6.88并同步构建时间 (84e6f206)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "添加PPT生成参考图片支持并修复React组件卸载问题 (b470e504)"
-    },
-    {
-      "version": "0.6.88",
-      "date": "2026-04-28",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "改进动态导入错误恢复机制并优化错误处理 (3781c354)",
-          "guard toImage fetch failures (dff2f46a)"
-        ],
-        "improvements": [
-          "更新应用版本号至0.6.87并同步构建时间 (aa97f83f)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "改进动态导入错误恢复机制并优化错误处理 (3781c354)"
-    },
-    {
-      "version": "0.6.87",
-      "date": "2026-04-28",
-      "changes": {
-        "features": [
-          "为 API Key 输入框添加显示/隐藏切换功能 (87d79796)"
-        ],
-        "fixes": [
-          "stabilize GPT image generation requests (d478c883)",
-          "retry failed image generation anchors (9755447a)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "为 API Key 输入框添加显示/隐藏切换功能 (87d79796)"
-    },
-    {
-      "version": "0.6.86",
-      "date": "2026-04-28",
-      "changes": {
-        "features": [],
-        "fixes": [],
-        "improvements": [
-          "更新版本号至 0.6.85 并同步构建时间 (f1613719)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "构建修复与稳定性改进"
-    },
-    {
-      "version": "0.6.85",
-      "date": "2026-04-28",
-      "changes": {
-        "features": [
-          "增强懒加载资源恢复与SEO优化 (c16b4d59)"
-        ],
-        "fixes": [
-          "修复 default 分组迁移类型检查 (7f4ec5c3)",
-          "调整 default 分组 GPT Image 默认路由 (c789bda1)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "增强懒加载资源恢复与SEO优化 (c16b4d59)"
-    },
-    {
-      "version": "0.6.84",
-      "date": "2026-04-28",
-      "changes": {
-        "features": [],
-        "fixes": [],
-        "improvements": [
-          "perf: slim startup dependencies without visual regressions (3103325d)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "构建修复与稳定性改进"
-    },
-    {
-      "version": "0.6.83",
-      "date": "2026-04-28",
-      "changes": {
-        "features": [
-          "优化懒加载和构建配置，添加分析埋点 (4438a44f)"
-        ],
-        "fixes": [],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "优化懒加载和构建配置，添加分析埋点 (4438a44f)"
-    },
-    {
-      "version": "0.6.82",
-      "date": "2026-04-27",
-      "changes": {
-        "features": [],
-        "fixes": [],
-        "improvements": [
-          "更新应用版本号至0.6.81并同步构建时间 (a435015f)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "构建修复与稳定性改进"
-    },
-    {
-      "version": "0.6.81",
-      "date": "2026-04-27",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "修复画布批量拖拽媒体定位 (b0933fee)",
-          "收敛静态循环依赖 (556a56f1)",
-          "选中PPT页面时素材插入页面内 (1b65b885)",
-          "自动重排删除后的 PPT 页面 (05d78509)",
-          "改进API认证错误处理以区分缺失与无效凭证 (89a9b83b)",
-          "修复图片骨架屏加载期间透明度计算逻辑 (834e50c4)",
-          "support right dock drawer avoidance (04ab497a)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "修复画布批量拖拽媒体定位 (b0933fee)"
-    },
-    {
-      "version": "0.6.80",
-      "date": "2026-04-27",
-      "changes": {
-        "features": [
-          "启用 GPT-5.5 模型配置 (cb97b283)"
-        ],
-        "fixes": [
-          "tighten media cache warnings (e71cb815)",
-          "refine left floating toolbar drawer alignment (8255bde4)",
-          "clear task failure badge after viewing (b574bfbb)",
-          "优化素材库渲染性能 (bf713cd5)",
-          "完善 PPT 标题文件名和媒体导出 (0f8a2fcd)"
-        ],
-        "improvements": [
-          "更新应用版本号至0.6.79并同步构建时间 (5af73dc1)",
-          "Add home SEO alternates and SW prefetch (aaeab363)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "启用 GPT-5.5 模型配置 (cb97b283)"
-    },
-    {
-      "version": "0.6.79",
-      "date": "2026-04-26",
-      "changes": {
-        "features": [
-          "添加提示词历史工具并集成到AI输入栏 (d3e63998)",
-          "为歌曲创作页面添加提示词优化功能 (ff373c31)"
-        ],
-        "fixes": [
-          "sync prompt history selectors (f82a39fe)",
-          "本地开发默认启用 Service Worker (d27c8494)",
-          "确保虚拟图片链接在当前页由 SW 接管 (f5f556ad)",
-          "恢复画布图片稳定虚拟 URL 缓存链路 (26433192)",
-          "修复粘贴图片画布展示兜底 (fd800afa)"
-        ],
-        "improvements": [
-          "slim npm dependencies (56232ee6)",
-          "移除开发调试日志并添加PPT与提示词分析文档 (835aa9c1)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "添加提示词历史工具并集成到AI输入栏 (d3e63998)"
-    },
-    {
-      "version": "0.6.78",
-      "date": "2026-04-26",
-      "changes": {
-        "features": [
-          "add PPT common prompt history (9c41c60e)",
-          "add PPT outline image preview action (0f1dddae)",
-          "分离公共提示词与单页提示词，优化幻灯片生成流程 (20854ff0)",
-          "add ppt outline generation flow (af35d4ae)",
-          "改造提示词优化多轮交互 (913ba764)",
-          "优化 PPT 编辑与生成模型体验 (f19c02ff)"
-        ],
-        "fixes": [
-          "align model dropdown checkmark (095d9f1a)",
-          "优化 PPT 大纲提示词与替换逻辑 (ff22ecc9)",
-          "优化 PPT 生图可见文字提示词 (4179fa8c)",
-          "避免关闭 SW 时通道初始化超时 (8548dfc8)",
-          "用 WinBox 承载优化弹窗 (2f49bddc)",
-          "调整默认文本模型与选择器顺序 (53485977)",
-          "提升 PPT 生图风格一致性 (77a4acb1)",
-          "ensure PPT media displays fully (e5291e64)",
-          "稳定 PPT 生图历史顺序 (c4200a00)",
-          "统一 PPT 页面客户术语 (fb2b2c06)",
-          "修复生图插入重试重复插入问题 (6670f8bc)",
-          "修复 GPT Image 编辑尺寸映射 (f39813ad)",
-          "align prompt preview flows and refresh default samples (595d4f03)",
-          "autosize ai input textarea (2d2d6441)"
-        ],
-        "improvements": [
-          "更新应用版本号至0.6.77并刷新构建时间 (5c32fee5)",
-          "优化提示词预览与内置提示词 (82ac84aa)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "add PPT common prompt history (9c41c60e)"
-    },
-    {
-      "version": "0.6.77",
-      "date": "2026-04-25",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "修复非根路径部署时的资源加载问题 (9d8d4c8b)",
-          "增强 Vite 构建文件句柄重试 (cee1ab01)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "修复非根路径部署时的资源加载问题 (9d8d4c8b)"
-    },
-    {
-      "version": "0.6.76",
-      "date": "2026-04-25",
-      "changes": {
-        "features": [
-          "新增 Xingtu SEO 首页 (99fca746)"
-        ],
-        "fixes": [],
-        "improvements": [
-          "更新版本号至0.6.75并同步构建时间 (cefc3cb1)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "新增 Xingtu SEO 首页 (99fca746)"
-    },
-    {
-      "version": "0.6.75",
-      "date": "2026-04-25",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "离线时跳过 idle prefetch 清单预热 (a20393e2)"
-        ],
-        "improvements": [
-          "更新应用版本号至0.6.74并同步构建时间 (19cecd26)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "离线时跳过 idle prefetch 清单预热 (a20393e2)"
-    },
-    {
-      "version": "0.6.74",
-      "date": "2026-04-24",
-      "changes": {
-        "features": [
-          "添加UI交互埋点并优化剪贴板权限检测 (26ae1854)",
-          "为缓存失败的媒体添加下载提示角标 (a42ed0ff)"
-        ],
-        "fixes": [
-          "修复离线 CDN 资源缓存回退 (b70ad2ae)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "添加UI交互埋点并优化剪贴板权限检测 (26ae1854)"
-    },
-    {
-      "version": "0.6.73",
-      "date": "2026-04-24",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "修复版本更新条假升级与 SW 提交时序 (328468bf)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "修复版本更新条假升级与 SW 提交时序 (328468bf)"
-    },
-    {
-      "version": "0.6.72",
-      "date": "2026-04-24",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "确保更新安装时所有预缓存资源就绪后再提示升级 (a1833973)"
-        ],
-        "improvements": [
-          "perf(sw): 优化空闲预取机制并移除调试日志 (cd0b738d)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "确保更新安装时所有预缓存资源就绪后再提示升级 (a1833973)"
-    },
-    {
-      "version": "0.6.70",
-      "date": "2026-04-24",
-      "changes": {
-        "features": [
-          "完善 GPT Image 兼容链路 (fafb3ae6)"
-        ],
-        "fixes": [
-          "收口预缓存并补齐按需工具离线资源 (c511ba29)",
-          "接力完整离线补齐并清理 drawnix tsc (317291d8)",
-          "修正跨域静态资源离线缓存命中 (99054680)",
-          "修正按需资源预缓存与预热分组 (2dcd6928)",
-          "限制 app shell 仅匹配根壳页面 (3b8f28f1)",
-          "修复离线模式下懒加载模块资源未预热 (55eee6a2)",
-          "修复 GPT Image 适配器 readonly 元组类型不兼容和灵感图缺少 imageQuality 默认值 (9da7d380)"
-        ],
-        "improvements": [
-          "更新版本号至0.6.69并刷新构建时间 (52915fd2)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "完善 GPT Image 兼容链路 (fafb3ae6)"
-    },
-    {
-      "version": "0.6.68",
-      "date": "2026-04-24",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "修正跨域静态资源离线缓存命中 (5b2d6774)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "修正跨域静态资源离线缓存命中 (5b2d6774)"
-    },
-    {
-      "version": "0.6.66",
-      "date": "2026-04-24",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "修正按需资源预缓存与预热分组 (ccb41849)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "修正按需资源预缓存与预热分组 (ccb41849)"
-    },
-    {
-      "version": "0.6.65",
-      "date": "2026-04-24",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "限制 app shell 仅匹配根壳页面 (f78d33ee)",
-          "修复离线模式下懒加载模块资源未预热 (68d368fc)"
-        ],
-        "improvements": [
-          "更新版本号至0.6.64并修正回滚脚本参数顺序 (7e024607)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "限制 app shell 仅匹配根壳页面 (f78d33ee)"
-    },
-    {
-      "version": "0.6.64",
-      "date": "2026-04-23",
-      "changes": {
-        "features": [
-          "添加CDN恢复探测和详细日志记录 (7559e132)"
-        ],
-        "fixes": [
-          "修复 LLM API Logger 的 IDB 连接关闭导致大模型调用失败 (f13d842a)",
-          "HTML 缓存双 key 存储，导航请求直接命中 (2ee82aea)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "添加CDN恢复探测和详细日志记录 (7559e132)"
-    },
-    {
-      "version": "0.6.60",
-      "date": "2026-04-23",
-      "changes": {
-        "features": [
-          "支持多供应商分组的模型健康状态显示 (f0eef23c)"
-        ],
-        "fixes": [
-          "稳定 service worker 分阶段加载与版本提交协议 (8051cd18)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "支持多供应商分组的模型健康状态显示 (f0eef23c)"
-    },
-    {
-      "version": "0.6.59",
-      "date": "2026-04-23",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "增强错误上下文收集并修复资源错误跟踪 (b1825467)",
-          "修正 SW 静态资源版本命中与启动页提示 (497703c5)",
-          "统一 PostHog 版本上下文 (f10d11b8)",
-          "老用户沿用旧版壳并修正图层锁定失效路径 (6e88c9d4)",
-          "将 SW 升级切换改为整包 ready 后再接管 (12bdc930)",
-          "恢复 Gemini 图片模型的 generateContent 路由策略 (d70f9d72)"
-        ],
-        "improvements": [
-          "更新版本号至0.6.55并刷新构建时间 (159f2ebf)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "增强错误上下文收集并修复资源错误跟踪 (b1825467)"
-    },
-    {
-      "version": "0.6.57",
-      "date": "2026-04-23",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "老用户沿用旧版壳并修正图层锁定失效路径 (2aed8ef9)"
-        ],
-        "improvements": []
-      },
-      "type": "patch",
-      "highlights": "老用户沿用旧版壳并修正图层锁定失效路径 (2aed8ef9)"
-    },
-    {
-      "version": "0.6.56",
-      "date": "2026-04-23",
-      "changes": {
-        "features": [],
-        "fixes": [
-          "将 SW 升级切换改为整包 ready 后再接管 (6c482936)"
-        ],
-        "improvements": [
-          "更新版本号至0.6.55并刷新构建时间 (7610ed5e)"
-        ]
-      },
-      "type": "patch",
-      "highlights": "将 SW 升级切换改为整包 ready 后再接管 (6c482936)"
     }
   ]
 }
