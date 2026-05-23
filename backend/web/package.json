@@ -1,0 +1,33 @@
+{
+  "name": "@aitu/backend-web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "vite serve --host 0.0.0.0",
+    "build": "tsc -p tsconfig.app.json --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" vite.config.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.0.0",
+    "@tanstack/react-router": "^1.0.0",
+    "@tanstack/react-table": "^8.0.0",
+    "lucide-react": "^0.562.0",
+    "oidc-client-ts": "^3.5.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tdesign-icons-react": "^0.6.1",
+    "tdesign-react": "^1.14.5",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "18.16.9",
+    "@types/react": "18.3.1",
+    "@types/react-dom": "18.3.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "typescript": "~5.4.2",
+    "vite": "^6.2.2"
+  }
+}

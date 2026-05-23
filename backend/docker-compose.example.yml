@@ -22,7 +22,7 @@ services:
       QINGKE_MERCHANT_PRIVATE_KEY_PEM: ${QINGKE_MERCHANT_PRIVATE_KEY_PEM:?QINGKE_MERCHANT_PRIVATE_KEY_PEM is required}
       QINGKE_PLATFORM_PUBLIC_KEY_PEM: ${QINGKE_PLATFORM_PUBLIC_KEY_PEM:?QINGKE_PLATFORM_PUBLIC_KEY_PEM is required}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://api.xingtu.live}
-      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-https://xingtu.live,https://www.xingtu.live,http://localhost:7200,http://localhost:5174}
+      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-https://xingtu.live,https://www.xingtu.live,https://console.xingtu.live,http://localhost:7200,http://localhost:5174}
       TRUST_BASE_URL: ${TRUST_BASE_URL:-https://trust-api.skyzcstack.space}
       TRUST_REALM: ${TRUST_REALM:-xing}
       TRUST_CLIENT_ID: ${TRUST_CLIENT_ID:-xingtu}
