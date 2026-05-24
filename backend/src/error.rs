@@ -75,7 +75,14 @@ impl IntoResponse for AppError {
 
 impl From<sqlx::Error> for AppError {
     fn from(error: sqlx::Error) -> Self {
-        tracing::error!(?error, "database error");
+        match &error {
+            sqlx::Error::PoolTimedOut => {
+                tracing::error!(?error, "database pool acquire timed out");
+            }
+            _ => {
+                tracing::error!(?error, "database error");
+            }
+        }
         Self::Internal
     }
 }

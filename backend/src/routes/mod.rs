@@ -1,7 +1,10 @@
-use crate::{config::AppConfig, qingke::QingkeClient, trust::TrustClient};
+use crate::{
+    config::AppConfig, llm_config::LlmProxyConfigCache, qingke::QingkeClient, trust::TrustClient,
+};
 use axum::Router;
 use reqwest::Client;
 use sqlx::PgPool;
+use std::sync::Arc;
 
 mod account;
 mod admin_llm_config;
@@ -16,6 +19,7 @@ pub struct AppState {
     pub qingke: QingkeClient,
     pub trust: TrustClient,
     pub http_client: Client,
+    pub llm_config_cache: Arc<LlmProxyConfigCache>,
 }
 
 pub fn router(state: AppState) -> Router {

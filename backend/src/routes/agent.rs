@@ -1,5 +1,5 @@
 use super::AppState;
-use crate::{error::AppResult, llm_config::get_llm_proxy_config};
+use crate::error::AppResult;
 use axum::{extract::State, http::HeaderMap, routing::post, Json, Router};
 use rig_core::{client::CompletionClient, completion::Prompt, providers::openai};
 use serde::{Deserialize, Serialize};
@@ -30,7 +30,7 @@ async fn agent_chat(
     Json(input): Json<AgentChatRequest>,
 ) -> AppResult<Json<AgentChatResponse>> {
     state.trust.authenticate(&headers).await?;
-    let config = get_llm_proxy_config(&state.pool).await?;
+    let config = state.llm_config_cache.get_or_load(&state.pool).await?;
     let agent_name = input
         .agent
         .unwrap_or_else(|| "xingtu-assistant".to_string());

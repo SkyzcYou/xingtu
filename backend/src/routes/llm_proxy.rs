@@ -1,7 +1,7 @@
 use super::AppState;
 use crate::{
     error::AppError,
-    llm_config::{fetch_upstream_model_ids, get_llm_proxy_config, LlmProxyConfig},
+    llm_config::{fetch_upstream_model_ids, LlmProxyConfig},
 };
 use axum::{
     body::{Body, Bytes},
@@ -47,7 +47,7 @@ async fn proxy_chat_completions(
         return app_error_response(error);
     }
 
-    let config = match get_llm_proxy_config(&state.pool).await {
+    let config = match state.llm_config_cache.get_or_load(&state.pool).await {
         Ok(config) => config,
         Err(error) => return app_error_response(error),
     };
@@ -60,7 +60,7 @@ async fn proxy_chat_completions(
     let upstream = state
         .http_client
         .post(upstream_url)
-        .bearer_auth(config.api_key)
+        .bearer_auth(&config.api_key)
         .timeout(Duration::from_secs(config.timeout_seconds))
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .header(
@@ -74,7 +74,12 @@ async fn proxy_chat_completions(
     match upstream {
         Ok(response) => upstream_response(response),
         Err(error) => {
-            tracing::warn!(?error, "llm chat completions upstream request failed");
+            tracing::warn!(
+                ?error,
+                is_timeout = error.is_timeout(),
+                timeout_seconds = config.timeout_seconds,
+                "llm chat completions upstream request failed"
+            );
             openai_error_response(
                 StatusCode::BAD_GATEWAY,
                 "上游 LLM 请求失败",
@@ -94,7 +99,7 @@ async fn proxy_image_generations(
         return app_error_response(error);
     }
 
-    let config = match get_llm_proxy_config(&state.pool).await {
+    let config = match state.llm_config_cache.get_or_load(&state.pool).await {
         Ok(config) => config,
         Err(error) => return app_error_response(error),
     };
@@ -119,7 +124,7 @@ async fn proxy_image_edits(
         return app_error_response(error);
     }
 
-    let config = match get_llm_proxy_config(&state.pool).await {
+    let config = match state.llm_config_cache.get_or_load(&state.pool).await {
         Ok(config) => config,
         Err(error) => return app_error_response(error),
     };
@@ -135,7 +140,12 @@ async fn proxy_upstream_body(
     body: Bytes,
 ) -> Response {
     let upstream_url = join_upstream_url(&config.base_url, path);
-    tracing::info!(%upstream_url, "proxying llm request");
+    tracing::info!(
+        %upstream_url,
+        timeout_seconds = config.timeout_seconds,
+        allowed_models_count = config.allowed_models.len(),
+        "proxying llm request"
+    );
     let mut request = state
         .http_client
         .post(upstream_url)
@@ -151,7 +161,13 @@ async fn proxy_upstream_body(
     match request.send().await {
         Ok(response) => upstream_response(response),
         Err(error) => {
-            tracing::warn!(?error, %path, "llm upstream request failed");
+            tracing::warn!(
+                ?error,
+                %path,
+                is_timeout = error.is_timeout(),
+                timeout_seconds = config.timeout_seconds,
+                "llm upstream request failed"
+            );
             openai_error_response(
                 StatusCode::BAD_GATEWAY,
                 "上游 LLM 请求失败",
@@ -167,7 +183,7 @@ async fn list_models(State(state): State<AppState>, headers: HeaderMap) -> Respo
         return app_error_response(error);
     }
 
-    let config = match get_llm_proxy_config(&state.pool).await {
+    let config = match state.llm_config_cache.get_or_load(&state.pool).await {
         Ok(config) => config,
         Err(error) => return app_error_response(error),
     };
@@ -193,7 +209,7 @@ async fn retrieve_model(
         return app_error_response(error);
     }
 
-    let config = match get_llm_proxy_config(&state.pool).await {
+    let config = match state.llm_config_cache.get_or_load(&state.pool).await {
         Ok(config) => config,
         Err(error) => return app_error_response(error),
     };

@@ -35,7 +35,9 @@ async fn update_config(
     Json(input): Json<UpdateLlmConfigRequest>,
 ) -> AppResult<Json<crate::llm_config::AdminLlmConfigResponse>> {
     authenticate_admin(&state, &headers).await?;
-    Ok(Json(update_llm_config(&state.pool, input).await?))
+    let response = update_llm_config(&state.pool, input).await?;
+    state.llm_config_cache.invalidate();
+    Ok(Json(response))
 }
 
 async fn test_config(

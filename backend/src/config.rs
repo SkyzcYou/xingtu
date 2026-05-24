@@ -2,10 +2,19 @@ use crate::error::{AppError, AppResult};
 use std::env;
 
 #[derive(Clone, Debug)]
+pub struct DatabasePoolConfig {
+    pub url: String,
+    pub max_connections: u32,
+    pub min_connections: u32,
+    pub acquire_timeout_seconds: u64,
+}
+
+#[derive(Clone, Debug)]
 pub struct AppConfig {
     pub server_host: String,
     pub server_port: u16,
-    pub database_url: String,
+    pub database: DatabasePoolConfig,
+    pub llm_config_cache_ttl_seconds: u64,
     pub qingke_api_base: String,
     pub qingke_pid: String,
     pub qingke_merchant_private_key_pem: String,
@@ -24,11 +33,23 @@ impl AppConfig {
         let server_port = env_or("SERVER_PORT", "8080")
             .parse::<u16>()
             .map_err(|_| AppError::config("SERVER_PORT must be a valid port"))?;
+        let database = DatabasePoolConfig {
+            url: require_env("DATABASE_URL")?,
+            max_connections: env_u32_or("DATABASE_MAX_CONNECTIONS", 20)?.max(1),
+            min_connections: env_u32_or("DATABASE_MIN_CONNECTIONS", 0)?,
+            acquire_timeout_seconds: env_u64_or("DATABASE_ACQUIRE_TIMEOUT_SECONDS", 5)?.max(1),
+        };
+        if database.min_connections > database.max_connections {
+            return Err(AppError::config(
+                "DATABASE_MIN_CONNECTIONS must be less than or equal to DATABASE_MAX_CONNECTIONS",
+            ));
+        }
 
         Ok(Self {
             server_host: env_or("SERVER_HOST", "0.0.0.0"),
             server_port,
-            database_url: require_env("DATABASE_URL")?,
+            database,
+            llm_config_cache_ttl_seconds: env_u64_or("LLM_CONFIG_CACHE_TTL_SECONDS", 30)?.max(1),
             qingke_api_base: env_or("QINGKE_API_BASE", "https://pay.xianlai.work"),
             qingke_pid: require_env("QINGKE_PID")?,
             qingke_merchant_private_key_pem: normalize_pem(&require_env(
@@ -58,6 +79,26 @@ fn require_env(name: &str) -> AppResult<String> {
 
 fn env_or(name: &str, default: &str) -> String {
     env::var(name).unwrap_or_else(|_| default.to_string())
+}
+
+fn env_u32_or(name: &str, default: u32) -> AppResult<u32> {
+    env::var(name)
+        .map(|value| {
+            value
+                .parse::<u32>()
+                .map_err(|_| AppError::config(format!("{name} must be a valid unsigned integer")))
+        })
+        .unwrap_or(Ok(default))
+}
+
+fn env_u64_or(name: &str, default: u64) -> AppResult<u64> {
+    env::var(name)
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .map_err(|_| AppError::config(format!("{name} must be a valid unsigned integer")))
+        })
+        .unwrap_or(Ok(default))
 }
 
 fn trust_client_ids() -> AppResult<Vec<String>> {

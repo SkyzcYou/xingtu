@@ -9,9 +9,10 @@ mod trust;
 
 use axum::http::{HeaderValue, Method};
 use config::AppConfig;
+use llm_config::LlmProxyConfigCache;
 use qingke::QingkeClient;
 use routes::AppState;
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tower_http::{
     cors::{AllowOrigin, Any, CorsLayer},
@@ -29,10 +30,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let config = AppConfig::from_env()?;
-    let pool = db::create_pool(&config.database_url).await?;
+    let pool = db::create_pool(&config.database).await?;
     let qingke = QingkeClient::new(&config)?;
     let trust = TrustClient::new(&config);
     let http_client = reqwest::Client::new();
+    let llm_config_cache = Arc::new(LlmProxyConfigCache::new(Duration::from_secs(
+        config.llm_config_cache_ttl_seconds,
+    )));
     let addr: SocketAddr = format!("{}:{}", config.server_host, config.server_port).parse()?;
 
     let cors = build_cors_layer(&config.cors_allowed_origin)?;
@@ -42,6 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         qingke,
         trust,
         http_client,
+        llm_config_cache,
     })
     .layer(TraceLayer::new_for_http())
     .layer(cors);

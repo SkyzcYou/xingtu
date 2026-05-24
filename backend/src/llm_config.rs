@@ -3,7 +3,10 @@ use chrono::{DateTime, Utc};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
-use std::time::Instant;
+use std::{
+    sync::RwLock,
+    time::{Duration, Instant},
+};
 use uuid::Uuid;
 
 #[derive(FromRow)]
@@ -83,6 +86,81 @@ pub struct LlmProxyConfig {
     pub default_agent_model: String,
     pub allowed_models: Vec<String>,
     pub timeout_seconds: u64,
+}
+
+struct CachedLlmProxyConfig {
+    value: LlmProxyConfig,
+    expires_at: Instant,
+}
+
+pub struct LlmProxyConfigCache {
+    ttl: Duration,
+    inner: RwLock<Option<CachedLlmProxyConfig>>,
+}
+
+impl LlmProxyConfigCache {
+    pub fn new(ttl: Duration) -> Self {
+        Self {
+            ttl,
+            inner: RwLock::new(None),
+        }
+    }
+
+    pub async fn get_or_load(&self, pool: &PgPool) -> AppResult<LlmProxyConfig> {
+        if let Some(config) = self.current() {
+            return Ok(config);
+        }
+
+        let config = match get_llm_proxy_config(pool).await {
+            Ok(config) => config,
+            Err(error) => {
+                tracing::warn!(
+                    ?error,
+                    pool_size = pool.size(),
+                    pool_idle = pool.num_idle(),
+                    "failed to refresh llm proxy config cache"
+                );
+                return Err(error);
+            }
+        };
+        let expires_at = Instant::now() + self.ttl;
+        let mut guard = self
+            .inner
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *guard = Some(CachedLlmProxyConfig {
+            value: config.clone(),
+            expires_at,
+        });
+        tracing::debug!(
+            ttl_seconds = self.ttl.as_secs(),
+            "llm proxy config cache refreshed"
+        );
+        Ok(config)
+    }
+
+    pub fn invalidate(&self) {
+        let mut guard = self
+            .inner
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *guard = None;
+        tracing::debug!("llm proxy config cache invalidated");
+    }
+
+    fn current(&self) -> Option<LlmProxyConfig> {
+        let guard = self
+            .inner
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.as_ref().and_then(|cached| {
+            if Instant::now() < cached.expires_at {
+                Some(cached.value.clone())
+            } else {
+                None
+            }
+        })
+    }
 }
 
 pub async fn get_admin_llm_config(pool: &PgPool) -> AppResult<AdminLlmConfigResponse> {
