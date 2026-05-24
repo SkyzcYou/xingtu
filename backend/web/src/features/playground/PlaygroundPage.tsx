@@ -1,0 +1,368 @@
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Button, Tag } from 'tdesign-react';
+import { SectionCard } from '../../components/SectionCard';
+import { getLlmConfig } from '../profile/profile.api';
+import {
+  generateImage,
+  getGatewayModels,
+  sendChatCompletion,
+  type PlaygroundImageResult,
+  type PlaygroundMessage,
+} from './playground.api';
+
+type PlaygroundTab = 'chat' | 'image';
+
+const imageSizes = ['1024x1024', '1024x1536', '1536x1024'] as const;
+
+function getModelListHint(isLoading: boolean, error: Error | null, enabled: boolean): string {
+  if (isLoading) return '正在从上游获取模型列表。';
+  if (error) return error.message;
+  if (!enabled) return '中转未启用，当前显示 LLM 配置中已保存的模型。';
+  return '模型列表来自后端 /v1/models 的上游查询结果。';
+}
+
+export function PlaygroundPage() {
+  const configQuery = useQuery({
+    queryKey: ['llm-config'],
+    queryFn: getLlmConfig,
+  });
+  const modelsQuery = useQuery({
+    queryKey: ['gateway-models'],
+    queryFn: getGatewayModels,
+    enabled: configQuery.data?.enabled === true,
+  });
+  const modelOptions = useMemo(() => {
+    const upstreamModels = modelsQuery.data ?? [];
+    return upstreamModels.length > 0 ? upstreamModels : configQuery.data?.allowedModels ?? [];
+  }, [configQuery.data?.allowedModels, modelsQuery.data]);
+  const defaultModel = useMemo(() => {
+    const config = configQuery.data;
+    if (config?.defaultChatModel && modelOptions.includes(config.defaultChatModel)) {
+      return config.defaultChatModel;
+    }
+    return config?.defaultChatModel || modelOptions[0] || '';
+  }, [configQuery.data, modelOptions]);
+  const defaultImageModel = useMemo(
+    () => modelOptions.find((item) => item.toLowerCase().includes('image')) || defaultModel,
+    [defaultModel, modelOptions]
+  );
+  const [activeTab, setActiveTab] = useState<PlaygroundTab>('chat');
+  const [model, setModel] = useState('');
+  const [imageModel, setImageModel] = useState('');
+  const [useSystemPrompt, setUseSystemPrompt] = useState(false);
+  const [systemPrompt, setSystemPrompt] = useState('你是星图的服务端模型网关测试助手，回答要简洁准确。');
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState<PlaygroundMessage[]>([]);
+  const [error, setError] = useState('');
+  const [imagePrompt, setImagePrompt] = useState('');
+  const [imageSize, setImageSize] = useState<(typeof imageSizes)[number]>('1024x1024');
+  const [referenceImages, setReferenceImages] = useState<File[]>([]);
+  const [imageResults, setImageResults] = useState<PlaygroundImageResult[]>([]);
+  const [imageError, setImageError] = useState('');
+
+  useEffect(() => {
+    if (modelOptions.length > 0 && !modelOptions.includes(model)) {
+      setModel(defaultModel || modelOptions[0]);
+      return;
+    }
+    if (!model && defaultModel) {
+      setModel(defaultModel);
+    }
+  }, [defaultModel, model, modelOptions]);
+
+  useEffect(() => {
+    if (modelOptions.length > 0 && !modelOptions.includes(imageModel)) {
+      setImageModel(defaultImageModel || modelOptions[0]);
+      return;
+    }
+    if (!imageModel && defaultImageModel) {
+      setImageModel(defaultImageModel);
+    }
+  }, [defaultImageModel, imageModel, modelOptions]);
+
+  const mutation = useMutation({
+    mutationFn: sendChatCompletion,
+    onSuccess: (content) => {
+      setMessages((current) => [...current, { role: 'assistant', content }]);
+      setError('');
+    },
+    onError: (err) => {
+      setError(err.message);
+    },
+  });
+
+  const imageMutation = useMutation({
+    mutationFn: generateImage,
+    onSuccess: (results) => {
+      setImageResults(results);
+      setImageError('');
+    },
+    onError: (err) => {
+      setImageError(err.message);
+    },
+  });
+
+  const gatewayEnabled = configQuery.data?.enabled === true;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const prompt = input.trim();
+    const selectedModel = model.trim();
+    if (!gatewayEnabled) {
+      setError('请先在 LLM 配置中启用中转');
+      return;
+    }
+    if (!selectedModel) {
+      setError('请先配置或输入模型名称');
+      return;
+    }
+    if (!prompt) {
+      setError('请输入测试消息');
+      return;
+    }
+
+    const userContent = useSystemPrompt && systemPrompt.trim()
+      ? `${systemPrompt.trim()}\n\n用户消息：${prompt}`
+      : prompt;
+    const nextMessages: PlaygroundMessage[] = [
+      ...messages,
+      { role: 'user', content: userContent },
+    ];
+    setMessages((current) => [...current, { role: 'user', content: prompt }]);
+    setInput('');
+    setError('');
+    mutation.mutate({ model: selectedModel, messages: nextMessages });
+  }
+
+  function handleImageSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const prompt = imagePrompt.trim();
+    const selectedModel = imageModel.trim();
+    if (!gatewayEnabled) {
+      setImageError('请先在 LLM 配置中启用中转');
+      return;
+    }
+    if (!selectedModel) {
+      setImageError('请先选择图片模型');
+      return;
+    }
+    if (!prompt) {
+      setImageError('请输入生图提示词');
+      return;
+    }
+    setImageError('');
+    imageMutation.mutate({
+      model: selectedModel,
+      prompt,
+      size: imageSize,
+      referenceImages,
+    });
+  }
+
+  return (
+    <div className="page-stack">
+      <SectionCard
+        title="LLM Playground"
+        description="启用中转后，本页会调用业务后端 OpenAI-compatible 接口验证真实链路；未启用时仅展示 LLM 配置中已保存的模型，不能发起中转调用。"
+        action={<Tag theme={gatewayEnabled ? 'success' : 'warning'}>{gatewayEnabled ? '中转已启用' : '中转未启用'}</Tag>}
+      >
+        <div className="playground-meta">
+          <div>
+            <span>对话 API</span>
+            <strong>/v1/chat/completions</strong>
+          </div>
+          <div>
+            <span>图片 API</span>
+            <strong>/v1/images/generations</strong>
+          </div>
+          <div>
+            <span>默认模型</span>
+            <strong>{defaultModel || '未配置'}</strong>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="能力测试" description="获取模型/测试连接属于管理员配置校验；只有启用中转后，对话、图片和 Agent API 才会正式对客户端开放。">
+        {gatewayEnabled !== true && (
+          <div className="playground-warning" role="alert">
+            当前未启用中转，发送测试会被后端拒绝。请先在 LLM 配置中开启“启用中转”并保存。
+          </div>
+        )}
+        <div className="playground-tabs" role="tablist" aria-label="Playground 测试类型">
+          <button
+            aria-selected={activeTab === 'chat'}
+            role="tab"
+            type="button"
+            onClick={() => setActiveTab('chat')}
+          >
+            对话测试
+          </button>
+          <button
+            aria-selected={activeTab === 'image'}
+            role="tab"
+            type="button"
+            onClick={() => setActiveTab('image')}
+          >
+            生图测试
+          </button>
+        </div>
+        {activeTab === 'chat' ? (
+          <div className="playground-layout">
+            <form className="playground-form" onSubmit={handleSubmit}>
+              <label>
+                <span>模型</span>
+                <select
+                  id="playground-model"
+                  name="model"
+                  value={model}
+                  disabled={modelsQuery.isLoading || modelOptions.length === 0}
+                  onChange={(event) => setModel(event.target.value)}
+                >
+                  {modelOptions.length > 0 ? (
+                    modelOptions.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">暂无可选模型</option>
+                  )}
+                </select>
+                <small>{getModelListHint(modelsQuery.isLoading, modelsQuery.error, gatewayEnabled)}</small>
+              </label>
+              <label>
+                <span className="playground-form__checkbox-label">
+                  <input
+                    checked={useSystemPrompt}
+                    type="checkbox"
+                    onChange={(event) => setUseSystemPrompt(event.target.checked)}
+                  />
+                  启用 System Prompt
+                </span>
+                <textarea
+                  id="playground-system-prompt"
+                  name="systemPrompt"
+                  value={systemPrompt}
+                  disabled={!useSystemPrompt}
+                  rows={3}
+                  onChange={(event) => setSystemPrompt(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>用户消息</span>
+                <textarea
+                  id="playground-message"
+                  name="message"
+                  value={input}
+                  placeholder="输入一条消息测试上下游调用。"
+                  rows={5}
+                  onChange={(event) => setInput(event.target.value)}
+                />
+              </label>
+              {(error || mutation.error) && <p className="form-error">{error || mutation.error?.message}</p>}
+              <div className="playground-actions">
+                <Button theme="primary" type="submit" disabled={!gatewayEnabled} loading={mutation.isPending}>
+                  发送测试
+                </Button>
+                <Button variant="outline" type="button" onClick={() => setMessages([])}>
+                  清空对话
+                </Button>
+              </div>
+            </form>
+
+            <div className="playground-chat" aria-label="对话记录">
+              {messages.length === 0 ? (
+                <div className="playground-empty">暂无对话，发送一条消息开始测试。</div>
+              ) : (
+                messages.map((message, index) => (
+                  <article className="playground-message" data-role={message.role} key={`${message.role}-${index}`}>
+                    <span>{message.role}</span>
+                    <p>{message.content}</p>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="playground-layout">
+            <form className="playground-form" onSubmit={handleImageSubmit}>
+              <label>
+                <span>图片模型</span>
+                <select
+                  id="playground-image-model"
+                  name="imageModel"
+                  value={imageModel}
+                  disabled={modelsQuery.isLoading || modelOptions.length === 0}
+                  onChange={(event) => setImageModel(event.target.value)}
+                >
+                  {modelOptions.length > 0 ? (
+                    modelOptions.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">暂无可选模型</option>
+                  )}
+                </select>
+                <small>文生图走 /v1/images/generations；上传参考图后走 /v1/images/edits。</small>
+              </label>
+              <label>
+                <span>尺寸</span>
+                <select value={imageSize} onChange={(event) => setImageSize(event.target.value as typeof imageSize)}>
+                  {imageSizes.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>提示词</span>
+                <textarea
+                  id="playground-image-prompt"
+                  name="imagePrompt"
+                  value={imagePrompt}
+                  placeholder="描述你想生成的图片。"
+                  rows={5}
+                  onChange={(event) => setImagePrompt(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>参考图</span>
+                <input
+                  accept="image/*"
+                  multiple
+                  type="file"
+                  onChange={(event) => setReferenceImages(Array.from(event.target.files ?? []))}
+                />
+                <small>{referenceImages.length > 0 ? `已选择 ${referenceImages.length} 张参考图。` : '不上传参考图时执行文生图。'}</small>
+              </label>
+              {(imageError || imageMutation.error) && <p className="form-error">{imageError || imageMutation.error?.message}</p>}
+              <div className="playground-actions">
+                <Button theme="primary" type="submit" disabled={!gatewayEnabled} loading={imageMutation.isPending}>
+                  生成图片
+                </Button>
+                <Button variant="outline" type="button" onClick={() => setImageResults([])}>
+                  清空结果
+                </Button>
+              </div>
+            </form>
+
+            <div className="playground-image-results" aria-label="生图结果">
+              {imageResults.length === 0 ? (
+                <div className="playground-empty">暂无图片，提交提示词开始测试。</div>
+              ) : (
+                imageResults.map((result, index) => (
+                  <figure className="playground-image-result" key={`${result.src}-${index}`}>
+                    <img alt={`生成结果 ${index + 1}`} src={result.src} />
+                    {result.revisedPrompt && <figcaption>{result.revisedPrompt}</figcaption>}
+                  </figure>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  );
+}

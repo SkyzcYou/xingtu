@@ -14,7 +14,9 @@ pub struct AppConfig {
     pub cors_allowed_origin: String,
     pub trust_base_url: String,
     pub trust_realm: String,
-    pub trust_client_id: String,
+    pub trust_client_ids: Vec<String>,
+    pub admin_required_role: String,
+    pub admin_role_client_id: String,
 }
 
 impl AppConfig {
@@ -43,7 +45,9 @@ impl AppConfig {
                 .trim_end_matches('/')
                 .to_string(),
             trust_realm: env_or("TRUST_REALM", "xing"),
-            trust_client_id: env_or("TRUST_CLIENT_ID", "xingtu"),
+            trust_client_ids: trust_client_ids()?,
+            admin_required_role: env_or("ADMIN_REQUIRED_ROLE", "admin"),
+            admin_role_client_id: env_or("ADMIN_ROLE_CLIENT_ID", "xingtu-console"),
         })
     }
 }
@@ -54,6 +58,26 @@ fn require_env(name: &str) -> AppResult<String> {
 
 fn env_or(name: &str, default: &str) -> String {
     env::var(name).unwrap_or_else(|_| default.to_string())
+}
+
+fn trust_client_ids() -> AppResult<Vec<String>> {
+    let value = require_env("TRUST_CLIENT_IDS")?;
+    let mut client_ids = Vec::new();
+    for client_id in value
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        if !client_ids.iter().any(|value| value == client_id) {
+            client_ids.push(client_id.to_string());
+        }
+    }
+    if client_ids.is_empty() {
+        return Err(AppError::config(
+            "TRUST_CLIENT_IDS must include at least one client id",
+        ));
+    }
+    Ok(client_ids)
 }
 
 fn normalize_pem(value: &str) -> String {

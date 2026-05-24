@@ -12,6 +12,7 @@ import { CallbackPage } from '../features/auth/CallbackPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { ProfilePage } from '../features/profile/ProfilePage';
+import { PlaygroundPage } from '../features/playground/PlaygroundPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { SyncPage } from '../features/sync/SyncPage';
 import { consoleUserManager, isActiveUser } from '../lib/auth/console-oidc';
@@ -77,6 +78,12 @@ const syncRoute = createRoute({
   component: SyncPage,
 });
 
+const playgroundRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/playground',
+  component: PlaygroundPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
@@ -114,6 +121,7 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     profileRoute,
     syncRoute,
+    playgroundRoute,
     settingsRoute,
     authProfileRoute,
     legacyHomeRoute,

@@ -11,7 +11,7 @@ const DEFAULT_API_BASE_URL = 'https://api.xingtu.live';
 const DEFAULT_FERRISKEY_BASE_URL = 'https://trust-api.skyzcstack.space';
 const DEFAULT_FERRISKEY_REALM = 'xing';
 const DEFAULT_FERRISKEY_CLIENT_ID = 'xingtu-console';
-const DEFAULT_FERRISKEY_SCOPE = 'openid profile email';
+const DEFAULT_FERRISKEY_SCOPE = 'openid profile email offline_access';
 
 function getEnvString(name: string, fallback: string): string {
   const value = import.meta.env[name];

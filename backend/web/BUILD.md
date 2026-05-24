@@ -24,7 +24,8 @@ VITE_API_BASE_URL=https://api.xingtu.live
 VITE_FERRISKEY_BASE_URL=https://trust-api.skyzcstack.space
 VITE_FERRISKEY_REALM=xing
 VITE_FERRISKEY_CLIENT_ID=xingtu-console
-VITE_FERRISKEY_SCOPE=openid profile email
+VITE_FERRISKEY_SCOPE=openid profile email offline_access
+VITE_ADMIN_REQUIRED_ROLE=admin
 ```
 
 如需覆盖：
@@ -36,6 +37,7 @@ docker build \
   --build-arg VITE_FERRISKEY_BASE_URL=https://trust-api.skyzcstack.space \
   --build-arg VITE_FERRISKEY_REALM=xing \
   --build-arg VITE_FERRISKEY_CLIENT_ID=xingtu-console \
+  --build-arg VITE_ADMIN_REQUIRED_ROLE=admin \
   -t crpi-b1po1b8mfjqfuj2k.cn-shenzhen.personal.cr.aliyuncs.com/skyzcstack/xing-tu-console:latest \
   .
 ```

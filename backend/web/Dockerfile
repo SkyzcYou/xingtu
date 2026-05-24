@@ -7,7 +7,7 @@ ARG VITE_API_BASE_URL=https://api.xingtu.live
 ARG VITE_FERRISKEY_BASE_URL=https://trust-api.skyzcstack.space
 ARG VITE_FERRISKEY_REALM=xing
 ARG VITE_FERRISKEY_CLIENT_ID=xingtu-console
-ARG VITE_FERRISKEY_SCOPE="openid profile email"
+ARG VITE_FERRISKEY_SCOPE="openid profile email offline_access"
 ARG VITE_ADMIN_REQUIRED_ROLE=
 
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL

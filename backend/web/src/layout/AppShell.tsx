@@ -3,6 +3,7 @@ import {
   Activity,
   KeyRound,
   LayoutDashboard,
+  MessageSquare,
   LogOut,
   Settings,
   ShieldCheck,
@@ -15,7 +16,8 @@ import './AppShell.scss';
 
 const navItems = [
   { to: '/', label: '总览', icon: LayoutDashboard },
-  { to: '/profile', label: 'API Key 管理', icon: KeyRound },
+  { to: '/profile', label: 'LLM 配置', icon: KeyRound },
+  { to: '/playground', label: 'Playground', icon: MessageSquare },
   { to: '/sync', label: '同步审计', icon: ShieldCheck },
   { to: '/settings', label: '管理员设置', icon: Settings },
 ] as const;
@@ -57,7 +59,7 @@ export function AppShell() {
         <header className="admin-shell__topbar">
           <div>
             <span>Backend Web</span>
-            <strong>管理员管理星图账号配置</strong>
+            <strong>管理星图服务端模型能力</strong>
           </div>
           <div className="admin-shell__topbar-actions">
             <div className="admin-shell__env">

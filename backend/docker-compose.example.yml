@@ -25,7 +25,9 @@ services:
       CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-https://xingtu.live,https://www.xingtu.live,https://console.xingtu.live,http://localhost:7200,http://localhost:5174}
       TRUST_BASE_URL: ${TRUST_BASE_URL:-https://trust-api.skyzcstack.space}
       TRUST_REALM: ${TRUST_REALM:-xing}
-      TRUST_CLIENT_ID: ${TRUST_CLIENT_ID:-xingtu}
+      TRUST_CLIENT_IDS: ${TRUST_CLIENT_IDS:-xingtu,xingtu-console}
+      ADMIN_REQUIRED_ROLE: ${ADMIN_REQUIRED_ROLE:-admin}
+      ADMIN_ROLE_CLIENT_ID: ${ADMIN_ROLE_CLIENT_ID:-xingtu-console}
     depends_on:
       xingtu-api-migrate:
         condition: service_completed_successfully

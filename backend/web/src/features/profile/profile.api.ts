@@ -2,9 +2,16 @@ import { request } from '../../lib/api/request';
 import {
   isApiProfile,
   isHealthResponse,
+  isLlmConfig,
+  isLlmModelsResponse,
+  isTestLlmConfigResponse,
   type ApiProfile,
   type HealthResponse,
+  type LlmConfig,
+  type LlmModelsResponse,
   type ProfileFieldRow,
+  type TestLlmConfigResponse,
+  type UpdateLlmConfigInput,
 } from './profile.types';
 
 export async function getHealth(): Promise<HealthResponse> {
@@ -19,6 +26,47 @@ export async function getApiProfile(): Promise<ApiProfile> {
   const response = await request<unknown>('/api/account/api-profile');
   if (!isApiProfile(response)) {
     throw new Error('账户 API 配置响应格式无效');
+  }
+  return response;
+}
+
+export async function getLlmConfig(): Promise<LlmConfig> {
+  const response = await request<unknown>('/api/admin/llm-config');
+  if (!isLlmConfig(response)) {
+    throw new Error('LLM 配置响应格式无效');
+  }
+  return response;
+}
+
+export async function updateLlmConfig(input: UpdateLlmConfigInput): Promise<LlmConfig> {
+  const response = await request<unknown>('/api/admin/llm-config', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  if (!isLlmConfig(response)) {
+    throw new Error('LLM 配置保存响应格式无效');
+  }
+  return response;
+}
+
+export async function testLlmConfig(input: UpdateLlmConfigInput): Promise<TestLlmConfigResponse> {
+  const response = await request<unknown>('/api/admin/llm-config/test', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!isTestLlmConfigResponse(response)) {
+    throw new Error('LLM 配置测试响应格式无效');
+  }
+  return response;
+}
+
+export async function getLlmModels(input: UpdateLlmConfigInput): Promise<LlmModelsResponse> {
+  const response = await request<unknown>('/api/admin/llm-config/models', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!isLlmModelsResponse(response)) {
+    throw new Error('模型列表响应格式无效');
   }
   return response;
 }
@@ -45,7 +93,8 @@ export function toProfileRows(profile: ApiProfile): ProfileFieldRow[] {
   ];
 }
 
-function formatDateTime(value: string): string {
+export function formatDateTime(value: string | null): string {
+  if (!value) return '未记录';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat('zh-CN', {

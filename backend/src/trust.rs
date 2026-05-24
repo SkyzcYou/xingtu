@@ -3,15 +3,17 @@ use crate::{
     error::{AppError, AppResult},
 };
 use axum::http::{header::AUTHORIZATION, HeaderMap, StatusCode};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use reqwest::Client;
 use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone)]
 pub struct TrustClient {
     client: Client,
     issuer: String,
     userinfo_url: String,
-    client_id: String,
+    client_ids: HashSet<String>,
 }
 
 #[derive(Debug)]
@@ -21,6 +23,13 @@ pub struct TrustPrincipal {
     pub display_name: Option<String>,
     pub email: Option<String>,
     pub avatar_url: Option<String>,
+    pub realm_roles: Vec<String>,
+    pub resource_roles: HashMap<String, Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct RoleAccess {
+    roles: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -31,6 +40,14 @@ struct TrustUserInfo {
     email: Option<String>,
     picture: Option<String>,
     azp: Option<String>,
+    realm_access: Option<RoleAccess>,
+    resource_access: Option<HashMap<String, RoleAccess>>,
+}
+
+#[derive(Deserialize)]
+struct TokenRoleClaims {
+    realm_access: Option<RoleAccess>,
+    resource_access: Option<HashMap<String, RoleAccess>>,
 }
 
 impl TrustClient {
@@ -40,7 +57,7 @@ impl TrustClient {
             client: Client::new(),
             userinfo_url: format!("{issuer}/protocol/openid-connect/userinfo"),
             issuer,
-            client_id: config.trust_client_id.clone(),
+            client_ids: config.trust_client_ids.iter().cloned().collect(),
         }
     }
 
@@ -76,10 +93,15 @@ impl TrustClient {
         }
 
         if let Some(azp) = userinfo.azp.as_deref() {
-            if !azp.is_empty() && azp != self.client_id {
+            let azp = azp.trim();
+            if !azp.is_empty() && !self.client_ids.contains(azp) {
                 return Err(AppError::unauthorized("Trust IAM 客户端不匹配"));
             }
         }
+
+        let mut realm_roles = collect_realm_roles(&userinfo);
+        let mut resource_roles = collect_resource_roles(&userinfo);
+        merge_token_roles(token, &mut realm_roles, &mut resource_roles);
 
         Ok(TrustPrincipal {
             issuer: self.issuer.clone(),
@@ -87,8 +109,96 @@ impl TrustClient {
             display_name: userinfo.name.or(userinfo.preferred_username),
             email: userinfo.email,
             avatar_url: userinfo.picture,
+            realm_roles,
+            resource_roles,
         })
     }
+}
+
+impl TrustPrincipal {
+    pub fn has_role(&self, role: &str, client_id: &str) -> bool {
+        self.realm_roles.iter().any(|value| value == role)
+            || self
+                .resource_roles
+                .get(client_id)
+                .is_some_and(|roles| roles.iter().any(|value| value == role))
+    }
+}
+
+fn collect_realm_roles(userinfo: &TrustUserInfo) -> Vec<String> {
+    let mut roles = HashSet::new();
+    if let Some(realm_access) = &userinfo.realm_access {
+        collect_role_values(realm_access.roles.as_deref(), &mut roles);
+    }
+    sorted_roles(roles)
+}
+
+fn collect_resource_roles(userinfo: &TrustUserInfo) -> HashMap<String, Vec<String>> {
+    userinfo
+        .resource_access
+        .as_ref()
+        .map(|resource_access| {
+            resource_access
+                .iter()
+                .map(|(client_id, access)| {
+                    let mut roles = HashSet::new();
+                    collect_role_values(access.roles.as_deref(), &mut roles);
+                    (client_id.clone(), sorted_roles(roles))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn merge_token_roles(
+    token: &str,
+    realm_roles: &mut Vec<String>,
+    resource_roles: &mut HashMap<String, Vec<String>>,
+) {
+    let Some(claims) = decode_token_role_claims(token) else {
+        return;
+    };
+
+    let mut merged_realm_roles = realm_roles.iter().cloned().collect::<HashSet<_>>();
+    if let Some(realm_access) = claims.realm_access {
+        collect_role_values(realm_access.roles.as_deref(), &mut merged_realm_roles);
+    }
+    *realm_roles = sorted_roles(merged_realm_roles);
+
+    if let Some(claim_resources) = claims.resource_access {
+        claim_resources.into_iter().for_each(|(client_id, access)| {
+            let mut roles = resource_roles
+                .remove(&client_id)
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<HashSet<_>>();
+            collect_role_values(access.roles.as_deref(), &mut roles);
+            resource_roles.insert(client_id, sorted_roles(roles));
+        });
+    }
+}
+
+fn decode_token_role_claims(token: &str) -> Option<TokenRoleClaims> {
+    let payload = token.split('.').nth(1)?;
+    let bytes = URL_SAFE_NO_PAD.decode(payload).ok()?;
+    serde_json::from_slice::<TokenRoleClaims>(&bytes).ok()
+}
+
+fn collect_role_values(values: Option<&[String]>, roles: &mut HashSet<String>) {
+    if let Some(values) = values {
+        values.iter().for_each(|role| {
+            let role = role.trim();
+            if !role.is_empty() {
+                roles.insert(role.to_string());
+            }
+        });
+    }
+}
+
+fn sorted_roles(roles: HashSet<String>) -> Vec<String> {
+    let mut roles = roles.into_iter().collect::<Vec<_>>();
+    roles.sort();
+    roles
 }
 
 fn extract_bearer_token(headers: &HeaderMap) -> AppResult<&str> {

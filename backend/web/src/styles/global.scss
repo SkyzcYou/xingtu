@@ -282,10 +282,392 @@ code {
   line-height: 1.8;
 }
 
+.llm-endpoint-grid,
+.llm-config-form {
+  display: grid;
+  gap: 14px;
+}
+
+.llm-endpoint-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.endpoint-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #eef2f7;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.endpoint-card code {
+  overflow-wrap: anywhere;
+  color: #111827;
+}
+
+.endpoint-card p {
+  margin: 0;
+}
+
+.llm-config-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.llm-config-form label {
+  display: grid;
+  gap: 8px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.llm-config-form small {
+  color: #6b7280;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.llm-config-form input,
+.llm-config-form textarea {
+  width: 100%;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #111827;
+  background: #ffffff;
+}
+
+.llm-config-form textarea {
+  resize: vertical;
+}
+
+.llm-config-form__switch {
+  align-content: start;
+}
+
+.llm-config-form__label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.llm-config-form__tip {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1;
+  cursor: help;
+}
+
+.llm-config-form__switch input {
+  width: 18px;
+  height: 18px;
+}
+
+.llm-config-form__wide,
+.llm-config-form__actions,
+.form-error {
+  grid-column: 1 / -1;
+}
+
+.llm-config-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.llm-model-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.llm-model-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.llm-model-picker__dropdown {
+  position: relative;
+}
+
+.llm-model-picker__dropdown summary {
+  width: 100%;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #111827;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.llm-model-picker__menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow: auto;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+}
+
+.llm-model-picker__menu p {
+  margin: 0;
+  color: #6b7280;
+}
+
+.llm-config-form .llm-model-picker__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.llm-config-form .llm-model-picker__option:hover {
+  background: #f8fafc;
+}
+
+.llm-config-form .llm-model-picker__option input {
+  width: 16px;
+  height: 16px;
+}
+
+.llm-model-picker small {
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.form-error,
+.form-success {
+  margin: 0;
+}
+
+.form-error {
+  color: #dc2626;
+}
+
+.form-success {
+  color: #047857;
+}
+
+.playground-meta,
+.playground-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.playground-meta {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.playground-meta div {
+  padding: 16px;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.playground-meta span,
+.playground-meta strong {
+  display: block;
+}
+
+.playground-meta span {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.playground-meta strong {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+
+.playground-layout {
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+}
+
+.playground-form {
+  display: grid;
+  gap: 14px;
+}
+
+.playground-form label {
+  display: grid;
+  gap: 8px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.playground-form input,
+.playground-form select,
+.playground-form textarea {
+  width: 100%;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #111827;
+  background: #ffffff;
+}
+
+.playground-form textarea {
+  resize: vertical;
+}
+
+.playground-form textarea:disabled {
+  color: #94a3b8;
+  background: #f8fafc;
+}
+
+.playground-form__checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.playground-form__checkbox-label input {
+  width: 16px;
+  height: 16px;
+}
+
+.playground-form small {
+  color: #6b7280;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.playground-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.playground-warning {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  color: #b91c1c;
+  background: #fef2f2;
+  font-weight: 600;
+}
+
+.playground-tabs {
+  display: inline-flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #f1f5f9;
+}
+
+.playground-tabs button {
+  border: 0;
+  border-radius: 9px;
+  padding: 8px 14px;
+  color: #475569;
+  background: transparent;
+  cursor: pointer;
+}
+
+.playground-tabs button[aria-selected='true'] {
+  color: #111827;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.playground-chat,
+.playground-image-results {
+  min-height: 360px;
+  max-height: 560px;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #eef2f7;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.playground-empty {
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+  color: #6b7280;
+}
+
+.playground-image-result {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.playground-image-result img {
+  width: 100%;
+  max-height: 460px;
+  border-radius: 10px;
+  object-fit: contain;
+  background: #f8fafc;
+}
+
+.playground-image-result figcaption {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.playground-message {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.playground-message[data-role='user'] {
+  background: rgba(243, 156, 18, 0.1);
+}
+
+.playground-message span {
+  color: #6b7280;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.playground-message p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 860px) {
   .status-grid,
   .profile-summary,
-  .identity-grid {
+  .identity-grid,
+  .llm-endpoint-grid,
+  .llm-config-form,
+  .playground-meta,
+  .playground-layout {
     grid-template-columns: 1fr;
   }
 }

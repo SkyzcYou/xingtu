@@ -1,6 +1,7 @@
 mod config;
 mod db;
 mod error;
+mod llm_config;
 mod models;
 mod qingke;
 mod routes;
@@ -31,6 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = db::create_pool(&config.database_url).await?;
     let qingke = QingkeClient::new(&config)?;
     let trust = TrustClient::new(&config);
+    let http_client = reqwest::Client::new();
     let addr: SocketAddr = format!("{}:{}", config.server_host, config.server_port).parse()?;
 
     let cors = build_cors_layer(&config.cors_allowed_origin)?;
@@ -39,6 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config,
         qingke,
         trust,
+        http_client,
     })
     .layer(TraceLayer::new_for_http())
     .layer(cors);
@@ -53,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn build_cors_layer(origin: &str) -> Result<CorsLayer, Box<dyn std::error::Error>> {
     let layer = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
         .allow_headers(Any)
         .max_age(Duration::from_secs(3600));
 

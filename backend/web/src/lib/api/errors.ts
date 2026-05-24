@@ -18,6 +18,10 @@ export function getErrorMessage(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== 'object') return fallback;
   const data = payload as ErrorPayload;
   if (typeof data.error === 'string') return data.error;
+  if (data.error && typeof data.error === 'object') {
+    const error = data.error as { message?: unknown };
+    if (typeof error.message === 'string') return error.message;
+  }
   if (typeof data.message === 'string') return data.message;
   return fallback;
 }

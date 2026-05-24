@@ -36,7 +36,8 @@ export const consoleUserManager = new UserManager({
   scope: panelConfig.ferriskeyScope,
   userStore: new WebStorageStateStore({ store: window.sessionStorage }),
   loadUserInfo: true,
-  automaticSilentRenew: false,
+  automaticSilentRenew: true,
+  accessTokenExpiringNotificationTimeInSeconds: 60,
   metadata: {
     issuer: consoleAuthority,
     authorization_endpoint: `${consoleAuthority}/protocol/openid-connect/auth`,
