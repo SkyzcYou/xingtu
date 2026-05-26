@@ -1,3 +1,5 @@
+import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts';
+
 export type OidcSessionStatus = 'signed-in' | 'signed-out' | 'expired';
 
 export interface OidcProfileViewModel {
@@ -16,6 +18,7 @@ type UnknownRecord = Record<string, unknown>;
 
 interface StoredOidcUser {
   access_token?: string;
+  refresh_token?: string;
   token_type?: string;
   expires_at?: number;
   profile?: UnknownRecord;
@@ -25,6 +28,29 @@ const DEFAULT_FERRISKEY_BASE_URL = 'https://trust-api.skyzcstack.space';
 const DEFAULT_FERRISKEY_REALM = 'xing';
 const DEFAULT_FERRISKEY_CLIENT_ID = 'xingtu';
 const OIDC_USER_KEY_PREFIX = 'oidc.user:';
+const AUTH_LOGIN_PATH = '/auth-login.html';
+const AUTH_RETURN_URL_PARAM = 'returnUrl';
+const PROFILE_PANEL_RETURN_PARAM = 'profilePanel';
+const PROFILE_PANEL_RETURN_VALUE = '1';
+const TOKEN_REFRESH_SKEW_SECONDS = 30;
+
+let oidcUserManager: UserManager | null = null;
+let refreshPromise: Promise<string | null> | null = null;
+
+export function buildOidcLoginUrl(options: { profilePanel?: boolean } = {}): string {
+  if (typeof window === 'undefined') {
+    return AUTH_LOGIN_PATH;
+  }
+
+  const returnUrl = new URL(window.location.href);
+  if (options.profilePanel) {
+    returnUrl.searchParams.set(PROFILE_PANEL_RETURN_PARAM, PROFILE_PANEL_RETURN_VALUE);
+  }
+  const returnPath = `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`;
+  const loginUrl = new URL(AUTH_LOGIN_PATH, window.location.origin);
+  loginUrl.searchParams.set(AUTH_RETURN_URL_PARAM, returnPath);
+  return `${loginUrl.pathname}${loginUrl.search}`;
+}
 
 function getEnvString(name: string, fallback: string): string {
   const value = import.meta.env[name];
@@ -43,12 +69,42 @@ function getFerriskeyAuthority(): string {
   return `${baseUrl}/realms/${realm}`;
 }
 
+function getFerriskeyClientId(): string {
+  return getEnvString('VITE_FERRISKEY_CLIENT_ID', DEFAULT_FERRISKEY_CLIENT_ID);
+}
+
 function getExpectedUserKey(): string {
-  const clientId = getEnvString(
-    'VITE_FERRISKEY_CLIENT_ID',
-    DEFAULT_FERRISKEY_CLIENT_ID
-  );
-  return `${OIDC_USER_KEY_PREFIX}${getFerriskeyAuthority()}:${clientId}`;
+  return `${OIDC_USER_KEY_PREFIX}${getFerriskeyAuthority()}:${getFerriskeyClientId()}`;
+}
+
+function getOidcUserManager(): UserManager | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  if (oidcUserManager) {
+    return oidcUserManager;
+  }
+
+  const authority = getFerriskeyAuthority();
+  oidcUserManager = new UserManager({
+    authority,
+    client_id: getFerriskeyClientId(),
+    redirect_uri: `${window.location.origin}/auth-callback.html`,
+    response_type: 'code',
+    scope: getEnvString('VITE_FERRISKEY_SCOPE', 'openid profile email offline_access'),
+    userStore: new WebStorageStateStore({ store: window.sessionStorage }),
+    loadUserInfo: true,
+    automaticSilentRenew: false,
+    metadata: {
+      issuer: authority,
+      authorization_endpoint: `${authority}/protocol/openid-connect/auth`,
+      token_endpoint: `${authority}/protocol/openid-connect/token`,
+      userinfo_endpoint: `${authority}/protocol/openid-connect/userinfo`,
+      end_session_endpoint: `${authority}/protocol/openid-connect/logout`,
+    },
+  });
+
+  return oidcUserManager;
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -169,6 +225,42 @@ function getStatus(user: StoredOidcUser | null): OidcSessionStatus {
   return user.access_token ? 'signed-in' : 'signed-out';
 }
 
+function isUserRefreshable(user: StoredOidcUser | null): boolean {
+  return Boolean(user?.refresh_token);
+}
+
+function isAccessTokenFresh(
+  user: Pick<User, 'access_token' | 'expires_at'> | null
+): boolean {
+  if (!user?.access_token || !user.expires_at) {
+    return false;
+  }
+  return user.expires_at - Date.now() / 1000 > TOKEN_REFRESH_SKEW_SECONDS;
+}
+
+async function refreshOidcAccessToken(): Promise<string | null> {
+  const manager = getOidcUserManager();
+  if (!manager) {
+    return null;
+  }
+
+  const user = await manager.getUser();
+  if (isAccessTokenFresh(user)) {
+    return user?.access_token || null;
+  }
+  if (!user?.refresh_token) {
+    return null;
+  }
+
+  try {
+    const renewed = await manager.signinSilent();
+    return renewed?.access_token || null;
+  } catch (error) {
+    console.debug('[oidc-session] Silent token refresh failed:', error);
+    return null;
+  }
+}
+
 function formatExpiresAt(expiresAt: number | undefined): string {
   if (!expiresAt) {
     return '未知';
@@ -207,6 +299,23 @@ export function getOidcAccessToken(): string | null {
     return null;
   }
   return user?.access_token || null;
+}
+
+export function hasOidcSessionCredential(): boolean {
+  const user = readStoredUser();
+  return getStatus(user) === 'signed-in' || isUserRefreshable(user);
+}
+
+export async function getFreshOidcAccessToken(): Promise<string | null> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = refreshOidcAccessToken().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
 }
 
 export function clearOidcSession(): void {

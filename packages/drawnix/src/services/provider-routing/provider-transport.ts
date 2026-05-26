@@ -1,3 +1,7 @@
+import {
+  getFreshOidcAccessToken,
+  getOidcAccessToken,
+} from '../auth/oidc-session';
 import type {
   PreparedProviderTransportRequest,
   ProviderBaseUrlStrategy,
@@ -60,17 +64,32 @@ function mergeHeaders(
   };
 }
 
-function applyAuthHeaders(
+function getProviderCredential(context: ResolvedProviderContext): string {
+  return context.credentialSource === 'oidc-session'
+    ? getOidcAccessToken() || ''
+    : context.apiKey;
+}
+
+async function getProviderCredentialAsync(
+  context: ResolvedProviderContext
+): Promise<string> {
+  return context.credentialSource === 'oidc-session'
+    ? (await getFreshOidcAccessToken()) || ''
+    : context.apiKey;
+}
+
+function applyAuthHeadersWithCredential(
   context: ResolvedProviderContext,
-  headers: Record<string, string>
+  headers: Record<string, string>,
+  credential: string
 ): Record<string, string> {
-  if (!context.apiKey) {
+  if (!credential) {
     return headers;
   }
 
   switch (context.authType) {
     case 'bearer':
-      return { ...headers, Authorization: `Bearer ${context.apiKey}` };
+      return { ...headers, Authorization: `Bearer ${credential}` };
     case 'header':
       if (
         headers.Authorization ||
@@ -80,7 +99,7 @@ function applyAuthHeaders(
       ) {
         return headers;
       }
-      return { ...headers, 'X-API-Key': context.apiKey };
+      return { ...headers, 'X-API-Key': credential };
     case 'custom':
     case 'query':
     default:
@@ -88,11 +107,23 @@ function applyAuthHeaders(
   }
 }
 
-function applyAuthQuery(
+function applyAuthHeaders(
   context: ResolvedProviderContext,
-  query: Record<string, string | number | boolean | null | undefined>
+  headers: Record<string, string>
+): Record<string, string> {
+  return applyAuthHeadersWithCredential(
+    context,
+    headers,
+    getProviderCredential(context)
+  );
+}
+
+function applyAuthQueryWithCredential(
+  context: ResolvedProviderContext,
+  query: Record<string, string | number | boolean | null | undefined>,
+  credential: string
 ): Record<string, string | number | boolean | null | undefined> {
-  if (!context.apiKey || context.authType !== 'query') {
+  if (!credential || context.authType !== 'query') {
     return query;
   }
 
@@ -105,8 +136,19 @@ function applyAuthQuery(
 
   return {
     ...query,
-    [authQueryKey]: context.apiKey,
+    [authQueryKey]: credential,
   };
+}
+
+function applyAuthQuery(
+  context: ResolvedProviderContext,
+  query: Record<string, string | number | boolean | null | undefined>
+): Record<string, string | number | boolean | null | undefined> {
+  return applyAuthQueryWithCredential(
+    context,
+    query,
+    getProviderCredential(context)
+  );
 }
 
 function createTimeoutSignal(
@@ -156,13 +198,22 @@ function createTimeoutSignal(
 }
 
 export class ProviderTransport {
-  prepareRequest(
+  private createPreparedRequest(
     context: ResolvedProviderContext,
-    request: ProviderTransportRequest
+    request: ProviderTransportRequest,
+    credential: string
   ): PreparedProviderTransportRequest {
     const mergedHeaders = mergeHeaders(context.extraHeaders, request.headers);
-    const authenticatedHeaders = applyAuthHeaders(context, mergedHeaders);
-    const query = applyAuthQuery(context, request.query || {});
+    const authenticatedHeaders = applyAuthHeadersWithCredential(
+      context,
+      mergedHeaders,
+      credential
+    );
+    const query = applyAuthQueryWithCredential(
+      context,
+      request.query || {},
+      credential
+    );
     const resolvedBaseUrl = applyBaseUrlStrategy(
       context.baseUrl,
       request.baseUrlStrategy
@@ -184,6 +235,28 @@ export class ProviderTransport {
     };
   }
 
+  prepareRequest(
+    context: ResolvedProviderContext,
+    request: ProviderTransportRequest
+  ): PreparedProviderTransportRequest {
+    return this.createPreparedRequest(
+      context,
+      request,
+      getProviderCredential(context)
+    );
+  }
+
+  async prepareRequestAsync(
+    context: ResolvedProviderContext,
+    request: ProviderTransportRequest
+  ): Promise<PreparedProviderTransportRequest> {
+    const credential = await getProviderCredentialAsync(context);
+    if (context.credentialSource === 'oidc-session' && !credential) {
+      throw new Error('请重新登录星图帐号');
+    }
+    return this.createPreparedRequest(context, request, credential);
+  }
+
   async send(
     context: ResolvedProviderContext,
     request: ProviderTransportRequest
@@ -192,13 +265,13 @@ export class ProviderTransport {
       request.signal,
       request.timeoutMs
     );
-    const prepared = this.prepareRequest(context, {
-      ...request,
-      signal: timeoutControl.signal,
-    });
     const fetcher = request.fetcher || fetch;
 
     try {
+      const prepared = await this.prepareRequestAsync(context, {
+        ...request,
+        signal: timeoutControl.signal,
+      });
       return await fetcher(prepared.url, prepared.init);
     } catch (error) {
       if (timeoutControl.didTimeout()) {

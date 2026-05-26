@@ -106,7 +106,7 @@ interface PollingOptions {
 }
 
 function inferAuthType(route: ReturnType<typeof resolveInvocationRoute>): ProviderAuthStrategy {
-  return 'bearer';
+  return route.authType;
 }
 
 function resolveProviderContext(
@@ -125,6 +125,7 @@ function resolveProviderContext(
     baseUrl: route.baseUrl,
     apiKey: route.apiKey,
     authType: inferAuthType(route),
+    credentialSource: route.credentialSource,
   };
 }
 

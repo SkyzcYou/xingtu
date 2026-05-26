@@ -11,18 +11,12 @@ use std::collections::{HashMap, HashSet};
 #[derive(Clone)]
 pub struct TrustClient {
     client: Client,
-    issuer: String,
     userinfo_url: String,
     client_ids: HashSet<String>,
 }
 
 #[derive(Debug)]
 pub struct TrustPrincipal {
-    pub issuer: String,
-    pub subject: String,
-    pub display_name: Option<String>,
-    pub email: Option<String>,
-    pub avatar_url: Option<String>,
     pub realm_roles: Vec<String>,
     pub resource_roles: HashMap<String, Vec<String>>,
 }
@@ -35,10 +29,6 @@ struct RoleAccess {
 #[derive(Deserialize)]
 struct TrustUserInfo {
     sub: String,
-    preferred_username: Option<String>,
-    name: Option<String>,
-    email: Option<String>,
-    picture: Option<String>,
     azp: Option<String>,
     realm_access: Option<RoleAccess>,
     resource_access: Option<HashMap<String, RoleAccess>>,
@@ -56,7 +46,6 @@ impl TrustClient {
         Self {
             client: Client::new(),
             userinfo_url: format!("{issuer}/protocol/openid-connect/userinfo"),
-            issuer,
             client_ids: config.trust_client_ids.iter().cloned().collect(),
         }
     }
@@ -104,11 +93,6 @@ impl TrustClient {
         merge_token_roles(token, &mut realm_roles, &mut resource_roles);
 
         Ok(TrustPrincipal {
-            issuer: self.issuer.clone(),
-            subject: userinfo.sub,
-            display_name: userinfo.name.or(userinfo.preferred_username),
-            email: userinfo.email,
-            avatar_url: userinfo.picture,
             realm_roles,
             resource_roles,
         })

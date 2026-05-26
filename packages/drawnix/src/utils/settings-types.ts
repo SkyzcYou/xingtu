@@ -13,6 +13,7 @@ export interface GeminiSettings {
 
 export type ProviderType = 'openai-compatible' | 'gemini-compatible' | 'custom';
 export type ProviderAuthType = 'bearer' | 'header' | 'query' | 'custom';
+export type ProviderCredentialSource = 'api-key' | 'oidc-session';
 export type ImageApiCompatibility =
   | 'auto'
   | 'openai-gpt-image'
@@ -49,6 +50,7 @@ export interface ProviderProfile {
   baseUrl: string;
   apiKey: string;
   authType: ProviderAuthType;
+  credentialSource?: ProviderCredentialSource;
   imageApiCompatibility?: ImageApiCompatibility;
   videoApiCompatibility?: VideoApiCompatibility;
   preferAsyncImageEndpoint?: boolean;
@@ -112,6 +114,11 @@ export interface AppSettings {
   migrations: SettingsMigrations;
 }
 
+export type InvocationRouteCredentialStatus =
+  | 'ready'
+  | 'missing-api-key'
+  | 'login-required';
+
 export interface ResolvedInvocationRoute {
   routeType: ModelType;
   modelId: string;
@@ -120,5 +127,7 @@ export interface ResolvedInvocationRoute {
   providerType: ProviderType | null;
   baseUrl: string;
   apiKey: string;
+  authType: ProviderAuthType;
+  credentialSource: ProviderCredentialSource;
   source: 'preset' | 'legacy';
 }

@@ -18,10 +18,12 @@ import {
   type GeminiSettings,
   type ImageApiCompatibility,
   type InvocationPreset,
+  type InvocationRouteCredentialStatus,
   type ModelRef,
   type ProviderAuthType,
   type ProviderCapabilities,
   type ProviderCatalog,
+  type ProviderCredentialSource,
   type ProviderProfile,
   type ProviderType,
   type ResolvedInvocationRoute,
@@ -39,6 +41,10 @@ import {
   type ModelConfig,
   type ModelType,
 } from '../constants/model-config';
+import {
+  getFreshOidcAccessToken,
+  hasOidcSessionCredential,
+} from '../services/auth/oidc-session';
 
 export {
   DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
@@ -48,10 +54,12 @@ export {
   type GeminiSettings,
   type ImageApiCompatibility,
   type InvocationPreset,
+  type InvocationRouteCredentialStatus,
   type ModelRef,
   type ProviderAuthType,
   type ProviderCapabilities,
   type ProviderCatalog,
+  type ProviderCredentialSource,
   type ProviderProfile,
   type ProviderType,
   type ResolvedInvocationRoute,
@@ -63,6 +71,7 @@ export {
 
 // 设置类型定义集中在 settings-types.ts，本文件保留运行时设置管理逻辑。
 
+export const XINGTU_LOGIN_PROVIDER_PROFILE_ID = 'xingtu-login';
 export const LEGACY_DEFAULT_PROVIDER_PROFILE_ID = 'legacy-default';
 export const DEFAULT_INVOCATION_PRESET_ID = 'default';
 export const TUZI_ORIGINAL_PROVIDER_PROFILE_ID = 'tuzi-origin';
@@ -70,6 +79,8 @@ export const TUZI_MIX_PROVIDER_PROFILE_ID = 'tuzi-mix';
 export const TUZI_CODEX_PROVIDER_PROFILE_ID = 'tuzi-codex';
 export const TUZI_BUSINESS_PROVIDER_PROFILE_ID = 'tuzi-business';
 export const TUZI_PROVIDER_ICON_URL = '/logo-xingtu.png';
+export const XINGTU_LOGIN_PROVIDER_NAME = '星图账号';
+export const XINGTU_BACKEND_DEFAULT_BASE_URL = 'https://api.xingtu.live/v1';
 export const TUZI_PROVIDER_DEFAULT_BASE_URL = 'https://api.ourzhishi.top/v1';
 export const TUZI_BUSINESS_PROVIDER_DEFAULT_BASE_URL =
   'https://api.ourzhishi.top/v1';
@@ -355,6 +366,27 @@ class SettingsManager {
     return this.inferProviderAuthType(baseUrl, providerType);
   }
 
+  private normalizeProviderCredentialSource(
+    credentialSource?: ProviderCredentialSource | string | null
+  ): ProviderCredentialSource {
+    return credentialSource === 'oidc-session' ? 'oidc-session' : 'api-key';
+  }
+
+  private normalizeXingtuBackendBaseUrl(baseUrl: string): string {
+    const normalized = baseUrl.trim().replace(/\/+$/, '');
+    return normalized === 'https://api.xingtu.live'
+      ? XINGTU_BACKEND_DEFAULT_BASE_URL
+      : normalized;
+  }
+
+  private getXingtuBackendBaseUrl(): string {
+    const value = import.meta.env.VITE_XINGTU_BACKEND_BASE_URL;
+    const baseUrl = typeof value === 'string' && value.trim()
+      ? value.trim()
+      : XINGTU_BACKEND_DEFAULT_BASE_URL;
+    return this.normalizeXingtuBackendBaseUrl(baseUrl);
+  }
+
   private normalizeImageApiCompatibility(
     value?: ImageApiCompatibility | string | null
   ): ImageApiCompatibility {
@@ -511,6 +543,46 @@ class SettingsManager {
     }, {});
 
     return Object.keys(result).length > 0 ? result : undefined;
+  }
+
+  private buildXingtuLoginProfile(
+    profile?: Partial<ProviderProfile>
+  ): ProviderProfile {
+    const rawBaseUrl =
+      typeof profile?.baseUrl === 'string' && profile.baseUrl.trim()
+        ? profile.baseUrl
+        : this.getXingtuBackendBaseUrl();
+    const baseUrl = this.normalizeXingtuBackendBaseUrl(rawBaseUrl);
+    if (baseUrl !== rawBaseUrl.trim().replace(/\/+$/, '')) {
+      this.shouldPersistSettingsAfterInitialization = true;
+    }
+    return {
+      id: XINGTU_LOGIN_PROVIDER_PROFILE_ID,
+      name: profile?.name?.trim() || XINGTU_LOGIN_PROVIDER_NAME,
+      iconUrl: TUZI_PROVIDER_ICON_URL,
+      homepageUrl: this.normalizeHomepageUrl(profile?.homepageUrl),
+      providerType: 'openai-compatible',
+      baseUrl,
+      apiKey: '',
+      authType: 'bearer',
+      credentialSource: 'oidc-session',
+      imageApiCompatibility: this.normalizeStoredImageApiCompatibility(
+        profile?.imageApiCompatibility
+      ),
+      videoApiCompatibility: this.normalizeStoredVideoApiCompatibility(
+        profile?.videoApiCompatibility
+      ),
+      preferAsyncImageEndpoint: profile?.preferAsyncImageEndpoint === true,
+      extraHeaders: this.normalizeStringRecord(profile?.extraHeaders),
+      enabled: true,
+      capabilities: this.normalizeCapabilities(profile?.capabilities),
+      pricingUrl: normalizeNullableString(profile?.pricingUrl) || undefined,
+      cnyPerUsd:
+        typeof profile?.cnyPerUsd === 'number' && Number.isFinite(profile.cnyPerUsd)
+          ? profile.cnyPerUsd
+          : undefined,
+      pricingGroup: normalizeNullableString(profile?.pricingGroup) || undefined,
+    };
   }
 
   private buildLegacyDefaultProfile(
@@ -729,6 +801,32 @@ class SettingsManager {
     };
   }
 
+  private buildXingtuLoginDefaultPreset(): InvocationPreset {
+    const profileId = XINGTU_LOGIN_PROVIDER_PROFILE_ID;
+    return {
+      id: DEFAULT_INVOCATION_PRESET_ID,
+      name: '默认方案',
+      isDefault: true,
+      text: createRouteConfig(createModelRef(profileId, getDefaultTextModel())),
+      audio: createRouteConfig(createModelRef(profileId, getDefaultAudioModel())),
+      image: createRouteConfig(createModelRef(profileId, getDefaultImageModel())),
+      video: createRouteConfig(createModelRef(profileId, getDefaultVideoModel())),
+    };
+  }
+
+  private buildDefaultCatalogModels(): ModelConfig[] {
+    const modelIds = [
+      getDefaultTextModel(),
+      getDefaultAudioModel(),
+      getDefaultImageModel(),
+      getDefaultVideoModel(),
+    ];
+    const models = modelIds
+      .map((modelId) => getModelConfig(modelId))
+      .filter((model): model is ModelConfig => Boolean(model));
+    return Array.from(new Map(models.map((model) => [model.id, model])).values());
+  }
+
   private buildLegacyDefaultPreset(gemini: GeminiSettings): InvocationPreset {
     const profileId = LEGACY_DEFAULT_PROVIDER_PROFILE_ID;
     return {
@@ -800,6 +898,9 @@ class SettingsManager {
             baseUrl,
             providerType,
             profile.authType
+          ),
+          credentialSource: this.normalizeProviderCredentialSource(
+            profile.credentialSource
           ),
           imageApiCompatibility: this.normalizeStoredImageApiCompatibility(
             profile.imageApiCompatibility
@@ -978,6 +1079,9 @@ class SettingsManager {
   }
 
   private ensureLegacyCompatibility(settings: AppSettings): AppSettings {
+    const existingXingtuLoginProfile = settings.providerProfiles.find(
+      (profile) => profile.id === XINGTU_LOGIN_PROVIDER_PROFILE_ID
+    );
     const existingLegacyProfile = settings.providerProfiles.find(
       (profile) => profile.id === LEGACY_DEFAULT_PROVIDER_PROFILE_ID
     );
@@ -1016,6 +1120,9 @@ class SettingsManager {
       this.shouldPersistSettingsAfterInitialization = true;
     }
 
+    const xingtuLoginProfile = this.buildXingtuLoginProfile(
+      existingXingtuLoginProfile
+    );
     const legacyProfile = {
       ...this.buildLegacyDefaultProfile(settings.gemini, legacyProfileForBuild),
       extraHeaders: this.normalizeStringRecord(
@@ -1038,6 +1145,7 @@ class SettingsManager {
     const legacyPreset = this.buildLegacyDefaultPreset(settings.gemini);
 
     const providerProfiles = [
+      xingtuLoginProfile,
       legacyProfile,
       tuziOriginProfile,
       tuziMixProfile,
@@ -1045,6 +1153,7 @@ class SettingsManager {
       tuziBusinessProfile,
       ...settings.providerProfiles.filter(
         (profile) =>
+          profile.id !== XINGTU_LOGIN_PROVIDER_PROFILE_ID &&
           profile.id !== LEGACY_DEFAULT_PROVIDER_PROFILE_ID &&
           profile.id !== TUZI_ORIGINAL_PROVIDER_PROFILE_ID &&
           profile.id !== TUZI_MIX_PROVIDER_PROFILE_ID &&
@@ -1065,6 +1174,22 @@ class SettingsManager {
           (id) => typeof id === 'string'
         ),
       }));
+
+    if (
+      !providerCatalogs.some(
+        (catalog) => catalog.profileId === XINGTU_LOGIN_PROVIDER_PROFILE_ID
+      )
+    ) {
+      const defaultModels = this.buildDefaultCatalogModels();
+      providerCatalogs.unshift({
+        profileId: XINGTU_LOGIN_PROVIDER_PROFILE_ID,
+        discoveredAt: null,
+        discoveredModels: defaultModels,
+        selectedModelIds: defaultModels.map((model) => model.id),
+        sourceBaseUrl: xingtuLoginProfile.baseUrl,
+        error: null,
+      });
+    }
 
     if (
       !providerCatalogs.some(
@@ -1142,6 +1267,7 @@ class SettingsManager {
     }
 
     const invocationPresets = [...settings.invocationPresets];
+    const loginPreset = this.buildXingtuLoginDefaultPreset();
     const legacyPresetIndex = invocationPresets.findIndex(
       (preset) => preset.id === DEFAULT_INVOCATION_PRESET_ID
     );
@@ -1169,7 +1295,7 @@ class SettingsManager {
         video: resolveLegacyRoute(existingPreset.video, legacyPreset.video),
       };
     } else {
-      invocationPresets.unshift(legacyPreset);
+      invocationPresets.unshift(loginPreset);
     }
 
     const normalizedPresets = invocationPresets.map((preset) => ({
@@ -1889,16 +2015,48 @@ class SettingsManager {
       providerType: profile?.providerType || null,
       baseUrl: normalizedProfileBaseUrl || normalizedLegacyBaseUrl,
       apiKey: normalizedProfileApiKey || normalizedLegacyApiKey,
+      authType: profile?.authType || 'bearer',
+      credentialSource: profile?.credentialSource || 'api-key',
       source: profile ? 'preset' : 'legacy',
     };
+  }
+
+  public getInvocationRouteCredentialStatus(
+    routeType: ModelType,
+    requestedModelId?: string | ModelRef | null
+  ): InvocationRouteCredentialStatus {
+    const route = this.resolveInvocationRoute(routeType, requestedModelId);
+    if (!route.baseUrl) {
+      return 'missing-api-key';
+    }
+    if (route.credentialSource === 'oidc-session') {
+      return hasOidcSessionCredential() ? 'ready' : 'login-required';
+    }
+    return route.apiKey ? 'ready' : 'missing-api-key';
+  }
+
+  public async getInvocationRouteCredentialStatusAsync(
+    routeType: ModelType,
+    requestedModelId?: string | ModelRef | null
+  ): Promise<InvocationRouteCredentialStatus> {
+    const route = this.resolveInvocationRoute(routeType, requestedModelId);
+    if (!route.baseUrl) {
+      return 'missing-api-key';
+    }
+    if (route.credentialSource === 'oidc-session') {
+      return (await getFreshOidcAccessToken()) ? 'ready' : 'login-required';
+    }
+    return route.apiKey ? 'ready' : 'missing-api-key';
   }
 
   public hasInvocationRouteCredentials(
     routeType: ModelType,
     requestedModelId?: string | ModelRef | null
   ): boolean {
-    const route = this.resolveInvocationRoute(routeType, requestedModelId);
-    return Boolean(route.baseUrl && route.apiKey);
+    return (
+      this.getInvocationRouteCredentialStatus(routeType, requestedModelId) ===
+      'ready'
+    );
   }
 }
 
@@ -1967,6 +2125,21 @@ export const hasInvocationRouteCredentials = (
   requestedModelId?: string | ModelRef | null
 ): boolean =>
   settingsManager.hasInvocationRouteCredentials(routeType, requestedModelId);
+
+export const getInvocationRouteCredentialStatus = (
+  routeType: ModelType,
+  requestedModelId?: string | ModelRef | null
+): InvocationRouteCredentialStatus =>
+  settingsManager.getInvocationRouteCredentialStatus(routeType, requestedModelId);
+
+export const getInvocationRouteCredentialStatusAsync = (
+  routeType: ModelType,
+  requestedModelId?: string | ModelRef | null
+): Promise<InvocationRouteCredentialStatus> =>
+  settingsManager.getInvocationRouteCredentialStatusAsync(
+    routeType,
+    requestedModelId
+  );
 
 export const updateActiveInvocationRouteModel = (
   routeType: ModelType,

@@ -28,7 +28,7 @@ import {
 } from './media-executor/task-storage-writer';
 import { taskStorageReader } from './task-storage-reader';
 import { executorFactory, waitForTaskCompletion } from './media-executor';
-import { hasInvocationRouteCredentials } from '../utils/settings-manager';
+import { getInvocationRouteCredentialStatusAsync } from '../utils/settings-manager';
 import { DEFAULT_AUDIO_MODEL_ID } from '../constants/model-config';
 import { analytics } from '../utils/posthog-analytics';
 import {
@@ -627,17 +627,19 @@ class TaskQueueService {
           : task.type === TaskType.CHAT
           ? 'text'
           : 'image';
-      if (
-        !hasInvocationRouteCredentials(
-          routeType,
-          task.params.modelRef || task.params.model
-        )
-      ) {
+      const credentialStatus = await getInvocationRouteCredentialStatusAsync(
+        routeType,
+        task.params.modelRef || task.params.model
+      );
+      if (credentialStatus !== 'ready') {
         console.warn(
-          '[TaskQueueService] No API configuration, cannot execute task'
+          '[TaskQueueService] No route credentials, cannot execute task'
         );
         this.updateTaskStatus(task.id, TaskStatus.FAILED, {
-          error: { code: 'NO_API_KEY', message: '未配置 API Key' },
+          error:
+            credentialStatus === 'login-required'
+              ? { code: 'LOGIN_REQUIRED', message: '请重新登录星图帐号' }
+              : { code: 'NO_API_KEY', message: '未配置 API Key' },
         });
         return;
       }

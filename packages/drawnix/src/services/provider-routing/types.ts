@@ -2,6 +2,7 @@ import type { ModelType } from '../../constants/model-config';
 import type {
   ImageApiCompatibility,
   ModelRef,
+  ProviderCredentialSource,
   ProviderProfile,
   VideoApiCompatibility,
 } from '../../utils/settings-types';
@@ -98,6 +99,7 @@ export interface ProviderProfileSnapshot
     | 'providerType'
     | 'baseUrl'
     | 'apiKey'
+    | 'credentialSource'
     | 'imageApiCompatibility'
     | 'videoApiCompatibility'
     | 'preferAsyncImageEndpoint'
@@ -113,6 +115,7 @@ export interface ResolvedProviderContext {
   baseUrl: string;
   apiKey: string;
   authType: ProviderAuthStrategy;
+  credentialSource?: ProviderCredentialSource;
   extraHeaders?: Record<string, string>;
 }
 

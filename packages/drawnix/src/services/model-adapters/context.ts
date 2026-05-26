@@ -44,7 +44,8 @@ export const getAdapterContextFromSettings = (
     baseUrl: route.baseUrl,
     operation: routeType,
     apiKey: route.apiKey,
-    authType: 'bearer',
+    authType: route.authType,
+    credentialSource: route.credentialSource,
     provider: null,
     binding: null,
   };
@@ -68,6 +69,7 @@ export function buildProviderContextFromAdapterContext(
     baseUrl: baseUrlOverride || context.baseUrl,
     apiKey: context.apiKey || '',
     authType: context.authType || 'bearer',
+    credentialSource: context.credentialSource,
     extraHeaders: context.extraHeaders,
   };
 }

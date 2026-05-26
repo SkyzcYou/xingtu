@@ -62,6 +62,10 @@ import {
 import { resolveAdapterForInvocation } from '../model-adapters';
 import { GPT_IMAGE_EDIT_REQUEST_SCHEMAS } from '../model-adapters';
 import {
+  isGPTImage2Model,
+  resolveOfficialGPTImageSize,
+} from '../model-adapters/image-size-quality-resolver';
+import {
   executeImageViaAdapter,
   executeVideoViaAdapter,
 } from './fallback-adapter-routes';
@@ -76,7 +80,7 @@ import {
 function inferAuthTypeFromRoute(
   route: ReturnType<typeof resolveInvocationRoute>
 ): ProviderAuthStrategy {
-  return 'bearer';
+  return route.authType;
 }
 
 function buildProviderContext(config: {
@@ -263,11 +267,15 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         );
       }
 
+      const resolvedSize = isGPTImage2Model(modelName)
+        ? resolveOfficialGPTImageSize(modelName, size, params.params)
+        : size;
+
       // 构建请求体
       const requestBody = buildImageRequestBody({
         prompt,
         model: modelName,
-        size,
+        size: resolvedSize,
         referenceImages: processedImages,
         quality,
         n: Math.min(Math.max(1, count), 10),

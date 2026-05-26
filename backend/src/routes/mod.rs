@@ -6,7 +6,6 @@ use reqwest::Client;
 use sqlx::PgPool;
 use std::sync::Arc;
 
-mod account;
 mod admin_llm_config;
 mod agent;
 mod llm_proxy;
@@ -25,7 +24,6 @@ pub struct AppState {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(payments::router())
-        .merge(account::router())
         .merge(admin_llm_config::router())
         .merge(llm_proxy::router())
         .merge(agent::router())

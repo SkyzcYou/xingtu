@@ -80,6 +80,7 @@ function buildProviderContext(
     baseUrl: profile.baseUrl,
     apiKey: profile.apiKey,
     authType: profile.authType,
+    credentialSource: profile.credentialSource,
     extraHeaders: profile.extraHeaders,
   };
 }

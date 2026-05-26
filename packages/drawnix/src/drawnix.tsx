@@ -1828,6 +1828,9 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
               activationKey={0}
               onEnableToolWindows={enableToolWindows}
               onEnableRuntime={enableGenerationRuntime}
+              onOpenSettings={() =>
+                updateState((prev) => ({ ...prev, openSettings: true }))
+              }
             />
           </Suspense>
           {/* Quick Creation Toolbar - 双击空白区域显示的快捷工具栏 */}

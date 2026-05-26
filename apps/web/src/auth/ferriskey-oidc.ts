@@ -3,7 +3,7 @@ import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts';
 const DEFAULT_FERRISKEY_BASE_URL = 'https://trust-api.skyzcstack.space';
 const DEFAULT_FERRISKEY_REALM = 'xing';
 const DEFAULT_FERRISKEY_CLIENT_ID = 'xingtu';
-const DEFAULT_SCOPE = 'openid profile email';
+const DEFAULT_SCOPE = 'openid profile email offline_access';
 
 function getEnvString(name: string, fallback: string): string {
   const value = import.meta.env[name];

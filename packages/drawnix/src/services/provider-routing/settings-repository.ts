@@ -112,6 +112,7 @@ function toProviderProfileSnapshot(
     | 'baseUrl'
     | 'apiKey'
     | 'authType'
+    | 'credentialSource'
     | 'imageApiCompatibility'
     | 'videoApiCompatibility'
     | 'preferAsyncImageEndpoint'
@@ -129,6 +130,7 @@ function toProviderProfileSnapshot(
       profile.providerType,
       profile.authType
     ),
+    credentialSource: profile.credentialSource,
     imageApiCompatibility:
       profile.imageApiCompatibility || DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY,
     videoApiCompatibility:

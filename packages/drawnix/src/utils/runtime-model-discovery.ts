@@ -12,6 +12,7 @@ import {
   getStaticModelConfig,
   setRuntimeModelConfigs,
 } from '../constants/model-config';
+import { getFreshOidcAccessToken } from '../services/auth/oidc-session';
 import { normalizeApiBase } from '../services/media-api/utils';
 import {
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
@@ -1455,6 +1456,19 @@ class RuntimeModelDiscoveryStore {
     if (profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID) {
       removeLegacyPersistedState();
     }
+  }
+
+  async discoverForProfile(profile: ProviderProfile): Promise<ModelConfig[]> {
+    const credential =
+      profile.credentialSource === 'oidc-session'
+        ? (await getFreshOidcAccessToken()) || ''
+        : profile.apiKey;
+
+    if (!credential.trim() && profile.credentialSource === 'oidc-session') {
+      throw new Error('请先登录星图账号');
+    }
+
+    return this.discover(profile.id, profile.baseUrl, credential);
   }
 
   async discover(

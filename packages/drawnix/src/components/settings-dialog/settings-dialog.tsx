@@ -67,10 +67,12 @@ import {
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
   providerProfilesSettings,
   settingsManager,
+  TUZI_BUSINESS_PROVIDER_PROFILE_ID,
   TUZI_MIX_PROVIDER_PROFILE_ID,
   TUZI_CODEX_PROVIDER_PROFILE_ID,
   TUZI_ORIGINAL_PROVIDER_PROFILE_ID,
   TUZI_PROVIDER_DEFAULT_BASE_URL,
+  XINGTU_LOGIN_PROVIDER_PROFILE_ID,
   type ImageApiCompatibility,
   type InvocationPreset,
   type ModelRef,
@@ -586,10 +588,12 @@ function inferAuthTypeForProviderType(
 
 function isManagedProviderProfile(profileId: string): boolean {
   return (
+    profileId === XINGTU_LOGIN_PROVIDER_PROFILE_ID ||
     profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID ||
     profileId === TUZI_ORIGINAL_PROVIDER_PROFILE_ID ||
     profileId === TUZI_MIX_PROVIDER_PROFILE_ID ||
-    profileId === TUZI_CODEX_PROVIDER_PROFILE_ID
+    profileId === TUZI_CODEX_PROVIDER_PROFILE_ID ||
+    profileId === TUZI_BUSINESS_PROVIDER_PROFILE_ID
   );
 }
 
@@ -810,7 +814,11 @@ export const SettingsDialog = ({
     isCompactLayout &&
     (dialogWidth > 0 ? dialogWidth < 600 : viewportWidth < 600);
 
-  const canManageModels = !!selectedProfile && !!selectedProfile.apiKey.trim();
+  const selectedProfileUsesLogin =
+    selectedProfile?.credentialSource === 'oidc-session';
+  const canManageModels =
+    !!selectedProfile &&
+    (selectedProfileUsesLogin || !!selectedProfile.apiKey.trim());
   const currentDraftSignature = createSettingsDraftSignature({
     profiles: profilesDraft,
     presets: presetsDraft,
@@ -1528,12 +1536,7 @@ export const SettingsDialog = ({
       }
     }
 
-    const trimmedApiKey = selectedProfile.apiKey.trim();
-    const normalizedBaseUrl = normalizeModelApiBaseUrl(
-      selectedProfile.baseUrl.trim() || TUZI_PROVIDER_DEFAULT_BASE_URL
-    );
-
-    if (!trimmedApiKey) {
+    if (!canManageModels) {
       MessagePlugin.warning('请先填写 API Key');
       return;
     }
@@ -1546,11 +1549,7 @@ export const SettingsDialog = ({
         source: 'settings_dialog',
         metadata: { profileId: selectedProfile.id },
       });
-      await runtimeModelDiscovery.discover(
-        selectedProfile.id,
-        normalizedBaseUrl,
-        trimmedApiKey
-      );
+      await runtimeModelDiscovery.discoverForProfile(selectedProfile);
       analytics.trackUIInteraction({
         area: 'settings',
         action: 'model_discovery_succeeded',
@@ -2402,8 +2401,9 @@ export const SettingsDialog = ({
             <div className="settings-dialog__field settings-dialog__field--column settings-dialog__field--full">
               <div className="settings-dialog__label-with-tooltip settings-dialog__label-with-tooltip--left">
                 <label className="settings-dialog__label settings-dialog__label--stacked">
-                  API Key
+                  {selectedProfileUsesLogin ? '账户认证' : 'API Key'}
                 </label>
+                {!selectedProfileUsesLogin ? (
                 <HoverTip
                   content={
                     <div
@@ -2483,6 +2483,7 @@ export const SettingsDialog = ({
                 >
                   <InfoCircleIcon className="settings-dialog__tooltip-icon" />
                 </HoverTip>
+                ) : null}
               </div>
               <div
                 style={{
@@ -2498,33 +2499,46 @@ export const SettingsDialog = ({
                   style={{ flex: isCompactLayout ? 'none' : 1 }}
                 >
                   <input
-                    type={isApiKeyVisible ? 'text' : 'password'}
+                    type={
+                      selectedProfileUsesLogin
+                        ? 'text'
+                        : isApiKeyVisible
+                        ? 'text'
+                        : 'password'
+                    }
                     className="settings-dialog__input settings-dialog__secret-input"
-                    value={selectedProfile.apiKey}
+                    value={
+                      selectedProfileUsesLogin
+                        ? '使用当前登录账号'
+                        : selectedProfile.apiKey
+                    }
                     onChange={(event) =>
                       updateProfile(selectedProfile.id, (profile) => ({
                         ...profile,
                         apiKey: event.target.value,
                       }))
                     }
+                    disabled={selectedProfileUsesLogin}
                     autoComplete="off"
                   />
-                  <HoverTip
-                    content={isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'}
-                    showArrow={false}
-                  >
-                    <button
-                      type="button"
-                      className="settings-dialog__secret-toggle"
-                      aria-label={
-                        isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'
-                      }
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => setIsApiKeyVisible((visible) => !visible)}
+                  {!selectedProfileUsesLogin ? (
+                    <HoverTip
+                      content={isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'}
+                      showArrow={false}
                     >
-                      {isApiKeyVisible ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </HoverTip>
+                      <button
+                        type="button"
+                        className="settings-dialog__secret-toggle"
+                        aria-label={
+                          isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'
+                        }
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => setIsApiKeyVisible((visible) => !visible)}
+                      >
+                        {isApiKeyVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </HoverTip>
+                  ) : null}
                 </div>
                 <button
                   type="button"
@@ -2622,7 +2636,8 @@ export const SettingsDialog = ({
       ? getProviderDraftState(selectedProfile, initialProfiles)
       : 'saved';
     const canLaunchBenchmark =
-      !!selectedProfile?.apiKey.trim() &&
+      !!selectedProfile &&
+      (selectedProfileUsesLogin || !!selectedProfile.apiKey.trim()) &&
       providerDraftState === 'saved' &&
       runtimeState.status !== 'loading';
     const isDefaultProvider =
@@ -2907,7 +2922,9 @@ export const SettingsDialog = ({
           </div>
         ) : shouldShowHintState ? (
           <div className="settings-dialog__model-empty">
-            填写 API Key 后即可获取模型，获取完成后可在这里检索和浏览。
+            {selectedProfileUsesLogin
+              ? '登录星图账号后即可获取模型，获取完成后可在这里检索和浏览。'
+              : '填写 API Key 后即可获取模型，获取完成后可在这里检索和浏览。'}
           </div>
         ) : (
           <div className="settings-dialog__model-empty">还没有已添加的模型</div>

@@ -162,48 +162,6 @@ code {
   overflow-wrap: anywhere;
 }
 
-.profile-table__wrap {
-  overflow-x: auto;
-}
-
-.profile-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.profile-table th,
-.profile-table td {
-  padding: 14px 12px;
-  border-bottom: 1px solid #eef2f7;
-  text-align: left;
-  vertical-align: top;
-}
-
-.profile-table th {
-  color: #6b7280;
-  font-size: 12px;
-  font-weight: 600;
-  background: #f8fafc;
-}
-
-.profile-table__label {
-  color: #4b5563;
-  font-weight: 600;
-}
-
-.profile-table__value,
-.secret-field {
-  overflow-wrap: anywhere;
-}
-
-.secret-field {
-  display: inline-block;
-  max-width: 520px;
-  padding: 5px 8px;
-  border-radius: 8px;
-  background: #f3f4f6;
-}
-
 .sync-steps {
   display: grid;
   gap: 16px;

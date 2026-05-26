@@ -2,15 +2,11 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { LogIn, LogOut, RefreshCw } from 'lucide-react';
 import { CanvasAvatarPlaceholder } from '../canvas-avatar-placeholder';
 import {
+  buildOidcLoginUrl,
   clearOidcSession,
-  getOidcAccessToken,
   loadOidcProfileViewModel,
   type OidcProfileViewModel,
 } from '../../services/auth/oidc-session';
-import {
-  fetchAccountApiProfile,
-  syncAccountApiProfileToLocalSettings,
-} from '../../services/account-api-profile';
 import './profile-dialog.scss';
 
 export interface ProfileContentProps {
@@ -43,20 +39,6 @@ function getSignedOutDescription(status: OidcProfileViewModel['status']): string
     : '登录后可使用账户相关服务。';
 }
 
-const AUTH_LOGIN_PATH = '/auth-login.html';
-const AUTH_RETURN_URL_PARAM = 'returnUrl';
-const PROFILE_PANEL_RETURN_PARAM = 'profilePanel';
-const PROFILE_PANEL_RETURN_VALUE = '1';
-
-function buildAuthLoginUrl(): string {
-  const returnUrl = new URL(window.location.href);
-  returnUrl.searchParams.set(PROFILE_PANEL_RETURN_PARAM, PROFILE_PANEL_RETURN_VALUE);
-  const returnPath = `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`;
-  const loginUrl = new URL(AUTH_LOGIN_PATH, window.location.origin);
-  loginUrl.searchParams.set(AUTH_RETURN_URL_PARAM, returnPath);
-  return `${loginUrl.pathname}${loginUrl.search}`;
-}
-
 export const ProfileContent = ({
   active,
   compact = false,
@@ -69,9 +51,6 @@ export const ProfileContent = ({
   const [loginPending, setLoginPending] = useState(false);
   const [loginFeedback, setLoginFeedback] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
-  const [accountSyncPending, setAccountSyncPending] = useState(false);
-  const [accountSyncFeedback, setAccountSyncFeedback] = useState<string | null>(null);
-  const [accountSyncError, setAccountSyncError] = useState<string | null>(null);
 
   const refreshProfile = useCallback(() => {
     const nextProfile = loadOidcProfileViewModel();
@@ -83,8 +62,6 @@ export const ProfileContent = ({
     refreshProfile();
     setLoginFeedback(null);
     setLoginError(null);
-    setAccountSyncFeedback(null);
-    setAccountSyncError(null);
   }, [refreshProfile]);
 
   const handleLogout = useCallback(() => {
@@ -93,39 +70,14 @@ export const ProfileContent = ({
     setLoginPending(false);
     setLoginFeedback(null);
     setLoginError(null);
-    setAccountSyncPending(false);
-    setAccountSyncFeedback(null);
-    setAccountSyncError(null);
   }, [refreshProfile]);
 
   const handleLogin = useCallback(() => {
     setLoginPending(true);
     setLoginError(null);
     setLoginFeedback('正在前往安全登录页面...');
-    window.location.assign(buildAuthLoginUrl());
+    window.location.assign(buildOidcLoginUrl({ profilePanel: true }));
   }, []);
-
-  const handleSyncAccountConfig = useCallback(async () => {
-    setAccountSyncPending(true);
-    setAccountSyncFeedback(null);
-    setAccountSyncError(null);
-
-    try {
-      const accessToken = getOidcAccessToken();
-      if (!accessToken) {
-        refreshProfile();
-        throw new Error('登录已过期，请重新登录');
-      }
-
-      const accountProfile = await fetchAccountApiProfile(accessToken);
-      await syncAccountApiProfileToLocalSettings(accountProfile);
-      setAccountSyncFeedback('账户配置已同步到本机');
-    } catch (error) {
-      setAccountSyncError(error instanceof Error ? error.message : '账户配置同步失败');
-    } finally {
-      setAccountSyncPending(false);
-    }
-  }, [refreshProfile]);
 
   useEffect(() => {
     if (active) {
@@ -166,16 +118,6 @@ export const ProfileContent = ({
         <section className="profile-dialog__panel" aria-label="账户信息">
           <ProfileRow label="用户名">{profile.displayName}</ProfileRow>
           <ProfileRow label="邮箱">{profile.email}</ProfileRow>
-          {accountSyncFeedback && (
-            <p className="profile-dialog__notice" role="status">
-              {accountSyncFeedback}
-            </p>
-          )}
-          {accountSyncError && (
-            <p className="profile-dialog__notice profile-dialog__notice--error" role="alert">
-              {accountSyncError}
-            </p>
-          )}
         </section>
       ) : (
         <section className="profile-dialog__empty" aria-label="登录提示">
@@ -206,17 +148,6 @@ export const ProfileContent = ({
           <RefreshCw size={15} />
           刷新
         </button>
-        {isSignedIn && (
-          <button
-            type="button"
-            className="profile-dialog__button"
-            onClick={handleSyncAccountConfig}
-            disabled={accountSyncPending}
-          >
-            <RefreshCw size={15} />
-            {accountSyncPending ? '同步中' : '同步账户配置'}
-          </button>
-        )}
         {isSignedIn && (
           <button
             type="button"

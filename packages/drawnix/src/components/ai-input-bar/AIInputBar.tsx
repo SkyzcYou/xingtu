@@ -115,12 +115,14 @@ import { knowledgeBaseService } from '../../services/knowledge-base-service';
 import { externalSkillService } from '../../services/external-skill-service';
 import { useWorkflowControl } from '../../contexts/WorkflowContext';
 import {
-  hasInvocationRouteCredentials,
+  getInvocationRouteCredentialStatusAsync,
   resolveInvocationRoute,
   createModelRef,
+  LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
   type ModelRef,
 } from '../../utils/settings-manager';
-import { promptForApiKey } from '../../utils/gemini-api/auth';
+import { promptForAuthMethod } from '../../utils/gemini-api/auth';
+import { buildOidcLoginUrl } from '../../services/auth/oidc-session';
 import type { WorkflowMessageData } from '../../types/chat.types';
 import type { GenerationParams } from '../../types/shared/core.types';
 import {
@@ -244,6 +246,12 @@ const KNOWLEDGE_CONTEXT_MCP_TOOLS = new Set([
   'generate_audio',
   'generate_text',
 ]);
+
+const SETTINGS_PROVIDER_NAV_EVENT = 'aitu:settings:provider-nav';
+
+type ProviderSettingsIntent =
+  | { action: 'select'; profileId: string }
+  | { action: 'create' };
 
 function getPromptHistoryCategoryForStep(
   mcp: string,
@@ -575,6 +583,8 @@ interface AIInputBarProps {
   onEnableToolWindows?: () => void;
   /** 确保生成任务后台运行时已启用 */
   onEnableRuntime?: () => void;
+  /** 打开设置弹窗 */
+  onOpenSettings?: () => void;
 }
 
 /**
@@ -768,7 +778,13 @@ const SelectionWatcher: React.FC<{
 SelectionWatcher.displayName = 'SelectionWatcher';
 
 export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
-  ({ className, isDataReady, onEnableToolWindows, onEnableRuntime }) => {
+  ({
+    className,
+    isDataReady,
+    onEnableToolWindows,
+    onEnableRuntime,
+    onOpenSettings,
+  }) => {
     // console.log('[AIInputBar] Component rendering');
 
     const { language } = useI18n();
@@ -1354,6 +1370,26 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       }),
       [language]
     );
+
+    const openCustomProviderSettings = useCallback(() => {
+      const intent: ProviderSettingsIntent = { action: 'create' };
+      const targetWindow = window as typeof window & {
+        __aituPendingProviderNavigationIntent?: ProviderSettingsIntent;
+      };
+      targetWindow.__aituPendingProviderNavigationIntent = intent;
+      onOpenSettings?.();
+      window.setTimeout(() => {
+        if (targetWindow.__aituPendingProviderNavigationIntent !== intent) {
+          return;
+        }
+        targetWindow.__aituPendingProviderNavigationIntent = undefined;
+        window.dispatchEvent(
+          new CustomEvent<ProviderSettingsIntent>(SETTINGS_PROVIDER_NAV_EVENT, {
+            detail: intent,
+          })
+        );
+      }, 100);
+    }, [onOpenSettings]);
 
     // 监听生成类型变化，自动切换模型和尺寸
     useEffect(() => {
@@ -3020,7 +3056,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         const effectiveGenerationType =
           override?.generationType ?? generationType;
         const effectiveSelectedModel = override?.selectedModel ?? selectedModel;
-        const effectiveSelectedModelRef =
+        let effectiveSelectedModelRef =
           override?.selectedModelRef ?? selectedModelRef;
         const effectiveSelectedParams =
           override?.selectedParams ?? selectedParams;
@@ -3082,7 +3118,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         trackSubmitStatus('start');
 
         try {
-          // 检查 API key，如果没有配置则弹窗获取
           const currentRouteType =
             effectiveGenerationType === 'video'
               ? 'video'
@@ -3092,15 +3127,62 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                 effectiveGenerationType === 'agent'
               ? 'text'
               : 'image';
-          const hasRouteCredentials = hasInvocationRouteCredentials(
+          const credentialStatus = await getInvocationRouteCredentialStatusAsync(
             currentRouteType,
             effectiveSelectedModelRef || effectiveSelectedModel
           );
-          if (!hasRouteCredentials) {
-            const newApiKey = await promptForApiKey();
-            if (!newApiKey) {
+          if (credentialStatus !== 'ready') {
+            const authResult = await promptForAuthMethod();
+            if (authResult?.action === 'login') {
               trackSubmitStatus('cancelled', {
-                reason: 'missing_api_key',
+                reason: 'login_required',
+                submitMode: 'preflight',
+                submit_mode: 'preflight',
+              });
+              submitLockRef.current = false;
+              setIsSubmitting(false);
+              window.location.assign(buildOidcLoginUrl());
+              return;
+            }
+
+            if (authResult?.action === 'custom-provider') {
+              openCustomProviderSettings();
+              trackSubmitStatus('cancelled', {
+                reason:
+                  credentialStatus === 'login-required'
+                    ? 'login_required'
+                    : 'missing_api_key',
+                submitMode: 'preflight',
+                submit_mode: 'preflight',
+              });
+              submitLockRef.current = false;
+              setIsSubmitting(false);
+              return;
+            }
+
+            if (authResult?.action === 'xingtu-api-key') {
+              const legacyModelRef = createModelRef(
+                LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+                effectiveSelectedModel
+              );
+              effectiveSelectedModelRef = legacyModelRef;
+              if (!override) {
+                setSelectedModelRef(legacyModelRef);
+                setPersistedModelSelection(
+                  effectiveGenerationType as PersistedGenerationType,
+                  {
+                    modelId: effectiveSelectedModel,
+                    modelRef: legacyModelRef,
+                    providerIdHint: LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+                  }
+                );
+              }
+            } else {
+              trackSubmitStatus('cancelled', {
+                reason:
+                  credentialStatus === 'login-required'
+                    ? 'login_required'
+                    : 'missing_api_key',
                 submitMode: 'preflight',
                 submit_mode: 'preflight',
               });
@@ -4133,6 +4215,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         applyCurrentImageAnchorPresentationState,
         removeCurrentImageAnchor,
         onEnableRuntime,
+        openCustomProviderSettings,
       ]
     );
 

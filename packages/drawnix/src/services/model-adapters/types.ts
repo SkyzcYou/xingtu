@@ -18,6 +18,7 @@ export interface AdapterContext {
   operation?: ModelType;
   apiKey?: string;
   authType?: ProviderAuthStrategy;
+  credentialSource?: 'api-key' | 'oidc-session';
   extraHeaders?: Record<string, string>;
   provider?: ResolvedProviderContext | null;
   binding?: ProviderModelBinding | null;
