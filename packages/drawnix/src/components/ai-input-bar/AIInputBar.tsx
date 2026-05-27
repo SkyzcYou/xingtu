@@ -83,6 +83,7 @@ import {
   getDefaultTextModel,
   getCompatibleParams,
   type ModelConfig,
+  type ModelType,
 } from '../../constants/model-config';
 import { getEffectiveVideoCompatibleParams } from '../../services/video-binding-utils';
 import { initializeMCP, mcpRegistry } from '../../mcp';
@@ -119,10 +120,22 @@ import {
   resolveInvocationRoute,
   createModelRef,
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+  XINGTU_LOGIN_PROVIDER_PROFILE_ID,
+  providerProfilesSettings,
+  providerCatalogsSettings,
+  geminiSettings,
   type ModelRef,
 } from '../../utils/settings-manager';
-import { promptForAuthMethod } from '../../utils/gemini-api/auth';
+import {
+  promptForAuthMethod,
+  type AuthMethodPromptOption,
+} from '../../utils/gemini-api/auth';
 import { buildOidcLoginUrl } from '../../services/auth/oidc-session';
+import {
+  consumePendingSubmitAfterAuthDraft,
+  savePendingSubmitAfterAuthDraft,
+  type PendingSubmitContent,
+} from '../../services/auth/pending-submit-after-auth';
 import type { WorkflowMessageData } from '../../types/chat.types';
 import type { GenerationParams } from '../../types/shared/core.types';
 import {
@@ -396,6 +409,32 @@ interface GenerationRequestOverride {
   appendToCurrentChatSession?: boolean;
 }
 
+function toPendingSubmitContent(content: SelectedContent[]): PendingSubmitContent[] {
+  return content
+    .filter((item) => item.url || item.text)
+    .map((item) => ({
+      type: item.type,
+      url: item.url,
+      maskImage: item.maskImage,
+      text: item.text,
+      name: item.name,
+      width: item.width,
+      height: item.height,
+    }));
+}
+
+function fromPendingSubmitContent(content: PendingSubmitContent[]): SelectedContent[] {
+  return content.map((item) => ({
+    type: item.type,
+    url: item.url,
+    maskImage: item.maskImage,
+    text: item.text,
+    name: item.name,
+    width: item.width,
+    height: item.height,
+  }));
+}
+
 function getSelectionKeyForModel(
   model: Pick<ModelConfig, 'id' | 'selectionKey' | 'sourceProfileId'>
 ): string {
@@ -547,6 +586,120 @@ function resolveGenerationTypeForModelSelection(
   }
 
   return modelType as GenerationType;
+}
+
+function getDefaultModelForRouteType(routeType: ModelType): string {
+  switch (routeType) {
+    case 'image':
+      return getDefaultImageModel();
+    case 'video':
+      return getDefaultVideoModel();
+    case 'audio':
+      return getDefaultAudioModel();
+    case 'text':
+    default:
+      return getDefaultTextModel();
+  }
+}
+
+function findSelectedProviderModel(
+  catalogs: ReturnType<typeof providerCatalogsSettings.get>,
+  profileId: string,
+  routeType: ModelType,
+  preferredModelId: string
+): ModelConfig | null {
+  const catalog = catalogs.find((item) => item.profileId === profileId);
+  if (!catalog) return null;
+
+  const selectedIds = new Set(catalog.selectedModelIds);
+  const models = catalog.discoveredModels.filter(
+    (model) => model.type === routeType && selectedIds.has(model.id)
+  );
+
+  return (
+    models.find((model) => model.id === preferredModelId) || models[0] || null
+  );
+}
+
+function getInactiveProviderDescription(modelRef: ModelRef | null): string {
+  const profiles = providerProfilesSettings.get();
+  const profileName = modelRef?.profileId
+    ? profiles.find((profile) => profile.id === modelRef.profileId)?.name
+    : null;
+  const channelName = profileName || '当前所选渠道';
+  return `${channelName}未激活。你可以登录账号、粘贴星图 API Key，或接入自己的供应商后继续。`;
+}
+
+async function buildAuthMethodOptions(
+  routeType: ModelType,
+  selectedModelId: string
+): Promise<AuthMethodPromptOption[]> {
+  const profiles = providerProfilesSettings.get();
+  const catalogs = providerCatalogsSettings.get();
+  const fallbackModelId = selectedModelId || getDefaultModelForRouteType(routeType);
+
+  const loginModel = findSelectedProviderModel(
+    catalogs,
+    XINGTU_LOGIN_PROVIDER_PROFILE_ID,
+    routeType,
+    fallbackModelId
+  );
+  const loginModelRef = createModelRef(
+    XINGTU_LOGIN_PROVIDER_PROFILE_ID,
+    loginModel?.id || fallbackModelId
+  );
+  const loginProfile = profiles.find(
+    (profile) => profile.id === XINGTU_LOGIN_PROVIDER_PROFILE_ID
+  );
+  const loginStatus =
+    loginProfile?.enabled === false
+      ? 'missing-api-key'
+      : await getInvocationRouteCredentialStatusAsync(routeType, loginModelRef);
+
+  const legacyModelRef = createModelRef(
+    LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+    fallbackModelId
+  );
+  const legacyStatus = await getInvocationRouteCredentialStatusAsync(
+    routeType,
+    legacyModelRef
+  );
+
+  return [
+    {
+      id: 'xingtu-login',
+      title: '登录账号',
+      description: '使用星图账号登录，无需手动保存 API Key。',
+      descriptionItems: ['不想手动管理 API Key', '登录后直接使用账号权益'],
+      statusLabel: loginStatus === 'ready' ? '已登录' : '推荐',
+      buttonLabel: loginStatus === 'ready' ? '使用星图账号继续' : '登录星图账号',
+      action: loginStatus === 'ready' ? 'switch-model' : 'login',
+      modelRef: loginStatus === 'ready' ? loginModelRef : undefined,
+    },
+    {
+      id: 'xingtu-api-key',
+      title: '使用星图 API Key',
+      description: '已有星图 API Key，可直接粘贴使用。',
+      descriptionItems: ['已经有可用的星图 API Key', '想优先使用本地密钥配置'],
+      statusLabel: legacyStatus === 'ready' ? '已配置' : undefined,
+      buttonLabel: legacyStatus === 'ready' ? '使用星图 API Key 继续' : '保存并继续',
+      action: 'save-xingtu-api-key',
+      modelRef: legacyModelRef,
+      requiresApiKeyInput: true,
+      allowEmptyApiKey: legacyStatus === 'ready',
+      apiKeyMaskedValue: legacyStatus === 'ready' ? '********' : undefined,
+      apiKeyPlaceholder:
+        legacyStatus === 'ready' ? '可粘贴新的星图 API Key' : '粘贴星图 API Key',
+    },
+    {
+      id: 'provider-settings',
+      title: '自定义 API Key',
+      description: '接入 OpenAI 兼容、Gemini 兼容或其他供应商。',
+      descriptionItems: ['想接入自己的模型供应商', '需要管理 OpenAI / Gemini 兼容渠道'],
+      buttonLabel: '打开供应商设置',
+      action: 'open-provider-settings',
+    },
+  ];
 }
 
 /**
@@ -2027,6 +2180,11 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       });
     }, []);
 
+    const getCurrentPromptValue = useCallback(
+      () => inputRef.current?.value ?? promptRef.current,
+      []
+    );
+
     const confirmOverwriteInputIfNeeded = useCallback(
       async (source?: AIInputPrefillEventDetail['source']) => {
         const hasPrompt = promptRef.current.trim().length > 0;
@@ -2201,6 +2359,79 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       textModels,
       videoModels,
     ]);
+
+    useEffect(() => {
+      const restoreTimer = window.setTimeout(() => {
+        const draft = consumePendingSubmitAfterAuthDraft();
+        if (!draft) return;
+
+        const restoreDraft = async () => {
+          const shouldRestore = await confirm({
+            title:
+              language === 'zh'
+                ? '恢复登录前的输入？'
+                : 'Restore input from before login?',
+            description:
+              language === 'zh'
+                ? '登录前的提示词、参考图和知识库选择已暂存。是否恢复到底部输入框？恢复后请手动发送。'
+                : 'Your prompt, references, and knowledge context were saved before login. Restore them to the bottom input? Send manually after reviewing.',
+            confirmText: language === 'zh' ? '恢复' : 'Restore',
+            cancelText: language === 'zh' ? '丢弃' : 'Discard',
+          });
+          if (!shouldRestore) return;
+
+          const restoredSelectedModelRef = draft.selectedModelRef ?? null;
+          const restoredParams = draft.selectedParams || {};
+          const restoredScopeKey = getSelectionKey(
+            draft.selectedModel,
+            restoredSelectedModelRef
+          );
+
+          setGenerationType(draft.generationType);
+          promptRef.current = draft.prompt;
+          setPrompt(draft.prompt);
+          setUploadedContent(fromPendingSubmitContent(draft.uploadedContent));
+          setSelectedContent(fromPendingSubmitContent(draft.selectedContent));
+          setSelectedModel(draft.selectedModel);
+          setSelectedModelRef(restoredSelectedModelRef);
+          setSelectedParams(restoredParams);
+          selectedParamsRef.current = restoredParams;
+          selectedParamScopeRef.current =
+            draft.generationType === 'agent'
+              ? 'agent'
+              : `${draft.generationType}:${restoredScopeKey}`;
+          setSelectedCount(draft.selectedCount);
+          setKnowledgeContextRefs(
+            normalizeKnowledgeContextRefs(draft.knowledgeContextRefs)
+          );
+
+          if (draft.generationType === 'agent' && draft.selectedSkillId) {
+            setSelectedSkillId(draft.selectedSkillId);
+            const systemSkill = findSystemSkillById(draft.selectedSkillId);
+            const externalSkill = systemSkill
+              ? null
+              : findExternalSkillById(draft.selectedSkillId);
+            const skill = systemSkill || externalSkill;
+            if (skill) {
+              setSelectedSkillMediaTypes(inferSkillMediaTypes(skill));
+            }
+          }
+
+          MessagePlugin.success(
+            language === 'zh'
+              ? '已恢复登录前内容，请检查后手动发送'
+              : 'Restored your pre-login input. Review it and send manually.'
+          );
+          focusInput();
+        };
+
+        void restoreDraft();
+      }, 0);
+
+      return () => {
+        window.clearTimeout(restoreTimer);
+      };
+    }, [confirm, focusInput, language]);
 
     // 处理灵感模版选择：将提示词替换到输入框并切换到 Agent 模式
     const handleSelectInspirationPrompt = useCallback(
@@ -3051,11 +3282,11 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           typeof triggerOrOverride === 'string' ? undefined : triggerOrOverride;
         const trigger =
           typeof triggerOrOverride === 'string' ? triggerOrOverride : 'button';
-        const effectivePrompt = override?.prompt ?? prompt;
+        const effectivePrompt = override?.prompt ?? getCurrentPromptValue();
         const effectiveContent = override?.content ?? allContent;
         const effectiveGenerationType =
           override?.generationType ?? generationType;
-        const effectiveSelectedModel = override?.selectedModel ?? selectedModel;
+        let effectiveSelectedModel = override?.selectedModel ?? selectedModel;
         let effectiveSelectedModelRef =
           override?.selectedModelRef ?? selectedModelRef;
         const effectiveSelectedParams =
@@ -3118,7 +3349,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         trackSubmitStatus('start');
 
         try {
-          const currentRouteType =
+          const currentRouteType: ModelType =
             effectiveGenerationType === 'video'
               ? 'video'
               : effectiveGenerationType === 'audio'
@@ -3132,20 +3363,49 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             effectiveSelectedModelRef || effectiveSelectedModel
           );
           if (credentialStatus !== 'ready') {
-            const authResult = await promptForAuthMethod();
+            const authResult = await promptForAuthMethod({
+              description: getInactiveProviderDescription(
+                effectiveSelectedModelRef
+              ),
+              options: await buildAuthMethodOptions(
+                currentRouteType,
+                effectiveSelectedModel
+              ),
+            });
             if (authResult?.action === 'login') {
               trackSubmitStatus('cancelled', {
                 reason: 'login_required',
                 submitMode: 'preflight',
                 submit_mode: 'preflight',
               });
+              if (!override) {
+                const savedPendingSubmit = savePendingSubmitAfterAuthDraft({
+                  prompt: effectivePrompt,
+                  generationType: effectiveGenerationType,
+                  uploadedContent: toPendingSubmitContent(
+                    uploadedContentRef.current
+                  ),
+                  selectedContent: toPendingSubmitContent(
+                    selectedContentRef.current
+                  ),
+                  selectedModel: effectiveSelectedModel,
+                  selectedModelRef: effectiveSelectedModelRef ?? null,
+                  selectedParams: effectiveSelectedParams,
+                  selectedCount: effectiveSelectedCount,
+                  selectedSkillId,
+                  knowledgeContextRefs: effectiveKnowledgeContextRefs,
+                });
+                if (!savedPendingSubmit) {
+                  console.warn('[AIInputBar] 保存登录前草稿失败');
+                }
+              }
               submitLockRef.current = false;
               setIsSubmitting(false);
               window.location.assign(buildOidcLoginUrl());
               return;
             }
 
-            if (authResult?.action === 'custom-provider') {
+            if (authResult?.action === 'open-provider-settings') {
               openCustomProviderSettings();
               trackSubmitStatus('cancelled', {
                 reason:
@@ -3160,20 +3420,46 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
               return;
             }
 
-            if (authResult?.action === 'xingtu-api-key') {
-              const legacyModelRef = createModelRef(
-                LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
-                effectiveSelectedModel
-              );
-              effectiveSelectedModelRef = legacyModelRef;
+            if (
+              authResult?.action === 'switch-model' ||
+              authResult?.action === 'save-xingtu-api-key'
+            ) {
+              if (authResult.action === 'save-xingtu-api-key' && authResult.apiKey) {
+                await geminiSettings.update({ apiKey: authResult.apiKey });
+              }
+              const nextModelRef = authResult.modelRef;
+              const nextModelId = nextModelRef.modelId || effectiveSelectedModel;
+              effectiveSelectedModel = nextModelId;
+              effectiveSelectedModelRef = nextModelRef;
+
+              const switchedStatus =
+                await getInvocationRouteCredentialStatusAsync(
+                  currentRouteType,
+                  nextModelRef
+                );
+              if (switchedStatus !== 'ready') {
+                trackSubmitStatus('cancelled', {
+                  reason:
+                    switchedStatus === 'login-required'
+                      ? 'login_required'
+                      : 'missing_api_key',
+                  submitMode: 'preflight',
+                  submit_mode: 'preflight',
+                });
+                submitLockRef.current = false;
+                setIsSubmitting(false);
+                return;
+              }
+
               if (!override) {
-                setSelectedModelRef(legacyModelRef);
+                setSelectedModel(nextModelId);
+                setSelectedModelRef(nextModelRef);
                 setPersistedModelSelection(
                   effectiveGenerationType as PersistedGenerationType,
                   {
-                    modelId: effectiveSelectedModel,
-                    modelRef: legacyModelRef,
-                    providerIdHint: LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+                    modelId: nextModelId,
+                    modelRef: nextModelRef,
+                    providerIdHint: nextModelRef.profileId,
                   }
                 );
               }
@@ -4196,7 +4482,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         }
       },
       [
-        prompt,
+        getCurrentPromptValue,
         allContent,
         isSubmitting,
         selectedModel,
@@ -4739,6 +5025,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const newValue = e.target.value;
         const cursorPos = e.target.selectionStart || newValue.length;
+        promptRef.current = newValue;
         setPrompt(newValue);
         setIsInspirationSendGuideActive(false);
 

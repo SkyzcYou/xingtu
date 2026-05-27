@@ -3,12 +3,44 @@
  */
 
 import { GeminiConfig } from './types';
-import { geminiSettings } from '../settings-manager';
+import { geminiSettings, type ModelRef } from '../settings-manager';
+
+export type AuthMethodPromptAction =
+  | 'login'
+  | 'switch-model'
+  | 'save-xingtu-api-key'
+  | 'open-provider-settings';
+
+export interface AuthMethodPromptOption {
+  id: string;
+  title: string;
+  description: string;
+  descriptionItems?: string[];
+  statusLabel?: string;
+  buttonLabel: string;
+  action: AuthMethodPromptAction;
+  modelRef?: ModelRef | null;
+  requiresApiKeyInput?: boolean;
+  allowEmptyApiKey?: boolean;
+  apiKeyMaskedValue?: string;
+  apiKeyPlaceholder?: string;
+}
+
+export interface AuthMethodPromptOptions {
+  description?: string;
+  options: AuthMethodPromptOption[];
+}
 
 export type AuthMethodPromptResult =
-  | { action: 'login' }
-  | { action: 'xingtu-api-key'; apiKey: string }
-  | { action: 'custom-provider' }
+  | { action: 'login'; optionId: string }
+  | { action: 'switch-model'; modelRef: ModelRef; optionId: string }
+  | {
+      action: 'save-xingtu-api-key';
+      apiKey: string;
+      modelRef: ModelRef;
+      optionId: string;
+    }
+  | { action: 'open-provider-settings'; optionId: string }
   | null;
 
 /**
@@ -143,15 +175,99 @@ export function promptForApiKey(): Promise<string | null> {
   });
 }
 
-export function promptForAuthMethod(): Promise<AuthMethodPromptResult> {
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildDefaultAuthOptions(): AuthMethodPromptOption[] {
+  const legacyModelRef: ModelRef = {
+    profileId: 'legacy-default',
+    modelId: null,
+  };
+  return [
+    {
+      id: 'login',
+      title: '登录账号',
+      description: '使用星图账号登录，无需手动保存 API Key。',
+      descriptionItems: ['不想手动管理 API Key', '登录后直接使用账号权益'],
+      statusLabel: '推荐',
+      buttonLabel: '登录星图账号',
+      action: 'login',
+    },
+    {
+      id: 'xingtu-api-key-input',
+      title: '使用星图 API Key',
+      description: '已有星图 API Key，可直接粘贴使用。',
+      descriptionItems: ['已经有可用的星图 API Key', '想优先使用本地密钥配置'],
+      buttonLabel: '保存并继续',
+      action: 'save-xingtu-api-key',
+      modelRef: legacyModelRef,
+      requiresApiKeyInput: true,
+      apiKeyPlaceholder: '粘贴星图 API Key',
+    },
+    {
+      id: 'provider-settings',
+      title: '自定义 API Key',
+      description: '接入 OpenAI 兼容、Gemini 兼容或其他供应商。',
+      descriptionItems: ['想接入自己的模型供应商', '需要管理 OpenAI / Gemini 兼容渠道'],
+      buttonLabel: '打开供应商设置',
+      action: 'open-provider-settings',
+    },
+  ];
+}
+
+export function promptForAuthMethod(
+  promptOptions?: AuthMethodPromptOptions
+): Promise<AuthMethodPromptResult> {
   if (typeof window === 'undefined') return Promise.resolve(null);
 
   return new Promise((resolve) => {
+    const options = promptOptions?.options?.length
+      ? promptOptions.options
+      : buildDefaultAuthOptions();
     const overlay = document.createElement('div');
     overlay.className = 'auth-method-overlay';
 
     const dialog = document.createElement('div');
     dialog.className = 'auth-method-dialog';
+
+    const optionCards = options
+      .map((option, index) => {
+        const status = option.statusLabel
+          ? `<div class="auth-method-badge">${escapeHtml(option.statusLabel)}</div>`
+          : '';
+        const input = option.requiresApiKeyInput
+          ? `<input id="authMethodInput-${index}" class="auth-method-input" type="text" value="${escapeHtml(
+              option.apiKeyMaskedValue || ''
+            )}" placeholder="${escapeHtml(
+              option.apiKeyPlaceholder || '粘贴星图 API Key'
+            )}" />`
+          : '';
+        const description = option.descriptionItems?.length
+          ? `<ul class="auth-method-description-list">${option.descriptionItems
+              .map((item) => `<li>${escapeHtml(item)}</li>`)
+              .join('')}</ul>`
+          : `<p>${escapeHtml(option.description)}</p>`;
+        return `<section class="auth-method-card${index === 0 ? ' auth-method-card--primary' : ''}">
+          <div class="auth-method-card-header">
+            <h4>${escapeHtml(option.title)}</h4>
+            ${status}
+          </div>
+          ${description}
+          ${input}
+          <button
+            class="auth-method-button ${option.action === 'login' ? 'auth-method-button--account' : option.action === 'open-provider-settings' ? 'auth-method-button--neutral' : 'auth-method-button--primary'}"
+            type="button"
+            data-option-index="${index}"
+          >${escapeHtml(option.buttonLabel)}</button>
+        </section>`;
+      })
+      .join('');
 
     dialog.innerHTML = `
       <style>
@@ -282,13 +398,20 @@ export function promptForAuthMethod(): Promise<AuthMethodPromptResult> {
           border-color: color-mix(in srgb, var(--td-brand-color, #f39c12) 24%, var(--td-component-border, #dcdcdc));
         }
 
+        .auth-method-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+
         .auth-method-badge {
           display: inline-flex;
           align-items: center;
-          align-self: flex-start;
+          flex-shrink: 0;
           height: 22px;
           padding: 0 8px;
-          margin-bottom: 12px;
           border-radius: var(--td-radius-round, 999px);
           background: var(--td-bg-color-component, rgba(0, 0, 0, 0.04));
           color: var(--td-text-color-secondary, #6b7280);
@@ -297,23 +420,61 @@ export function promptForAuthMethod(): Promise<AuthMethodPromptResult> {
         }
 
         .auth-method-card h4 {
-          margin: 0 0 8px;
+          margin: 0;
           color: var(--td-text-color-primary, #111827);
           font-size: 16px;
         }
 
-        .auth-method-card p {
+        .auth-method-card p,
+        .auth-method-description-list {
           margin: 0 0 16px;
           color: var(--td-text-color-secondary, #6b7280);
           font-size: 13px;
           line-height: 1.6;
         }
 
+        .auth-method-description-list {
+          list-style: disc;
+          padding-left: 16px;
+        }
+
+        .auth-method-description-list li + li {
+          margin-top: 4px;
+        }
+
+        .auth-method-promo {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 16px;
+          padding: 14px 16px;
+          border: 1px solid color-mix(in srgb, var(--td-component-border, #dcdcdc) 72%, transparent);
+          border-radius: var(--td-radius-large, 14px);
+          background: color-mix(in srgb, var(--td-bg-color-container, #ffffff) 72%, transparent);
+          box-shadow: var(--td-shadow-1, 0 8px 24px rgba(15, 23, 42, 0.08));
+          backdrop-filter: blur(16px);
+        }
+
+        .auth-method-promo-title {
+          margin: 0 0 4px;
+          color: var(--td-text-color-primary, #111827);
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .auth-method-promo-desc {
+          margin: 0;
+          color: var(--td-text-color-secondary, #6b7280);
+          font-size: 12px;
+          line-height: 1.6;
+        }
+
         .auth-method-qrs {
           display: flex;
+          flex-shrink: 0;
           gap: 10px;
           justify-content: center;
-          margin-bottom: 12px;
         }
 
         .auth-method-qr {
@@ -326,8 +487,8 @@ export function promptForAuthMethod(): Promise<AuthMethodPromptResult> {
         }
 
         .auth-method-qr img {
-          width: 78px;
-          height: 78px;
+          width: 64px;
+          height: 64px;
           object-fit: contain;
           border-radius: var(--td-radius-default, 10px);
           background: var(--td-bg-color-container, #ffffff);
@@ -411,6 +572,11 @@ export function promptForAuthMethod(): Promise<AuthMethodPromptResult> {
           .auth-method-dialog {
             padding: 22px;
           }
+
+          .auth-method-promo {
+            align-items: flex-start;
+            flex-direction: column;
+          }
         }
       </style>
 
@@ -418,56 +584,40 @@ export function promptForAuthMethod(): Promise<AuthMethodPromptResult> {
         <div>
           <div class="auth-method-eyebrow">开始使用星图 AI</div>
           <h3 class="auth-method-title">选择一种认证方式</h3>
-          <p class="auth-method-desc">首次生成前需要完成认证。你可以登录账号、粘贴星图 API Key，或接入自己的供应商。</p>
+          <p class="auth-method-desc">${escapeHtml(
+            promptOptions?.description ||
+              '首次生成前需要完成认证。你可以登录账号、粘贴星图 API Key，或接入自己的供应商。'
+          )}</p>
         </div>
         <button id="closeBtn" class="auth-method-close" type="button" aria-label="关闭">×</button>
       </div>
 
-      <div class="auth-method-grid">
-        <section class="auth-method-card auth-method-card--primary">
-          <div class="auth-method-badge">推荐</div>
-          <h4>登录账号</h4>
-          <p>使用星图账号登录，无需手动保存 API Key。</p>
-          <button id="loginBtn" class="auth-method-button auth-method-button--account" type="button">登录星图账号</button>
-        </section>
-
-        <section class="auth-method-card">
-          <h4>使用星图 API Key</h4>
-          <p>已有星图 API Key，可直接粘贴使用。</p>
-          <div class="auth-method-qrs">
-            <div class="auth-method-qr">
-              <img src="./logo/wechat-qr.jpg" alt="微信 API Key 支持二维码" />
-              <div>微信咨询</div>
-            </div>
-            <div class="auth-method-qr">
-              <img src="./red-qr.png" alt="小红薯 API Key 支持二维码" />
-              <div>小红薯</div>
-            </div>
+      <div class="auth-method-promo">
+        <div>
+          <div class="auth-method-promo-title">需要 API Key 或人工协助？</div>
+          <p class="auth-method-promo-desc">扫码咨询微信或小红薯，获取 API Key 配置与渠道开通支持。</p>
+        </div>
+        <div class="auth-method-qrs">
+          <div class="auth-method-qr">
+            <img src="./logo/wechat-qr.jpg" alt="微信 API Key 支持二维码" />
+            <div>交流反馈群</div>
           </div>
-          <input id="xingtuApiKeyInput" class="auth-method-input" type="text" placeholder="粘贴星图 API Key" />
-          <button id="xingtuApiKeyBtn" class="auth-method-button auth-method-button--primary" type="button">保存并继续</button>
-        </section>
+          <div class="auth-method-qr">
+            <img src="./red-qr.png" alt="小红薯 API Key 支持二维码" />
+            <div>小红薯</div>
+          </div>
+        </div>
+      </div>
 
-        <section class="auth-method-card">
-          <h4>自定义 API Key</h4>
-          <p>接入 OpenAI 兼容、Gemini 兼容或其他供应商。</p>
-          <button id="customProviderBtn" class="auth-method-button auth-method-button--neutral" type="button">打开供应商设置</button>
-        </section>
+      <div class="auth-method-grid">
+        ${optionCards}
       </div>
     `;
 
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
 
-    const input = dialog.querySelector('#xingtuApiKeyInput') as HTMLInputElement;
     const closeBtn = dialog.querySelector('#closeBtn') as HTMLButtonElement;
-    const loginBtn = dialog.querySelector('#loginBtn') as HTMLButtonElement;
-    const xingtuApiKeyBtn = dialog.querySelector(
-      '#xingtuApiKeyBtn'
-    ) as HTMLButtonElement;
-    const customProviderBtn = dialog.querySelector(
-      '#customProviderBtn'
-    ) as HTMLButtonElement;
 
     const stopKeyboardPropagation = (event: KeyboardEvent) => {
       event.stopPropagation();
@@ -490,28 +640,75 @@ export function promptForAuthMethod(): Promise<AuthMethodPromptResult> {
       resolve(result);
     };
 
-    setTimeout(() => input.focus(), 100);
+    const firstInput = dialog.querySelector('.auth-method-input') as
+      | HTMLInputElement
+      | null;
+    const firstButton = dialog.querySelector('.auth-method-button') as
+      | HTMLButtonElement
+      | null;
+    setTimeout(() => (firstInput || firstButton)?.focus(), 100);
 
     closeBtn.addEventListener('click', () => finish(null));
-    loginBtn.addEventListener('click', () => finish({ action: 'login' }));
-    customProviderBtn.addEventListener('click', () =>
-      finish({ action: 'custom-provider' })
-    );
-    xingtuApiKeyBtn.addEventListener('click', async () => {
-      const apiKey = input.value.trim();
-      if (!apiKey) {
-        input.style.borderColor = '#ef4444';
-        input.focus();
-        return;
-      }
-      await geminiSettings.update({ apiKey });
-      finish({ action: 'xingtu-api-key', apiKey });
+    dialog.querySelectorAll<HTMLButtonElement>('[data-option-index]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const index = Number(button.dataset.optionIndex);
+        const option = options[index];
+        if (!option) return;
+
+        if (option.action === 'login') {
+          finish({ action: 'login', optionId: option.id });
+          return;
+        }
+
+        if (option.action === 'open-provider-settings') {
+          finish({ action: 'open-provider-settings', optionId: option.id });
+          return;
+        }
+
+        if (option.action === 'switch-model') {
+          if (!option.modelRef) return;
+          finish({
+            action: 'switch-model',
+            modelRef: option.modelRef,
+            optionId: option.id,
+          });
+          return;
+        }
+
+        if (option.action === 'save-xingtu-api-key') {
+          const input = dialog.querySelector(
+            `#authMethodInput-${index}`
+          ) as HTMLInputElement | null;
+          const inputValue = input?.value.trim() || '';
+          const apiKey =
+            inputValue === option.apiKeyMaskedValue ? '' : inputValue;
+          if (!apiKey && !option.allowEmptyApiKey) {
+            if (input) {
+              input.style.borderColor = '#ef4444';
+              input.focus();
+            }
+            return;
+          }
+          if (!option.modelRef) return;
+          finish({
+            action: 'save-xingtu-api-key',
+            apiKey,
+            modelRef: option.modelRef,
+            optionId: option.id,
+          });
+        }
+      });
     });
 
-    input.addEventListener('keypress', (event) => {
-      if (event.key === 'Enter') {
-        xingtuApiKeyBtn.click();
-      }
+    dialog.querySelectorAll<HTMLInputElement>('.auth-method-input').forEach((input) => {
+      input.addEventListener('keypress', (event) => {
+        if (event.key !== 'Enter') return;
+        const section = input.closest('.auth-method-card');
+        const button = section?.querySelector<HTMLButtonElement>(
+          '[data-option-index]'
+        );
+        button?.click();
+      });
     });
     overlay.addEventListener('click', (event) => {
       if (event.target === overlay) {
