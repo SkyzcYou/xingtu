@@ -125,11 +125,6 @@ function writeStoredToolbarLeft(left: number, isMobileOrTablet = false) {
   }
 }
 
-function getSignedInAvatarSeed() {
-  const profile = loadOidcProfileViewModel();
-  return profile.status === 'signed-in' ? profile.avatarSeed : null;
-}
-
 function syncToolbarPositionVars(left: number, toolbarEl: HTMLElement | null) {
   if (typeof document === 'undefined') {
     return;
@@ -207,9 +202,17 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
     const [toolbarLeft, setToolbarLeft] = useState(() =>
       readStoredToolbarLeft(isMobileOrTablet)
     );
-    const [avatarSeed, setAvatarSeed] = useState<string | null>(
-      getSignedInAvatarSeed
+    const [profileViewModel, setProfileViewModel] = useState(
+      loadOidcProfileViewModel
     );
+    const avatarSeed =
+      profileViewModel.status === 'signed-in'
+        ? profileViewModel.avatarSeed
+        : null;
+    const avatarTooltip =
+      profileViewModel.status === 'signed-in'
+        ? `${profileViewModel.displayName}：已登录`
+        : '未登录星图账户';
     const [isToolbarDragging, setIsToolbarDragging] = useState(false);
     const [isTaskPanelAnimationReady, setIsTaskPanelAnimationReady] =
       useState(false);
@@ -533,7 +536,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
     }, [onProfilePanelToggle, profilePanelExpanded]);
 
     const handleProfileChange = useCallback((profile: OidcProfileViewModel) => {
-      setAvatarSeed(profile.status === 'signed-in' ? profile.avatarSeed : null);
+      setProfileViewModel(profile);
     }, []);
 
     const handleAvatarPointerDown = useCallback(
@@ -570,14 +573,16 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
     );
 
     const renderAvatarTrigger = () => (
-      <CanvasAvatarPlaceholder
-        seed={avatarSeed}
-        selected={profilePanelExpanded}
-        aria-label={profilePanelExpanded ? '关闭个人资料' : '打开个人资料'}
-        onPointerDown={handleAvatarPointerDown}
-        onClick={handleAvatarClick}
-        onKeyDown={handleAvatarKeyDown}
-      />
+      <HoverTip content={avatarTooltip} placement="right" showArrow={false}>
+        <CanvasAvatarPlaceholder
+          seed={avatarSeed}
+          selected={profilePanelExpanded}
+          aria-label={profilePanelExpanded ? '关闭个人资料' : '打开个人资料'}
+          onPointerDown={handleAvatarPointerDown}
+          onClick={handleAvatarClick}
+          onKeyDown={handleAvatarKeyDown}
+        />
+      </HoverTip>
     );
 
     return (
