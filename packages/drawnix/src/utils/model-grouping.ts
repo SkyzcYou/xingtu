@@ -8,6 +8,7 @@
 import type { ModelConfig, ModelVendor } from '../constants/model-config';
 import {
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+  XINGTU_LOGIN_PROVIDER_PROFILE_ID,
   TUZI_DEFAULT_PROVIDER_NAME,
   TUZI_PROVIDER_ICON_URL,
   type ProviderProfile,
@@ -119,10 +120,16 @@ export function groupModelsByProvider(
     });
   }
 
-  // default 置顶，其余按名称排序
+  const getProviderOrder = (providerId: string) => {
+    if (providerId === XINGTU_LOGIN_PROVIDER_PROFILE_ID) return 0;
+    if (providerId === DEFAULT_PROVIDER_ID) return 1;
+    return 2;
+  };
+
   groups.sort((a, b) => {
-    if (a.providerId === DEFAULT_PROVIDER_ID) return -1;
-    if (b.providerId === DEFAULT_PROVIDER_ID) return 1;
+    const priorityDiff =
+      getProviderOrder(a.providerId) - getProviderOrder(b.providerId);
+    if (priorityDiff !== 0) return priorityDiff;
     return a.providerName.localeCompare(b.providerName);
   });
 
