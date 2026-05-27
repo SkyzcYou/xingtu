@@ -357,7 +357,7 @@ export function MediaLibraryModal({
         resizable={true}
         movable={true}
         modal={false}
-        className="winbox-media-library media-library-modal"
+        className="winbox-media-library winbox-glass-window media-library-modal"
         data-testid="media-library-modal"
         icon={<MediaLibraryIcon size={18} />}
       >

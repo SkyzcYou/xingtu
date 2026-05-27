@@ -339,39 +339,35 @@
 
 // AI 生成弹窗通用样式
 .winbox-ai-generation {
-  // 不使用 !important，让 WinBox 可以管理聚焦窗口的 z-index
-
-  // 白底灰黑色 header 样式
   .wb-header {
-    background: #ffffff !important;
-    border-bottom: 1px solid #e5e5e5;
+    background: transparent !important;
+    border-bottom: 1px solid var(--xingtu-glass-border-soft);
+    box-shadow: none;
   }
 
-  // 标题文字样式
   .wb-title {
-    color: #333333;
-    font-weight: 600;
+    color: var(--xingtu-glass-text-primary) !important;
+    font-weight: 700;
+    text-shadow: none !important;
   }
 
-  // 图标样式（白底深色图标）
   .wb-icon-container .wb-icon-content {
-    color: #333333;
+    color: var(--xingtu-glass-text-primary) !important;
   }
 
-  // 控制按钮改为灰黑色图标
   .wb-min,
   .wb-max,
   .wb-full,
   .wb-split,
   .wb-insert-canvas,
   .wb-close {
-    background-color: rgba(0, 0, 0, 0.05) !important;
-    border: 1px solid rgba(0, 0, 0, 0.05) !important;
-    filter: invert(1) brightness(0.4);
+    background-color: var(--xingtu-glass-control-bg) !important;
+    border: 1px solid var(--xingtu-glass-border-soft) !important;
+    filter: invert(1) brightness(0.36);
 
     &:hover {
-      background-color: rgba(0, 0, 0, 0.1) !important;
-      filter: invert(1) brightness(0.2);
+      background-color: var(--xingtu-glass-control-bg-hover) !important;
+      filter: invert(1) brightness(0.22);
     }
   }
 
@@ -394,73 +390,66 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 16px 20px;
+    padding: 0;
+    background: transparent;
   }
 
-  // AI 图片/视频生成容器
   .ai-image-generation-container,
   .ai-video-generation-container {
     flex: 1;
     height: 100%;
-    overflow: auto;
+    overflow: hidden;
   }
 
-  // 白底 header 中的 Select 组件样式调整
   .wb-header-custom {
     .t-select {
-      background: #f5f5f5;
-      border: 1px solid #d9d9d9;
+      background: var(--xingtu-glass-control-bg);
+      border: 1px solid var(--xingtu-glass-border-soft);
 
-      .t-input {
-        color: #333333;
-
-        &::placeholder {
-          color: #999999;
-        }
-      }
-
+      .t-input,
       .t-input__inner {
-        color: #333333;
+        color: var(--xingtu-glass-text-primary);
       }
 
+      .t-input::placeholder,
       .t-fake-arrow {
-        color: #666666;
+        color: var(--xingtu-glass-text-secondary);
       }
 
       &:hover {
-        background: #eeeeee;
-        border-color: #bfbfbf;
+        background: var(--xingtu-glass-control-bg-hover);
+        border-color: var(--xingtu-glass-border-hover);
       }
 
       &.t-is-focused {
-        background: #ffffff;
-        border-color: #5A4FCF;
-        box-shadow: 0 0 0 2px rgba(90, 79, 207, 0.15);
+        background: var(--xingtu-glass-field-bg-focus);
+        border-color: rgba(var(--xingtu-theme-accent-rgb), 0.28);
+        box-shadow: 0 0 0 3px rgba(var(--xingtu-theme-accent-rgb), 0.08);
       }
     }
   }
 
-  // 模式切换按钮组
   .image-generation-mode-tabs {
     display: flex;
     align-items: center;
-    background: #f0f0f0;
+    background: var(--xingtu-glass-control-bg);
     padding: 3px;
     gap: 4px;
-    border-radius: 8px;
+    border: 1px solid var(--xingtu-glass-border-soft);
+    border-radius: 10px;
     margin-left: 8px;
     position: relative;
-    z-index: 100; // 确保在拖拽区域之上
-    pointer-events: auto; // 确保可点击
+    z-index: 100;
+    pointer-events: auto;
 
     .mode-tab {
       padding: 6px 16px;
       font-size: 13px;
-      font-weight: 500;
-      color: #666666;
+      font-weight: 600;
+      color: var(--xingtu-glass-text-secondary);
       background: transparent;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       white-space: nowrap;
@@ -468,12 +457,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      pointer-events: auto; // 确保可点击
-      touch-action: manipulation; // 优化移动端触摸
+      pointer-events: auto;
+      touch-action: manipulation;
 
       &:hover:not(.active) {
-        color: #333333;
-        background: rgba(255, 255, 255, 0.5);
+        color: var(--xingtu-glass-text-primary);
+        background: var(--xingtu-glass-list-bg-hover);
       }
 
       &:active {
@@ -481,10 +470,10 @@
       }
 
       &.active {
-        color: #F39C12;
-        font-weight: 600;
-        background: #ffffff;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+        color: var(--xingtu-glass-text-primary);
+        font-weight: 700;
+        background: var(--xingtu-glass-list-bg-selected);
+        box-shadow: 0 0 0 1px var(--xingtu-glass-control-ring);
       }
     }
   }

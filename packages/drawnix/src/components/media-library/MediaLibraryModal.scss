@@ -9,24 +9,51 @@
 // WinBox 素材库专用样式 - 素雅风格
 // ========================================
 .winbox-media-library {
-  border-radius: 12px !important;
+  --aitu-ui-surface: var(--xingtu-glass-control-bg);
+  --aitu-ui-surface-subtle: transparent;
+  --aitu-ui-surface-muted: var(--xingtu-glass-list-bg-hover);
+  --aitu-ui-surface-elevated: var(--xingtu-glass-control-bg-selected);
+  --aitu-ui-hover-bg: var(--xingtu-glass-list-bg-hover);
+  --aitu-ui-selected-bg: var(--xingtu-glass-list-bg-selected);
+  --aitu-ui-border: var(--xingtu-glass-border-soft);
+  --aitu-ui-border-subtle: var(--xingtu-glass-border-soft);
+  --aitu-ui-border-hover: var(--xingtu-glass-border-hover);
+  --aitu-ui-text-primary: var(--xingtu-glass-text-primary);
+  --aitu-ui-text-secondary: var(--xingtu-glass-text-secondary);
+  --aitu-ui-text-tertiary: var(--xingtu-glass-text-tertiary);
+  --aitu-ui-text-inverse: var(--xingtu-glass-control-bg);
+  --aitu-ui-brand: var(--xingtu-glass-text-primary);
+  --aitu-ui-brand-hover: var(--xingtu-glass-text-primary);
+  --aitu-ui-brand-text: var(--xingtu-glass-text-primary);
+  --aitu-ui-brand-soft: var(--xingtu-glass-list-bg-selected);
+  --aitu-ui-brand-softer: var(--xingtu-glass-list-bg-hover);
+  --aitu-ui-brand-border: var(--xingtu-glass-list-selected-border);
+  --aitu-ui-brand-border-soft: var(--xingtu-glass-border-hover);
+  --aitu-ui-focus-ring: 0 0 0 3px var(--xingtu-glass-control-ring);
+  --aitu-ui-shadow-popover: var(--xingtu-glass-shadow);
+  --aitu-ui-shadow-card: none;
+  --aitu-ui-shadow-soft: none;
+  --aitu-ui-shadow-hover: 0 0 0 1px var(--xingtu-glass-border-hover);
+  --aitu-ui-shadow-selected: 0 0 0 1px var(--xingtu-glass-control-ring);
+  border-radius: 16px !important;
   overflow: hidden;
-  box-shadow: var(--aitu-ui-shadow-popover, 0 16px 40px rgba(15, 23, 42, 0.14)) !important;
+  box-shadow: var(--aitu-ui-shadow-popover) !important;
 
-  // 标题栏 - 白色简洁风格
   .wb-header {
-    background: var(--aitu-ui-surface, #ffffff) !important;
-    border-radius: 12px 12px 0 0;
-    height: 44px;
-    border-bottom: 1px solid var(--aitu-ui-border-subtle, rgba(15, 23, 42, 0.06));
+    background: transparent !important;
+    border-radius: 16px 16px 0 0;
+    height: 48px;
+    border-bottom: 1px solid var(--xingtu-glass-border-soft);
+    box-shadow: none;
   }
 
   // 标题文字
   .wb-title {
     font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--aitu-ui-text-primary, #1e293b);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--xingtu-glass-text-primary) !important;
+    text-shadow: none !important;
     padding: 0 8px 0 12px;
     display: block !important;
     min-width: 48px;
@@ -41,7 +68,7 @@
     margin-left: 4px;
 
     .wb-icon-content {
-      color: var(--aitu-ui-text-secondary, #64748b);
+      color: var(--xingtu-glass-text-primary) !important;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -55,26 +82,28 @@
   .wb-close {
     width: 32px;
     height: 32px;
-    border-radius: 6px;
+    border: 1px solid var(--xingtu-glass-border-soft) !important;
+    border-radius: 8px;
+    background-color: var(--xingtu-glass-control-bg) !important;
     background-size: 14px;
-    filter: invert(1) brightness(0.3);
+    filter: invert(1) brightness(0.36);
     transition: all 0.15s ease-out;
 
     &:hover {
-      background-color: var(--aitu-ui-brand-softer, rgba(243, 156, 18, 0.06));
-      filter: invert(1) brightness(0.2);
+      background-color: var(--xingtu-glass-control-bg-hover) !important;
+      filter: invert(1) brightness(0.22);
     }
   }
 
   .wb-close:hover {
-    background-color: var(--aitu-ui-danger-soft, rgba(233, 30, 99, 0.08));
-    filter: invert(1) brightness(0.2);
+    background-color: rgba(255, 59, 48, 0.15) !important;
+    filter: none !important;
   }
 
   // 窗口主体
   .wb-body {
-    background: var(--aitu-ui-surface, #ffffff);
-    border-radius: 0 0 12px 12px;
+    background: transparent !important;
+    border-radius: 0 0 16px 16px;
     overflow: hidden;
     padding: 0;
     display: flex;
@@ -87,7 +116,7 @@
     width: 100% !important;
     height: 100% !important;
     overflow: hidden !important;
-    background: var(--aitu-ui-surface-subtle, #f8fafc) !important;
+    background: transparent !important;
     display: flex !important;
     flex-direction: column !important;
     flex: 1 !important;
@@ -95,17 +124,49 @@
 
   // 聚焦状态
   &.focus {
-    box-shadow: var(--aitu-ui-shadow-popover, 0 16px 40px rgba(15, 23, 42, 0.14)), 0 0 0 1px var(--aitu-ui-brand-border-soft, rgba(243, 156, 18, 0.28)) !important;
+    box-shadow: var(--aitu-ui-shadow-popover), 0 0 0 1px var(--xingtu-glass-border-hover) !important;
+  }
+
+  .t-button--theme-primary {
+    background: var(--xingtu-glass-list-bg-selected) !important;
+    border: 1px solid var(--xingtu-glass-list-selected-border) !important;
+    color: var(--xingtu-glass-text-primary) !important;
+    box-shadow: none !important;
+
+    &:hover:not(:disabled) {
+      background: var(--xingtu-glass-list-bg-selected-hover) !important;
+      border-color: var(--xingtu-glass-list-selected-border) !important;
+      color: var(--xingtu-glass-text-primary) !important;
+      box-shadow: 0 0 0 3px var(--xingtu-glass-control-ring) !important;
+    }
+  }
+
+  .t-button--variant-outline,
+  .t-button--variant-text {
+    background: var(--xingtu-glass-control-bg) !important;
+    border-color: var(--xingtu-glass-border-soft) !important;
+    color: var(--xingtu-glass-text-primary) !important;
+
+    &:hover:not(:disabled) {
+      background: var(--xingtu-glass-list-bg-hover) !important;
+      border-color: var(--xingtu-glass-border-hover) !important;
+      color: var(--xingtu-glass-text-primary) !important;
+    }
+  }
+
+  .t-checkbox.t-is-checked .t-checkbox__input {
+    background: var(--xingtu-glass-text-primary) !important;
+    border-color: var(--xingtu-glass-text-primary) !important;
   }
 
   // 最大化状态
   &.max {
     border-radius: 0 !important;
-    
+
     .wb-header {
       border-radius: 0;
     }
-    
+
     .wb-body {
       border-radius: 0;
     }
@@ -132,7 +193,10 @@
   flex: 1;
   height: 100%;
   min-height: 0;
-  background: var(--aitu-ui-surface, #ffffff);
+  margin: 18px;
+  border: 1px solid var(--xingtu-glass-border-soft);
+  border-radius: 18px;
+  background: var(--xingtu-glass-control-bg);
   overflow: hidden;
 
   &__main {
@@ -140,14 +204,14 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--aitu-ui-surface, #ffffff);
+    background: transparent;
     min-width: 0;
   }
 
   &__inspector {
     width: 300px;
     border-left: 1px solid var(--aitu-ui-border-subtle, rgba(15, 23, 42, 0.06));
-    background: linear-gradient(180deg, var(--aitu-ui-surface, #ffffff) 0%, var(--aitu-ui-surface-subtle, #f8fafc) 100%);
+    background: transparent;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
@@ -233,7 +297,7 @@
   .t-drawer__header {
     border-bottom: 1px solid var(--aitu-ui-border-subtle, rgba(15, 23, 42, 0.06));
     padding: 16px 20px;
-    background: var(--aitu-ui-surface, #ffffff);
+    background: transparent;
     font-weight: 600;
     color: var(--aitu-ui-text-primary, #1e293b);
   }

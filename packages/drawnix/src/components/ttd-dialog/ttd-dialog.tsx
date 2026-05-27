@@ -740,7 +740,7 @@ const TTDDialogComponent = ({
         y="center"
         modal={false}
         minimizable={false}
-        className="winbox-ai-generation winbox-ai-image-generation"
+        className="winbox-ai-generation winbox-glass-window winbox-ai-image-generation"
         container={container}
         autoMaximize={imageDialogAutoMaximize || isMobile}
       >
@@ -817,7 +817,7 @@ const TTDDialogComponent = ({
         y="center"
         modal={false}
         minimizable={false}
-        className="winbox-ai-generation winbox-ai-video-generation"
+        className="winbox-ai-generation winbox-glass-window winbox-ai-video-generation"
         container={container}
         autoMaximize={isMobile}
       >

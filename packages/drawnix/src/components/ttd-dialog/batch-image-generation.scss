@@ -1333,3 +1333,157 @@
     }
   }
 }
+
+.batch-image-generation {
+  --ag-accent: var(--xingtu-theme-accent);
+  --ag-accent-hover: var(--xingtu-theme-accent-hover);
+  --ag-accent-soft: rgba(var(--xingtu-theme-accent-rgb), 0.1);
+  --ag-text: var(--xingtu-glass-text-primary);
+  --ag-muted: var(--xingtu-glass-text-secondary);
+  --ag-border: var(--xingtu-glass-border-soft);
+  --ag-surface: var(--xingtu-glass-control-bg);
+  --ag-surface-hover: var(--xingtu-glass-control-bg-hover);
+  --ag-surface-soft: var(--xingtu-glass-list-bg-hover);
+  --ag-selected: var(--xingtu-glass-list-bg-selected);
+  padding: 18px;
+  background: transparent;
+  color: var(--ag-text);
+
+  .batch-main-content,
+  .excel-table-container,
+  .batch-import-modal {
+    border: 1px solid var(--ag-border);
+    background: var(--ag-surface);
+    box-shadow: none;
+  }
+
+  .batch-main-content {
+    border-radius: 18px;
+  }
+
+  .batch-toolbar,
+  .add-rows-section,
+  .modal-header,
+  .modal-footer {
+    border-color: var(--ag-border);
+  }
+
+  .toolbar-divider {
+    background: var(--ag-border);
+  }
+
+  .excel-table {
+    th,
+    .row-number {
+      background: var(--ag-surface-soft);
+      color: var(--ag-muted);
+    }
+
+    th,
+    td {
+      border-color: var(--ag-border);
+    }
+
+    tr:hover td {
+      background: var(--xingtu-glass-list-bg-hover);
+    }
+
+    tr.row-selected td,
+    .excel-cell.selected:not(.active) {
+      background: var(--ag-selected) !important;
+      box-shadow: inset 0 0 0 1px var(--xingtu-glass-list-selected-border);
+    }
+  }
+
+  .excel-cell {
+    color: var(--ag-text);
+
+    &.active {
+      background: var(--ag-surface-hover) !important;
+      box-shadow: inset 0 0 0 2px var(--xingtu-glass-list-selected-border);
+    }
+
+    input[type='number'],
+    .batch-params-cell-control .parameters-dropdown__trigger {
+      background: var(--ag-surface-soft) !important;
+      color: var(--ag-text);
+      border-color: var(--ag-border) !important;
+
+      &:hover,
+      &:focus {
+        background: var(--ag-surface-hover) !important;
+        border-color: rgba(var(--xingtu-theme-accent-rgb), 0.28) !important;
+        box-shadow: 0 0 0 3px rgba(var(--xingtu-theme-accent-rgb), 0.08) !important;
+      }
+    }
+
+    .batch-params-cell-control .parameters-dropdown__trigger--open {
+      background: var(--ag-surface-hover) !important;
+      border-color: rgba(var(--xingtu-theme-accent-rgb), 0.28) !important;
+    }
+  }
+
+  .column-fill-btn,
+  .batch-delete-btn:hover,
+  .preview-item,
+  .preview-more,
+  .start-row-input,
+  .per-row-btn {
+    background: var(--ag-surface-soft) !important;
+    border-color: var(--ag-border) !important;
+    color: var(--ag-muted) !important;
+  }
+
+  .column-fill-btn:hover,
+  .per-row-btn:hover,
+  .per-row-btn.active {
+    background: var(--ag-selected) !important;
+    border-color: var(--xingtu-glass-list-selected-border) !important;
+    color: var(--ag-text) !important;
+  }
+
+  .batch-generate-btn {
+    background: var(--ag-selected) !important;
+    border: 1px solid var(--xingtu-glass-list-selected-border) !important;
+    color: var(--ag-text) !important;
+    box-shadow: none !important;
+  }
+
+  .batch-generate-btn:hover:not(:disabled) {
+    background: var(--xingtu-glass-list-bg-selected-hover) !important;
+    border-color: var(--xingtu-glass-list-selected-border) !important;
+    box-shadow: 0 0 0 3px var(--xingtu-glass-control-ring) !important;
+    transform: translateY(-1px);
+  }
+
+  .t-checkbox.t-is-checked .t-checkbox__input {
+    background: var(--ag-text) !important;
+    border-color: var(--ag-text) !important;
+  }
+
+  .library-toggle-active {
+    color: var(--ag-text) !important;
+    background: var(--ag-selected) !important;
+    border-color: var(--xingtu-glass-list-selected-border) !important;
+  }
+
+  .batch-import-modal .modal-header h3,
+  .import-setting-item label,
+  .start-row-input {
+    color: var(--ag-text);
+  }
+
+  .import-info,
+  .preview-more {
+    color: var(--ag-muted);
+  }
+
+  .import-preview {
+    background: var(--ag-accent-soft);
+    color: var(--ag-accent-hover);
+  }
+
+  .modal-footer {
+    background: var(--ag-surface);
+  }
+}
