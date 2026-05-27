@@ -358,7 +358,6 @@ function inferVendorByKeywords(modelId: string): ModelVendor {
     lowerId.includes('whisper') ||
     lowerId.includes('codex') ||
     lowerId.includes('text-embedding') ||
-    lowerId.includes('omni') ||
     lowerId.includes('tts-') ||
     lowerId.includes('babbage') ||
     lowerId.includes('davinci') ||
@@ -368,6 +367,8 @@ function inferVendorByKeywords(modelId: string): ModelVendor {
     return ModelVendor.GPT;
   }
   if (
+    lowerId === 'omni-flash' ||
+    lowerId === 'omni-flash-components' ||
     lowerId.includes('gemini') ||
     lowerId.includes('banana') ||
     lowerId.includes('gemma') ||

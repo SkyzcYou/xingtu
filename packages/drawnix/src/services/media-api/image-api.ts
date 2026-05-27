@@ -62,7 +62,6 @@ export function buildImageRequestBody(
   const body: Record<string, unknown> = {
     prompt: params.prompt,
     model: params.model,
-    response_format: 'url',
   };
 
   if (params.n && params.n > 1) {
@@ -70,7 +69,7 @@ export function buildImageRequestBody(
   }
 
   if (params.size) {
-    body.size = params.size;
+    body.size = aspectRatioToSize(params.size) || params.size;
   } else if (params.aspectRatio) {
     body.size = aspectRatioToSize(params.aspectRatio);
   }
