@@ -832,6 +832,17 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     };
   }, []);
 
+  useEffect(() => {
+    const handleOpenSettings = () => {
+      setAppState((prev) => ({ ...prev, openSettings: true }));
+    };
+
+    window.addEventListener('aitu:open-settings', handleOpenSettings);
+    return () => {
+      window.removeEventListener('aitu:open-settings', handleOpenSettings);
+    };
+  }, []);
+
   // 监听 API 认证错误事件，自动打开设置对话框
   useEffect(() => {
     const handleApiAuthError = (event: Event) => {
