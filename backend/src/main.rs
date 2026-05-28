@@ -5,6 +5,8 @@ mod credits;
 mod db;
 mod error;
 mod llm_config;
+mod message_events;
+mod messages;
 mod models;
 mod qingke;
 mod routes;
@@ -13,6 +15,7 @@ mod trust;
 use axum::http::{HeaderValue, Method};
 use config::AppConfig;
 use llm_config::LlmProxyConfigCache;
+use message_events::{spawn_message_event_listener, MessageEventHub};
 use qingke::QingkeClient;
 use routes::AppState;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
@@ -40,6 +43,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let llm_config_cache = Arc::new(LlmProxyConfigCache::new(Duration::from_secs(
         config.llm_config_cache_ttl_seconds,
     )));
+    let message_events = MessageEventHub::new();
+    spawn_message_event_listener(config.database.url.clone(), message_events.clone());
     let addr: SocketAddr = format!("{}:{}", config.server_host, config.server_port).parse()?;
 
     let cors = build_cors_layer(&config.cors_allowed_origin)?;
@@ -50,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         trust,
         http_client,
         llm_config_cache,
+        message_events,
     })
     .layer(TraceLayer::new_for_http())
     .layer(cors);

@@ -1,0 +1,143 @@
+.messages-page {
+  .messages-toolbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+
+    input,
+    select {
+      min-height: 36px;
+      border: 1px solid #dcdfe6;
+      border-radius: 8px;
+      padding: 0 10px;
+      background: #fff;
+    }
+
+    input {
+      min-width: 240px;
+    }
+  }
+}
+
+.messages-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.messages-list-item {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e6e8eb;
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+
+  &[data-active='true'] {
+    border-color: #5a4fcf;
+    box-shadow: 0 0 0 2px rgba(90, 79, 207, 0.12);
+  }
+
+  strong {
+    color: #1f2937;
+  }
+
+  span {
+    color: #6b7280;
+    font-size: 13px;
+  }
+}
+
+.messages-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.messages-form {
+  display: grid;
+  gap: 14px;
+
+  label {
+    display: grid;
+    gap: 6px;
+    color: #4b5563;
+    font-size: 13px;
+  }
+
+  input,
+  select,
+  textarea {
+    width: 100%;
+    border: 1px solid #dcdfe6;
+    border-radius: 8px;
+    padding: 9px 10px;
+    background: #fff;
+    color: #111827;
+    font: inherit;
+  }
+
+  textarea {
+    resize: vertical;
+  }
+}
+
+.messages-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.messages-targets {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e6e8eb;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.messages-target-list {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+
+  button {
+    display: grid;
+    gap: 3px;
+    padding: 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    text-align: left;
+    cursor: pointer;
+
+    &[data-active='true'] {
+      border-color: #5a4fcf;
+      background: rgba(90, 79, 207, 0.08);
+    }
+
+    span {
+      color: #6b7280;
+      font-size: 12px;
+    }
+  }
+}
+
+@media (max-width: 1080px) {
+  .messages-grid,
+  .messages-form-row {
+    grid-template-columns: 1fr;
+  }
+}

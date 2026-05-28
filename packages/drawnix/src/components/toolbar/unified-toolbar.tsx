@@ -17,6 +17,7 @@ import { BottomActionsSection } from './bottom-actions-section';
 import { CanvasAvatarPlaceholder } from '../canvas-avatar-placeholder';
 import { useViewportScale } from '../../hooks/useViewportScale';
 import { useDeviceType } from '../../hooks/useDeviceType';
+import { useMessageCenter } from '../../hooks/use-message-center';
 import { MessageHornIcon, TaskIcon } from '../icons';
 import { HoverTip } from '../shared/hover';
 import {
@@ -196,6 +197,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
   }) => {
     // 检测设备类型
     const { isMobile: isSmallScreen, isTablet } = useDeviceType();
+    const { unreadCount } = useMessageCenter();
     const isMobileOrTablet = isSmallScreen || isTablet;
     const [isIconMode, setIsIconMode] = useState(false);
     const [isMobileCollapsed, setIsMobileCollapsed] = useState(true); // 移动端默认收起
@@ -673,7 +675,7 @@ export const UnifiedToolbar: React.FC<UnifiedToolbarProps> = React.memo(
               >
                 <span className="message-button__icon">
                   <MessageHornIcon />
-                  <span className="message-button__dot" />
+                  {unreadCount > 0 && <span className="message-button__dot" />}
                 </span>
               </button>
               <button

@@ -1,5 +1,6 @@
 use crate::{
-    config::AppConfig, llm_config::LlmProxyConfigCache, qingke::QingkeClient, trust::TrustClient,
+    config::AppConfig, llm_config::LlmProxyConfigCache, message_events::MessageEventHub,
+    qingke::QingkeClient, trust::TrustClient,
 };
 use axum::Router;
 use reqwest::Client;
@@ -8,11 +9,13 @@ use std::sync::Arc;
 
 mod admin_credits;
 mod admin_llm_config;
+mod admin_messages;
 mod agent;
 mod auth;
 mod credit_recharge;
 mod llm_proxy;
 mod llm_proxy_credits;
+mod messages;
 #[cfg(test)]
 mod payment_tests;
 mod payments;
@@ -25,6 +28,7 @@ pub struct AppState {
     pub trust: TrustClient,
     pub http_client: Client,
     pub llm_config_cache: Arc<LlmProxyConfigCache>,
+    pub message_events: MessageEventHub,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -32,7 +36,9 @@ pub fn router(state: AppState) -> Router {
         .merge(payments::router())
         .merge(admin_llm_config::router())
         .merge(admin_credits::router())
+        .merge(admin_messages::router())
         .merge(credit_recharge::router())
+        .merge(messages::router())
         .merge(llm_proxy::router())
         .merge(agent::router())
         .with_state(state)

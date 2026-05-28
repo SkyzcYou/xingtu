@@ -6,6 +6,7 @@ import {
   MessageSquare,
   LogOut,
   Coins,
+  Bell,
   Settings,
   ShieldCheck,
   UserRound,
@@ -20,6 +21,7 @@ const navItems = [
   { to: '/profile', label: 'LLM 配置', icon: KeyRound },
   { to: '/playground', label: 'Playground', icon: MessageSquare },
   { to: '/credits', label: '积分系统', icon: Coins },
+  { to: '/messages', label: '消息管理', icon: Bell },
   { to: '/sync', label: '同步审计', icon: ShieldCheck },
   { to: '/settings', label: '管理员设置', icon: Settings },
 ] as const;

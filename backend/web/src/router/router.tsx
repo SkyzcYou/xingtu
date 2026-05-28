@@ -12,6 +12,7 @@ import { CallbackPage } from '../features/auth/CallbackPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { CreditsPage } from '../features/credits/CreditsPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
+import { MessagesPage } from '../features/messages/MessagesPage';
 import { ProfilePage } from '../features/profile/ProfilePage';
 import { PlaygroundPage } from '../features/playground/PlaygroundPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
@@ -91,6 +92,12 @@ const creditsRoute = createRoute({
   component: CreditsPage,
 });
 
+const messagesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/messages',
+  component: MessagesPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
@@ -130,6 +137,7 @@ const routeTree = rootRoute.addChildren([
     syncRoute,
     playgroundRoute,
     creditsRoute,
+    messagesRoute,
     settingsRoute,
     authProfileRoute,
     legacyHomeRoute,

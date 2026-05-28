@@ -1,5 +1,12 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { BaseDrawer } from '../side-drawer';
+import {
+  markAllMessageCenterItemsRead,
+  markMessageCenterItemRead,
+  refreshMessageCenter,
+  useMessageCenter,
+} from '../../hooks/use-message-center';
+import type { MessageCenterItem } from '../../services/message-center-service';
 import './message-drawer.scss';
 
 export interface MessageDrawerProps {
@@ -7,40 +14,47 @@ export interface MessageDrawerProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-interface MessageItem {
-  id: string;
-  title: string;
-  content: string;
-  time: string;
-}
-
 export const MESSAGE_DRAWER_WIDTH_KEY = 'message-drawer-width';
 
 const WECHAT_QR_CODE_URL = './logo/wechat-qr.jpg';
 const RED_QR_CODE_URL = './red-qr.png';
 
-const MESSAGES: MessageItem[] = [
-  {
-    id: 'welcome',
-    title: '欢迎使用星图',
-    content: '这里会展示产品更新、活动通知和重要提醒。',
-    time: '刚刚',
-  },
-  {
-    id: 'updates',
-    title: '消息中心已上线',
-    content: '产品更新、活动通知和重要提醒会在这里集中展示。',
-    time: '今天',
-  },
-];
+const KIND_LABELS: Record<MessageCenterItem['kind'], string> = {
+  update: '更新',
+  notice: '通知',
+  activity: '活动',
+  maintenance: '维护',
+};
 
 export const MessageDrawer: React.FC<MessageDrawerProps> = ({
   isOpen = false,
   onOpenChange,
 }) => {
+  const { messages, unreadCount, loading, error } = useMessageCenter();
+
+  useEffect(() => {
+    if (isOpen) {
+      void refreshMessageCenter();
+    }
+  }, [isOpen]);
+
   const handleClose = useCallback(() => {
     onOpenChange?.(false);
   }, [onOpenChange]);
+
+  const handleRefresh = useCallback(() => {
+    void refreshMessageCenter();
+  }, []);
+
+  const handleMarkAllRead = useCallback(() => {
+    void markAllMessageCenterItemsRead();
+  }, []);
+
+  const handleMessageClick = useCallback((message: MessageCenterItem) => {
+    if (!message.readAt) {
+      void markMessageCenterItemRead(message.id);
+    }
+  }, []);
 
   return (
     <BaseDrawer
@@ -75,17 +89,53 @@ export const MessageDrawer: React.FC<MessageDrawerProps> = ({
         </div>
       </div>
 
-      {MESSAGES.length === 0 ? (
+      <div className="message-drawer__toolbar">
+        <span>{unreadCount > 0 ? `${unreadCount} 条未读` : '暂无未读消息'}</span>
+        <div>
+          <button type="button" onClick={handleRefresh}>刷新</button>
+          {unreadCount > 0 && (
+            <button type="button" onClick={handleMarkAllRead}>全部已读</button>
+          )}
+        </div>
+      </div>
+
+      {loading && messages.length === 0 ? (
+        <div className="message-drawer__empty">正在加载消息...</div>
+      ) : error ? (
+        <div className="message-drawer__empty">
+          <span>{error}</span>
+          <button type="button" onClick={handleRefresh}>重试</button>
+        </div>
+      ) : messages.length === 0 ? (
         <div className="message-drawer__empty">暂无消息</div>
       ) : (
         <div className="message-drawer__list">
-          {MESSAGES.map((message) => (
-            <article className="message-drawer__item" key={message.id}>
+          {messages.map((message) => (
+            <article
+              className="message-drawer__item"
+              data-unread={!message.readAt}
+              key={message.id}
+              onClick={() => handleMessageClick(message)}
+            >
               <div className="message-drawer__item-header">
-                <h3 className="message-drawer__title">{message.title}</h3>
-                <span className="message-drawer__time">{message.time}</span>
+                <div>
+                  <span className="message-drawer__kind">{KIND_LABELS[message.kind]}</span>
+                  <h3 className="message-drawer__title">{message.title}</h3>
+                </div>
+                <span className="message-drawer__time">{formatMessageTime(message)}</span>
               </div>
               <p className="message-drawer__content-text">{message.content}</p>
+              {message.linkUrl && (
+                <a
+                  className="message-drawer__link"
+                  href={message.linkUrl}
+                  target={message.linkUrl.startsWith('http') ? '_blank' : undefined}
+                  rel={message.linkUrl.startsWith('http') ? 'noreferrer' : undefined}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {message.linkLabel || '查看详情'}
+                </a>
+              )}
             </article>
           ))}
         </div>
@@ -93,5 +143,17 @@ export const MessageDrawer: React.FC<MessageDrawerProps> = ({
     </BaseDrawer>
   );
 };
+
+function formatMessageTime(message: MessageCenterItem): string {
+  const value = message.publishAt || message.createdAt;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
 
 export default MessageDrawer;

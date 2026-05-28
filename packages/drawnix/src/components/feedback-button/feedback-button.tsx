@@ -1,6 +1,7 @@
 import React from 'react';
 import { MessageHornIcon } from '../icons';
 import { ToolButton } from '../tool-button';
+import { useMessageCenter } from '../../hooks/use-message-center';
 import './feedback-button.scss';
 
 interface MessageButtonProps {
@@ -12,13 +13,15 @@ export const MessageButton: React.FC<MessageButtonProps> = ({
   open,
   onToggle,
 }) => {
+  const { unreadCount } = useMessageCenter();
+
   return (
     <ToolButton
       type="icon"
       icon={
         <span className="message-button__icon">
           <MessageHornIcon />
-          <span className="message-button__dot" />
+          {unreadCount > 0 && <span className="message-button__dot" />}
         </span>
       }
       aria-label="消息中心"
