@@ -1,11 +1,13 @@
 use super::AppState;
 use crate::{
-    error::{AppError, AppResult},
+    error::AppResult,
     llm_config::{
         get_admin_llm_config, get_llm_config_models, test_llm_config, update_llm_config,
         UpdateLlmConfigRequest,
     },
 };
+
+use super::auth::authenticate_admin;
 use axum::{extract::State, http::HeaderMap, routing::get, Json, Router};
 
 pub fn router() -> Router<AppState> {
@@ -60,15 +62,4 @@ async fn get_models(
     Ok(Json(
         get_llm_config_models(&state.pool, &state.http_client, input).await?,
     ))
-}
-
-async fn authenticate_admin(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
-    let principal = state.trust.authenticate(headers).await?;
-    let required_role = state.config.admin_required_role.trim();
-    if required_role.is_empty()
-        || principal.has_role(required_role, &state.config.admin_role_client_id)
-    {
-        return Ok(());
-    }
-    Err(AppError::forbidden("当前账号没有管理员权限"))
 }

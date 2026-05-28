@@ -1,5 +1,6 @@
 use super::AppState;
 use crate::{
+    credits::CreditRequestType,
     error::AppError,
     llm_config::{fetch_upstream_model_ids, LlmProxyConfig},
 };
@@ -12,8 +13,13 @@ use axum::{
     Json, Router,
 };
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::time::Duration;
+
+use super::llm_proxy_credits::{
+    authenticate_account, charge_request, parse_model_request, refund_after_send_failure,
+    refund_if_unsuccessful, request_id,
+};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -43,16 +49,33 @@ async fn proxy_chat_completions(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    if let Err(error) = state.trust.authenticate(&headers).await {
-        return app_error_response(error);
-    }
-
+    let account = match authenticate_account(&state, &headers).await {
+        Ok(account) => account,
+        Err(response) => return response,
+    };
     let config = match state.llm_config_cache.get_or_load(&state.pool).await {
         Ok(config) => config,
         Err(error) => return app_error_response(error),
     };
-
-    if let Err(response) = validate_chat_request(&body, &config.allowed_models) {
+    let model = match parse_model_request(
+        &headers,
+        &body,
+        &config.allowed_models,
+        "请求体必须是有效的 OpenAI Chat Completions JSON",
+    ) {
+        Ok(model) => model,
+        Err(response) => return response,
+    };
+    let request_id = request_id(&headers);
+    if let Err(response) = charge_request(
+        &state,
+        &account,
+        &model,
+        CreditRequestType::Chat,
+        &request_id,
+    )
+    .await
+    {
         return response;
     }
 
@@ -72,8 +95,12 @@ async fn proxy_chat_completions(
         .await;
 
     match upstream {
-        Ok(response) => upstream_response(response),
+        Ok(response) => {
+            refund_if_unsuccessful(&state, response.status(), &request_id).await;
+            upstream_response(response)
+        }
         Err(error) => {
+            refund_after_send_failure(&state, &request_id).await;
             tracing::warn!(
                 ?error,
                 is_timeout = error.is_timeout(),
@@ -95,24 +122,15 @@ async fn proxy_image_generations(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    if let Err(error) = state.trust.authenticate(&headers).await {
-        return app_error_response(error);
-    }
-
-    let config = match state.llm_config_cache.get_or_load(&state.pool).await {
-        Ok(config) => config,
-        Err(error) => return app_error_response(error),
-    };
-
-    if let Err(response) = validate_model_request(
-        &body,
-        &config.allowed_models,
+    proxy_charged_upstream_body(
+        &state,
+        &headers,
+        body,
+        "images/generations",
+        CreditRequestType::ImageGeneration,
         "请求体必须是有效的 OpenAI Images JSON",
-    ) {
-        return response;
-    }
-
-    proxy_upstream_body(&state, &config, &headers, "images/generations", body).await
+    )
+    .await
 }
 
 async fn proxy_image_edits(
@@ -120,16 +138,48 @@ async fn proxy_image_edits(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    if let Err(error) = state.trust.authenticate(&headers).await {
-        return app_error_response(error);
-    }
+    proxy_charged_upstream_body(
+        &state,
+        &headers,
+        body,
+        "images/edits",
+        CreditRequestType::ImageEdit,
+        "请求体必须包含有效的 model 字段",
+    )
+    .await
+}
 
+async fn proxy_charged_upstream_body(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: Bytes,
+    path: &str,
+    request_type: CreditRequestType,
+    invalid_request_message: &str,
+) -> Response {
+    let account = match authenticate_account(state, headers).await {
+        Ok(account) => account,
+        Err(response) => return response,
+    };
     let config = match state.llm_config_cache.get_or_load(&state.pool).await {
         Ok(config) => config,
         Err(error) => return app_error_response(error),
     };
-
-    proxy_upstream_body(&state, &config, &headers, "images/edits", body).await
+    let model = match parse_model_request(
+        headers,
+        &body,
+        &config.allowed_models,
+        invalid_request_message,
+    ) {
+        Ok(model) => model,
+        Err(response) => return response,
+    };
+    let request_id = request_id(headers);
+    if let Err(response) = charge_request(state, &account, &model, request_type, &request_id).await
+    {
+        return response;
+    }
+    proxy_upstream_body(state, &config, headers, path, body, &request_id).await
 }
 
 async fn proxy_upstream_body(
@@ -138,6 +188,7 @@ async fn proxy_upstream_body(
     headers: &HeaderMap,
     path: &str,
     body: Bytes,
+    request_id: &str,
 ) -> Response {
     let upstream_url = join_upstream_url(&config.base_url, path);
     tracing::info!(
@@ -159,8 +210,12 @@ async fn proxy_upstream_body(
     }
 
     match request.send().await {
-        Ok(response) => upstream_response(response),
+        Ok(response) => {
+            refund_if_unsuccessful(state, response.status(), request_id).await;
+            upstream_response(response)
+        }
         Err(error) => {
+            refund_after_send_failure(state, request_id).await;
             tracing::warn!(
                 ?error,
                 %path,
@@ -251,57 +306,6 @@ async fn list_available_model_ids(
     Ok(models)
 }
 
-fn validate_chat_request(body: &[u8], allowed_models: &[String]) -> Result<(), Response> {
-    validate_model_request(
-        body,
-        allowed_models,
-        "请求体必须是有效的 OpenAI Chat Completions JSON",
-    )
-}
-
-fn validate_model_request(
-    body: &[u8],
-    allowed_models: &[String],
-    invalid_json_message: &str,
-) -> Result<(), Response> {
-    if allowed_models.is_empty() {
-        return Ok(());
-    }
-
-    let payload = serde_json::from_slice::<Value>(body).map_err(|_| {
-        openai_error_response(
-            StatusCode::BAD_REQUEST,
-            invalid_json_message,
-            "invalid_request_error",
-            Some("invalid_json"),
-        )
-    })?;
-
-    let model = payload
-        .get("model")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    if model.is_empty() {
-        return Err(openai_error_response(
-            StatusCode::BAD_REQUEST,
-            "缺少 model 字段",
-            "invalid_request_error",
-            Some("missing_model"),
-        ));
-    }
-
-    if allowed_models.iter().any(|allowed| allowed == model) {
-        Ok(())
-    } else {
-        Err(openai_error_response(
-            StatusCode::BAD_REQUEST,
-            "当前模型不在服务端允许列表中",
-            "invalid_request_error",
-            Some("model_not_allowed"),
-        ))
-    }
-}
-
 fn openai_model(id: String) -> ModelResponse {
     ModelResponse {
         id,
@@ -343,7 +347,7 @@ fn should_forward_response_header(name: &HeaderName) -> bool {
         || name.starts_with("x-ratelimit-")
 }
 
-fn app_error_response(error: AppError) -> Response {
+pub(super) fn app_error_response(error: AppError) -> Response {
     let (status, message, code) = match error {
         AppError::Unauthorized(message) => (StatusCode::UNAUTHORIZED, message, "unauthorized"),
         AppError::Forbidden(message) => (StatusCode::FORBIDDEN, message, "forbidden"),
@@ -364,7 +368,7 @@ fn app_error_response(error: AppError) -> Response {
     openai_error_response(status, &message, "server_error", Some(code))
 }
 
-fn openai_error_response(
+pub(super) fn openai_error_response(
     status: StatusCode,
     message: &str,
     error_type: &str,

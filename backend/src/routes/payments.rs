@@ -1,5 +1,6 @@
 use super::AppState;
 use crate::{
+    credit_recharge::credit_paid_recharge_order,
     error::{AppError, AppResult},
     models::{PaymentOrder, PaymentOrderResponse, PaymentStatus},
     qingke::QingkeCreatePaymentInput,
@@ -168,8 +169,13 @@ async fn query_order(
         status,
     )
     .await?;
+    if status == PaymentStatus::Paid {
+        credit_paid_recharge_order(&state.pool, &out_trade_no).await?;
+    }
 
-    Ok(Json(updated.into()))
+    Ok(Json(
+        find_order(&state.pool, &updated.out_trade_no).await?.into(),
+    ))
 }
 
 async fn handle_notify(
@@ -250,6 +256,7 @@ async fn handle_notify(
         &params,
     )
     .await?;
+    credit_paid_recharge_order(&state.pool, &out_trade_no).await?;
     insert_notify_event(
         &state.pool,
         Some(&out_trade_no),
@@ -286,7 +293,7 @@ fn validate_name(name: &str) -> AppResult<String> {
     Ok(name.to_string())
 }
 
-fn validate_pay_channel(pay_channel: Option<&str>) -> AppResult<String> {
+pub(super) fn validate_pay_channel(pay_channel: Option<&str>) -> AppResult<String> {
     let pay_channel = pay_channel.unwrap_or("alipay");
     match pay_channel {
         "alipay" | "wxpay" => Ok(pay_channel.to_string()),
@@ -294,7 +301,7 @@ fn validate_pay_channel(pay_channel: Option<&str>) -> AppResult<String> {
     }
 }
 
-fn parse_amount(amount: &str) -> AppResult<Decimal> {
+pub(super) fn parse_amount(amount: &str) -> AppResult<Decimal> {
     let amount = Decimal::from_str(amount.trim())
         .map_err(|_| AppError::bad_request("amount must be a decimal number"))?;
     if amount <= Decimal::ZERO {
@@ -327,7 +334,7 @@ fn client_ip(headers: &HeaderMap) -> String {
         .to_string()
 }
 
-fn append_out_trade_no(return_url: String, out_trade_no: &str) -> String {
+pub(super) fn append_out_trade_no(return_url: String, out_trade_no: &str) -> String {
     let separator = if return_url.contains('?') { '&' } else { '?' };
     format!("{return_url}{separator}out_trade_no={out_trade_no}")
 }
@@ -363,7 +370,7 @@ async fn insert_order(
 
 async fn find_order(pool: &PgPool, out_trade_no: &str) -> AppResult<PaymentOrder> {
     sqlx::query_as::<_, PaymentOrder>(
-        "SELECT id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, created_at, updated_at, paid_at
+        "SELECT id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at
          FROM payment_orders WHERE out_trade_no = $1",
     )
     .bind(out_trade_no)
@@ -381,7 +388,7 @@ async fn update_order_qingke_trade_no(
         "UPDATE payment_orders
          SET qingke_trade_no = COALESCE($2, qingke_trade_no), updated_at = now()
          WHERE out_trade_no = $1
-         RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, created_at, updated_at, paid_at",
+         RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at",
     )
     .bind(out_trade_no)
     .bind(qingke_trade_no)
@@ -417,7 +424,7 @@ async fn update_order_from_qingke_query(
              paid_at = CASE WHEN $5 = 'paid' AND paid_at IS NULL THEN now() ELSE paid_at END,
              updated_at = now()
          WHERE out_trade_no = $1
-         RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, created_at, updated_at, paid_at",
+         RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at",
     )
     .bind(out_trade_no)
     .bind(trade_no)
@@ -486,35 +493,4 @@ async fn insert_notify_event(
 const ORDER_RETURNING_SQL: &str =
     "INSERT INTO payment_orders (id, out_trade_no, name, amount, pay_channel, status, param)
      VALUES ($1, $2, $3, $4, $5, 'pending', $6)
-     RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, created_at, updated_at, paid_at";
-
-#[cfg(test)]
-mod tests {
-    use super::{append_out_trade_no, parse_amount, validate_pay_channel};
-
-    #[test]
-    fn amount_allows_two_decimals() {
-        assert!(parse_amount("1.00").is_ok());
-        assert!(parse_amount("0.001").is_err());
-        assert!(parse_amount("0").is_err());
-    }
-
-    #[test]
-    fn only_known_channels_are_allowed() {
-        assert!(validate_pay_channel(Some("alipay")).is_ok());
-        assert!(validate_pay_channel(Some("wxpay")).is_ok());
-        assert!(validate_pay_channel(Some("bank")).is_err());
-    }
-
-    #[test]
-    fn appends_order_to_return_url() {
-        assert_eq!(
-            append_out_trade_no("http://localhost:5174".to_string(), "XT1"),
-            "http://localhost:5174?out_trade_no=XT1"
-        );
-        assert_eq!(
-            append_out_trade_no("http://localhost:5174?return=1".to_string(), "XT1"),
-            "http://localhost:5174?return=1&out_trade_no=XT1"
-        );
-    }
-}
+     RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at";

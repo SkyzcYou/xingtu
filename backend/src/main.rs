@@ -1,4 +1,7 @@
+mod accounts;
 mod config;
+mod credit_recharge;
+mod credits;
 mod db;
 mod error;
 mod llm_config;

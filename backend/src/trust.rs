@@ -11,12 +11,18 @@ use std::collections::{HashMap, HashSet};
 #[derive(Clone)]
 pub struct TrustClient {
     client: Client,
+    issuer: String,
     userinfo_url: String,
     client_ids: HashSet<String>,
 }
 
 #[derive(Debug)]
 pub struct TrustPrincipal {
+    pub issuer: String,
+    pub subject: String,
+    pub display_name: Option<String>,
+    pub email: Option<String>,
+    pub avatar_url: Option<String>,
     pub realm_roles: Vec<String>,
     pub resource_roles: HashMap<String, Vec<String>>,
 }
@@ -30,6 +36,10 @@ struct RoleAccess {
 struct TrustUserInfo {
     sub: String,
     azp: Option<String>,
+    name: Option<String>,
+    preferred_username: Option<String>,
+    email: Option<String>,
+    picture: Option<String>,
     realm_access: Option<RoleAccess>,
     resource_access: Option<HashMap<String, RoleAccess>>,
 }
@@ -45,6 +55,7 @@ impl TrustClient {
         let issuer = format!("{}/realms/{}", config.trust_base_url, config.trust_realm);
         Self {
             client: Client::new(),
+            issuer: issuer.clone(),
             userinfo_url: format!("{issuer}/protocol/openid-connect/userinfo"),
             client_ids: config.trust_client_ids.iter().cloned().collect(),
         }
@@ -93,6 +104,11 @@ impl TrustClient {
         merge_token_roles(token, &mut realm_roles, &mut resource_roles);
 
         Ok(TrustPrincipal {
+            issuer: self.issuer.clone(),
+            subject: userinfo.sub,
+            display_name: first_non_empty([userinfo.name, userinfo.preferred_username]),
+            email: non_empty(userinfo.email),
+            avatar_url: non_empty(userinfo.picture),
             realm_roles,
             resource_roles,
         })
@@ -107,6 +123,21 @@ impl TrustPrincipal {
                 .get(client_id)
                 .is_some_and(|roles| roles.iter().any(|value| value == role))
     }
+}
+
+fn first_non_empty(values: [Option<String>; 2]) -> Option<String> {
+    values.into_iter().find_map(non_empty)
+}
+
+fn non_empty(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let value = value.trim();
+        if value.is_empty() {
+            None
+        } else {
+            Some(value.to_string())
+        }
+    })
 }
 
 fn collect_realm_roles(userinfo: &TrustUserInfo) -> Vec<String> {

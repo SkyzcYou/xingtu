@@ -6,9 +6,15 @@ use reqwest::Client;
 use sqlx::PgPool;
 use std::sync::Arc;
 
+mod admin_credits;
 mod admin_llm_config;
 mod agent;
+mod auth;
+mod credit_recharge;
 mod llm_proxy;
+mod llm_proxy_credits;
+#[cfg(test)]
+mod payment_tests;
 mod payments;
 
 #[derive(Clone)]
@@ -25,6 +31,8 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(payments::router())
         .merge(admin_llm_config::router())
+        .merge(admin_credits::router())
+        .merge(credit_recharge::router())
         .merge(llm_proxy::router())
         .merge(agent::router())
         .with_state(state)

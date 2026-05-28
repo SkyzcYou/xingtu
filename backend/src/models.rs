@@ -46,12 +46,18 @@ pub struct PaymentOrder {
     pub param: Option<String>,
     pub buyer: Option<String>,
     pub notify_payload: Option<serde_json::Value>,
+    pub principal_id: Option<Uuid>,
+    pub credit_package_id: Option<String>,
+    pub credit_amount: Option<i64>,
+    pub credit_ledger_id: Option<Uuid>,
+    pub credited_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub paid_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PaymentOrderResponse {
     pub out_trade_no: String,
     pub qingke_trade_no: Option<String>,
@@ -60,6 +66,9 @@ pub struct PaymentOrderResponse {
     pub amount: String,
     pub pay_channel: String,
     pub status: String,
+    pub credit_package_id: Option<String>,
+    pub credit_amount: Option<i64>,
+    pub credited_at: Option<DateTime<Utc>>,
     pub paid_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -75,6 +84,9 @@ impl From<PaymentOrder> for PaymentOrderResponse {
             amount: order.amount.to_string(),
             pay_channel: order.pay_channel,
             status: order.status,
+            credit_package_id: order.credit_package_id,
+            credit_amount: order.credit_amount,
+            credited_at: order.credited_at,
             paid_at: order.paid_at,
             created_at: order.created_at,
             updated_at: order.updated_at,
