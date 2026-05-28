@@ -1,0 +1,157 @@
+.credits-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+  gap: 16px;
+}
+
+.credits-toolbar,
+.credits-actions,
+.credits-adjust-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.credits-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.credits-table th,
+.credits-table td {
+  padding: 10px;
+  border-bottom: 1px solid #eef2f7;
+  text-align: left;
+  vertical-align: top;
+}
+
+.credits-table th {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.credits-table input,
+.credits-table select,
+.credits-search,
+.credits-toolbar select,
+.credits-adjust-form input {
+  width: 100%;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: #111827;
+  background: #ffffff;
+}
+
+.credits-package-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.credits-package-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #eef2f7;
+  border-radius: 14px;
+  color: #111827;
+  background: #f8fafc;
+  text-align: left;
+  cursor: pointer;
+}
+
+.credits-package-card em {
+  color: #047857;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.credits-pay-result,
+.credits-order-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.credits-pay-result,
+.credits-order-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.credits-pay-result code {
+  overflow-wrap: anywhere;
+}
+
+.credits-order-item {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(180px, 1.4fr) auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.credits-account-list {
+  display: grid;
+  gap: 8px;
+  max-height: 460px;
+  overflow: auto;
+}
+
+.credits-account-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  color: #111827;
+  background: #f8fafc;
+  text-align: left;
+  cursor: pointer;
+}
+
+.credits-account-item[data-active='true'] {
+  border-color: #94a3b8;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.credits-account-item span,
+.credits-ledger-meta {
+  color: #64748b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.credits-balance {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.credits-ledger-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.credits-ledger-item {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.credits-delta-positive {
+  color: #047857;
+}
+
+.credits-delta-negative {
+  color: #dc2626;
+}

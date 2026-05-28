@@ -10,6 +10,7 @@ import { EmptyState } from '../components/EmptyState';
 import { AuthProfilePage } from '../features/auth/AuthProfilePage';
 import { CallbackPage } from '../features/auth/CallbackPage';
 import { LoginPage } from '../features/auth/LoginPage';
+import { CreditsPage } from '../features/credits/CreditsPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { ProfilePage } from '../features/profile/ProfilePage';
 import { PlaygroundPage } from '../features/playground/PlaygroundPage';
@@ -84,6 +85,12 @@ const playgroundRoute = createRoute({
   component: PlaygroundPage,
 });
 
+const creditsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/credits',
+  component: CreditsPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
@@ -122,6 +129,7 @@ const routeTree = rootRoute.addChildren([
     profileRoute,
     syncRoute,
     playgroundRoute,
+    creditsRoute,
     settingsRoute,
     authProfileRoute,
     legacyHomeRoute,
