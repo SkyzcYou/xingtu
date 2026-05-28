@@ -118,6 +118,7 @@ import { useWorkflowControl } from '../../contexts/WorkflowContext';
 import {
   getInvocationRouteCredentialStatusAsync,
   resolveInvocationRoute,
+  updateActiveInvocationRouteModel,
   createModelRef,
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
   XINGTU_LOGIN_PROVIDER_PROFILE_ID,
@@ -563,6 +564,17 @@ function findMatchingSelectableModel(
   const expectedKey = getSelectionKey(modelId, modelRef);
   const expectedProfileId = modelRef?.profileId || null;
 
+  if (expectedProfileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID) {
+    return (
+      models.find((model) => getSelectionKeyForModel(model) === expectedKey) ||
+      models.find(
+        (model) =>
+          model.id === modelId &&
+          (model.sourceProfileId || null) === expectedProfileId
+      )
+    );
+  }
+
   return (
     models.find((model) => getSelectionKeyForModel(model) === expectedKey) ||
     models.find(
@@ -600,6 +612,23 @@ function getDefaultModelForRouteType(routeType: ModelType): string {
     default:
       return getDefaultTextModel();
   }
+}
+
+function getRouteTypeForGenerationType(type: GenerationType): ModelType {
+  if (type === 'video') return 'video';
+  if (type === 'audio') return 'audio';
+  if (type === 'text' || type === 'agent') return 'text';
+  return 'image';
+}
+
+function hasUnscopedSelectableModel(
+  models: ModelConfig[],
+  modelId?: string | null
+): boolean {
+  return (
+    !!modelId &&
+    models.some((model) => model.id === modelId && !model.sourceProfileId)
+  );
 }
 
 function findSelectedProviderModel(
@@ -1114,9 +1143,21 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           persisted.modelId,
           createModelRef(persisted.profileId, persisted.modelId)
         );
-
         if (matchedModel) {
           return matchedModel;
+        }
+
+        if (
+          persisted.profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID &&
+          hasUnscopedSelectableModel(models, persisted.modelId)
+        ) {
+          return (
+            getPinnedSelectableModel(
+              getRouteTypeForGenerationType(type),
+              persisted.modelId,
+              createModelRef(persisted.profileId, persisted.modelId)
+            ) || undefined
+          );
         }
 
         clearPersistedModelSelection(type);
@@ -1135,22 +1176,29 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           return persistedModel;
         }
 
-        const routeType =
-          type === 'video'
-            ? 'video'
-            : type === 'audio'
-            ? 'audio'
-            : type === 'text' || type === 'agent'
-            ? 'text'
-            : 'image';
+        const routeType = getRouteTypeForGenerationType(type);
         const route = resolveInvocationRoute(routeType);
+        const routeModelRef = createModelRef(route.profileId, route.modelId);
         const routeModel = findMatchingSelectableModel(
           models,
           route.modelId,
-          createModelRef(route.profileId, route.modelId)
+          routeModelRef
         );
         if (routeModel) {
           return routeModel;
+        }
+        if (
+          route.profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID &&
+          hasUnscopedSelectableModel(models, route.modelId)
+        ) {
+          const pinnedRouteModel = getPinnedSelectableModel(
+            routeType,
+            route.modelId,
+            routeModelRef
+          );
+          if (pinnedRouteModel) {
+            return pinnedRouteModel;
+          }
         }
 
         const fallbackModelId =
@@ -3462,6 +3510,12 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                     providerIdHint: nextModelRef.profileId,
                   }
                 );
+                if (authResult.action === 'save-xingtu-api-key') {
+                  await updateActiveInvocationRouteModel(
+                    currentRouteType,
+                    nextModelRef
+                  );
+                }
               }
             } else {
               trackSubmitStatus('cancelled', {
