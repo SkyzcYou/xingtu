@@ -107,17 +107,6 @@ function applyAuthHeadersWithCredential(
   }
 }
 
-function applyAuthHeaders(
-  context: ResolvedProviderContext,
-  headers: Record<string, string>
-): Record<string, string> {
-  return applyAuthHeadersWithCredential(
-    context,
-    headers,
-    getProviderCredential(context)
-  );
-}
-
 function applyAuthQueryWithCredential(
   context: ResolvedProviderContext,
   query: Record<string, string | number | boolean | null | undefined>,
@@ -138,17 +127,6 @@ function applyAuthQueryWithCredential(
     ...query,
     [authQueryKey]: credential,
   };
-}
-
-function applyAuthQuery(
-  context: ResolvedProviderContext,
-  query: Record<string, string | number | boolean | null | undefined>
-): Record<string, string | number | boolean | null | undefined> {
-  return applyAuthQueryWithCredential(
-    context,
-    query,
-    getProviderCredential(context)
-  );
 }
 
 function createTimeoutSignal(
@@ -268,11 +246,26 @@ export class ProviderTransport {
     const fetcher = request.fetcher || fetch;
 
     try {
-      const prepared = await this.prepareRequestAsync(context, {
+      const requestWithSignal = {
         ...request,
         signal: timeoutControl.signal,
-      });
-      return await fetcher(prepared.url, prepared.init);
+      };
+      const prepared = await this.prepareRequestAsync(context, requestWithSignal);
+      const response = await fetcher(prepared.url, prepared.init);
+      if (response.status !== 401 || context.credentialSource !== 'oidc-session') {
+        return response;
+      }
+
+      const refreshedToken = await getFreshOidcAccessToken({ forceRefresh: true });
+      if (!refreshedToken) {
+        return response;
+      }
+      const retried = this.createPreparedRequest(
+        context,
+        requestWithSignal,
+        refreshedToken
+      );
+      return await fetcher(retried.url, retried.init);
     } catch (error) {
       if (timeoutControl.didTimeout()) {
         const timeoutMinutes = Math.floor((request.timeoutMs || 0) / 60000);

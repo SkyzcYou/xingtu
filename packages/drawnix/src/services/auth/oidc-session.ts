@@ -1,4 +1,4 @@
-import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts';
+import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 
 export type OidcSessionStatus = 'signed-in' | 'signed-out' | 'expired';
 
@@ -34,8 +34,15 @@ const PROFILE_PANEL_RETURN_PARAM = 'profilePanel';
 const PROFILE_PANEL_RETURN_VALUE = '1';
 const TOKEN_REFRESH_SKEW_SECONDS = 30;
 
+export interface FreshOidcAccessTokenOptions {
+  forceRefresh?: boolean;
+}
+
 let oidcUserManager: UserManager | null = null;
 let refreshPromise: Promise<string | null> | null = null;
+let queuedForceRefreshPromise: Promise<string | null> | null = null;
+let refreshPromiseForceRefresh = false;
+let visibilityRefreshListenerAttached = false;
 
 export function buildOidcLoginUrl(options: { profilePanel?: boolean } = {}): string {
   if (typeof window === 'undefined') {
@@ -230,7 +237,7 @@ function isUserRefreshable(user: StoredOidcUser | null): boolean {
 }
 
 function isAccessTokenFresh(
-  user: Pick<User, 'access_token' | 'expires_at'> | null
+  user: { access_token?: string; expires_at?: number } | null
 ): boolean {
   if (!user?.access_token || !user.expires_at) {
     return false;
@@ -238,14 +245,14 @@ function isAccessTokenFresh(
   return user.expires_at - Date.now() / 1000 > TOKEN_REFRESH_SKEW_SECONDS;
 }
 
-async function refreshOidcAccessToken(): Promise<string | null> {
+async function refreshOidcAccessToken(forceRefresh = false): Promise<string | null> {
   const manager = getOidcUserManager();
   if (!manager) {
     return null;
   }
 
   const user = await manager.getUser();
-  if (isAccessTokenFresh(user)) {
+  if (!forceRefresh && isAccessTokenFresh(user)) {
     return user?.access_token || null;
   }
   if (!user?.refresh_token) {
@@ -306,16 +313,33 @@ export function hasOidcSessionCredential(): boolean {
   return getStatus(user) === 'signed-in' || isUserRefreshable(user);
 }
 
-export async function getFreshOidcAccessToken(): Promise<string | null> {
-  if (refreshPromise) {
+function runOidcAccessTokenRefresh(forceRefresh: boolean): Promise<string | null> {
+  refreshPromiseForceRefresh = forceRefresh;
+  refreshPromise = refreshOidcAccessToken(forceRefresh).finally(() => {
+    refreshPromise = null;
+    refreshPromiseForceRefresh = false;
+  });
+  return refreshPromise;
+}
+
+export async function getFreshOidcAccessToken(
+  options: FreshOidcAccessTokenOptions = {}
+): Promise<string | null> {
+  const forceRefresh = options.forceRefresh === true;
+  if (!refreshPromise) {
+    return runOidcAccessTokenRefresh(forceRefresh);
+  }
+  if (!forceRefresh || refreshPromiseForceRefresh) {
     return refreshPromise;
   }
-
-  refreshPromise = refreshOidcAccessToken().finally(() => {
-    refreshPromise = null;
-  });
-
-  return refreshPromise;
+  if (!queuedForceRefreshPromise) {
+    queuedForceRefreshPromise = refreshPromise
+      .then(() => runOidcAccessTokenRefresh(true))
+      .finally(() => {
+        queuedForceRefreshPromise = null;
+      });
+  }
+  return queuedForceRefreshPromise;
 }
 
 export function clearOidcSession(): void {
@@ -329,3 +353,27 @@ export function clearOidcSession(): void {
     }
   }
 }
+
+function handleVisibilityRefresh(): void {
+  if (document.visibilityState !== 'visible') {
+    return;
+  }
+  const user = readStoredUser();
+  if (isUserRefreshable(user) && !isAccessTokenFresh(user)) {
+    void getFreshOidcAccessToken();
+  }
+}
+
+function setupOidcVisibilityRefresh(): void {
+  if (
+    visibilityRefreshListenerAttached
+    || typeof document === 'undefined'
+    || typeof window === 'undefined'
+  ) {
+    return;
+  }
+  visibilityRefreshListenerAttached = true;
+  document.addEventListener('visibilitychange', handleVisibilityRefresh);
+}
+
+setupOidcVisibilityRefresh();

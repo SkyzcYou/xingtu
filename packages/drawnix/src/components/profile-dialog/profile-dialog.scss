@@ -138,6 +138,44 @@
     font-weight: 700;
   }
 
+  &__credits {
+    gap: 12px;
+  }
+
+  &__credits-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid var(--pd-border);
+    border-radius: 16px;
+    padding: 14px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(var(--pd-accent-rgb), 0.08));
+  }
+
+  &__credits-label {
+    color: var(--pd-muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  &__credits-balance {
+    margin-top: 6px;
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  &__credits-sync {
+    flex: 0 0 auto;
+    border: 1px solid var(--pd-border);
+    border-radius: 999px;
+    padding: 4px 8px;
+    color: var(--pd-muted);
+    background: var(--pd-surface-soft);
+    font-size: 12px;
+  }
+
   &__empty {
     display: grid;
     place-items: center;

@@ -1469,13 +1469,19 @@ class RuntimeModelDiscoveryStore {
       throw new Error('请先登录星图账号');
     }
 
-    return this.discover(profile.id, profile.baseUrl, credential);
+    return this.discover(
+      profile.id,
+      profile.baseUrl,
+      credential,
+      profile.credentialSource === 'oidc-session'
+    );
   }
 
   async discover(
     profileId = LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
     baseUrl: string,
-    apiKey: string
+    apiKey: string,
+    refreshOidcOnUnauthorized = false
   ): Promise<ModelConfig[]> {
     const trimmedApiKey = apiKey.trim();
     if (!trimmedApiKey) {
@@ -1498,11 +1504,21 @@ class RuntimeModelDiscoveryStore {
       false
     );
 
-    const response = await fetch(`${normalizedBaseUrl}/models`, {
+    let response = await fetch(`${normalizedBaseUrl}/models`, {
       headers: {
         Authorization: `Bearer ${trimmedApiKey}`,
       },
     });
+    if (response.status === 401 && refreshOidcOnUnauthorized) {
+      const refreshedToken = await getFreshOidcAccessToken({ forceRefresh: true });
+      if (refreshedToken?.trim()) {
+        response = await fetch(`${normalizedBaseUrl}/models`, {
+          headers: {
+            Authorization: `Bearer ${refreshedToken.trim()}`,
+          },
+        });
+      }
+    }
 
     const rawText = await response.text();
     if (!response.ok) {

@@ -4,9 +4,14 @@ import { CanvasAvatarPlaceholder } from '../canvas-avatar-placeholder';
 import {
   buildOidcLoginUrl,
   clearOidcSession,
+  getFreshOidcAccessToken,
   loadOidcProfileViewModel,
   type OidcProfileViewModel,
 } from '../../services/auth/oidc-session';
+import {
+  getAccountCreditUsage,
+  type AccountCreditUsage,
+} from '../../services/account-credit-service';
 import './profile-dialog.scss';
 
 export interface ProfileContentProps {
@@ -15,6 +20,8 @@ export interface ProfileContentProps {
   className?: string;
   onProfileChange?: (profile: OidcProfileViewModel) => void;
 }
+
+const creditFormatter = new Intl.NumberFormat('zh-CN');
 
 function ProfileRow({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -39,6 +46,10 @@ function getSignedOutDescription(status: OidcProfileViewModel['status']): string
     : '登录后可使用账户相关服务。';
 }
 
+function formatCredits(value: number): string {
+  return creditFormatter.format(value);
+}
+
 export const ProfileContent = ({
   active,
   compact = false,
@@ -51,18 +62,48 @@ export const ProfileContent = ({
   const [loginPending, setLoginPending] = useState(false);
   const [loginFeedback, setLoginFeedback] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [creditUsage, setCreditUsage] = useState<AccountCreditUsage | null>(null);
+  const [creditLoading, setCreditLoading] = useState(false);
+  const [creditError, setCreditError] = useState<string | null>(null);
 
   const refreshProfile = useCallback(() => {
     const nextProfile = loadOidcProfileViewModel();
     setProfile(nextProfile);
     onProfileChange?.(nextProfile);
+    return nextProfile;
   }, [onProfileChange]);
 
+  const refreshProfileWithFreshToken = useCallback(async () => {
+    await getFreshOidcAccessToken();
+    return refreshProfile();
+  }, [refreshProfile]);
+
+  const loadCreditUsage = useCallback(async (signal?: AbortSignal) => {
+    setCreditLoading(true);
+    setCreditError(null);
+    try {
+      const usage = await getAccountCreditUsage(signal);
+      setCreditUsage(usage);
+    } catch (error) {
+      if (signal?.aborted) return;
+      setCreditUsage(null);
+      setCreditError(error instanceof Error ? error.message : '积分信息加载失败');
+    } finally {
+      if (!signal?.aborted) {
+        setCreditLoading(false);
+      }
+    }
+  }, []);
+
   const handleRefresh = useCallback(() => {
-    refreshProfile();
+    void refreshProfileWithFreshToken().then((nextProfile) => {
+      if (nextProfile.status === 'signed-in') {
+        void loadCreditUsage();
+      }
+    });
     setLoginFeedback(null);
     setLoginError(null);
-  }, [refreshProfile]);
+  }, [loadCreditUsage, refreshProfileWithFreshToken]);
 
   const handleLogout = useCallback(() => {
     clearOidcSession();
@@ -70,6 +111,9 @@ export const ProfileContent = ({
     setLoginPending(false);
     setLoginFeedback(null);
     setLoginError(null);
+    setCreditUsage(null);
+    setCreditLoading(false);
+    setCreditError(null);
   }, [refreshProfile]);
 
   const handleLogin = useCallback(() => {
@@ -81,9 +125,22 @@ export const ProfileContent = ({
 
   useEffect(() => {
     if (active) {
-      refreshProfile();
+      void refreshProfileWithFreshToken();
     }
-  }, [active, refreshProfile]);
+  }, [active, refreshProfileWithFreshToken]);
+
+  useEffect(() => {
+    if (!active || profile.status !== 'signed-in') {
+      setCreditUsage(null);
+      setCreditLoading(false);
+      setCreditError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    void loadCreditUsage(controller.signal);
+    return () => controller.abort();
+  }, [active, loadCreditUsage, profile.status, profile.subject]);
 
   const isSignedIn = profile.status === 'signed-in';
   const isExpired = profile.status === 'expired';
@@ -115,10 +172,33 @@ export const ProfileContent = ({
       </section>
 
       {isSignedIn ? (
-        <section className="profile-dialog__panel" aria-label="账户信息">
-          <ProfileRow label="用户名">{profile.displayName}</ProfileRow>
-          <ProfileRow label="邮箱">{profile.email}</ProfileRow>
-        </section>
+        <>
+          <section className="profile-dialog__panel" aria-label="账户信息">
+            <ProfileRow label="用户名">{profile.displayName}</ProfileRow>
+            <ProfileRow label="邮箱">{profile.email}</ProfileRow>
+          </section>
+
+          <section
+            className="profile-dialog__panel profile-dialog__credits"
+            aria-label="积分额度与使用情况"
+          >
+            <div className="profile-dialog__credits-header">
+              <div>
+                <div className="profile-dialog__credits-label">当前积分额度</div>
+                <div className="profile-dialog__credits-balance">
+                  {creditUsage ? formatCredits(creditUsage.balance) : creditLoading ? '加载中' : '--'}
+                </div>
+              </div>
+              {creditLoading && <span className="profile-dialog__credits-sync">更新中</span>}
+            </div>
+
+            {creditError && (
+              <p className="profile-dialog__notice profile-dialog__notice--error" role="alert">
+                {creditError}
+              </p>
+            )}
+          </section>
+        </>
       ) : (
         <section className="profile-dialog__empty" aria-label="登录提示">
           <button
