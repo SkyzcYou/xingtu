@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { LogIn, LogOut, RefreshCw } from 'lucide-react';
+import { CreditCard, LogIn, LogOut, RefreshCw } from 'lucide-react';
 import { CanvasAvatarPlaceholder } from '../canvas-avatar-placeholder';
+import { CreditRechargeDialog } from './CreditRechargeDialog';
 import {
   buildOidcLoginUrl,
   clearOidcSession,
@@ -65,6 +66,7 @@ export const ProfileContent = ({
   const [creditUsage, setCreditUsage] = useState<AccountCreditUsage | null>(null);
   const [creditLoading, setCreditLoading] = useState(false);
   const [creditError, setCreditError] = useState<string | null>(null);
+  const [rechargeDialogVisible, setRechargeDialogVisible] = useState(false);
 
   const refreshProfile = useCallback(() => {
     const nextProfile = loadOidcProfileViewModel();
@@ -114,6 +116,7 @@ export const ProfileContent = ({
     setCreditUsage(null);
     setCreditLoading(false);
     setCreditError(null);
+    setRechargeDialogVisible(false);
   }, [refreshProfile]);
 
   const handleLogin = useCallback(() => {
@@ -122,6 +125,10 @@ export const ProfileContent = ({
     setLoginFeedback('正在前往安全登录页面...');
     window.location.assign(buildOidcLoginUrl({ profilePanel: true }));
   }, []);
+
+  const handleRechargeSuccess = useCallback(() => {
+    void loadCreditUsage();
+  }, [loadCreditUsage]);
 
   useEffect(() => {
     if (active) {
@@ -189,7 +196,17 @@ export const ProfileContent = ({
                   {creditUsage ? formatCredits(creditUsage.balance) : creditLoading ? '加载中' : '--'}
                 </div>
               </div>
-              {creditLoading && <span className="profile-dialog__credits-sync">更新中</span>}
+              <div className="profile-dialog__credits-actions">
+                {creditLoading && <span className="profile-dialog__credits-sync">更新中</span>}
+                <button
+                  type="button"
+                  className="profile-dialog__recharge-button"
+                  onClick={() => setRechargeDialogVisible(true)}
+                >
+                  <CreditCard size={15} />
+                  积分充值
+                </button>
+              </div>
             </div>
 
             {creditError && (
@@ -239,6 +256,16 @@ export const ProfileContent = ({
           </button>
         )}
       </footer>
+
+      {isSignedIn && (
+        <CreditRechargeDialog
+          visible={rechargeDialogVisible}
+          compact={compact}
+          initialBalance={creditUsage?.balance ?? null}
+          onClose={() => setRechargeDialogVisible(false)}
+          onRechargeSuccess={handleRechargeSuccess}
+        />
+      )}
     </div>
   );
 };
