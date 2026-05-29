@@ -1031,6 +1031,8 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
               onMiddleTabChange={handleVendorChange}
               searchQuery={searchQuery}
               compact
+              showTabTooltip
+              tabTooltipZIndex={Z_INDEX.DROPDOWN_PORTAL + 1}
               tabsFooter={
                 showProviderAction ? (
                   <button

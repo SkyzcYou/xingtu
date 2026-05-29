@@ -40,6 +40,8 @@ export interface VendorTabPanelProps {
   compact?: boolean;
   /** 第一列标签 hover 时展示完整名称 */
   showTabTooltip?: boolean;
+  /** 第一列标签 hover 提示层级 */
+  tabTooltipZIndex?: number;
   /** 第一列底部扩展区 */
   tabsFooter?: React.ReactNode;
 }
@@ -55,6 +57,7 @@ export const VendorTabPanel: React.FC<VendorTabPanelProps> = ({
   children,
   compact = false,
   showTabTooltip = false,
+  tabTooltipZIndex,
   tabsFooter,
 }) => {
   const isSearching = !!searchQuery?.trim();
@@ -107,6 +110,7 @@ export const VendorTabPanel: React.FC<VendorTabPanelProps> = ({
                   content={label}
                   disabled={!showTabTooltip}
                   showArrow={false}
+                  zIndex={tabTooltipZIndex}
                 >
                   {tabButton}
                 </HoverTip>
