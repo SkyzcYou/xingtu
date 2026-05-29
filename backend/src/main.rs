@@ -1,6 +1,7 @@
 mod accounts;
 mod config;
 mod credit_recharge;
+mod credit_settings;
 mod credits;
 mod db;
 mod error;

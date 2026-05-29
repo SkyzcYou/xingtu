@@ -13,6 +13,15 @@ export interface CreditPricesResponse {
   prices: ModelCreditPrice[];
 }
 
+export interface CreditSettingsResponse {
+  newUserBonusCredits: number;
+  updatedAt: string | null;
+}
+
+export interface UpdateCreditSettingsInput {
+  newUserBonusCredits: number;
+}
+
 export interface UpdateCreditPriceInput {
   modelId: string;
   requestType: CreditRequestType;
@@ -115,6 +124,12 @@ export function isCreditPricesResponse(value: unknown): value is CreditPricesRes
   if (!value || typeof value !== 'object') return false;
   const data = value as Partial<CreditPricesResponse>;
   return Array.isArray(data.prices) && data.prices.every(isModelCreditPrice);
+}
+
+export function isCreditSettingsResponse(value: unknown): value is CreditSettingsResponse {
+  if (!value || typeof value !== 'object') return false;
+  const data = value as Partial<CreditSettingsResponse>;
+  return typeof data.newUserBonusCredits === 'number' && (typeof data.updatedAt === 'string' || data.updatedAt === null);
 }
 
 export function isCreditAccountsResponse(value: unknown): value is CreditAccountsResponse {

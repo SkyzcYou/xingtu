@@ -5,6 +5,7 @@ import {
   isCreditAccountsResponse,
   isCreditBalanceResponse,
   isCreditPricesResponse,
+  isCreditSettingsResponse,
   isPaymentOrder,
   isRechargeOrdersResponse,
   isRechargePackagesResponse,
@@ -15,10 +16,31 @@ import {
   type CreditAccountsResponse,
   type CreditBalanceResponse,
   type CreditPricesResponse,
+  type CreditSettingsResponse,
   type RechargeOrdersResponse,
   type RechargePackagesResponse,
   type UpdateCreditPricesInput,
+  type UpdateCreditSettingsInput,
 } from './credits.types';
+
+export async function getCreditSettings(): Promise<CreditSettingsResponse> {
+  const response = await request<unknown>('/api/admin/credit-settings');
+  if (!isCreditSettingsResponse(response)) {
+    throw new Error('积分设置响应格式无效');
+  }
+  return response;
+}
+
+export async function updateCreditSettings(input: UpdateCreditSettingsInput): Promise<CreditSettingsResponse> {
+  const response = await request<unknown>('/api/admin/credit-settings', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  if (!isCreditSettingsResponse(response)) {
+    throw new Error('积分设置保存响应格式无效');
+  }
+  return response;
+}
 
 export async function getCreditPrices(): Promise<CreditPricesResponse> {
   const response = await request<unknown>('/api/admin/credit-prices');

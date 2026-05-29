@@ -1,5 +1,5 @@
 use super::AppState;
-use crate::error::AppResult;
+use crate::{accounts::ensure_account_principal, error::AppResult};
 use axum::{extract::State, http::HeaderMap, routing::post, Json, Router};
 use rig_core::{client::CompletionClient, completion::Prompt, providers::openai};
 use serde::{Deserialize, Serialize};
@@ -29,7 +29,8 @@ async fn agent_chat(
     headers: HeaderMap,
     Json(input): Json<AgentChatRequest>,
 ) -> AppResult<Json<AgentChatResponse>> {
-    state.trust.authenticate(&headers).await?;
+    let principal = state.trust.authenticate(&headers).await?;
+    ensure_account_principal(&state.pool, &principal).await?;
     let config = state.llm_config_cache.get_or_load(&state.pool).await?;
     let agent_name = input
         .agent

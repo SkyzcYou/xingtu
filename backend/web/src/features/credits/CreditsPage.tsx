@@ -12,10 +12,12 @@ import {
   getCreditAccounts,
   getCreditBalance,
   getCreditPrices,
+  getCreditSettings,
   getRechargeOrders,
   getRechargePackages,
   queryPaymentOrder,
   updateCreditPrices,
+  updateCreditSettings,
 } from './credits.api';
 import {
   creditRequestTypes,
@@ -40,10 +42,13 @@ const reasonLabels: Record<string, string> = {
   refund: '失败退款',
   admin_adjustment: '手动调整',
   payment_recharge: '充值入账',
+  new_user_bonus: '新用户赠送',
 };
 
 export function CreditsPage() {
   const queryClient = useQueryClient();
+  const [newUserBonusCredits, setNewUserBonusCredits] = useState('0');
+  const [settingsError, setSettingsError] = useState('');
   const [priceRows, setPriceRows] = useState<UpdateCreditPriceInput[]>([]);
   const [priceError, setPriceError] = useState('');
   const [accountQuery, setAccountQuery] = useState('');
@@ -55,6 +60,7 @@ export function CreditsPage() {
   const [latestOrder, setLatestOrder] = useState<CreateRechargeOrderResponse | null>(null);
   const [rechargeError, setRechargeError] = useState('');
 
+  const settingsQuery = useQuery({ queryKey: ['credit-settings'], queryFn: getCreditSettings });
   const pricesQuery = useQuery({ queryKey: ['credit-prices'], queryFn: getCreditPrices });
   const balanceQuery = useQuery({ queryKey: ['credit-balance'], queryFn: getCreditBalance });
   const packagesQuery = useQuery({ queryKey: ['recharge-packages'], queryFn: getRechargePackages });
@@ -70,6 +76,11 @@ export function CreditsPage() {
   });
 
   useEffect(() => {
+    if (!settingsQuery.data) return;
+    setNewUserBonusCredits(String(settingsQuery.data.newUserBonusCredits));
+  }, [settingsQuery.data]);
+
+  useEffect(() => {
     if (!pricesQuery.data) return;
     setPriceRows(pricesQuery.data.prices.map(({ modelId, requestType, creditsPerRequest, enabled }) => ({
       modelId,
@@ -83,6 +94,15 @@ export function CreditsPage() {
     if (selectedAccountId || !accountsQuery.data?.accounts.length) return;
     setSelectedAccountId(accountsQuery.data.accounts[0].principalId);
   }, [accountsQuery.data, selectedAccountId]);
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: updateCreditSettings,
+    onSuccess: () => {
+      setSettingsError('');
+      void queryClient.invalidateQueries({ queryKey: ['credit-settings'] });
+    },
+    onError: (error) => setSettingsError(error.message),
+  });
 
   const savePricesMutation = useMutation({
     mutationFn: updateCreditPrices,
@@ -134,8 +154,12 @@ export function CreditsPage() {
   const selectedDetail = detailQuery.data;
   const totalConfiguredModels = useMemo(() => new Set(priceRows.map((row) => row.modelId).filter(Boolean)).size, [priceRows]);
 
-  if (pricesQuery.isLoading) {
+  if (settingsQuery.isLoading || pricesQuery.isLoading) {
     return <PageLoading text="正在加载积分配置" />;
+  }
+
+  if (settingsQuery.error) {
+    return <PageError message={settingsQuery.error.message} onRetry={() => settingsQuery.refetch()} />;
   }
 
   if (pricesQuery.error) {
@@ -152,6 +176,15 @@ export function CreditsPage() {
 
   function removePriceRow(index: number) {
     setPriceRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
+  }
+
+  function handleSaveSettings() {
+    const bonusCredits = Number(newUserBonusCredits);
+    if (!Number.isInteger(bonusCredits) || bonusCredits < 0) {
+      setSettingsError('新用户赠送积分必须是非负整数');
+      return;
+    }
+    saveSettingsMutation.mutate({ newUserBonusCredits: bonusCredits });
   }
 
   function handleSavePrices() {
@@ -190,6 +223,26 @@ export function CreditsPage() {
           <div><span>价格规则</span><strong>{priceRows.length}</strong></div>
           <div><span>覆盖模型</span><strong>{totalConfiguredModels}</strong></div>
         </div>
+      </SectionCard>
+
+      <SectionCard
+        title="新用户赠送积分"
+        description="用户首次完成鉴权进入系统时，可自动赠送一次性积分；默认 0 表示不赠送。"
+        action={<Button theme="primary" onClick={handleSaveSettings} loading={saveSettingsMutation.isPending}>保存设置</Button>}
+      >
+        <div className="credits-toolbar">
+          <input
+            type="number"
+            min="0"
+            value={newUserBonusCredits}
+            onChange={(event) => setNewUserBonusCredits(event.target.value)}
+          />
+          <Button variant="outline" onClick={() => settingsQuery.refetch()}>刷新设置</Button>
+        </div>
+        <p className="muted-text">
+          该配置只在用户首次进入时处理一次；已处理过的账号不会因为后续修改配置而补发。
+        </p>
+        {settingsError && <p className="form-error">{settingsError}</p>}
       </SectionCard>
 
       <SectionCard title="我的积分充值" description="选择固定套餐创建支付订单，支付成功后自动写入积分流水。">
@@ -340,6 +393,9 @@ function ledgerMeta(entry: CreditLedgerEntry): string {
   if (entry.reason === 'payment_recharge') {
     const metadata = entry.metadata && typeof entry.metadata === 'object' ? entry.metadata as Record<string, unknown> : {};
     return `${String(metadata.packageId ?? '充值套餐')} · ${String(metadata.outTradeNo ?? entry.requestId ?? '')}`;
+  }
+  if (entry.reason === 'new_user_bonus') {
+    return '一次性新用户奖励';
   }
   return entry.modelId || '手动调整';
 }

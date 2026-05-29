@@ -1,5 +1,9 @@
 use super::{auth::authenticate_admin, AppState};
 use crate::{
+    credit_settings::{
+        get_credit_settings, update_credit_settings, CreditSettingsResponse,
+        UpdateCreditSettingsRequest,
+    },
     credits::{
         adjust_account_credits, get_account_credit_detail, list_model_credit_prices,
         search_account_credit_summaries, upsert_model_credit_prices, AdjustCreditsRequest,
@@ -20,6 +24,10 @@ use uuid::Uuid;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route(
+            "/api/admin/credit-settings",
+            get(get_settings).put(update_settings),
+        )
+        .route(
             "/api/admin/credit-prices",
             get(list_prices).put(update_prices),
         )
@@ -34,6 +42,23 @@ pub fn router() -> Router<AppState> {
 #[derive(Deserialize)]
 struct AccountQuery {
     query: Option<String>,
+}
+
+async fn get_settings(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<Json<CreditSettingsResponse>> {
+    authenticate_admin(&state, &headers).await?;
+    Ok(Json(get_credit_settings(&state.pool).await?))
+}
+
+async fn update_settings(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<UpdateCreditSettingsRequest>,
+) -> AppResult<Json<CreditSettingsResponse>> {
+    authenticate_admin(&state, &headers).await?;
+    Ok(Json(update_credit_settings(&state.pool, input).await?))
 }
 
 async fn list_prices(

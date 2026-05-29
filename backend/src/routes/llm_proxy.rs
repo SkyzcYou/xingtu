@@ -234,8 +234,8 @@ async fn proxy_upstream_body(
 }
 
 async fn list_models(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    if let Err(error) = state.trust.authenticate(&headers).await {
-        return app_error_response(error);
+    if let Err(response) = authenticate_account(&state, &headers).await {
+        return response;
     }
 
     let config = match state.llm_config_cache.get_or_load(&state.pool).await {
@@ -260,8 +260,8 @@ async fn retrieve_model(
     headers: HeaderMap,
     Path(model): Path<String>,
 ) -> Response {
-    if let Err(error) = state.trust.authenticate(&headers).await {
-        return app_error_response(error);
+    if let Err(response) = authenticate_account(&state, &headers).await {
+        return response;
     }
 
     let config = match state.llm_config_cache.get_or_load(&state.pool).await {
