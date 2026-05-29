@@ -1,3 +1,84 @@
+## 6.7.13 (2026-05-29)
+
+### 🚀 Features
+
+- add dynamic message center (91730ca1)
+- show account credits in profile and refresh OIDC tokens (09896211)
+- add admin credit management console (17d2b8d6)
+- add account credits and charged LLM proxy (a5dc59fd)
+- support Xingtu account provider auth (20f3cb72)
+- harden backend llm proxy (9d9c21b8)
+- update backend web admin console (fc6af9cf)
+- 新增 backend web 管理控制台 (e95de0a3)
+- 新增 omni-flash 视频模型支持 (248af3f7)
+- 画布图片选中状态锁定优化 (12517bd7)
+- 支持同步账户 API 配置 (10589a40)
+- 支持当前页登录回跳 (bad69c18)
+- 新增青科支付 MVP (22ca573f)
+- 支持侧边栏资料与弹窗登录 (1e82523b)
+- 支持打开个人资料窗口 (1a365e2c)
+- 供应商设置增加「图片优先使用异步接口」开关 (1fc6aadc)
+- sync media library batch select functionality across AIInputBar and EnhancedChatInput (cffb6b42)
+- 添加批量插入功能 (344c28a2)
+- improve chat drawer workflow generation (5da07cac)
+
+### 🩹 Fixes
+
+- show provider tooltip above model picker (5e289a04)
+- persist API key provider after auth prompt (9bdf3fa2)
+- show account status on toolbar avatar (0417c97e)
+- route auth prompt through settings flow (410bd39c)
+- complete glass themed generation windows (42b7591a)
+- prioritize Xingtu account model group (3c683050)
+- restore AI input after account login (c1a1c59d)
+- 统一图片尺寸计算机制，修复批量插入叠加问题 (6c166910)
+- 修复图片尺寸相关问题（真实尺寸更新、批量插入叠加） (b04cfc27)
+- 补修 MCP 路径 lockReferenceDimensions=true，更新完整审计文档 (6006c7ff)
+- 修复图片生成比例错误和 API 参数兼容性问题 | 修复 buildImageRequestBody 中 size 为比例格式时未转换像素尺寸(所有非1:1比例都生成1:1) | 移除 response_format url 参数(rix API 不支持) | 修复 lockReferenceDimensions 导致非正方形图片被压缩 (982e6271)
+- 修复 MJ 运行时模型参数与调度路由 (fb464a86)
+- 更新网站首页入口 (38854fad)
+- 优化后端生产配置与请求超时 (8e19f5db)
+- 修复异步图片接口开关路由 (e6d10834)
+- 移除图片接口默认 response_format (c1207e2f)
+- 异步接口开关持久化 + 图片任务刷新后恢复轮询 (08f05614)
+- split batch media action copy by target context (3332459b)
+- support bulk media insertion and image generation compatibility (3156c1ac)
+
+### 🔧 Chores
+
+- bump web version metadata (95640880)
+- bump version to 6.7.12 (6f18038d)
+- bump version to 6.7.11 (8dc3b17b)
+- bump version to 0.9.9 (26ed328a)
+- 添加 Docker 部署示例 (ed4011b9)
+- bump version to 0.9.8 (db9efd71)
+- bump version to 0.9.7 (35aba9f3)
+- docs: 补充跨 AI 提供商兼容性分析size 比例转换不影响其他 API 生图 (edb129b7)
+- docs: 图片生成API参数兼容性与比例转换修复经验总结 (5c06b488)
+- 文档：补充模型分类优先级经验 (b5f1d169)
+- 调整运行时模型分类优先级并补充 category 回归测试 (805014d3)
+- 发布 (9bce5497)
+- 修复：同步聊天抽屉素材库批量选择 (06fee16e)
+- 更新应用版本到 0.9.8 (a70d1053)
+- Refactor canvas batch insertion to viewport flow layout (04f42a12)
+- 修复对话输入框内层描边并抽出共享壳 (8be4a467)
+- 聊天抽屉图片预览收口到列表层 (8afea976)
+- 补充首屏壳层与 chunk 守门经验 (f8f4b8f7)
+- 修复素材库配色与多选架构，补充UI规范和架构说明 (8c233640)
+- 修复：蒙版预览缓存不进入素材库 (94dbf95e)
+- Bump web app version to 0.9.7 (3bc2abe0)
+- revert: restore original image generation behavior (e12dec48)
+
+### ❤️  Thank You
+
+- SkyzcYou <youzhengcai@gmail.com>
+- 李泓震 <15900797+AiW520@user.noreply.gitee.com>
+- gongchengtu <1817063960@qq.com>
+- liquid <ljquan@qq.com>
+- liangkaijun <2290804689@qq.com>
+- lichenyi <lichenyi@qq.com>
+- SaulgoodMan-C <271131037+SaulgoodMan-C@users.noreply.github.com>
+
 ## 6.7.10 (2026-05-17)
 
 ### 🚀 Features
