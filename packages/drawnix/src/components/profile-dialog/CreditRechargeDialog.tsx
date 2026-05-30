@@ -4,7 +4,6 @@ import { Button, Dialog } from 'tdesign-react';
 import {
   createCreditRechargeOrder,
   getAccountCreditBalance,
-  getCreditRechargeOrders,
   getCreditRechargePackages,
   queryCreditRechargeOrder,
   type CreateRechargeOrderResponse,
@@ -39,31 +38,33 @@ export function CreditRechargeDialog({
   const [payChannel, setPayChannel] = useState<PayChannel>('alipay');
   const [balance, setBalance] = useState<number | null>(initialBalance);
   const [packages, setPackages] = useState<RechargePackage[]>([]);
-  const [orders, setOrders] = useState<PaymentOrder[]>([]);
   const [latestOrder, setLatestOrder] = useState<CreateRechargeOrderResponse | null>(null);
+  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [creatingPackageId, setCreatingPackageId] = useState<string | null>(null);
+  const [creatingOrder, setCreatingOrder] = useState(false);
   const [queryingOrderNo, setQueryingOrderNo] = useState<string | null>(null);
 
   const latestPaymentUrl = useMemo(
     () => getSafePaymentUrl(latestOrder?.payType ?? null, latestOrder?.payInfo ?? null),
     [latestOrder]
   );
+  const selectedPackage = useMemo(
+    () => packages.find((item) => item.id === selectedPackageId) ?? null,
+    [packages, selectedPackageId]
+  );
 
   const loadDialogData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setLoadError(null);
     try {
-      const [balanceResult, packagesResult, ordersResult] = await Promise.all([
+      const [balanceResult, packagesResult] = await Promise.all([
         getAccountCreditBalance(signal),
         getCreditRechargePackages(signal),
-        getCreditRechargeOrders(signal),
       ]);
       setBalance(balanceResult.balance);
       setPackages(packagesResult.packages);
-      setOrders(ordersResult.orders);
     } catch (error) {
       if (signal?.aborted) return;
       setLoadError(error instanceof Error ? error.message : '充值信息加载失败');
@@ -74,33 +75,33 @@ export function CreditRechargeDialog({
     }
   }, []);
 
-  const refreshBalanceAndOrders = useCallback(async () => {
-    const [balanceResult, ordersResult] = await Promise.all([
-      getAccountCreditBalance(),
-      getCreditRechargeOrders(),
-    ]);
+  const refreshBalance = useCallback(async () => {
+    const balanceResult = await getAccountCreditBalance();
     setBalance(balanceResult.balance);
-    setOrders(ordersResult.orders);
   }, []);
 
-  const handleCreateOrder = useCallback(async (item: RechargePackage) => {
-    setCreatingPackageId(item.id);
+  const handleCreateOrder = useCallback(async () => {
+    if (!selectedPackage) {
+      setActionError('请先选择充值套餐');
+      return;
+    }
+    setCreatingOrder(true);
     setActionError(null);
     try {
       const result = await createCreditRechargeOrder({
-        packageId: item.id,
+        packageId: selectedPackage.id,
         payChannel,
         device: getPaymentDevice(),
         returnUrl: buildProfileReturnUrl(),
       });
       setLatestOrder(result);
-      await refreshBalanceAndOrders();
+      await refreshBalance();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '充值订单创建失败');
     } finally {
-      setCreatingPackageId(null);
+      setCreatingOrder(false);
     }
-  }, [payChannel, refreshBalanceAndOrders]);
+  }, [payChannel, refreshBalance, selectedPackage]);
 
   const handleQueryOrder = useCallback(async (outTradeNo: string) => {
     setQueryingOrderNo(outTradeNo);
@@ -112,7 +113,7 @@ export function CreditRechargeDialog({
           ? { ...current, order: updatedOrder }
           : current
       ));
-      await refreshBalanceAndOrders();
+      await refreshBalance();
       if (updatedOrder.creditedAt) {
         onRechargeSuccess?.();
       }
@@ -121,7 +122,7 @@ export function CreditRechargeDialog({
     } finally {
       setQueryingOrderNo(null);
     }
-  }, [onRechargeSuccess, refreshBalanceAndOrders]);
+  }, [onRechargeSuccess, refreshBalance]);
 
   const handleOpenPayment = useCallback(() => {
     if (!latestPaymentUrl) return;
@@ -136,6 +137,12 @@ export function CreditRechargeDialog({
     void loadDialogData(controller.signal);
     return () => controller.abort();
   }, [initialBalance, loadDialogData, visible]);
+
+  useEffect(() => {
+    if (!selectedPackageId && packages.length > 0) {
+      setSelectedPackageId(packages[0].id);
+    }
+  }, [packages, selectedPackageId]);
 
   return (
     <Dialog
@@ -164,8 +171,33 @@ export function CreditRechargeDialog({
           </p>
         )}
 
+        <section className="credit-recharge-dialog__section" aria-label="充值套餐">
+          <div className="credit-recharge-dialog__section-title">1. 选择充值套餐</div>
+          {loading && packages.length === 0 ? (
+            <div className="credit-recharge-dialog__loading">正在加载套餐...</div>
+          ) : (
+            <div className="credit-recharge-dialog__packages">
+              {packages.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={item.id === selectedPackageId
+                    ? 'credit-recharge-dialog__package is-active'
+                    : 'credit-recharge-dialog__package'}
+                  onClick={() => setSelectedPackageId(item.id)}
+                  aria-pressed={item.id === selectedPackageId}
+                >
+                  <span>{item.name}</span>
+                  <strong>{item.amount} 元</strong>
+                  <em>{creditFormatter.format(item.credits)} 积分</em>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
         <section className="credit-recharge-dialog__section" aria-label="支付方式">
-          <div className="credit-recharge-dialog__section-title">选择支付方式</div>
+          <div className="credit-recharge-dialog__section-title">2. 选择支付方式</div>
           <div className="credit-recharge-dialog__pay-channels">
             {(['alipay', 'wxpay'] as PayChannel[]).map((channel) => (
               <button
@@ -182,28 +214,24 @@ export function CreditRechargeDialog({
           </div>
         </section>
 
-        <section className="credit-recharge-dialog__section" aria-label="充值套餐">
-          <div className="credit-recharge-dialog__section-title">选择充值套餐</div>
-          {loading && packages.length === 0 ? (
-            <div className="credit-recharge-dialog__loading">正在加载套餐...</div>
-          ) : (
-            <div className="credit-recharge-dialog__packages">
-              {packages.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="credit-recharge-dialog__package"
-                  onClick={() => void handleCreateOrder(item)}
-                  disabled={Boolean(creatingPackageId)}
-                >
-                  <span>{item.name}</span>
-                  <strong>{item.amount} 元</strong>
-                  <em>{creditFormatter.format(item.credits)} 积分</em>
-                  {creatingPackageId === item.id && <small>创建中...</small>}
-                </button>
-              ))}
-            </div>
-          )}
+        <section className="credit-recharge-dialog__submit" aria-label="提交充值订单">
+          <div>
+            <span>3. 确认支付</span>
+            <strong>
+              {selectedPackage
+                ? `${selectedPackage.amount} 元 · ${creditFormatter.format(selectedPackage.credits)} 积分`
+                : '请选择套餐'}
+            </strong>
+          </div>
+          <Button
+            variant="outline"
+            className="credit-recharge-dialog__pay-button"
+            onClick={() => void handleCreateOrder()}
+            loading={creatingOrder}
+            disabled={!selectedPackage || loading}
+          >
+            立即支付
+          </Button>
         </section>
 
         {latestOrder && (
@@ -216,12 +244,6 @@ export function CreditRechargeDialog({
             onQuery={() => void handleQueryOrder(latestOrder.order.outTradeNo)}
           />
         )}
-
-        <OrderList
-          orders={orders}
-          queryingOrderNo={queryingOrderNo}
-          onQuery={(outTradeNo) => void handleQueryOrder(outTradeNo)}
-        />
 
         {actionError && (
           <p className="credit-recharge-dialog__notice credit-recharge-dialog__notice--error" role="alert">
@@ -259,7 +281,7 @@ function LatestOrderPanel({
       </div>
       <div className="credit-recharge-dialog__result-actions">
         {paymentUrl && (
-          <Button theme="primary" onClick={onOpenPayment}>
+          <Button variant="outline" className="credit-recharge-dialog__pay-button" onClick={onOpenPayment}>
             <ExternalLink size={14} />
             前往支付
           </Button>
@@ -270,47 +292,6 @@ function LatestOrderPanel({
       </div>
       {payInfo && !paymentUrl && (
         <pre className="credit-recharge-dialog__pay-info">{payInfo}</pre>
-      )}
-    </section>
-  );
-}
-
-interface OrderListProps {
-  orders: PaymentOrder[];
-  queryingOrderNo: string | null;
-  onQuery: (outTradeNo: string) => void;
-}
-
-function OrderList({ orders, queryingOrderNo, onQuery }: OrderListProps) {
-  const recentOrders = orders.slice(0, 5);
-  return (
-    <section className="credit-recharge-dialog__section" aria-label="充值订单记录">
-      <div className="credit-recharge-dialog__section-title">最近订单</div>
-      {recentOrders.length === 0 ? (
-        <div className="credit-recharge-dialog__empty">暂无充值订单</div>
-      ) : (
-        <div className="credit-recharge-dialog__orders">
-          {recentOrders.map((order) => (
-            <div key={order.outTradeNo} className="credit-recharge-dialog__order">
-              <div>
-                <strong>{order.name}</strong>
-                <span>{order.outTradeNo}</span>
-                <small>{order.amount} 元 · {creditFormatter.format(order.creditAmount ?? 0)} 积分 · {formatDateTime(order.createdAt)}</small>
-              </div>
-              <div className="credit-recharge-dialog__order-side">
-                <em className={order.creditedAt ? 'is-paid' : ''}>{getPaymentStatusText(order)}</em>
-                <Button
-                  size="small"
-                  variant="outline"
-                  onClick={() => onQuery(order.outTradeNo)}
-                  loading={queryingOrderNo === order.outTradeNo}
-                >
-                  查询
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
       )}
     </section>
   );
@@ -343,12 +324,6 @@ function getPaymentStatusText(order: PaymentOrder): string {
   if (order.status === 'refunded') return '已退款';
   if (order.status === 'frozen') return '已冻结';
   return '待支付';
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('zh-CN', { hour12: false });
 }
 
 export default CreditRechargeDialog;

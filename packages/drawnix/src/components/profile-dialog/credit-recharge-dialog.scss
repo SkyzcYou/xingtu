@@ -1,5 +1,38 @@
 .credit-recharge-dialog {
+  .t-dialog__wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+
+  .t-dialog__position {
+    position: static !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    padding: 0 !important;
+  }
+
+  .t-dialog {
+    display: flex !important;
+    flex-direction: column;
+    width: min(680px, calc(100vw - 48px)) !important;
+    height: min(78vh, 760px);
+    max-height: calc(100vh - 48px);
+    margin: 0 !important;
+  }
+
   .t-dialog__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
     padding-top: 0;
   }
 
@@ -11,15 +44,20 @@
     --cr-border: var(--xingtu-glass-border-soft, var(--td-component-border, rgba(31, 41, 55, 0.12)));
     --cr-surface: var(--xingtu-glass-control-bg, var(--td-bg-color-container, #fff));
     --cr-surface-soft: var(--xingtu-glass-list-bg-hover, var(--td-bg-color-component, #f3f4f6));
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: 14px;
-    max-height: min(72vh, 720px);
+    height: 100%;
+    min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
+    padding-right: 2px;
     color: var(--cr-text);
   }
 
   &__summary,
   &__section,
+  &__submit,
   &__result {
     border: 1px solid var(--cr-border);
     border-radius: 16px;
@@ -53,6 +91,7 @@
   &__section {
     display: grid;
     gap: 12px;
+    min-height: 0;
     padding: 14px;
   }
 
@@ -136,17 +175,71 @@
     }
 
     &:hover,
-    &:focus-visible {
+    &:focus-visible,
+    &.is-active {
       transform: translateY(-1px);
       border-color: rgba(var(--cr-accent-rgb), 0.42);
       background: rgba(var(--cr-accent-rgb), 0.1);
       outline: none;
     }
 
+    &.is-active {
+      box-shadow: 0 0 0 2px rgba(var(--cr-accent-rgb), 0.12);
+    }
+
     &:disabled {
       cursor: not-allowed;
       opacity: 0.66;
       transform: none;
+    }
+  }
+
+  &__submit {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+
+    span {
+      display: block;
+      color: var(--cr-muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 16px;
+      line-height: 1.35;
+    }
+  }
+
+  &__pay-button.t-button {
+    min-width: 112px;
+    border-color: var(--cr-border);
+    color: var(--cr-text);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), var(--cr-surface-soft));
+    backdrop-filter: blur(12px);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.16), 0 10px 24px rgba(15, 23, 42, 0.08);
+
+    &:hover,
+    &:focus-visible {
+      border-color: rgba(31, 41, 55, 0.22);
+      color: var(--cr-text);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), var(--cr-surface));
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.2), 0 12px 28px rgba(15, 23, 42, 0.1);
+    }
+
+    &:active {
+      color: var(--cr-text);
+      background: var(--cr-surface-soft);
+      box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.08);
+    }
+
+    &:disabled {
+      box-shadow: none;
     }
   }
 
@@ -199,58 +292,6 @@
     word-break: break-all;
   }
 
-  &__orders {
-    display: grid;
-    gap: 10px;
-  }
-
-  &__order {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 12px;
-    border: 1px solid var(--cr-border);
-    border-radius: 12px;
-    padding: 12px;
-    background: var(--cr-surface-soft);
-
-    strong,
-    span,
-    small {
-      display: block;
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-
-    strong {
-      font-size: 13px;
-    }
-
-    span,
-    small {
-      margin-top: 4px;
-      color: var(--cr-muted);
-      font-size: 12px;
-    }
-  }
-
-  &__order-side {
-    display: grid;
-    justify-items: end;
-    gap: 8px;
-
-    em {
-      color: var(--cr-muted);
-      font-size: 12px;
-      font-style: normal;
-      font-weight: 800;
-
-      &.is-paid {
-        color: #10b981;
-      }
-    }
-  }
-
   &__notice,
   &__empty,
   &__loading {
@@ -266,19 +307,16 @@
 
   @media (max-width: 640px) {
     &__packages,
-    &__pay-channels,
-    &__order {
+    &__pay-channels {
       grid-template-columns: 1fr;
     }
 
     &__summary,
+    &__submit,
     &__result-actions {
       align-items: stretch;
       flex-direction: column;
     }
 
-    &__order-side {
-      justify-items: stretch;
-    }
   }
 }
