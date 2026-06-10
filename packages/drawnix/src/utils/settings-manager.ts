@@ -89,6 +89,7 @@ export const TUZI_ORIGINAL_PROVIDER_NAME = '星图ai-VIP高速渠道';
 export const TUZI_MIX_PROVIDER_NAME = '星图ai-Gemini渠道';
 export const TUZI_CODEX_PROVIDER_NAME = '星图ai-Codex渠道';
 export const TUZI_BUSINESS_PROVIDER_NAME = '星图ai-Business渠道';
+const LEGACY_DEFAULT_IMAGE_MODEL_ID = 'gpt-image-2-vip';
 
 const DEFAULT_PROVIDER_CAPABILITIES: ProviderCapabilities = {
   supportsModelsEndpoint: true,
@@ -106,7 +107,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     baseUrl: TUZI_PROVIDER_DEFAULT_BASE_URL,
     chatModel: getDefaultTextModel(),
     audioModelName: 'suno_music',
-    imageModelName: 'gpt-image-2',
+    imageModelName: getDefaultImageModel(),
     videoModelName: 'seedance-1.5-pro',
     textModelName: getDefaultTextModel(),
   },
@@ -451,6 +452,7 @@ class SettingsManager {
     return {
       legacyDefaultImageApiCompatibilityV1:
         migrations.legacyDefaultImageApiCompatibilityV1 === true,
+      legacyDefaultImageModelV1: migrations.legacyDefaultImageModelV1 === true,
     };
   }
 
@@ -513,6 +515,19 @@ class SettingsManager {
     return this.isTuziProviderBaseUrl(baseUrl)
       ? LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY
       : DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY;
+  }
+
+  private migrateLegacyDefaultImageModel(
+    gemini: GeminiSettings
+  ): GeminiSettings {
+    if (gemini.imageModelName !== LEGACY_DEFAULT_IMAGE_MODEL_ID) {
+      return gemini;
+    }
+
+    return {
+      ...gemini,
+      imageModelName: getDefaultImageModel(),
+    };
   }
 
   private normalizeCapabilities(value: unknown): ProviderCapabilities {
@@ -1100,8 +1115,12 @@ class SettingsManager {
     const migrations: SettingsMigrations = { ...settings.migrations };
     const shouldRunLegacyDefaultImageMigration =
       migrations.legacyDefaultImageApiCompatibilityV1 !== true;
-    const legacyBaseUrl =
-      settings.gemini.baseUrl || DEFAULT_SETTINGS.gemini.baseUrl;
+    const shouldRunLegacyDefaultImageModelMigration =
+      migrations.legacyDefaultImageModelV1 !== true;
+    const gemini = shouldRunLegacyDefaultImageModelMigration
+      ? this.migrateLegacyDefaultImageModel(settings.gemini)
+      : settings.gemini;
+    const legacyBaseUrl = gemini.baseUrl || DEFAULT_SETTINGS.gemini.baseUrl;
     const legacyProfileForBuild =
       shouldRunLegacyDefaultImageMigration &&
       this.shouldMigrateLegacyDefaultImageApiCompatibility(
@@ -1119,12 +1138,18 @@ class SettingsManager {
       migrations.legacyDefaultImageApiCompatibilityV1 = true;
       this.shouldPersistSettingsAfterInitialization = true;
     }
+    if (shouldRunLegacyDefaultImageModelMigration) {
+      migrations.legacyDefaultImageModelV1 = true;
+      if (gemini !== settings.gemini) {
+        this.shouldPersistSettingsAfterInitialization = true;
+      }
+    }
 
     const xingtuLoginProfile = this.buildXingtuLoginProfile(
       existingXingtuLoginProfile
     );
     const legacyProfile = {
-      ...this.buildLegacyDefaultProfile(settings.gemini, legacyProfileForBuild),
+      ...this.buildLegacyDefaultProfile(gemini, legacyProfileForBuild),
       extraHeaders: this.normalizeStringRecord(
         existingLegacyProfile?.extraHeaders
       ),
@@ -1142,7 +1167,7 @@ class SettingsManager {
     const tuziBusinessProfile = this.buildTuziBusinessProfile(
       existingTuziBusinessProfile
     );
-    const legacyPreset = this.buildLegacyDefaultPreset(settings.gemini);
+    const legacyPreset = this.buildLegacyDefaultPreset(gemini);
 
     const providerProfiles = [
       xingtuLoginProfile,
@@ -1327,6 +1352,7 @@ class SettingsManager {
 
     return {
       ...settings,
+      gemini,
       migrations,
       providerProfiles,
       providerCatalogs,

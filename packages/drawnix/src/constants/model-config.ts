@@ -798,7 +798,8 @@ const BUILT_IN_VIDEO_MODELS: ModelConfig[] = [
     id: 'happyhorse-1.0-video-edit',
     label: 'HappyHorse 1.0 Video Edit',
     shortCode: 'h10v',
-    description: 'HappyHorse 视频参考生成视频，时长跟随输入视频，支持保留原音频',
+    description:
+      'HappyHorse 视频参考生成视频，时长跟随输入视频，支持保留原音频',
     type: 'video',
     vendor: ModelVendor.HAPPYHORSE,
     supportsTools: true,
@@ -1906,7 +1907,8 @@ export const VIDEO_PARAMS: ParamConfig[] = [
     id: 'duration',
     label: '视频时长',
     shortLabel: '时长',
-    description: 'HappyHorse 视频时长（3-15 秒整数；Video Edit 跟随输入视频，不支持此参数）',
+    description:
+      'HappyHorse 视频时长（3-15 秒整数；Video Edit 跟随输入视频，不支持此参数）',
     valueType: 'enum',
     options: [
       { value: '3', label: '3秒' },
