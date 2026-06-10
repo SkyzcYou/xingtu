@@ -76,6 +76,7 @@ import {
   resolveLegacyTaskInvocationRouteModel,
   shouldUseStrictTaskInvocationRoute,
 } from '../task-invocation-route';
+import { normalizeLlmTextContent } from '../../utils/llm-json-extractor';
 
 function inferAuthTypeFromRoute(
   route: ReturnType<typeof resolveInvocationRoute>
@@ -939,7 +940,9 @@ export class FallbackMediaExecutor implements IMediaExecutor {
 
       options?.onProgress?.({ progress: 80 });
 
-      const fullResponse = data.choices?.[0]?.message?.content || '';
+      const fullResponse = normalizeLlmTextContent(
+        data.choices?.[0]?.message?.content
+      );
       const elapsedTime = Date.now() - startTime;
 
       // 记录成功
@@ -1139,7 +1142,9 @@ export class FallbackMediaExecutor implements IMediaExecutor {
                 return response.json();
               });
 
-      const fullResponse = data.choices?.[0]?.message?.content || '';
+      const fullResponse = normalizeLlmTextContent(
+        data.choices?.[0]?.message?.content
+      );
       options?.onProgress?.({ progress: 100 });
       if (taskId) {
         await taskStorageWriter.completeTask(taskId, {
