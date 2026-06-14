@@ -1,3 +1,19 @@
+## 6.7.14 (2026-06-14)
+
+### 🚀 Features
+
+- port upstream workflow media features (a93db955)
+- add profile credit recharge entry (04efbe10)
+- add new user bonus credits (10fb9362)
+
+### 🩹 Fixes
+
+- refine credit recharge payment flow (40b45bb3)
+
+### ❤️  Thank You
+
+- SkyzcYou <youzhengcai@gmail.com>
+
 ## 6.7.13 (2026-05-29)
 
 ### 🚀 Features

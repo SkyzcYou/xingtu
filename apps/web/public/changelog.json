@@ -1,6 +1,23 @@
 {
   "versions": [
     {
+      "version": "6.7.14",
+      "date": "2026-06-14",
+      "changes": {
+        "features": [
+          "port upstream workflow media features (a93db955)",
+          "add profile credit recharge entry (04efbe10)",
+          "add new user bonus credits (10fb9362)"
+        ],
+        "fixes": [
+          "refine credit recharge payment flow (40b45bb3)"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "port upstream workflow media features (a93db955)"
+    },
+    {
       "version": "6.7.13",
       "date": "2026-05-29",
       "changes": {
