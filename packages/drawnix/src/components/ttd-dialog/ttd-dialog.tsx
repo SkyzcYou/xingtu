@@ -61,6 +61,10 @@ const TTDDialogComponent = ({
   const dialogInitialDataByType = appState.dialogInitialDataByType;
   const imageDialogInitialData =
     dialogInitialDataByType?.[DialogType.aiImageGeneration] ?? null;
+  const imageDialogSessionKey =
+    imageDialogInitialData?.prefillId ||
+    imageDialogInitialData?.batchId ||
+    'ai-image-dialog';
   const videoDialogInitialData =
     dialogInitialDataByType?.[DialogType.aiVideoGeneration] ?? null;
 
@@ -241,6 +245,18 @@ const TTDDialogComponent = ({
         return 'single';
       }
     });
+  const [imageDialogManualModeKey, setImageDialogManualModeKey] = useState<
+    string | null
+  >(null);
+  const shouldForceImageDialogSingleMode =
+    Boolean(imageDialogInitialData) &&
+    imageDialogManualModeKey !== imageDialogSessionKey;
+  const imageDialogRenderMode: ImageGenerationMode =
+    shouldForceImageDialogSingleMode ? 'single' : imageGenerationMode;
+
+  useEffect(() => {
+    setImageDialogManualModeKey(null);
+  }, [imageDialogSessionKey]);
 
   // 移动端/平板端自动切换回单图模式
   useEffect(() => {
@@ -251,6 +267,7 @@ const TTDDialogComponent = ({
 
   // 处理图片生成模式变化
   const handleImageModeChange = useCallback((mode: ImageGenerationMode) => {
+    setImageDialogManualModeKey(imageDialogSessionKey);
     setImageGenerationMode(mode);
     // 切换到批量模式时触发一次性全屏，切回时不调整尺寸（保持当前状态）
     if (mode === 'batch') {
@@ -264,12 +281,17 @@ const TTDDialogComponent = ({
     } catch (e) {
       console.warn('Failed to save image mode:', e);
     }
-  }, []);
+  }, [imageDialogSessionKey]);
 
   // 当对话框将要打开时，预先计算是否需要自动放大
   // 这需要在 WinBox 组件渲染前确定，且逻辑需要与 AIImageGeneration 的模式判断一致
   useEffect(() => {
     if (appState.openDialogTypes.has(DialogType.aiImageGeneration)) {
+      if (shouldForceImageDialogSingleMode) {
+        setImageDialogAutoMaximize(false);
+        return;
+      }
+
       // 如果有初始图片或初始提示词，说明是带内容进入，不自动放大（强制单图模式）
       const hasInitialContent =
         (aiImageData.initialImages && aiImageData.initialImages.length > 0) ||
@@ -294,6 +316,7 @@ const TTDDialogComponent = ({
     appState.openDialogTypes,
     aiImageData.initialImages,
     aiImageData.initialPrompt,
+    shouldForceImageDialogSingleMode,
   ]);
 
   const prevImageDialogOpenRef = useRef(false);
@@ -682,11 +705,11 @@ const TTDDialogComponent = ({
       </Dialog>
       {/* AI 图片生成窗口 - 使用 WinBox */}
       <WinBoxWindow
-        key={imageDialogInitialData?.prefillId || 'ai-image-window'}
+        key={imageDialogSessionKey}
         id="ai-image-dialog"
         visible={appState.openDialogTypes.has(DialogType.aiImageGeneration)}
         title={
-          imageGenerationMode === 'batch'
+          imageDialogRenderMode === 'batch'
             ? language === 'zh'
               ? '批量出图'
               : 'Batch Generation'
@@ -705,7 +728,7 @@ const TTDDialogComponent = ({
               <button
                 type="button"
                 className={`mode-tab ${
-                  imageGenerationMode === 'single' ? 'active' : ''
+                  imageDialogRenderMode === 'single' ? 'active' : ''
                 }`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -718,7 +741,7 @@ const TTDDialogComponent = ({
               <button
                 type="button"
                 className={`mode-tab ${
-                  imageGenerationMode === 'batch' ? 'active' : ''
+                  imageDialogRenderMode === 'batch' ? 'active' : ''
                 }`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -745,7 +768,7 @@ const TTDDialogComponent = ({
         autoMaximize={imageDialogAutoMaximize || isMobile}
       >
         {appState.openDialogTypes.has(DialogType.aiImageGeneration) &&
-          (imageGenerationMode === 'batch' ? (
+          (imageDialogRenderMode === 'batch' ? (
             <Suspense
               fallback={
                 <div className="loading-fallback">
@@ -763,11 +786,7 @@ const TTDDialogComponent = ({
             </Suspense>
           ) : (
             <AIImageGeneration
-              key={
-                imageDialogInitialData?.prefillId ||
-                imageDialogInitialData?.batchId ||
-                'ai-image-dialog'
-              }
+              key={imageDialogSessionKey}
               initialPrompt={aiImageData.initialPrompt}
               initialImages={aiImageData.initialImages}
               initialKnowledgeContextRefs={

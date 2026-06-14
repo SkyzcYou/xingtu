@@ -21,6 +21,7 @@ interface ChatMessagesAreaProps {
     workflow: WorkflowMessageData,
     stepIndex: number
   ) => void;
+  handleWorkflowReply: (workflow: WorkflowMessageData) => void;
   className?: string;
 }
 
@@ -29,6 +30,7 @@ export const ChatMessagesArea: React.FC<ChatMessagesAreaProps> = ({
   workflowMessages,
   retryingWorkflowId,
   handleWorkflowRetry,
+  handleWorkflowReply,
   className = 'chat-section',
 }) => {
   const [previewVisible, setPreviewVisible] = useState(false);
@@ -103,6 +105,7 @@ export const ChatMessagesArea: React.FC<ChatMessagesAreaProps> = ({
                       handleWorkflowRetry(workflowMsgId, workflowData, stepIndex)
                     }
                     isRetrying={retryingWorkflowId === workflowMsgId}
+                    onReply={() => handleWorkflowReply(workflowData)}
                   />
                 );
               }

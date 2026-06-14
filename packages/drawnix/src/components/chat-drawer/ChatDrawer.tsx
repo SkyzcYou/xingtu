@@ -40,6 +40,7 @@ import type {
   WorkflowMessageParams,
   AgentLogEntry,
   ChatMessage as ChatMessageType,
+  SelectedContentItem,
 } from '../../types/chat.types';
 import { MessageRole, MessageStatus } from '../../types/chat.types';
 import type { Task } from '../../types/task.types';
@@ -47,6 +48,10 @@ import type { Message } from '../../types/chat-ui.types';
 import { useTextSelection } from '../../hooks/useTextSelection';
 import { applyTaskUpdateToWorkflowMessage } from '../../utils/workflow-task-sync';
 import { resolveWorkflowSessionTarget } from '../../utils/chat-drawer-session-target';
+import {
+  getLatestWorkflowImageReferences,
+  shouldUseImplicitWorkflowReferences,
+} from './workflow-media-results';
 
 import { analytics } from '../../utils/posthog-analytics';
 import { HoverTip } from '../shared';
@@ -180,6 +185,12 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
       Map<string, WorkflowMessageData>
     >(new Map());
     const workflowMessagesRef = useRef(workflowMessages);
+    const [replyTarget, setReplyTarget] = useState<WorkflowMessageData | null>(
+      null
+    );
+    const [implicitReferenceContent, setImplicitReferenceContent] = useState<
+      SelectedContentItem[]
+    >([]);
     // 当前正在更新的工作流消息 ID
     const currentWorkflowMsgIdRef = useRef<string | null>(null);
     // 正在重试的工作流 ID
@@ -798,23 +809,84 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
       []
     );
 
+    const clearWorkflowReply = useCallback(() => {
+      setReplyTarget(null);
+      setImplicitReferenceContent([]);
+    }, []);
+
+    const handleWorkflowReply = useCallback(
+      (workflow: WorkflowMessageData) => {
+        const references = getLatestWorkflowImageReferences([workflow]);
+        if (references.length === 0) {
+          return;
+        }
+        setReplyTarget(workflow);
+        setImplicitReferenceContent(references);
+        setIsOpen(true);
+        onOpenChange?.(true);
+      },
+      [onOpenChange]
+    );
+
+    const withImplicitWorkflowReferences = useCallback((msg: Message): Message => {
+      const hasAttachedFile = msg.parts.some((part) => part.type === 'data-file');
+      if (hasAttachedFile) {
+        return msg;
+      }
+
+      const prompt = msg.parts
+        .filter((part) => part.type === 'text')
+        .map((part) => String((part as { text?: unknown }).text || ''))
+        .join('\n');
+
+      if (!shouldUseImplicitWorkflowReferences(prompt)) {
+        return msg;
+      }
+
+      const references = getLatestWorkflowImageReferences(
+        workflowMessagesRef.current.values()
+      );
+      if (references.length === 0) {
+        return msg;
+      }
+
+      return {
+        ...msg,
+        parts: [
+          ...msg.parts,
+          ...references.map(
+            (item, index) =>
+              ({
+                type: 'data-file',
+                data: {
+                  filename: `${item.type}-${index + 1}.png`,
+                  mediaType: 'image/png',
+                  url: item.url || '',
+                },
+              } as Message['parts'][number])
+          ),
+        ],
+      };
+    }, []);
+
     // Store pending message for retry after session creation or API key config
     const pendingMessageRef = React.useRef<Message | null>(null);
 
     // Handle send with auto-create session
     const handleSendWrapper = useCallback(
       async (msg: Message) => {
+        const outgoingMsg = withImplicitWorkflowReferences(msg);
         try {
           analytics.track('chat_message_send', {
-            hasImages: msg.parts.some((p) => p.type === 'image_url'), // Message parts uses image_url usually
+            hasImages: outgoingMsg.parts.some((p) => p.type === 'data-file'),
           });
           analytics.track('ai_modality_used', {
             modality: 'agent',
             action: 'message_send',
             source: 'chat_drawer',
-            hasImages: msg.parts.some((p) => p.type === 'image_url'),
-            partCount: msg.parts.length,
-            textLength: msg.parts
+            hasImages: outgoingMsg.parts.some((p) => p.type === 'data-file'),
+            partCount: outgoingMsg.parts.length,
+            textLength: outgoingMsg.parts
               .filter((part) => part.type === 'text')
               .reduce(
                 (total, part) => total + String((part as any).text || '').length,
@@ -825,7 +897,7 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           const settings = geminiSettings.get();
           if (!settings?.apiKey) {
             // Store message for sending after API key is configured
-            pendingMessageRef.current = msg;
+            pendingMessageRef.current = outgoingMsg;
             // Open settings dialog to configure API key
             setAppState({ ...appState, openSettings: true });
             return;
@@ -839,17 +911,17 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
             setSessions((prev) => [newSession, ...prev]);
             setActiveSessionId(newSession.id);
             // Store message to send after session is created
-            pendingMessageRef.current = msg;
+            pendingMessageRef.current = outgoingMsg;
             return;
           }
 
-          await chatHandler.sendMessage(msg);
+          await chatHandler.sendMessage(outgoingMsg);
         } catch (error) {
           console.error('[ChatDrawer] send message failed:', error);
-          pendingMessageRef.current = msg;
+          pendingMessageRef.current = outgoingMsg;
         }
       },
-      [activeSessionId, chatHandler, appState, setAppState]
+      [activeSessionId, chatHandler, appState, setAppState, withImplicitWorkflowReferences]
     );
 
     // 发送工作流消息
@@ -1576,6 +1648,7 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
                     workflowMessages={workflowMessages}
                     retryingWorkflowId={retryingWorkflowId}
                     handleWorkflowRetry={handleWorkflowRetry}
+                    handleWorkflowReply={handleWorkflowReply}
                   />
                 </Suspense>
               )}
@@ -1584,6 +1657,13 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
                 selectedContent={selectedContent}
                 onSend={handleSendWrapper}
                 placeholder="继续描述要修改的内容..."
+                implicitReferenceContent={implicitReferenceContent}
+                implicitReferenceLabel={
+                  replyTarget ? '已引用工作流生成结果' : undefined
+                }
+                implicitReferencePinned={Boolean(replyTarget)}
+                onImplicitReferenceClear={clearWorkflowReply}
+                onImplicitReferenceConsumed={clearWorkflowReply}
               />
             </div>
           </div>

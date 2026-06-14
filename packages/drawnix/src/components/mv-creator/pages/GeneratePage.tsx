@@ -1003,6 +1003,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       initialPrompt: draft?.prompt || prompt,
       initialKnowledgeContextRefs: knowledgeContextRefs,
       batchId: shotBatchId,
+      prefillId: shotBatchId,
       initialAspectRatio: draft?.aspectRatio ?? selectedImageAspectRatio,
       initialModel: imageModel || undefined,
       initialModelRef: imageModelRef,

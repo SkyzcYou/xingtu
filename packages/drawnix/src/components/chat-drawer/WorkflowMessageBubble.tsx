@@ -21,6 +21,7 @@ import {
   getWorkflowBubbleStatus,
   normalizeWorkflowStepsForDisplay,
 } from '../../utils/workflow-bubble-status';
+import { collectWorkflowMediaResults } from './workflow-media-results';
 import './workflow-message-bubble.scss';
 
 const MermaidRenderer = lazy(() =>
@@ -334,6 +335,8 @@ interface WorkflowMessageBubbleProps {
   onRetry?: (stepIndex: number) => void;
   /** 是否正在重试 */
   isRetrying?: boolean;
+  /** 回复当前工作流媒体结果 */
+  onReply?: () => void;
 }
 
 export const WorkflowMessageBubble: React.FC<WorkflowMessageBubbleProps> = ({
@@ -341,10 +344,16 @@ export const WorkflowMessageBubble: React.FC<WorkflowMessageBubbleProps> = ({
   className = '',
   onRetry,
   isRetrying = false,
+  onReply,
 }) => {
   const normalizedSteps = useMemo(() => {
     return normalizeWorkflowStepsForDisplay(workflow.steps);
   }, [workflow.steps]);
+
+  const mediaResults = useMemo(
+    () => collectWorkflowMediaResults(workflow, normalizedSteps),
+    [normalizedSteps, workflow]
+  );
 
   // 计算工作流状态。图片生成以任务队列完成为准，画布插入不再阻塞抽屉收口。
   const workflowStatus = useMemo(() => {
@@ -625,6 +634,48 @@ export const WorkflowMessageBubble: React.FC<WorkflowMessageBubbleProps> = ({
             <div className="workflow-bubble__logs-list">
               {workflow.logs.map((log, index) => (
                 <AgentLogItem key={`log-${index}-${log.timestamp}`} log={log} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {isCompleted && mediaResults.length > 0 && (
+          <div className="workflow-bubble__media-results">
+            <div className="workflow-bubble__media-header">
+              <span>生成结果</span>
+              {onReply && (
+                <button
+                  type="button"
+                  className="workflow-bubble__reply-btn"
+                  onClick={onReply}
+                >
+                  回复
+                </button>
+              )}
+            </div>
+            <div className="workflow-bubble__media-grid">
+              {mediaResults.map((item, index) => (
+                <div
+                  key={`${item.url}-${index}`}
+                  className={`workflow-bubble__media-item workflow-bubble__media-item--${item.type}`}
+                >
+                  {item.type === 'image' ? (
+                    <img
+                      src={item.url}
+                      alt={item.title || `生成结果 ${index + 1}`}
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : item.type === 'video' ? (
+                    <video
+                      src={item.url}
+                      poster={item.thumbnailUrl}
+                      controls
+                      preload="metadata"
+                    />
+                  ) : (
+                    <audio src={item.url} controls />
+                  )}
+                </div>
               ))}
             </div>
           </div>

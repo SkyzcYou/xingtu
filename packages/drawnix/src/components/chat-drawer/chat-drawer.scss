@@ -928,6 +928,29 @@ $drawer-input-max-height: 280px;
   }
 }
 
+.enhanced-chat-input__implicit-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  width: fit-content;
+  border: 1px solid var(--td-component-border);
+  border-radius: 999px;
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+}
+
+.enhanced-chat-input__implicit-clear {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--td-brand-color);
+  cursor: pointer;
+  font-size: 12px;
+}
+
 // ============================================================================
 // Mobile Styles
 // ============================================================================

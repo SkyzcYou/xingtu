@@ -46,6 +46,11 @@ interface EnhancedChatInputProps {
   onSend: (message: Message) => void | Promise<void>;
   disabled?: boolean;
   placeholder?: string;
+  implicitReferenceContent?: SelectedContentItem[];
+  implicitReferenceLabel?: string;
+  implicitReferencePinned?: boolean;
+  onImplicitReferenceClear?: () => void;
+  onImplicitReferenceConsumed?: () => void;
 }
 
 /**
@@ -60,12 +65,33 @@ export interface EnhancedChatInputRef {
   focus: () => void;
 }
 
+function dedupeContentByUrl(items: SelectedContentItem[]): SelectedContentItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = item.url || item.text || item.name;
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export const EnhancedChatInput = forwardRef<
   EnhancedChatInputRef,
   EnhancedChatInputProps
 >(
   (
-    { selectedContent, onSend, disabled = false, placeholder = '输入消息...' },
+    {
+      selectedContent,
+      onSend,
+      disabled = false,
+      placeholder = '输入消息...',
+      implicitReferenceContent = [],
+      implicitReferenceLabel,
+      implicitReferencePinned = false,
+      onImplicitReferenceClear,
+      onImplicitReferenceConsumed,
+    },
     ref
   ) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -77,8 +103,13 @@ export const EnhancedChatInput = forwardRef<
     >([]);
     const [showMediaLibrary, setShowMediaLibrary] = useState(false);
     const allContent = useMemo(
-      () => [...uploadedContent, ...selectedContent],
-      [selectedContent, uploadedContent]
+      () =>
+        dedupeContentByUrl([
+          ...uploadedContent,
+          ...implicitReferenceContent,
+          ...selectedContent,
+        ]),
+      [implicitReferenceContent, selectedContent, uploadedContent]
     );
     const hasSelection = allContent.length > 0;
     const { addHistory: addPromptHistory } = usePromptHistory();
@@ -257,9 +288,11 @@ export const EnhancedChatInput = forwardRef<
 
         setInput('');
         setUploadedContent([]);
+        onImplicitReferenceConsumed?.();
       },
       [
         chatDrawerControl,
+        onImplicitReferenceConsumed,
         generationControls.generationType,
         generationControls.selectedCount,
         generationControls.selectedModel,
@@ -323,9 +356,13 @@ export const EnhancedChatInput = forwardRef<
         addPromptHistory(trimmedInput, hasSelection, 'agent');
       }
 
-      void Promise.resolve(onSend(message)).catch((error) => {
-        console.error('[EnhancedChatInput] send failed:', error);
-      });
+      void Promise.resolve(onSend(message))
+        .then(() => {
+          onImplicitReferenceConsumed?.();
+        })
+        .catch((error) => {
+          console.error('[EnhancedChatInput] send failed:', error);
+        });
       setInput('');
       setUploadedContent([]);
     }, [
@@ -334,6 +371,7 @@ export const EnhancedChatInput = forwardRef<
       generationControls.generationType,
       submitGeneration,
       onSend,
+      onImplicitReferenceConsumed,
       addPromptHistory,
       hasSelection,
     ]);
@@ -371,6 +409,29 @@ export const EnhancedChatInput = forwardRef<
 
       return (
         <div className="enhanced-chat-input__selection">
+          {implicitReferenceContent.length > 0 && (
+            <div
+              className={`enhanced-chat-input__implicit-reference ${
+                implicitReferencePinned
+                  ? 'enhanced-chat-input__implicit-reference--pinned'
+                  : ''
+              }`}
+            >
+              <span>
+                {implicitReferenceLabel ||
+                  (language === 'zh' ? '已引用生成结果' : 'Referenced result')}
+              </span>
+              {onImplicitReferenceClear && (
+                <button
+                  type="button"
+                  onClick={onImplicitReferenceClear}
+                  className="enhanced-chat-input__implicit-clear"
+                >
+                  {language === 'zh' ? '移除' : 'Remove'}
+                </button>
+              )}
+            </div>
+          )}
           <SelectedContentPreview
             items={allContent}
             language="zh"

@@ -1042,6 +1042,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     openDialog(DialogType.aiImageGeneration, {
       initialPrompt: draft?.prompt || prompt,
       batchId: shotBatchId,
+      prefillId: shotBatchId,
       initialAspectRatio: draft?.aspectRatio ?? selectedImageAspectRatio,
       initialModel: imageModel || undefined,
       initialModelRef: imageModelRef,
