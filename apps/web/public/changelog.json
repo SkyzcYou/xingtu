@@ -1,6 +1,20 @@
 {
   "versions": [
     {
+      "version": "6.7.15",
+      "date": "2026-06-16",
+      "changes": {
+        "features": [],
+        "fixes": [],
+        "improvements": [
+          "修复 PR188 文本内容数组归一化 (b661f2a8)",
+          "修复多图生成 JSON 解析和默认模型迁移 (979d04a2)"
+        ]
+      },
+      "type": "patch",
+      "highlights": "构建修复与稳定性改进"
+    },
+    {
       "version": "6.7.14",
       "date": "2026-06-14",
       "changes": {

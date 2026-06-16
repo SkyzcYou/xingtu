@@ -1,6 +1,9 @@
 {
-  "version": "6.7.14",
-  "buildTime": "2026-06-14T10:19:42.966Z",
+  "version": "6.7.15",
+  "buildTime": "2026-06-16T11:27:18.786Z",
   "gitCommit": "unknown",
-  "changelog": []
+  "changelog": [
+    "修复多图生成 JSON 解析和默认模型迁移",
+    "修复 PR188 文本内容数组归一化"
+  ]
 }

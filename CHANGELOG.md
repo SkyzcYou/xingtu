@@ -1,3 +1,15 @@
+## 6.7.15 (2026-06-16)
+
+### 🔧 Chores
+
+- 修复 PR188 文本内容数组归一化 (b661f2a8)
+- 修复多图生成 JSON 解析和默认模型迁移 (979d04a2)
+
+### ❤️  Thank You
+
+- liquid <ljquan@qq.com>
+- 水滴鱼 <shuidiyu@shuidiyudeMacBook-Neo.local>
+
 ## 6.7.14 (2026-06-14)
 
 ### 🚀 Features
