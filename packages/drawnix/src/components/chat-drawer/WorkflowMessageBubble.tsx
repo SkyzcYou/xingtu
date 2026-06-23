@@ -11,12 +11,15 @@ import React, {
   useMemo,
   useRef,
   useEffect,
+  useCallback,
 } from 'react';
 import type {
   WorkflowMessageData,
   AgentLogEntry,
 } from '../../types/chat.types';
 import MarkdownReadonly from '../MarkdownReadonly';
+import { UnifiedMediaViewer } from '../shared/media-preview/UnifiedMediaViewer';
+import type { MediaItem } from '../shared/media-preview/types';
 import {
   getWorkflowBubbleStatus,
   normalizeWorkflowStepsForDisplay,
@@ -354,6 +357,36 @@ export const WorkflowMessageBubble: React.FC<WorkflowMessageBubbleProps> = ({
     () => collectWorkflowMediaResults(workflow, normalizedSteps),
     [normalizedSteps, workflow]
   );
+  const mediaViewerItems = useMemo<MediaItem[]>(
+    () =>
+      mediaResults.map((item, index) => ({
+        url: item.url,
+        type: item.type,
+        title: item.title || `生成结果 ${index + 1}`,
+        alt: item.title || `生成结果 ${index + 1}`,
+        posterUrl: item.thumbnailUrl,
+      })),
+    [mediaResults]
+  );
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerInitialIndex, setViewerInitialIndex] = useState(0);
+  const handleMediaPreview = useCallback((index: number) => {
+    setViewerInitialIndex(index);
+    setViewerVisible(true);
+  }, []);
+  const handleViewerClose = useCallback(() => {
+    setViewerVisible(false);
+  }, []);
+  const handleMediaKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
+      event.preventDefault();
+      handleMediaPreview(index);
+    },
+    [handleMediaPreview]
+  );
 
   // 计算工作流状态。图片生成以任务队列完成为准，画布插入不再阻塞抽屉收口。
   const workflowStatus = useMemo(() => {
@@ -447,6 +480,11 @@ export const WorkflowMessageBubble: React.FC<WorkflowMessageBubbleProps> = ({
       return { variant: 'info' as const, icon: '❌', text: '生成失败' };
     }
 
+    // 媒体结果已经在结果区展示，避免再渲染工具返回的 markdown 摘要。
+    if (mediaResults.length > 0) {
+      return null;
+    }
+
     // 直接展示最后一个 content
     if (lastContent) {
       return {
@@ -463,7 +501,13 @@ export const WorkflowMessageBubble: React.FC<WorkflowMessageBubbleProps> = ({
 
     // 没有任何内容
     return { variant: 'info' as const, icon: 'ℹ️', text: '未生成任何内容' };
-  }, [isCompleted, isFailed, lastContent, hasMediaGeneration]);
+  }, [
+    isCompleted,
+    isFailed,
+    lastContent,
+    hasMediaGeneration,
+    mediaResults.length,
+  ]);
 
   const markdownSummary = useMemo(() => {
     if (!summaryView || summaryView.variant !== 'markdown') return null;
@@ -587,28 +631,42 @@ export const WorkflowMessageBubble: React.FC<WorkflowMessageBubbleProps> = ({
           </div>
         )}
 
-        {shouldShowDetailsToggle && (
-          <button
-            type="button"
-            className="workflow-bubble__details-toggle"
-            onClick={() => setShowCompletedDetails((value) => !value)}
-            aria-expanded={showCompletedDetails}
-            aria-label={
-              showCompletedDetails ? '收起执行详情' : '查看执行详情'
-            }
-          >
-            <span>{showCompletedDetails ? '收起详情' : '查看详情'}</span>
-            <span
-              className={`workflow-bubble__details-toggle-icon ${
-                showCompletedDetails
-                  ? 'workflow-bubble__details-toggle-icon--open'
-                  : ''
-              }`}
-              aria-hidden="true"
-            >
-              ▼
-            </span>
-          </button>
+        {(shouldShowDetailsToggle ||
+          (isCompleted && mediaResults.length > 0 && onReply)) && (
+          <div className="workflow-bubble__actions">
+            {shouldShowDetailsToggle && (
+              <button
+                type="button"
+                className="workflow-bubble__details-toggle"
+                onClick={() => setShowCompletedDetails((value) => !value)}
+                aria-expanded={showCompletedDetails}
+                aria-label={
+                  showCompletedDetails ? '收起执行详情' : '查看执行详情'
+                }
+              >
+                <span>{showCompletedDetails ? '收起详情' : '查看详情'}</span>
+                <span
+                  className={`workflow-bubble__details-toggle-icon ${
+                    showCompletedDetails
+                      ? 'workflow-bubble__details-toggle-icon--open'
+                      : ''
+                  }`}
+                  aria-hidden="true"
+                >
+                  ▼
+                </span>
+              </button>
+            )}
+            {isCompleted && mediaResults.length > 0 && onReply && (
+              <button
+                type="button"
+                className="workflow-bubble__reply-btn"
+                onClick={onReply}
+              >
+                回复
+              </button>
+            )}
+          </div>
         )}
 
         {/* 步骤列表 */}
@@ -641,45 +699,60 @@ export const WorkflowMessageBubble: React.FC<WorkflowMessageBubbleProps> = ({
 
         {isCompleted && mediaResults.length > 0 && (
           <div className="workflow-bubble__media-results">
-            <div className="workflow-bubble__media-header">
-              <span>生成结果</span>
-              {onReply && (
-                <button
-                  type="button"
-                  className="workflow-bubble__reply-btn"
-                  onClick={onReply}
-                >
-                  回复
-                </button>
-              )}
-            </div>
-            <div className="workflow-bubble__media-grid">
+            <div className="workflow-bubble__media-header">生成结果</div>
+            <div className="workflow-bubble__media-grid" aria-label="生成结果">
               {mediaResults.map((item, index) => (
-                <div
+                <button
                   key={`${item.url}-${index}`}
+                  type="button"
                   className={`workflow-bubble__media-item workflow-bubble__media-item--${item.type}`}
+                  aria-label={`查看生成结果 ${index + 1}`}
+                  onClick={(event) => event.stopPropagation()}
+                  onDoubleClick={() => handleMediaPreview(index)}
+                  onKeyDown={(event) => handleMediaKeyDown(event, index)}
                 >
                   {item.type === 'image' ? (
                     <img
+                      className="workflow-bubble__media-preview"
                       src={item.url}
                       alt={item.title || `生成结果 ${index + 1}`}
                       referrerPolicy="no-referrer"
                     />
                   ) : item.type === 'video' ? (
                     <video
+                      className="workflow-bubble__media-preview"
                       src={item.url}
                       poster={item.thumbnailUrl}
-                      controls
                       preload="metadata"
+                      muted
                     />
                   ) : (
-                    <audio src={item.url} controls />
+                    <div className="workflow-bubble__audio-preview">
+                      <span
+                        className="workflow-bubble__audio-icon"
+                        role="img"
+                        aria-label="音频"
+                      >
+                        🎵
+                      </span>
+                      <span>{item.title || `音频 ${index + 1}`}</span>
+                    </div>
                   )}
-                </div>
+                </button>
               ))}
             </div>
           </div>
         )}
+
+        <UnifiedMediaViewer
+          visible={viewerVisible}
+          items={mediaViewerItems}
+          initialIndex={viewerInitialIndex}
+          onClose={handleViewerClose}
+          showThumbnails
+          showTitle
+          videoAutoPlay={false}
+        />
 
         {/* 完成摘要 */}
         {summaryView && summaryView.variant !== 'markdown' && (

@@ -999,11 +999,12 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
       : undefined;
     const characterReferenceImages = getShotCharacterReferenceImages(shot);
     const shotBatchId = `mv_${record.id}_shot${shot.id}_first`;
+    const prefillId = `${shotBatchId}_${Date.now()}`;
     openDialog(DialogType.aiImageGeneration, {
       initialPrompt: draft?.prompt || prompt,
       initialKnowledgeContextRefs: knowledgeContextRefs,
       batchId: shotBatchId,
-      prefillId: shotBatchId,
+      prefillId,
       initialAspectRatio: draft?.aspectRatio ?? selectedImageAspectRatio,
       initialModel: imageModel || undefined,
       initialModelRef: imageModelRef,

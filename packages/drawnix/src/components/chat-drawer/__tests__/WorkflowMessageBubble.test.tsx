@@ -15,6 +15,19 @@ import {
   normalizeWorkflowStepsForDisplay,
 } from '../../../utils/workflow-bubble-status';
 
+vi.mock('../../shared/media-preview/UnifiedMediaViewer', () => ({
+  UnifiedMediaViewer: ({
+    visible,
+    initialIndex,
+  }: {
+    visible: boolean;
+    initialIndex: number | number[];
+  }) =>
+    visible ? (
+      <div data-testid="unified-media-viewer">viewer-{initialIndex}</div>
+    ) : null,
+}));
+
 function createImageWorkflow(
   overrides: Partial<WorkflowMessageData> = {}
 ): WorkflowMessageData {
@@ -128,6 +141,55 @@ describe('WorkflowMessageBubble rendering', () => {
     expect(screen.getByText('生成图片 (1/3)')).toBeTruthy();
     expect(screen.getByText('生成图片 (2/3)')).toBeTruthy();
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('renders media results as preview buttons', () => {
+    render(<WorkflowMessageBubble workflow={createImageWorkflow()} />);
+
+    expect(screen.getByLabelText('生成结果')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: '查看生成结果 1' })
+    ).toBeTruthy();
+  });
+
+  it('opens the unified media viewer from a media result', () => {
+    render(<WorkflowMessageBubble workflow={createImageWorkflow()} />);
+
+    fireEvent.doubleClick(
+      screen.getByRole('button', { name: '查看生成结果 2' })
+    );
+
+    expect(screen.getByTestId('unified-media-viewer').textContent).toBe(
+      'viewer-1'
+    );
+  });
+
+  it('calls reply handler from the workflow media action row', () => {
+    const onReply = vi.fn();
+    render(
+      <WorkflowMessageBubble workflow={createImageWorkflow()} onReply={onReply} />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '回复' }));
+
+    expect(onReply).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits markdown summary when generated media results are present', () => {
+    const workflow = createImageWorkflow({
+      steps: createImageWorkflow().steps.map((step, index) => ({
+        ...step,
+        result: {
+          content: '这段摘要不应重复显示',
+          imageUrl: `/__aitu_cache__/image/result-${index}.png`,
+        },
+      })),
+    });
+
+    render(<WorkflowMessageBubble workflow={workflow} />);
+
+    expect(screen.queryByText('这段摘要不应重复显示')).toBeNull();
+    expect(screen.getByLabelText('生成结果')).toBeTruthy();
   });
 
   it('keeps running workflow steps visible immediately', () => {
