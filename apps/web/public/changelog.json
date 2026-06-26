@@ -1,6 +1,21 @@
 {
   "versions": [
     {
+      "version": "6.7.16",
+      "date": "2026-06-26",
+      "changes": {
+        "features": [
+          "补齐工作流媒体结果交互 (4d359aaa)"
+        ],
+        "fixes": [
+          "修复画布分组插入布局 (e281ca3d)"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "补齐工作流媒体结果交互 (4d359aaa)"
+    },
+    {
       "version": "6.7.15",
       "date": "2026-06-16",
       "changes": {

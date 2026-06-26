@@ -1,3 +1,17 @@
+## 6.7.16 (2026-06-26)
+
+### 🚀 Features
+
+- 补齐工作流媒体结果交互 (4d359aaa)
+
+### 🩹 Fixes
+
+- 修复画布分组插入布局 (e281ca3d)
+
+### ❤️  Thank You
+
+- SkyzcYou <youzhengcai@gmail.com>
+
 ## 6.7.15 (2026-06-16)
 
 ### 🔧 Chores
