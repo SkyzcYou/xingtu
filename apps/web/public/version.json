@@ -1,9 +1,6 @@
 {
-  "version": "6.7.16",
-  "buildTime": "2026-06-26T21:06:13.579Z",
+  "version": "6.7.17",
+  "buildTime": "2026-07-02T07:02:11.791Z",
   "gitCommit": "unknown",
-  "changelog": [
-    "补齐工作流媒体结果交互",
-    "修复画布分组插入布局"
-  ]
+  "changelog": []
 }
