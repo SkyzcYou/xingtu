@@ -1,6 +1,8 @@
 {
-  "version": "6.7.17",
-  "buildTime": "2026-07-02T07:02:11.791Z",
+  "version": "6.7.18",
+  "buildTime": "2026-07-12T00:00:00.000Z",
   "gitCommit": "unknown",
-  "changelog": []
+  "changelog": [
+    "主站积分充值支持 NoiPay 收银台二维码支付"
+  ]
 }

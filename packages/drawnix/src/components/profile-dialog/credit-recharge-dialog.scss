@@ -59,6 +59,7 @@
   &__section,
   &__submit,
   &__result {
+    flex: 0 0 auto;
     border: 1px solid var(--cr-border);
     border-radius: 16px;
     background: var(--cr-surface);
@@ -91,7 +92,6 @@
   &__section {
     display: grid;
     gap: 12px;
-    min-height: 0;
     padding: 14px;
   }
 
@@ -290,6 +290,65 @@
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-all;
+  }
+
+  &__qr-payment {
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+    border: 1px dashed rgba(var(--cr-accent-rgb), 0.34);
+    border-radius: 14px;
+    padding: 14px;
+    background: rgba(var(--cr-accent-rgb), 0.06);
+  }
+
+  &__qr-card {
+    display: grid;
+    place-items: center;
+    width: min(100%, 256px);
+    border-radius: 14px;
+    padding: 16px;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    box-sizing: border-box;
+
+    svg {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+  }
+
+  &__qr-help {
+    display: grid;
+    gap: 6px;
+    max-width: 360px;
+    text-align: center;
+
+    strong {
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    p,
+    span {
+      overflow-wrap: anywhere;
+      margin: 0;
+      color: var(--cr-muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+  }
+
+  &__qr-actions {
+    justify-content: center;
+  }
+
+  &__polling-status {
+    margin: 0;
+    color: var(--cr-muted);
+    font-size: 12px;
+    line-height: 1.5;
   }
 
   &__notice,

@@ -74,6 +74,9 @@ importers:
       postmessage-duplex:
         specifier: ^1.2.0
         version: 1.2.0
+      qrcode.react:
+        specifier: ^4.2.0
+        version: 4.2.0(react@18.3.1)
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -456,7 +459,7 @@ importers:
         version: 6.4.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.30.2)(sass@1.97.2)(terser@5.46.0)
       vite-plugin-dts:
         specifier: ^4.3.0
-        version: 4.5.4(@types/node@22.19.15)(rollup@4.55.1)(typescript@5.8.2)(vite@6.4.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.30.2)(sass@1.97.2)(terser@5.46.0))
+        version: 4.5.4(@types/node@22.19.15)(rollup@4.55.1)(typescript@5.4.5)(vite@6.4.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.30.2)(sass@1.97.2)(terser@5.46.0))
 
 packages:
 
@@ -5914,6 +5917,11 @@ packages:
     resolution: {integrity: sha512-oUeWlIg0pMz8YM5pu0uqakM+cCyYyXkHBxx9di9OUELu9X9+AYrNGGRLK9tNME3WfN3JGGqQIH3b4/E9LGek/w==}
     engines: {node: '>=18'}
 
+  qrcode.react@4.2.0:
+    resolution: {integrity: sha512-QpgqWi8rD9DsS9EP3z7BT+5lY5SFhsqGjpgW5DY/i3mK4M9DTBNz3ErMi8BWYEfI3L0d8GIbGmcdFAS1uIRGjA==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
   qs@6.14.1:
     resolution: {integrity: sha512-4EK3+xJl8Ts67nLYNwqw/dsFVnCf+qR7RgXSK9jEEm9unao3njwMDdmsdvoKBKHzxd7tCYz5e5M+SnMjdtXGQQ==}
     engines: {node: '>=0.6'}
@@ -10333,19 +10341,6 @@ snapshots:
     optionalDependencies:
       typescript: 5.4.5
 
-  '@vue/language-core@2.2.0(typescript@5.8.2)':
-    dependencies:
-      '@volar/language-core': 2.4.27
-      '@vue/compiler-dom': 3.5.26
-      '@vue/compiler-vue2': 2.7.16
-      '@vue/shared': 3.5.26
-      alien-signals: 0.4.14
-      minimatch: 9.0.5
-      muggle-string: 0.4.1
-      path-browserify: 1.0.1
-    optionalDependencies:
-      typescript: 5.8.2
-
   '@vue/reactivity@3.5.27':
     dependencies:
       '@vue/shared': 3.5.27
@@ -14183,6 +14178,10 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  qrcode.react@4.2.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
+
   qs@6.14.1:
     dependencies:
       side-channel: 1.1.0
@@ -15335,18 +15334,18 @@ snapshots:
       - rollup
       - supports-color
 
-  vite-plugin-dts@4.5.4(@types/node@22.19.15)(rollup@4.55.1)(typescript@5.8.2)(vite@6.4.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.30.2)(sass@1.97.2)(terser@5.46.0)):
+  vite-plugin-dts@4.5.4(@types/node@22.19.15)(rollup@4.55.1)(typescript@5.4.5)(vite@6.4.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.30.2)(sass@1.97.2)(terser@5.46.0)):
     dependencies:
       '@microsoft/api-extractor': 7.55.2(@types/node@22.19.15)
       '@rollup/pluginutils': 5.3.0(rollup@4.55.1)
       '@volar/typescript': 2.4.27
-      '@vue/language-core': 2.2.0(typescript@5.8.2)
+      '@vue/language-core': 2.2.0(typescript@5.4.5)
       compare-versions: 6.1.1
       debug: 4.4.3
       kolorist: 1.8.0
       local-pkg: 1.1.2
       magic-string: 0.30.21
-      typescript: 5.8.2
+      typescript: 5.4.5
     optionalDependencies:
       vite: 6.4.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.30.2)(sass@1.97.2)(terser@5.46.0)
     transitivePeerDependencies:

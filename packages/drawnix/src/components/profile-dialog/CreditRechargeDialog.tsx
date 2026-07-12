@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CreditCard, ExternalLink, RefreshCw } from 'lucide-react';
-import { Button, Dialog } from 'tdesign-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
+import { Copy, CreditCard, ExternalLink, RefreshCw } from 'lucide-react';
+import { Button, Dialog, MessagePlugin } from '../../utils/tdesign';
 import {
   createCreditRechargeOrder,
   getAccountCreditBalance,
@@ -11,6 +12,7 @@ import {
   type PaymentOrder,
   type RechargePackage,
 } from '../../services/account-credit-service';
+import { copyToClipboard } from '../../utils/runtime-helpers';
 import './credit-recharge-dialog.scss';
 
 export interface CreditRechargeDialogProps {
@@ -21,7 +23,12 @@ export interface CreditRechargeDialogProps {
   onRechargeSuccess?: () => void;
 }
 
+type PaymentAction =
+  | { kind: 'jump'; url: string }
+  | { kind: 'cashier_url'; url: string };
+
 const creditFormatter = new Intl.NumberFormat('zh-CN');
+const ORDER_POLL_INTERVAL_MS = 5000;
 
 const payChannelLabels: Record<PayChannel, string> = {
   alipay: '支付宝',
@@ -45,15 +52,17 @@ export function CreditRechargeDialog({
   const [actionError, setActionError] = useState<string | null>(null);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [queryingOrderNo, setQueryingOrderNo] = useState<string | null>(null);
+  const successNotifiedOrderNoRef = useRef<string | null>(null);
 
-  const latestPaymentUrl = useMemo(
-    () => getSafePaymentUrl(latestOrder?.payType ?? null, latestOrder?.payInfo ?? null),
+  const latestPaymentAction = useMemo(
+    () => getPaymentAction(latestOrder?.payType ?? null, latestOrder?.payInfo ?? null),
     [latestOrder]
   );
   const selectedPackage = useMemo(
     () => packages.find((item) => item.id === selectedPackageId) ?? null,
     [packages, selectedPackageId]
   );
+  const latestOrderPolling = latestOrder ? shouldPollOrder(latestOrder.order) : false;
 
   const loadDialogData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -80,6 +89,42 @@ export function CreditRechargeDialog({
     setBalance(balanceResult.balance);
   }, []);
 
+  const notifyRechargeSuccess = useCallback((order: PaymentOrder) => {
+    if (!order.creditedAt || successNotifiedOrderNoRef.current === order.outTradeNo) return;
+    successNotifiedOrderNoRef.current = order.outTradeNo;
+    void MessagePlugin.success('充值已入账');
+    onRechargeSuccess?.();
+  }, [onRechargeSuccess]);
+
+  const refreshOrderStatus = useCallback(async (
+    outTradeNo: string,
+    options?: { manual?: boolean; signal?: AbortSignal; silent?: boolean }
+  ) => {
+    if (options?.manual) {
+      setQueryingOrderNo(outTradeNo);
+      setActionError(null);
+    }
+
+    try {
+      const updatedOrder = await queryCreditRechargeOrder(outTradeNo, options?.signal);
+      setLatestOrder((current) => (
+        current?.order.outTradeNo === outTradeNo
+          ? { ...current, order: updatedOrder }
+          : current
+      ));
+      await refreshBalance();
+      notifyRechargeSuccess(updatedOrder);
+    } catch (error) {
+      if (!options?.silent && !options?.signal?.aborted) {
+        setActionError(error instanceof Error ? error.message : '支付状态查询失败');
+      }
+    } finally {
+      if (options?.manual) {
+        setQueryingOrderNo(null);
+      }
+    }
+  }, [notifyRechargeSuccess, refreshBalance]);
+
   const handleCreateOrder = useCallback(async () => {
     if (!selectedPackage) {
       setActionError('请先选择充值套餐');
@@ -94,40 +139,35 @@ export function CreditRechargeDialog({
         device: getPaymentDevice(),
         returnUrl: buildProfileReturnUrl(),
       });
+      successNotifiedOrderNoRef.current = null;
       setLatestOrder(result);
       await refreshBalance();
+      notifyRechargeSuccess(result.order);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '充值订单创建失败');
     } finally {
       setCreatingOrder(false);
     }
-  }, [payChannel, refreshBalance, selectedPackage]);
+  }, [notifyRechargeSuccess, payChannel, refreshBalance, selectedPackage]);
 
   const handleQueryOrder = useCallback(async (outTradeNo: string) => {
-    setQueryingOrderNo(outTradeNo);
-    setActionError(null);
-    try {
-      const updatedOrder = await queryCreditRechargeOrder(outTradeNo);
-      setLatestOrder((current) => (
-        current?.order.outTradeNo === outTradeNo
-          ? { ...current, order: updatedOrder }
-          : current
-      ));
-      await refreshBalance();
-      if (updatedOrder.creditedAt) {
-        onRechargeSuccess?.();
-      }
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : '支付状态查询失败');
-    } finally {
-      setQueryingOrderNo(null);
-    }
-  }, [onRechargeSuccess, refreshBalance]);
+    await refreshOrderStatus(outTradeNo, { manual: true });
+  }, [refreshOrderStatus]);
 
   const handleOpenPayment = useCallback(() => {
-    if (!latestPaymentUrl) return;
-    window.open(latestPaymentUrl, '_blank', 'noopener,noreferrer');
-  }, [latestPaymentUrl]);
+    if (!latestPaymentAction) return;
+    window.open(latestPaymentAction.url, '_blank', 'noopener,noreferrer');
+  }, [latestPaymentAction]);
+
+  const handleCopyPaymentUrl = useCallback(async () => {
+    if (!latestPaymentAction) return;
+    try {
+      await copyToClipboard(latestPaymentAction.url);
+      void MessagePlugin.success('支付链接已复制');
+    } catch {
+      void MessagePlugin.error('复制失败');
+    }
+  }, [latestPaymentAction]);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -143,6 +183,45 @@ export function CreditRechargeDialog({
       setSelectedPackageId(packages[0].id);
     }
   }, [packages, selectedPackageId]);
+
+  useEffect(() => {
+    if (!visible || !latestOrder || !shouldPollOrder(latestOrder.order)) return undefined;
+
+    const outTradeNo = latestOrder.order.outTradeNo;
+    const controller = new AbortController();
+    let stopped = false;
+    let inFlight = false;
+
+    const poll = async () => {
+      if (stopped || inFlight) return;
+      inFlight = true;
+      try {
+        await refreshOrderStatus(outTradeNo, {
+          signal: controller.signal,
+          silent: true,
+        });
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void poll();
+    }, ORDER_POLL_INTERVAL_MS);
+
+    return () => {
+      stopped = true;
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [
+    latestOrder?.order.creditedAt,
+    latestOrder?.order.outTradeNo,
+    latestOrder?.order.status,
+    latestOrder,
+    refreshOrderStatus,
+    visible,
+  ]);
 
   return (
     <Dialog
@@ -238,8 +317,10 @@ export function CreditRechargeDialog({
           <LatestOrderPanel
             order={latestOrder.order}
             payInfo={latestOrder.payInfo}
-            paymentUrl={latestPaymentUrl}
+            paymentAction={latestPaymentAction}
+            polling={latestOrderPolling}
             querying={queryingOrderNo === latestOrder.order.outTradeNo}
+            onCopyPayment={handleCopyPaymentUrl}
             onOpenPayment={handleOpenPayment}
             onQuery={() => void handleQueryOrder(latestOrder.order.outTradeNo)}
           />
@@ -258,8 +339,10 @@ export function CreditRechargeDialog({
 interface LatestOrderPanelProps {
   order: PaymentOrder;
   payInfo: string | null;
-  paymentUrl: string | null;
+  paymentAction: PaymentAction | null;
+  polling: boolean;
   querying: boolean;
+  onCopyPayment: () => void;
   onOpenPayment: () => void;
   onQuery: () => void;
 }
@@ -267,8 +350,10 @@ interface LatestOrderPanelProps {
 function LatestOrderPanel({
   order,
   payInfo,
-  paymentUrl,
+  paymentAction,
+  polling,
   querying,
+  onCopyPayment,
   onOpenPayment,
   onQuery,
 }: LatestOrderPanelProps) {
@@ -279,8 +364,17 @@ function LatestOrderPanel({
         <strong>{order.outTradeNo}</strong>
         <p>{order.amount} 元 · {creditFormatter.format(order.creditAmount ?? 0)} 积分 · {getPaymentStatusText(order)}</p>
       </div>
+
+      {paymentAction?.kind === 'cashier_url' && (
+        <CashierUrlPaymentPanel
+          url={paymentAction.url}
+          onCopy={onCopyPayment}
+          onOpen={onOpenPayment}
+        />
+      )}
+
       <div className="credit-recharge-dialog__result-actions">
-        {paymentUrl && (
+        {paymentAction?.kind === 'jump' && (
           <Button variant="outline" className="credit-recharge-dialog__pay-button" onClick={onOpenPayment}>
             <ExternalLink size={14} />
             前往支付
@@ -290,21 +384,80 @@ function LatestOrderPanel({
           查询支付状态
         </Button>
       </div>
-      {payInfo && !paymentUrl && (
+
+      {polling && (
+        <p className="credit-recharge-dialog__polling-status" role="status" aria-live="polite">
+          正在自动查询支付状态...
+        </p>
+      )}
+
+      {payInfo && !paymentAction && (
         <pre className="credit-recharge-dialog__pay-info">{payInfo}</pre>
       )}
     </section>
   );
 }
 
-function getSafePaymentUrl(payType: string | null, payInfo: string | null): string | null {
-  if (payType !== 'jump' || !payInfo) return null;
+interface CashierUrlPaymentPanelProps {
+  url: string;
+  onCopy: () => void;
+  onOpen: () => void;
+}
+
+function CashierUrlPaymentPanel({ url, onCopy, onOpen }: CashierUrlPaymentPanelProps) {
+  const host = useMemo(() => {
+    try {
+      return new URL(url).host;
+    } catch {
+      return '';
+    }
+  }, [url]);
+
+  return (
+    <div className="credit-recharge-dialog__qr-payment" aria-label="NoiPay 收银台二维码">
+      <div className="credit-recharge-dialog__qr-card">
+        <QRCodeSVG
+          value={url}
+          size={224}
+          level="M"
+          marginSize={4}
+          title="NoiPay 收银台二维码"
+        />
+      </div>
+      <div className="credit-recharge-dialog__qr-help">
+        <strong>扫码打开 NoiPay 收银台</strong>
+        <p>请使用支付宝或微信扫码完成支付。支付后保持窗口打开，系统会自动更新积分。</p>
+        {host && <span>支付域名：{host}</span>}
+      </div>
+      <div className="credit-recharge-dialog__result-actions credit-recharge-dialog__qr-actions">
+        <Button variant="outline" onClick={onCopy}>
+          <Copy size={14} />
+          复制链接
+        </Button>
+        <Button variant="outline" className="credit-recharge-dialog__pay-button" onClick={onOpen}>
+          <ExternalLink size={14} />
+          打开收银台
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function getPaymentAction(payType: string | null, payInfo: string | null): PaymentAction | null {
+  if ((payType !== 'jump' && payType !== 'cashier_url') || !payInfo) return null;
   try {
     const url = new URL(payInfo);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+    return url.protocol === 'http:' || url.protocol === 'https:'
+      ? { kind: payType, url: url.toString() }
+      : null;
   } catch {
     return null;
   }
+}
+
+function shouldPollOrder(order: PaymentOrder): boolean {
+  if (order.creditedAt) return false;
+  return !['failed', 'refunded', 'frozen'].includes(order.status);
 }
 
 function buildProfileReturnUrl(): string {
