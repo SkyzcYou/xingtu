@@ -58,4 +58,5 @@ test-results/
 apps/web/public/user-manual/
 
 localdoc
+noipay_docs/
 .claude

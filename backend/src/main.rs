@@ -9,6 +9,8 @@ mod llm_config;
 mod message_events;
 mod messages;
 mod models;
+mod noipay;
+mod payment_provider;
 mod qingke;
 mod routes;
 mod trust;
@@ -17,6 +19,8 @@ use axum::http::{HeaderValue, Method};
 use config::AppConfig;
 use llm_config::LlmProxyConfigCache;
 use message_events::{spawn_message_event_listener, MessageEventHub};
+use noipay::NoipayClient;
+use payment_provider::{PaymentProvider, PaymentProviderKind, PaymentProviders};
 use qingke::QingkeClient;
 use routes::AppState;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
@@ -38,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = AppConfig::from_env()?;
     let pool = db::create_pool(&config.database).await?;
-    let qingke = QingkeClient::new(&config)?;
+    let payment_providers = build_payment_providers(&config)?;
     let trust = TrustClient::new(&config);
     let http_client = reqwest::Client::new();
     let llm_config_cache = Arc::new(LlmProxyConfigCache::new(Duration::from_secs(
@@ -52,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = routes::router(AppState {
         pool,
         config,
-        qingke,
+        payment_providers,
         trust,
         http_client,
         llm_config_cache,
@@ -67,6 +71,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     Ok(())
+}
+
+fn build_payment_providers(
+    config: &AppConfig,
+) -> Result<PaymentProviders, Box<dyn std::error::Error>> {
+    let default = PaymentProviderKind::from_str(&config.payment_provider)?;
+    let qingke = if config.qingke_pid.is_some()
+        && config.qingke_merchant_private_key_pem.is_some()
+        && config.qingke_platform_public_key_pem.is_some()
+    {
+        Some(Arc::new(QingkeClient::new(config)?) as Arc<dyn PaymentProvider>)
+    } else {
+        None
+    };
+    let noipay = if config.noipay_app_id.is_some()
+        && config.noipay_app_secret.is_some()
+        && config.noipay_webhook_secret.is_some()
+    {
+        Some(Arc::new(NoipayClient::new(config)?) as Arc<dyn PaymentProvider>)
+    } else {
+        None
+    };
+    Ok(PaymentProviders::new(default, qingke, noipay))
 }
 
 fn build_cors_layer(origin: &str) -> Result<CorsLayer, Box<dyn std::error::Error>> {

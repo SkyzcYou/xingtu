@@ -1,6 +1,6 @@
 use crate::{
     config::AppConfig, llm_config::LlmProxyConfigCache, message_events::MessageEventHub,
-    qingke::QingkeClient, trust::TrustClient,
+    payment_provider::PaymentProviders, trust::TrustClient,
 };
 use axum::Router;
 use reqwest::Client;
@@ -24,7 +24,7 @@ mod payments;
 pub struct AppState {
     pub pool: PgPool,
     pub config: AppConfig,
-    pub qingke: QingkeClient,
+    pub payment_providers: PaymentProviders,
     pub trust: TrustClient,
     pub http_client: Client,
     pub llm_config_cache: Arc<LlmProxyConfigCache>,

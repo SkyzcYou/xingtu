@@ -3,7 +3,7 @@ use crate::{
     credit_recharge::credit_paid_recharge_order,
     error::{AppError, AppResult},
     models::{PaymentOrder, PaymentOrderResponse, PaymentStatus},
-    qingke::QingkeCreatePaymentInput,
+    payment_provider::{CreatePaymentInput, PaymentProviderKind, PaymentWebhookInput},
 };
 use axum::{
     extract::{Path, Query, State},
@@ -26,7 +26,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/orders", post(create_order))
         .route("/api/orders/:out_trade_no", get(get_order))
         .route("/api/orders/:out_trade_no/query", post(query_order))
-        .route("/api/pay/notify", get(handle_notify))
+        .route(
+            "/api/pay/notify",
+            get(handle_qingke_notify).post(handle_noipay_notify),
+        )
         .route("/api/pay/return", get(pay_return))
 }
 
@@ -65,9 +68,11 @@ async fn create_order(
     let amount = parse_amount(&request.amount)?;
     let pay_channel = validate_pay_channel(request.pay_channel.as_deref())?;
     let out_trade_no = create_out_trade_no();
+    let provider = state.payment_providers.default_provider()?;
     let order = insert_order(
         &state.pool,
         &out_trade_no,
+        provider.kind().as_str(),
         &name,
         amount,
         &pay_channel,
@@ -81,49 +86,40 @@ async fn create_order(
             .unwrap_or_else(|| format!("{}/api/pay/return", state.config.public_base_url)),
         &out_trade_no,
     );
-    let qingke_response = state
-        .qingke
-        .create_payment(QingkeCreatePaymentInput {
-            method: "jump".to_string(),
-            device: request.device.unwrap_or_else(|| "pc".to_string()),
+    let payment_response = provider
+        .create_payment(CreatePaymentInput {
+            device: request.device,
             pay_channel,
             out_trade_no: out_trade_no.clone(),
             notify_url: format!("{}/api/pay/notify", state.config.public_base_url),
             return_url,
             name,
-            money: order.amount.to_string(),
-            clientip: client_ip(&headers),
+            amount: order.amount,
+            client_ip: client_ip(&headers),
             param: request.param,
         })
         .await;
 
-    let qingke_response = match qingke_response {
-        Ok(response) if response.code == 0 => response,
-        Ok(response) => {
-            mark_order_failed(&state.pool, &out_trade_no).await?;
-            return Err(AppError::external(
-                response
-                    .msg
-                    .unwrap_or_else(|| "qingke create payment failed".to_string()),
-            ));
-        }
+    let payment_response = match payment_response {
+        Ok(response) => response,
         Err(error) => {
             mark_order_failed(&state.pool, &out_trade_no).await?;
             return Err(error);
         }
     };
 
-    let order = update_order_qingke_trade_no(
+    let order = update_order_provider_trade_no(
         &state.pool,
         &out_trade_no,
-        qingke_response.trade_no.as_deref(),
+        payment_response.provider_trade_no.as_deref(),
+        payment_response.api_trade_no.as_deref(),
     )
     .await?;
 
     Ok(Json(CreateOrderResponse {
         order: order.into(),
-        pay_type: qingke_response.pay_type,
-        pay_info: qingke_response.pay_info,
+        pay_type: payment_response.pay_type,
+        pay_info: payment_response.pay_info,
     }))
 }
 
@@ -140,32 +136,22 @@ async fn query_order(
     Path(out_trade_no): Path<String>,
 ) -> AppResult<Json<PaymentOrderResponse>> {
     let order = find_order(&state.pool, &out_trade_no).await?;
-    let qingke_response = state.qingke.query_payment(&order.out_trade_no).await?;
-    if qingke_response.code != 0 {
-        return Err(AppError::external(
-            qingke_response
-                .msg
-                .unwrap_or_else(|| "qingke query payment failed".to_string()),
-        ));
-    }
+    let provider = state.payment_providers.provider_for_order(&order)?;
+    let payment_response = provider.query_payment(&order).await?;
 
-    if let Some(money) = &qingke_response.money {
-        let remote_amount = parse_amount(money)?;
+    if let Some(remote_amount) = payment_response.amount {
         if remote_amount != order.amount {
-            return Err(AppError::bad_request("qingke order amount mismatch"));
+            return Err(AppError::bad_request("payment order amount mismatch"));
         }
     }
 
-    let status = qingke_response
-        .status
-        .map(PaymentStatus::from_qingke_status)
-        .unwrap_or(PaymentStatus::Pending);
-    let updated = update_order_from_qingke_query(
+    let status = payment_response.status;
+    let updated = update_order_from_provider_query(
         &state.pool,
         &out_trade_no,
-        qingke_response.trade_no.as_deref(),
-        qingke_response.api_trade_no.as_deref(),
-        qingke_response.buyer.as_deref(),
+        payment_response.provider_trade_no.as_deref(),
+        payment_response.api_trade_no.as_deref(),
+        payment_response.buyer.as_deref(),
         status,
     )
     .await?;
@@ -178,67 +164,90 @@ async fn query_order(
     ))
 }
 
-async fn handle_notify(
+async fn handle_qingke_notify(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(params): Query<BTreeMap<String, String>>,
 ) -> AppResult<&'static str> {
-    let out_trade_no = params.get("out_trade_no").cloned();
-    let trade_no = params.get("trade_no").cloned();
+    handle_provider_notify(
+        &state,
+        PaymentProviderKind::Qingke,
+        PaymentWebhookInput {
+            headers,
+            query_params: params,
+            raw_body: Vec::new(),
+        },
+    )
+    .await
+}
 
-    if let Err(error) = state.qingke.verify_notify(&params) {
-        insert_notify_event(
-            &state.pool,
-            out_trade_no.as_deref(),
-            trade_no.as_deref(),
-            &params,
-            false,
-            false,
-            &error.to_string(),
-        )
-        .await?;
-        return Err(error);
+async fn handle_noipay_notify(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> AppResult<&'static str> {
+    let result = handle_provider_notify(
+        &state,
+        PaymentProviderKind::Noipay,
+        PaymentWebhookInput {
+            headers,
+            query_params: BTreeMap::new(),
+            raw_body: body.to_vec(),
+        },
+    )
+    .await;
+
+    if let Err(error) = result {
+        tracing::warn!(?error, "noipay webhook acknowledged after processing error");
     }
 
-    if params.get("pid").map(String::as_str) != Some(state.qingke.pid()) {
-        insert_notify_event(
-            &state.pool,
-            out_trade_no.as_deref(),
-            trade_no.as_deref(),
-            &params,
-            true,
-            false,
-            "pid mismatch",
-        )
-        .await?;
-        return Err(AppError::bad_request("pid mismatch"));
-    }
+    Ok("success")
+}
 
-    if params.get("trade_status").map(String::as_str) != Some("TRADE_SUCCESS") {
-        insert_notify_event(
-            &state.pool,
-            out_trade_no.as_deref(),
-            trade_no.as_deref(),
-            &params,
-            true,
-            false,
-            "trade_status is not TRADE_SUCCESS",
-        )
-        .await?;
-        return Err(AppError::bad_request("trade_status is not TRADE_SUCCESS"));
-    }
+async fn handle_provider_notify(
+    state: &AppState,
+    kind: PaymentProviderKind,
+    input: PaymentWebhookInput,
+) -> AppResult<&'static str> {
+    let provider = state.payment_providers.provider(kind)?;
+    let event = match provider.parse_webhook(input).await {
+        Ok(event) => event,
+        Err(error) => {
+            insert_notify_event(
+                &state.pool,
+                None,
+                None,
+                &json!({ "provider": kind.as_str() }),
+                false,
+                false,
+                &error.to_string(),
+            )
+            .await?;
+            return Err(error);
+        }
+    };
 
-    let out_trade_no = out_trade_no.ok_or_else(|| AppError::bad_request("missing out_trade_no"))?;
-    let order = find_order(&state.pool, &out_trade_no).await?;
-    let remote_amount = params
-        .get("money")
-        .ok_or_else(|| AppError::bad_request("missing money"))
-        .and_then(|money| parse_amount(money))?;
-    if remote_amount != order.amount {
+    let order = match event.out_trade_no.as_deref() {
+        Some(out_trade_no) => find_order(&state.pool, out_trade_no).await?,
+        None => {
+            find_order_by_provider_trade_no(
+                &state.pool,
+                kind.as_str(),
+                event
+                    .provider_trade_no
+                    .as_deref()
+                    .ok_or_else(|| AppError::bad_request("missing provider trade number"))?,
+            )
+            .await?
+        }
+    };
+
+    if order.amount != event.amount {
         insert_notify_event(
             &state.pool,
-            Some(&out_trade_no),
-            trade_no.as_deref(),
-            &params,
+            Some(&order.out_trade_no),
+            event.provider_trade_no.as_deref(),
+            &event.payload,
             true,
             false,
             "amount mismatch",
@@ -247,21 +256,23 @@ async fn handle_notify(
         return Err(AppError::bad_request("amount mismatch"));
     }
 
-    mark_order_paid(
+    update_order_from_provider_query(
         &state.pool,
-        &out_trade_no,
-        trade_no.as_deref(),
-        params.get("api_trade_no").map(String::as_str),
-        params.get("buyer").map(String::as_str),
-        &params,
+        &order.out_trade_no,
+        event.provider_trade_no.as_deref(),
+        event.api_trade_no.as_deref(),
+        event.buyer.as_deref(),
+        event.status,
     )
     .await?;
-    credit_paid_recharge_order(&state.pool, &out_trade_no).await?;
+    if event.status == PaymentStatus::Paid {
+        credit_paid_recharge_order(&state.pool, &order.out_trade_no).await?;
+    }
     insert_notify_event(
         &state.pool,
-        Some(&out_trade_no),
-        trade_no.as_deref(),
-        &params,
+        Some(&order.out_trade_no),
+        event.provider_trade_no.as_deref(),
+        &event.payload,
         true,
         true,
         "processed",
@@ -351,6 +362,7 @@ fn html_escape(value: &str) -> String {
 async fn insert_order(
     pool: &PgPool,
     out_trade_no: &str,
+    payment_provider: &str,
     name: &str,
     amount: Decimal,
     pay_channel: &str,
@@ -359,6 +371,7 @@ async fn insert_order(
     sqlx::query_as::<_, PaymentOrder>(ORDER_RETURNING_SQL)
         .bind(Uuid::new_v4())
         .bind(out_trade_no)
+        .bind(payment_provider)
         .bind(name)
         .bind(amount)
         .bind(pay_channel)
@@ -370,7 +383,7 @@ async fn insert_order(
 
 async fn find_order(pool: &PgPool, out_trade_no: &str) -> AppResult<PaymentOrder> {
     sqlx::query_as::<_, PaymentOrder>(
-        "SELECT id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at
+        "SELECT id, out_trade_no, qingke_trade_no, api_trade_no, payment_provider, provider_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at
          FROM payment_orders WHERE out_trade_no = $1",
     )
     .bind(out_trade_no)
@@ -379,19 +392,41 @@ async fn find_order(pool: &PgPool, out_trade_no: &str) -> AppResult<PaymentOrder
     .ok_or_else(|| AppError::not_found("order not found"))
 }
 
-async fn update_order_qingke_trade_no(
+async fn find_order_by_provider_trade_no(
+    pool: &PgPool,
+    payment_provider: &str,
+    provider_trade_no: &str,
+) -> AppResult<PaymentOrder> {
+    sqlx::query_as::<_, PaymentOrder>(
+        "SELECT id, out_trade_no, qingke_trade_no, api_trade_no, payment_provider, provider_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at
+         FROM payment_orders
+         WHERE payment_provider = $1 AND provider_trade_no = $2",
+    )
+    .bind(payment_provider)
+    .bind(provider_trade_no)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::not_found("order not found"))
+}
+
+async fn update_order_provider_trade_no(
     pool: &PgPool,
     out_trade_no: &str,
-    qingke_trade_no: Option<&str>,
+    provider_trade_no: Option<&str>,
+    api_trade_no: Option<&str>,
 ) -> AppResult<PaymentOrder> {
     sqlx::query_as::<_, PaymentOrder>(
         "UPDATE payment_orders
-         SET qingke_trade_no = COALESCE($2, qingke_trade_no), updated_at = now()
+         SET provider_trade_no = COALESCE($2, provider_trade_no),
+             qingke_trade_no = COALESCE($2, qingke_trade_no),
+             api_trade_no = COALESCE($3, api_trade_no),
+             updated_at = now()
          WHERE out_trade_no = $1
-         RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at",
+         RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, payment_provider, provider_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at",
     )
     .bind(out_trade_no)
-    .bind(qingke_trade_no)
+    .bind(provider_trade_no)
+    .bind(api_trade_no)
     .fetch_one(pool)
     .await
     .map_err(Into::into)
@@ -407,27 +442,28 @@ async fn mark_order_failed(pool: &PgPool, out_trade_no: &str) -> AppResult<()> {
     Ok(())
 }
 
-async fn update_order_from_qingke_query(
+async fn update_order_from_provider_query(
     pool: &PgPool,
     out_trade_no: &str,
-    trade_no: Option<&str>,
+    provider_trade_no: Option<&str>,
     api_trade_no: Option<&str>,
     buyer: Option<&str>,
     status: PaymentStatus,
 ) -> AppResult<PaymentOrder> {
     sqlx::query_as::<_, PaymentOrder>(
         "UPDATE payment_orders
-         SET qingke_trade_no = COALESCE($2, qingke_trade_no),
+         SET provider_trade_no = COALESCE($2, provider_trade_no),
+             qingke_trade_no = COALESCE($2, qingke_trade_no),
              api_trade_no = COALESCE($3, api_trade_no),
              buyer = COALESCE($4, buyer),
              status = $5,
              paid_at = CASE WHEN $5 = 'paid' AND paid_at IS NULL THEN now() ELSE paid_at END,
              updated_at = now()
          WHERE out_trade_no = $1
-         RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at",
+         RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, payment_provider, provider_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at",
     )
     .bind(out_trade_no)
-    .bind(trade_no)
+    .bind(provider_trade_no)
     .bind(api_trade_no)
     .bind(buyer)
     .bind(status.as_str())
@@ -436,40 +472,11 @@ async fn update_order_from_qingke_query(
     .map_err(Into::into)
 }
 
-async fn mark_order_paid(
-    pool: &PgPool,
-    out_trade_no: &str,
-    trade_no: Option<&str>,
-    api_trade_no: Option<&str>,
-    buyer: Option<&str>,
-    params: &BTreeMap<String, String>,
-) -> AppResult<()> {
-    sqlx::query(
-        "UPDATE payment_orders
-         SET qingke_trade_no = COALESCE($2, qingke_trade_no),
-             api_trade_no = COALESCE($3, api_trade_no),
-             buyer = COALESCE($4, buyer),
-             notify_payload = $5,
-             status = 'paid',
-             paid_at = COALESCE(paid_at, now()),
-             updated_at = now()
-         WHERE out_trade_no = $1",
-    )
-    .bind(out_trade_no)
-    .bind(trade_no)
-    .bind(api_trade_no)
-    .bind(buyer)
-    .bind(json!(params))
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
 async fn insert_notify_event(
     pool: &PgPool,
     out_trade_no: Option<&str>,
     trade_no: Option<&str>,
-    params: &BTreeMap<String, String>,
+    payload: &serde_json::Value,
     signature_valid: bool,
     processed: bool,
     message: &str,
@@ -481,7 +488,7 @@ async fn insert_notify_event(
     .bind(Uuid::new_v4())
     .bind(out_trade_no)
     .bind(trade_no)
-    .bind(json!(params))
+    .bind(payload)
     .bind(signature_valid)
     .bind(processed)
     .bind(message)
@@ -491,6 +498,6 @@ async fn insert_notify_event(
 }
 
 const ORDER_RETURNING_SQL: &str =
-    "INSERT INTO payment_orders (id, out_trade_no, name, amount, pay_channel, status, param)
-     VALUES ($1, $2, $3, $4, $5, 'pending', $6)
-     RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at";
+    "INSERT INTO payment_orders (id, out_trade_no, payment_provider, name, amount, pay_channel, status, param)
+     VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+     RETURNING id, out_trade_no, qingke_trade_no, api_trade_no, payment_provider, provider_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload, principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at, created_at, updated_at, paid_at";

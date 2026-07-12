@@ -21,10 +21,17 @@ services:
       DATABASE_MIN_CONNECTIONS: ${DATABASE_MIN_CONNECTIONS:-2}
       DATABASE_ACQUIRE_TIMEOUT_SECONDS: ${DATABASE_ACQUIRE_TIMEOUT_SECONDS:-5}
       LLM_CONFIG_CACHE_TTL_SECONDS: ${LLM_CONFIG_CACHE_TTL_SECONDS:-30}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-qingke}
       QINGKE_API_BASE: ${QINGKE_API_BASE:-https://pay.xianlai.work}
-      QINGKE_PID: ${QINGKE_PID:?QINGKE_PID is required}
-      QINGKE_MERCHANT_PRIVATE_KEY_PEM: ${QINGKE_MERCHANT_PRIVATE_KEY_PEM:?QINGKE_MERCHANT_PRIVATE_KEY_PEM is required}
-      QINGKE_PLATFORM_PUBLIC_KEY_PEM: ${QINGKE_PLATFORM_PUBLIC_KEY_PEM:?QINGKE_PLATFORM_PUBLIC_KEY_PEM is required}
+      QINGKE_PID: ${QINGKE_PID:-}
+      QINGKE_MERCHANT_PRIVATE_KEY_PEM: ${QINGKE_MERCHANT_PRIVATE_KEY_PEM:-}
+      QINGKE_PLATFORM_PUBLIC_KEY_PEM: ${QINGKE_PLATFORM_PUBLIC_KEY_PEM:-}
+      # NoiPay dashboard Webhook URL: ${PUBLIC_BASE_URL:-https://api.xingtu.live}/api/pay/notify
+      # Subscribe at least: payment.succeeded, payment.failed, payment.closed, refund.succeeded
+      NOIPAY_API_BASE: ${NOIPAY_API_BASE:-https://api.noipay.net/api}
+      NOIPAY_APP_ID: ${NOIPAY_APP_ID:-}
+      NOIPAY_APP_SECRET: ${NOIPAY_APP_SECRET:-}
+      NOIPAY_WEBHOOK_SECRET: ${NOIPAY_WEBHOOK_SECRET:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://api.xingtu.live}
       CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-https://xingtu.live,https://www.xingtu.live,https://console.xingtu.live,http://localhost:7200,http://localhost:5174}
       TRUST_BASE_URL: ${TRUST_BASE_URL:-https://trust-api.skyzcstack.space}

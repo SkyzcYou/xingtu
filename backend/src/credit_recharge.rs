@@ -145,7 +145,7 @@ pub async fn list_recharge_orders(
     principal_id: Uuid,
 ) -> AppResult<RechargeOrdersResponse> {
     let orders = sqlx::query_as::<_, PaymentOrder>(
-        "SELECT id, out_trade_no, qingke_trade_no, api_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload,
+        "SELECT id, out_trade_no, qingke_trade_no, api_trade_no, payment_provider, provider_trade_no, name, amount, pay_channel, status, param, buyer, notify_payload,
                 principal_id, credit_package_id, credit_amount, credit_ledger_id, credited_at,
                 created_at, updated_at, paid_at
          FROM payment_orders

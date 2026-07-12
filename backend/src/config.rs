@@ -15,10 +15,15 @@ pub struct AppConfig {
     pub server_port: u16,
     pub database: DatabasePoolConfig,
     pub llm_config_cache_ttl_seconds: u64,
+    pub payment_provider: String,
     pub qingke_api_base: String,
-    pub qingke_pid: String,
-    pub qingke_merchant_private_key_pem: String,
-    pub qingke_platform_public_key_pem: String,
+    pub qingke_pid: Option<String>,
+    pub qingke_merchant_private_key_pem: Option<String>,
+    pub qingke_platform_public_key_pem: Option<String>,
+    pub noipay_api_base: String,
+    pub noipay_app_id: Option<String>,
+    pub noipay_app_secret: Option<String>,
+    pub noipay_webhook_secret: Option<String>,
     pub public_base_url: String,
     pub cors_allowed_origin: String,
     pub trust_base_url: String,
@@ -45,19 +50,52 @@ impl AppConfig {
             ));
         }
 
+        let payment_provider = env_or("PAYMENT_PROVIDER", "qingke");
+        if !matches!(payment_provider.as_str(), "qingke" | "noipay") {
+            return Err(AppError::config(
+                "PAYMENT_PROVIDER must be qingke or noipay",
+            ));
+        }
+
+        let qingke_pid = optional_env("QINGKE_PID");
+        let qingke_merchant_private_key_pem =
+            optional_env("QINGKE_MERCHANT_PRIVATE_KEY_PEM").map(|value| normalize_pem(&value));
+        let qingke_platform_public_key_pem =
+            optional_env("QINGKE_PLATFORM_PUBLIC_KEY_PEM").map(|value| normalize_pem(&value));
+        let noipay_app_id = optional_env("NOIPAY_APP_ID");
+        let noipay_app_secret = optional_env("NOIPAY_APP_SECRET");
+        let noipay_webhook_secret = optional_env("NOIPAY_WEBHOOK_SECRET");
+
+        if payment_provider == "qingke" {
+            require_present("QINGKE_PID", qingke_pid.as_deref())?;
+            require_present(
+                "QINGKE_MERCHANT_PRIVATE_KEY_PEM",
+                qingke_merchant_private_key_pem.as_deref(),
+            )?;
+            require_present(
+                "QINGKE_PLATFORM_PUBLIC_KEY_PEM",
+                qingke_platform_public_key_pem.as_deref(),
+            )?;
+        } else {
+            require_present("NOIPAY_APP_ID", noipay_app_id.as_deref())?;
+            require_present("NOIPAY_APP_SECRET", noipay_app_secret.as_deref())?;
+            require_present("NOIPAY_WEBHOOK_SECRET", noipay_webhook_secret.as_deref())?;
+        }
+
         Ok(Self {
             server_host: env_or("SERVER_HOST", "0.0.0.0"),
             server_port,
             database,
             llm_config_cache_ttl_seconds: env_u64_or("LLM_CONFIG_CACHE_TTL_SECONDS", 30)?.max(1),
+            payment_provider,
             qingke_api_base: env_or("QINGKE_API_BASE", "https://pay.xianlai.work"),
-            qingke_pid: require_env("QINGKE_PID")?,
-            qingke_merchant_private_key_pem: normalize_pem(&require_env(
-                "QINGKE_MERCHANT_PRIVATE_KEY_PEM",
-            )?),
-            qingke_platform_public_key_pem: normalize_pem(&require_env(
-                "QINGKE_PLATFORM_PUBLIC_KEY_PEM",
-            )?),
+            qingke_pid,
+            qingke_merchant_private_key_pem,
+            qingke_platform_public_key_pem,
+            noipay_api_base: env_or("NOIPAY_API_BASE", "https://api.noipay.net/api"),
+            noipay_app_id,
+            noipay_app_secret,
+            noipay_webhook_secret,
             public_base_url: require_env("PUBLIC_BASE_URL")?
                 .trim_end_matches('/')
                 .to_string(),
@@ -75,6 +113,17 @@ impl AppConfig {
 
 fn require_env(name: &str) -> AppResult<String> {
     env::var(name).map_err(|_| AppError::config(format!("missing required env {name}")))
+}
+
+fn optional_env(name: &str) -> Option<String> {
+    env::var(name).ok().filter(|value| !value.trim().is_empty())
+}
+
+fn require_present(name: &str, value: Option<&str>) -> AppResult<()> {
+    value
+        .filter(|value| !value.trim().is_empty())
+        .map(|_| ())
+        .ok_or_else(|| AppError::config(format!("missing required env {name}")))
 }
 
 fn env_or(name: &str, default: &str) -> String {

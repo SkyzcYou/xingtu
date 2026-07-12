@@ -1,6 +1,11 @@
 use crate::{
     config::AppConfig,
     error::{AppError, AppResult},
+    models::PaymentStatus,
+    payment_provider::{
+        CreatePaymentInput, CreatePaymentOutput, PaymentProvider, PaymentProviderKind,
+        PaymentWebhookEvent, PaymentWebhookInput, QueryPaymentOutput,
+    },
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Utc;
@@ -65,16 +70,29 @@ impl QingkeClient {
     pub fn new(config: &AppConfig) -> AppResult<Self> {
         Ok(Self {
             api_base: config.qingke_api_base.trim_end_matches('/').to_string(),
-            pid: config.qingke_pid.clone(),
+            pid: config
+                .qingke_pid
+                .clone()
+                .ok_or_else(|| AppError::config("missing required env QINGKE_PID"))?,
             client: Client::builder()
                 .connect_timeout(QINGKE_CONNECT_TIMEOUT)
                 .timeout(QINGKE_REQUEST_TIMEOUT)
                 .build()?,
             merchant_private_key: Arc::new(parse_private_key(
-                &config.qingke_merchant_private_key_pem,
+                config
+                    .qingke_merchant_private_key_pem
+                    .as_deref()
+                    .ok_or_else(|| {
+                        AppError::config("missing required env QINGKE_MERCHANT_PRIVATE_KEY_PEM")
+                    })?,
             )?),
             platform_public_key: Arc::new(parse_public_key(
-                &config.qingke_platform_public_key_pem,
+                config
+                    .qingke_platform_public_key_pem
+                    .as_deref()
+                    .ok_or_else(|| {
+                        AppError::config("missing required env QINGKE_PLATFORM_PUBLIC_KEY_PEM")
+                    })?,
             )?),
         })
     }
@@ -258,6 +276,130 @@ fn json_value_to_string(value: &Value) -> String {
 
 fn parse_i64(value: Option<&String>) -> Option<i64> {
     value.and_then(|value| value.parse::<i64>().ok())
+}
+
+impl PaymentProvider for QingkeClient {
+    fn kind(&self) -> PaymentProviderKind {
+        PaymentProviderKind::Qingke
+    }
+
+    fn create_payment<'a>(
+        &'a self,
+        input: CreatePaymentInput,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = AppResult<CreatePaymentOutput>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let response = QingkeClient::create_payment(
+                self,
+                QingkeCreatePaymentInput {
+                    method: "jump".to_string(),
+                    device: input.device.unwrap_or_else(|| "pc".to_string()),
+                    pay_channel: input.pay_channel,
+                    out_trade_no: input.out_trade_no,
+                    notify_url: input.notify_url,
+                    return_url: input.return_url,
+                    name: input.name,
+                    money: input.amount.to_string(),
+                    clientip: input.client_ip,
+                    param: input.param,
+                },
+            )
+            .await?;
+
+            if response.code != 0 {
+                return Err(AppError::external(
+                    response
+                        .msg
+                        .unwrap_or_else(|| "qingke create payment failed".to_string()),
+                ));
+            }
+
+            Ok(CreatePaymentOutput {
+                provider_trade_no: response.trade_no,
+                api_trade_no: None,
+                pay_type: response.pay_type,
+                pay_info: response.pay_info,
+            })
+        })
+    }
+
+    fn query_payment<'a>(
+        &'a self,
+        order: &'a crate::models::PaymentOrder,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = AppResult<QueryPaymentOutput>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let response = QingkeClient::query_payment(self, &order.out_trade_no).await?;
+            if response.code != 0 {
+                return Err(AppError::external(
+                    response
+                        .msg
+                        .unwrap_or_else(|| "qingke query payment failed".to_string()),
+                ));
+            }
+
+            Ok(QueryPaymentOutput {
+                provider_trade_no: response.trade_no,
+                api_trade_no: response.api_trade_no,
+                buyer: response.buyer,
+                amount: response
+                    .money
+                    .as_deref()
+                    .map(|money| {
+                        rust_decimal::Decimal::from_str_exact(money)
+                            .map_err(|_| AppError::external("qingke order amount is invalid"))
+                    })
+                    .transpose()?,
+                status: response
+                    .status
+                    .map(PaymentStatus::from_qingke_status)
+                    .unwrap_or(PaymentStatus::Pending),
+            })
+        })
+    }
+
+    fn parse_webhook<'a>(
+        &'a self,
+        input: PaymentWebhookInput,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = AppResult<PaymentWebhookEvent>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let params = input.query_params;
+            self.verify_notify(&params)?;
+
+            if params.get("pid").map(String::as_str) != Some(self.pid()) {
+                return Err(AppError::bad_request("pid mismatch"));
+            }
+            if params.get("trade_status").map(String::as_str) != Some("TRADE_SUCCESS") {
+                return Err(AppError::bad_request("trade_status is not TRADE_SUCCESS"));
+            }
+
+            let out_trade_no = params
+                .get("out_trade_no")
+                .cloned()
+                .ok_or_else(|| AppError::bad_request("missing out_trade_no"))?;
+            let amount = params
+                .get("money")
+                .ok_or_else(|| AppError::bad_request("missing money"))
+                .and_then(|money| {
+                    rust_decimal::Decimal::from_str_exact(money)
+                        .map_err(|_| AppError::bad_request("invalid money"))
+                })?;
+
+            Ok(PaymentWebhookEvent {
+                out_trade_no: Some(out_trade_no),
+                provider_trade_no: params.get("trade_no").cloned(),
+                api_trade_no: params.get("api_trade_no").cloned(),
+                buyer: params.get("buyer").cloned(),
+                amount,
+                status: PaymentStatus::Paid,
+                payload: serde_json::json!(params),
+            })
+        })
+    }
 }
 
 #[cfg(test)]

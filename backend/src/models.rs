@@ -10,6 +10,7 @@ pub enum PaymentStatus {
     Paid,
     Refunded,
     Frozen,
+    Failed,
 }
 
 impl PaymentStatus {
@@ -19,6 +20,7 @@ impl PaymentStatus {
             PaymentStatus::Paid => "paid",
             PaymentStatus::Refunded => "refunded",
             PaymentStatus::Frozen => "frozen",
+            PaymentStatus::Failed => "failed",
         }
     }
 
@@ -38,6 +40,8 @@ pub struct PaymentOrder {
     pub out_trade_no: String,
     pub qingke_trade_no: Option<String>,
     pub api_trade_no: Option<String>,
+    pub payment_provider: String,
+    pub provider_trade_no: Option<String>,
     pub name: String,
     #[serde(with = "rust_decimal::serde::str")]
     pub amount: Decimal,
