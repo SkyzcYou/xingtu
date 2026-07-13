@@ -1,6 +1,20 @@
 {
   "versions": [
     {
+      "version": "6.7.19",
+      "date": "2026-07-13",
+      "changes": {
+        "features": [
+          "add noipay backend payment provider (4c1bbbc8)",
+          "support noipay QR recharge (32ffeeba)"
+        ],
+        "fixes": [],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "add noipay backend payment provider (4c1bbbc8)"
+    },
+    {
       "version": "6.7.16",
       "date": "2026-06-26",
       "changes": {

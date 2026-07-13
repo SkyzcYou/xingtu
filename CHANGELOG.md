@@ -1,3 +1,14 @@
+## 6.7.19 (2026-07-13)
+
+### 🚀 Features
+
+- add noipay backend payment provider (4c1bbbc8)
+- support noipay QR recharge (32ffeeba)
+
+### ❤️  Thank You
+
+- SkyzcYou <youzhengcai@gmail.com>
+
 ## 6.7.16 (2026-06-26)
 
 ### 🚀 Features
