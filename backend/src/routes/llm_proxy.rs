@@ -2,6 +2,7 @@ use super::AppState;
 use crate::{
     credits::CreditRequestType,
     error::AppError,
+    image_jobs::ImageJobRequestType,
     llm_config::{fetch_upstream_model_ids, LlmProxyConfig},
 };
 use axum::{
@@ -16,9 +17,15 @@ use serde::Serialize;
 use serde_json::json;
 use std::time::Duration;
 
-use super::llm_proxy_credits::{
-    authenticate_account, charge_request, parse_model_request, refund_after_send_failure,
-    refund_if_unsuccessful, request_id,
+use super::{
+    image_jobs::submit_job,
+    llm_proxy_credits::{
+        authenticate_account, charge_request, parse_model_request, refund_after_send_failure,
+        refund_if_unsuccessful, request_id,
+    },
+    llm_proxy_image_mode::{
+        parse_image_edit_mode, parse_image_generation_mode, ImageGenerationMode,
+    },
 };
 
 pub fn router() -> Router<AppState> {
@@ -122,6 +129,21 @@ async fn proxy_image_generations(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    let body = match parse_image_generation_mode(&headers, body) {
+        Ok(ImageGenerationMode::Async(body)) => {
+            return submit_job(
+                &state,
+                &headers,
+                body,
+                ImageJobRequestType::Generation,
+                "请求体必须是有效的 OpenAI Images JSON",
+            )
+            .await;
+        }
+        Ok(ImageGenerationMode::Sync(body)) => body,
+        Err(response) => return response,
+    };
+
     proxy_charged_upstream_body(
         &state,
         &headers,
@@ -138,6 +160,21 @@ async fn proxy_image_edits(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    let body = match parse_image_edit_mode(&headers, body) {
+        Ok(ImageGenerationMode::Async(body)) => {
+            return submit_job(
+                &state,
+                &headers,
+                body,
+                ImageJobRequestType::Edit,
+                "请求体必须包含有效的 model 字段",
+            )
+            .await;
+        }
+        Ok(ImageGenerationMode::Sync(body)) => body,
+        Err(response) => return response,
+    };
+
     proxy_charged_upstream_body(
         &state,
         &headers,

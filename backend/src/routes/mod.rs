@@ -13,12 +13,15 @@ mod admin_messages;
 mod agent;
 mod auth;
 mod credit_recharge;
+mod image_jobs;
 mod llm_proxy;
 mod llm_proxy_credits;
+mod llm_proxy_image_mode;
 mod messages;
 #[cfg(test)]
 mod payment_tests;
 mod payments;
+mod playground_history;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -40,6 +43,8 @@ pub fn router(state: AppState) -> Router {
         .merge(credit_recharge::router())
         .merge(messages::router())
         .merge(llm_proxy::router())
+        .merge(image_jobs::router())
+        .merge(playground_history::router())
         .merge(agent::router())
         .with_state(state)
 }

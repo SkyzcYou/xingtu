@@ -1,6 +1,6 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Tag } from 'tdesign-react';
+import { Button } from 'tdesign-react';
 import { EmptyState } from '../../components/EmptyState';
 import { PageError } from '../../components/PageError';
 import { PageLoading } from '../../components/PageLoading';
@@ -22,12 +22,14 @@ import {
 import {
   creditRequestTypes,
   type CreateRechargeOrderResponse,
-  type CreditLedgerEntry,
   type CreditRequestType,
   type PayChannel,
   type PaymentOrder,
   type UpdateCreditPriceInput,
 } from './credits.types';
+import { CreditLedgerItem } from './CreditLedgerItem';
+import { CreditRechargeOrders } from './CreditRechargeOrders';
+import { CreditRechargePaymentDialog } from './CreditRechargePaymentDialog';
 import './CreditsPage.scss';
 
 const requestTypeLabels: Record<CreditRequestType, string> = {
@@ -37,13 +39,7 @@ const requestTypeLabels: Record<CreditRequestType, string> = {
   agent: 'Agent',
 };
 
-const reasonLabels: Record<string, string> = {
-  model_request: '模型调用',
-  refund: '失败退款',
-  admin_adjustment: '手动调整',
-  payment_recharge: '充值入账',
-  new_user_bonus: '新用户赠送',
-};
+const ORDER_POLL_INTERVAL_MS = 5000;
 
 export function CreditsPage() {
   const queryClient = useQueryClient();
@@ -58,7 +54,9 @@ export function CreditsPage() {
   const [adjustError, setAdjustError] = useState('');
   const [payChannel, setPayChannel] = useState<PayChannel>('alipay');
   const [latestOrder, setLatestOrder] = useState<CreateRechargeOrderResponse | null>(null);
+  const [paymentDialogVisible, setPaymentDialogVisible] = useState(false);
   const [rechargeError, setRechargeError] = useState('');
+  const pollingInFlightRef = useRef(false);
 
   const settingsQuery = useQuery({ queryKey: ['credit-settings'], queryFn: getCreditSettings });
   const pricesQuery = useQuery({ queryKey: ['credit-prices'], queryFn: getCreditPrices });
@@ -95,6 +93,36 @@ export function CreditsPage() {
     setSelectedAccountId(accountsQuery.data.accounts[0].principalId);
   }, [accountsQuery.data, selectedAccountId]);
 
+  const invalidateCreditData = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['credit-balance'] });
+    void queryClient.invalidateQueries({ queryKey: ['recharge-orders'] });
+    void queryClient.invalidateQueries({ queryKey: ['credit-accounts'] });
+    if (selectedAccountId) {
+      void queryClient.invalidateQueries({ queryKey: ['credit-account', selectedAccountId] });
+    }
+  }, [queryClient, selectedAccountId]);
+
+  const updateLatestOrder = useCallback((order: PaymentOrder) => {
+    setLatestOrder((current) => (
+      current?.order.outTradeNo === order.outTradeNo
+        ? { ...current, order }
+        : current
+    ));
+  }, []);
+
+  const refreshPaymentOrder = useCallback(async (outTradeNo: string, options?: { silent?: boolean }) => {
+    try {
+      const order = await queryPaymentOrder(outTradeNo);
+      updateLatestOrder(order);
+      setRechargeError('');
+      invalidateCreditData();
+    } catch (error) {
+      if (!options?.silent) {
+        setRechargeError(error instanceof Error ? error.message : '支付订单查询失败');
+      }
+    }
+  }, [invalidateCreditData, updateLatestOrder]);
+
   const saveSettingsMutation = useMutation({
     mutationFn: updateCreditSettings,
     onSuccess: () => {
@@ -114,9 +142,15 @@ export function CreditsPage() {
   });
 
   const createRechargeMutation = useMutation({
-    mutationFn: (packageId: string) => createRechargeOrder({ packageId, payChannel, returnUrl: window.location.href }),
+    mutationFn: (packageId: string) => createRechargeOrder({
+      packageId,
+      payChannel,
+      device: getPaymentDevice(),
+      returnUrl: window.location.href,
+    }),
     onSuccess: (result) => {
       setLatestOrder(result);
+      setPaymentDialogVisible(true);
       setRechargeError('');
       void queryClient.invalidateQueries({ queryKey: ['recharge-orders'] });
     },
@@ -125,14 +159,10 @@ export function CreditsPage() {
 
   const queryOrderMutation = useMutation({
     mutationFn: queryPaymentOrder,
-    onSuccess: () => {
+    onSuccess: (order) => {
+      updateLatestOrder(order);
       setRechargeError('');
-      void queryClient.invalidateQueries({ queryKey: ['credit-balance'] });
-      void queryClient.invalidateQueries({ queryKey: ['recharge-orders'] });
-      void queryClient.invalidateQueries({ queryKey: ['credit-accounts'] });
-      if (selectedAccountId) {
-        void queryClient.invalidateQueries({ queryKey: ['credit-account', selectedAccountId] });
-      }
+      invalidateCreditData();
     },
     onError: (error) => setRechargeError(error.message),
   });
@@ -149,6 +179,41 @@ export function CreditsPage() {
     },
     onError: (error) => setAdjustError(error.message),
   });
+
+  const latestOrderPolling = latestOrder ? shouldPollOrder(latestOrder.order) : false;
+
+  useEffect(() => {
+    if (!paymentDialogVisible || !latestOrder || !shouldPollOrder(latestOrder.order)) return undefined;
+
+    const outTradeNo = latestOrder.order.outTradeNo;
+    let stopped = false;
+
+    const poll = async () => {
+      if (stopped || pollingInFlightRef.current) return;
+      pollingInFlightRef.current = true;
+      try {
+        await refreshPaymentOrder(outTradeNo, { silent: true });
+      } finally {
+        pollingInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void poll();
+    }, ORDER_POLL_INTERVAL_MS);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    latestOrder?.order.creditedAt,
+    latestOrder?.order.outTradeNo,
+    latestOrder?.order.status,
+    latestOrder,
+    paymentDialogVisible,
+    refreshPaymentOrder,
+  ]);
 
   const accounts = accountsQuery.data?.accounts ?? [];
   const selectedDetail = detailQuery.data;
@@ -265,13 +330,23 @@ export function CreditsPage() {
         {latestOrder && (
           <div className="credits-pay-result">
             <strong>订单 {latestOrder.order.outTradeNo}</strong>
-            <span>{latestOrder.order.amount} 元 · {latestOrder.order.creditAmount ?? 0} 积分 · {latestOrder.order.status}</span>
-            {latestOrder.payInfo && <code>{latestOrder.payInfo}</code>}
-            <Button onClick={() => queryOrderMutation.mutate(latestOrder.order.outTradeNo)} loading={queryOrderMutation.isPending}>查询支付状态</Button>
+            <span>{latestOrder.order.amount} 元 · {latestOrder.order.creditAmount ?? 0} 积分 · {getPaymentStatusText(latestOrder.order)}</span>
+            <div className="credits-pay-result-actions">
+              <Button variant="outline" onClick={() => setPaymentDialogVisible(true)}>查看支付二维码</Button>
+              <Button onClick={() => queryOrderMutation.mutate(latestOrder.order.outTradeNo)} loading={queryOrderMutation.isPending}>查询支付状态</Button>
+            </div>
           </div>
         )}
         {rechargeError && <p className="form-error">{rechargeError}</p>}
-        <RechargeOrders orders={ordersQuery.data?.orders ?? []} onQuery={(order) => queryOrderMutation.mutate(order.outTradeNo)} />
+        <CreditRechargeOrders orders={ordersQuery.data?.orders ?? []} onQuery={(order) => queryOrderMutation.mutate(order.outTradeNo)} />
+        <CreditRechargePaymentDialog
+          visible={paymentDialogVisible}
+          latestOrder={latestOrder}
+          polling={latestOrderPolling}
+          querying={queryOrderMutation.isPending}
+          onClose={() => setPaymentDialogVisible(false)}
+          onQuery={(outTradeNo) => queryOrderMutation.mutate(outTradeNo)}
+        />
       </SectionCard>
 
       <SectionCard
@@ -348,7 +423,7 @@ export function CreditsPage() {
               </form>
               {adjustError && <p className="form-error">{adjustError}</p>}
               <div className="credits-ledger-list">
-                {selectedDetail.ledger.map((entry) => <LedgerItem key={entry.id} entry={entry} />)}
+                {selectedDetail.ledger.map((entry) => <CreditLedgerItem key={entry.id} entry={entry} />)}
               </div>
             </>
           ) : null}
@@ -358,46 +433,13 @@ export function CreditsPage() {
   );
 }
 
-function RechargeOrders({ orders, onQuery }: { orders: PaymentOrder[]; onQuery: (order: PaymentOrder) => void }) {
-  if (orders.length === 0) return null;
-  return (
-    <div className="credits-order-list">
-      {orders.map((order) => (
-        <div key={order.outTradeNo} className="credits-order-item">
-          <strong>{order.outTradeNo}</strong>
-          <span>{order.name} · {order.amount} 元 · {order.creditAmount ?? 0} 积分</span>
-          <Tag>{order.status}{order.creditedAt ? ' · 已入账' : ''}</Tag>
-          <Button variant="text" onClick={() => onQuery(order)}>查询</Button>
-        </div>
-      ))}
-    </div>
-  );
+function shouldPollOrder(order: PaymentOrder): boolean {
+  if (order.creditedAt) return false;
+  return !['failed', 'refunded', 'frozen'].includes(order.status);
 }
 
-function LedgerItem({ entry }: { entry: CreditLedgerEntry }) {
-  return (
-    <div className="credits-ledger-item">
-      <strong className={entry.delta >= 0 ? 'credits-delta-positive' : 'credits-delta-negative'}>
-        {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
-      </strong>
-      <div>
-        <Tag>{reasonLabels[entry.reason] ?? entry.reason}</Tag>
-        <div className="credits-ledger-meta">{ledgerMeta(entry)} · 余额 {entry.balanceAfter}</div>
-      </div>
-      <span className="credits-ledger-meta">{formatDateTime(entry.createdAt)}</span>
-    </div>
-  );
-}
-
-function ledgerMeta(entry: CreditLedgerEntry): string {
-  if (entry.reason === 'payment_recharge') {
-    const metadata = entry.metadata && typeof entry.metadata === 'object' ? entry.metadata as Record<string, unknown> : {};
-    return `${String(metadata.packageId ?? '充值套餐')} · ${String(metadata.outTradeNo ?? entry.requestId ?? '')}`;
-  }
-  if (entry.reason === 'new_user_bonus') {
-    return '一次性新用户奖励';
-  }
-  return entry.modelId || '手动调整';
+function getPaymentDevice(): string {
+  return window.matchMedia('(pointer: coarse)').matches ? 'mobile' : 'pc';
 }
 
 function formatDateTime(value: string | null): string {
@@ -411,4 +453,13 @@ function formatDateTime(value: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+function getPaymentStatusText(order: PaymentOrder): string {
+  if (order.creditedAt) return '已入账';
+  if (order.status === 'paid') return '已支付';
+  if (order.status === 'failed') return '失败';
+  if (order.status === 'refunded') return '已退款';
+  if (order.status === 'frozen') return '已冻结';
+  return '待支付';
 }

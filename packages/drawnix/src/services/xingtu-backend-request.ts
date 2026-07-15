@@ -43,11 +43,15 @@ export async function xingtuBackendRequest<T>(
 ): Promise<T> {
   const { auth = 'required', headers, ...init } = options;
   const token = await getXingtuBackendAccessToken(auth);
+  const shouldSetJsonContentType =
+    Boolean(init.body) &&
+    !(init.body instanceof FormData) &&
+    !(headers && hasContentTypeHeader(headers));
   const response = await fetch(`${getXingtuBackendApiBaseUrl()}${path}`, {
     ...init,
     headers: {
       accept: 'application/json',
-      ...(init.body ? { 'content-type': 'application/json' } : {}),
+      ...(shouldSetJsonContentType ? { 'content-type': 'application/json' } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
@@ -58,6 +62,16 @@ export async function xingtuBackendRequest<T>(
     throw new Error(getErrorMessage(payload, `请求失败：${response.status}`));
   }
   return payload as T;
+}
+
+function hasContentTypeHeader(headers: HeadersInit): boolean {
+  if (headers instanceof Headers) {
+    return headers.has('content-type');
+  }
+  if (Array.isArray(headers)) {
+    return headers.some(([name]) => name.toLowerCase() === 'content-type');
+  }
+  return Object.keys(headers).some((name) => name.toLowerCase() === 'content-type');
 }
 
 async function parseJson(response: Response): Promise<unknown> {
@@ -76,6 +90,12 @@ function getErrorMessage(payload: unknown, fallback: string): string {
     const data = payload as { error?: unknown };
     if (typeof data.error === 'string' && data.error.trim()) {
       return data.error;
+    }
+    if (data.error && typeof data.error === 'object') {
+      const error = data.error as { message?: unknown };
+      if (typeof error.message === 'string' && error.message.trim()) {
+        return error.message;
+      }
     }
   }
   return fallback;

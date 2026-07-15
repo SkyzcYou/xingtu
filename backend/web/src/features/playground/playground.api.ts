@@ -32,9 +32,25 @@ interface ImageGenerationResponse {
   data?: ImageGenerationData[];
 }
 
+interface ImageJobResponse {
+  id: string;
+  job_id?: string;
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  result?: { body?: unknown } | null;
+  error?: unknown;
+}
+
+interface ImageJobSubmitResponse {
+  job_id: string;
+  job: ImageJobResponse;
+}
+
+export type PlaygroundImageMode = 'sync' | 'async';
+
 export interface PlaygroundImageResult {
   src: string;
   revisedPrompt?: string;
+  jobId?: string;
 }
 
 export async function getGatewayModels(): Promise<string[]> {
@@ -51,12 +67,20 @@ export async function generateImage(input: {
   prompt: string;
   size: string;
   referenceImages: File[];
+  mode: PlaygroundImageMode;
 }): Promise<PlaygroundImageResult[]> {
-  const payload = input.referenceImages.length > 0 ? buildImageEditForm(input) : JSON.stringify({
-    model: input.model,
-    prompt: input.prompt,
-    size: input.size,
-  });
+  return input.mode === 'async'
+    ? generateImageAsync(input)
+    : generateImageSync(input);
+}
+
+async function generateImageSync(input: {
+  model: string;
+  prompt: string;
+  size: string;
+  referenceImages: File[];
+}): Promise<PlaygroundImageResult[]> {
+  const payload = buildImagePayload(input);
   const response = await rawRequest<unknown>(
     input.referenceImages.length > 0 ? '/v1/images/edits' : '/v1/images/generations',
     {
@@ -65,11 +89,29 @@ export async function generateImage(input: {
       headers: payload instanceof FormData ? undefined : { 'content-type': 'application/json' },
     }
   );
-  const images = parseImageGenerationResponse(response);
-  if (images.length === 0) {
-    throw new Error('图片生成响应格式无效');
-  }
-  return images;
+  return parseNonEmptyImageResponse(response);
+}
+
+async function generateImageAsync(input: {
+  model: string;
+  prompt: string;
+  size: string;
+  referenceImages: File[];
+}): Promise<PlaygroundImageResult[]> {
+  const payload = buildImagePayload(input, { async: true });
+  const submit = await rawRequest<ImageJobSubmitResponse>(
+    input.referenceImages.length > 0 ? '/v1/images/edits' : '/v1/images/generations',
+    {
+      method: 'POST',
+      body: payload,
+      headers: payload instanceof FormData ? undefined : { 'content-type': 'application/json' },
+    }
+  );
+  const completed = await pollImageJob(submit.job_id);
+  return parseNonEmptyImageResponse(completed.result?.body).map((item) => ({
+    ...item,
+    jobId: completed.job_id || completed.id,
+  }));
 }
 
 export async function sendChatCompletion(input: {
@@ -92,20 +134,70 @@ export async function sendChatCompletion(input: {
   return content;
 }
 
-function buildImageEditForm(input: {
-  model: string;
-  prompt: string;
-  size: string;
-  referenceImages: File[];
-}): FormData {
+function buildImagePayload(
+  input: {
+    model: string;
+    prompt: string;
+    size: string;
+    referenceImages: File[];
+  },
+  options?: { async?: boolean }
+): FormData | string {
+  return input.referenceImages.length > 0
+    ? buildImageEditForm(input, options)
+    : JSON.stringify({
+        model: input.model,
+        prompt: input.prompt,
+        size: input.size,
+        ...(options?.async ? { async: true } : {}),
+      });
+}
+
+function buildImageEditForm(
+  input: {
+    model: string;
+    prompt: string;
+    size: string;
+    referenceImages: File[];
+  },
+  options?: { async?: boolean }
+): FormData {
   const form = new FormData();
   form.append('model', input.model);
   form.append('prompt', input.prompt);
   form.append('size', input.size);
+  if (options?.async) {
+    form.append('async', 'true');
+  }
   input.referenceImages.forEach((file) => {
     form.append('image', file, file.name);
   });
   return form;
+}
+
+async function pollImageJob(id: string): Promise<ImageJobResponse> {
+  const maxAttempts = 240;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const job = await rawRequest<ImageJobResponse>(`/v1/images/generations/${id}`, {
+      method: 'GET',
+    });
+    if (job.status === 'succeeded') {
+      return job;
+    }
+    if (job.status === 'failed' || job.status === 'cancelled') {
+      throw new Error(readJobError(job.error));
+    }
+    await sleep(3000);
+  }
+  throw new Error('异步图片任务轮询超时');
+}
+
+function parseNonEmptyImageResponse(response: unknown): PlaygroundImageResult[] {
+  const images = parseImageGenerationResponse(response);
+  if (images.length === 0) {
+    throw new Error('图片生成响应格式无效');
+  }
+  return images;
 }
 
 function parseImageGenerationResponse(response: unknown): PlaygroundImageResult[] {
@@ -119,6 +211,23 @@ function parseImageGenerationResponse(response: unknown): PlaygroundImageResult[
     }
     return [];
   });
+}
+
+function readJobError(error: unknown): string {
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+  if (error && typeof error === 'object') {
+    const data = error as { message?: unknown };
+    if (typeof data.message === 'string' && data.message.trim()) {
+      return data.message;
+    }
+  }
+  return '异步图片任务失败';
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function stringOrUndefined(value: unknown): string | undefined {

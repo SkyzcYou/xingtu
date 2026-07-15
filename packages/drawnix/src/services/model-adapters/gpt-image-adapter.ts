@@ -8,9 +8,12 @@ import {
   resolveOfficialGPTImageEditSize,
   resolveOfficialGPTImageSize,
 } from './image-size-quality-resolver';
+import { asyncImageAPIService } from '../async-image-api-service';
+import { XINGTU_LOGIN_PROVIDER_PROFILE_ID } from '../../utils/settings-manager';
 import { sendAdapterRequest } from './context';
 import { registerModelAdapter } from './registry';
 import type {
+  AdapterContext,
   ImageGenerationRequest,
   ImageGenerationResult,
   ImageModelAdapter,
@@ -398,6 +401,13 @@ async function readErrorMessage(response: Response): Promise<string> {
   return `GPT Image request failed: ${response.status}`;
 }
 
+function shouldUseXingtuAccountAsyncImage(context: AdapterContext): boolean {
+  return (
+    context.provider?.profileId === XINGTU_LOGIN_PROVIDER_PROFILE_ID &&
+    context.provider?.credentialSource === 'oidc-session'
+  );
+}
+
 export const gptImageAdapter: ImageModelAdapter = {
   id: 'gpt-image-adapter',
   label: 'GPT Image',
@@ -409,20 +419,10 @@ export const gptImageAdapter: ImageModelAdapter = {
   ],
   defaultModel: 'gpt-image-2',
   async generateImage(context, request) {
-    console.debug('[gpt-image-adapter] generateImage called', {
-      bindingProtocol: context.binding?.protocol,
-      bindingRequestSchema: context.binding?.requestSchema,
-      bindingSubmitPath: context.binding?.submitPath,
-      generationMode: request.generationMode,
-      hasReferenceImages: !!(request.referenceImages && request.referenceImages.length > 0),
-      referenceImagesCount: request.referenceImages?.length ?? 0,
-      hasMaskImage: !!request.maskImage,
-    });
     const isEditRequest = isGPTImageEditRequest(
       request,
       context.binding?.requestSchema
     );
-    console.debug('[gpt-image-adapter] isEditRequest:', isEditRequest);
     const editFormData = isEditRequest
       ? await buildGPTImageEditFormData(request, context.fetcher)
       : null;
@@ -434,6 +434,33 @@ export const gptImageAdapter: ImageModelAdapter = {
       : typeof generationBody?.output_format === 'string'
       ? generationBody.output_format
       : undefined;
+
+    if (shouldUseXingtuAccountAsyncImage(context)) {
+      if (!request.model) {
+        throw new Error('GPT Image 请求缺少模型 ID');
+      }
+      if (isEditRequest) {
+        editFormData?.append('async', 'true');
+      }
+      const result = await asyncImageAPIService.generateXingtuBackendJobWithPolling(
+        editFormData || JSON.stringify(generationBody),
+        request.model,
+        {
+          interval: 5000,
+          routeModel: request.modelRef || request.model,
+          onProgress: request.params?.onProgress as
+            | ((progress: number, status?: string) => void)
+            | undefined,
+          onSubmitted: request.params?.onSubmitted as
+            | ((remoteId: string) => void)
+            | undefined,
+        }
+      );
+      const { url, urls, format } =
+        asyncImageAPIService.extractUrlAndFormat(result);
+      return { url, urls, format: format || outputFormat || 'png', raw: result };
+    }
+
     const response = await sendAdapterRequest(context, {
       path: resolveGPTImagePath(context, isEditRequest),
       method: 'POST',

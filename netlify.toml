@@ -89,8 +89,17 @@
 [context.production]
   command = "pnpm install && pnpm nx reset && pnpm run build:web"
 
+[context.production.environment]
+  AITU_REWRITE_ENTRY_ASSETS_TO_CDN = "0"
+
 [context.deploy-preview]
   command = "pnpm install && pnpm nx reset && pnpm run build:web"
 
+[context.deploy-preview.environment]
+  AITU_REWRITE_ENTRY_ASSETS_TO_CDN = "0"
+
 [context.branch-deploy]
   command = "pnpm install && pnpm nx reset && pnpm run build:web"
+
+[context.branch-deploy.environment]
+  AITU_REWRITE_ENTRY_ASSETS_TO_CDN = "0"

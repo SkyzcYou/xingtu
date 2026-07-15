@@ -88,6 +88,101 @@
   overflow-wrap: anywhere;
 }
 
+.credits-pay-result-actions,
+.credits-payment-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.credits-payment-dialog-content,
+.credits-payment-main,
+.credits-qr-payment,
+.credits-qr-help {
+  display: grid;
+  gap: 10px;
+}
+
+.credits-payment-dialog-content {
+  color: #111827;
+}
+
+.credits-payment-main {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.credits-payment-main span,
+.credits-payment-polling {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.credits-payment-main strong {
+  overflow-wrap: anywhere;
+}
+
+.credits-payment-main p,
+.credits-payment-polling {
+  margin: 0;
+}
+
+.credits-qr-payment {
+  justify-items: center;
+  padding: 14px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.credits-qr-card {
+  display: grid;
+  place-items: center;
+  width: min(100%, 256px);
+  padding: 16px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  box-sizing: border-box;
+}
+
+.credits-qr-card svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.credits-qr-help {
+  max-width: 360px;
+  text-align: center;
+}
+
+.credits-qr-help p,
+.credits-qr-help span {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.credits-pay-info-fallback {
+  overflow: auto;
+  max-height: 160px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .credits-order-item {
   display: grid;
   grid-template-columns: minmax(160px, 1fr) minmax(180px, 1.4fr) auto auto;

@@ -5,18 +5,22 @@ mod credit_settings;
 mod credits;
 mod db;
 mod error;
+mod image_job_worker;
+mod image_jobs;
 mod llm_config;
 mod message_events;
 mod messages;
 mod models;
 mod noipay;
 mod payment_provider;
+mod playground_history;
 mod qingke;
 mod routes;
 mod trust;
 
 use axum::http::{HeaderValue, Method};
 use config::AppConfig;
+use image_job_worker::spawn_image_job_worker;
 use llm_config::LlmProxyConfigCache;
 use message_events::{spawn_message_event_listener, MessageEventHub};
 use noipay::NoipayClient;
@@ -53,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr: SocketAddr = format!("{}:{}", config.server_host, config.server_port).parse()?;
 
     let cors = build_cors_layer(&config.cors_allowed_origin)?;
-    let app = routes::router(AppState {
+    let state = AppState {
         pool,
         config,
         payment_providers,
@@ -61,9 +65,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         http_client,
         llm_config_cache,
         message_events,
-    })
-    .layer(TraceLayer::new_for_http())
-    .layer(cors);
+    };
+    spawn_image_job_worker(state.clone());
+    let app = routes::router(state)
+        .layer(TraceLayer::new_for_http())
+        .layer(cors);
 
     let listener = TcpListener::bind(addr).await?;
     tracing::info!(%addr, "payment backend listening");

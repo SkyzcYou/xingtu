@@ -49,6 +49,7 @@ import {
 import { extractTextContent, parseToolCalls } from '../agent/tool-parser';
 import { unifiedCacheService } from '../unified-cache-service';
 import { submitVideoGeneration } from '../media-api';
+import { asyncImageAPIService } from '../async-image-api-service';
 import {
   extractPromptFromMessages,
   buildImageRequestBody,
@@ -74,6 +75,7 @@ import {
   assertTaskInvocationRouteAvailable,
   createTaskInvocationRouteSnapshot,
   resolveLegacyTaskInvocationRouteModel,
+  resolveTaskInvocationRouteModel,
   shouldUseStrictTaskInvocationRoute,
 } from '../task-invocation-route';
 import { normalizeLlmTextContent } from '../../utils/llm-json-extractor';
@@ -1217,39 +1219,125 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         );
       }
 
-      // 筛选出有 remoteId 的视频任务
-      const videoTasks = pendingTasks.filter(
+      // 筛选出有 remoteId 的图片/视频任务
+      const resumableTasks = pendingTasks.filter(
         (t) =>
-          t.type === 'video' && t.remoteId && t.status === TaskStatus.PROCESSING
+          (t.type === 'video' || t.type === 'image') &&
+          t.remoteId &&
+          t.status === TaskStatus.PROCESSING
       );
 
       // 日志：列出所有处理中的任务及其筛选结果
       for (const t of pendingTasks) {
-        const isVideo = t.type === 'video';
+        const isResumableType = t.type === 'video' || t.type === 'image';
         const hasRemoteId = !!t.remoteId;
-        const willResume = isVideo && hasRemoteId;
+        const willResume = isResumableType && hasRemoteId;
         console.warn(
           `[FallbackMediaExecutor]   task=${t.id} type=${t.type} remoteId=${
             t.remoteId || 'none'
           } → ${willResume ? 'RESUME' : 'SKIP'}${
-            !isVideo ? ' (not video)' : ''
+            !isResumableType ? ' (not image/video)' : ''
           }${!hasRemoteId ? ' (no remoteId)' : ''}`
         );
       }
 
-      if (videoTasks.length === 0) {
-        console.warn('[FallbackMediaExecutor] No video tasks to resume');
+      if (resumableTasks.length === 0) {
+        console.warn('[FallbackMediaExecutor] No media tasks to resume');
         return;
       }
       // 并行恢复
       await Promise.all(
-        videoTasks.map((task) => this.resumeVideoTask(task, onTaskUpdate))
+        resumableTasks.map((task) =>
+          task.type === 'image'
+            ? this.resumeImageTask(task, onTaskUpdate)
+            : this.resumeVideoTask(task, onTaskUpdate)
+        )
       );
     } catch (error) {
       console.error(
         '[FallbackMediaExecutor] Failed to resume pending tasks:',
         error
       );
+    }
+  }
+
+  /**
+   * 恢复单个图片任务的轮询
+   */
+  private async resumeImageTask(
+    task: Task,
+    onTaskUpdate?: (
+      taskId: string,
+      status: TaskStatus,
+      updates?: Partial<Task>
+    ) => void
+  ): Promise<void> {
+    if (this.pollingTasks.has(task.id)) {
+      return;
+    }
+
+    if (shouldUseStrictTaskInvocationRoute(task)) {
+      assertTaskInvocationRouteAvailable('image', task);
+    }
+    const routeModel = resolveTaskInvocationRouteModel(task);
+    const remoteId = task.remoteId!;
+
+    this.pollingTasks.add(task.id);
+
+    try {
+      const result = await asyncImageAPIService.resumePolling(remoteId, {
+        routeModel,
+        onProgress: (progress) => {
+          if (onTaskUpdate) {
+            onTaskUpdate(task.id, TaskStatus.PROCESSING, { progress });
+          } else {
+            taskStorageWriter
+              .updateStatus(task.id, TaskStatus.PROCESSING)
+              .catch(() => undefined);
+            taskStorageWriter
+              .updateProgress(task.id, progress)
+              .catch(() => undefined);
+          }
+        },
+      });
+      const { url, urls, format } =
+        asyncImageAPIService.extractUrlAndFormat(result);
+      const allUrls = urls?.length ? urls : [url];
+      const cachedUrls = await cacheRemoteUrls(allUrls, task.id, 'image', format, {
+        extraMetadata: task.params.assetMetadata
+          ? { ...task.params.assetMetadata }
+          : undefined,
+      });
+      const completionResult = {
+        url: cachedUrls[0],
+        urls: cachedUrls.length > 1 ? cachedUrls : undefined,
+        format,
+        size: 0,
+      };
+
+      await taskStorageWriter.completeTask(task.id, completionResult);
+      if (onTaskUpdate) {
+        onTaskUpdate(task.id, TaskStatus.COMPLETED, {
+          result: completionResult,
+          progress: 100,
+          completedAt: Date.now(),
+        });
+      }
+    } catch (error: any) {
+      console.error(
+        `[FallbackMediaExecutor] Failed to resume image task ${task.id}:`,
+        error
+      );
+      const errorInfo = {
+        code: error.code || 'RESUME_IMAGE_FAILED',
+        message: error.message || 'Failed to resume image task',
+      };
+      await taskStorageWriter.failTask(task.id, errorInfo).catch(() => undefined);
+      if (onTaskUpdate) {
+        onTaskUpdate(task.id, TaskStatus.FAILED, { error: errorInfo });
+      }
+    } finally {
+      this.pollingTasks.delete(task.id);
     }
   }
 

@@ -1,28 +1,38 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Tag } from 'tdesign-react';
 import { SectionCard } from '../../components/SectionCard';
 import { getLlmConfig } from '../profile/profile.api';
 import {
+  createPlaygroundHistory,
+  type CreatePlaygroundHistoryInput,
+  type PlaygroundHistoryRecord,
+} from './playground-history.api';
+import {
+  buildImageHistoryRecord,
+  buildTextHistoryRecord,
+} from './playground-history.records';
+import { PlaygroundHistory } from './PlaygroundHistory';
+import {
+  getModelListHint,
+  imageSizes,
+  type ChatMutationInput,
+  type ImageMutationInput,
+} from './playground-page.types';
+import {
   generateImage,
   getGatewayModels,
   sendChatCompletion,
+  type PlaygroundImageMode,
   type PlaygroundImageResult,
   type PlaygroundMessage,
 } from './playground.api';
+import './PlaygroundPage.scss';
 
 type PlaygroundTab = 'chat' | 'image';
 
-const imageSizes = ['1024x1024', '1024x1536', '1536x1024'] as const;
-
-function getModelListHint(isLoading: boolean, error: Error | null, enabled: boolean): string {
-  if (isLoading) return '正在从上游获取模型列表。';
-  if (error) return error.message;
-  if (!enabled) return '中转未启用，当前显示 LLM 配置中已保存的模型。';
-  return '模型列表来自后端 /v1/models 的上游查询结果。';
-}
-
 export function PlaygroundPage() {
+  const queryClient = useQueryClient();
   const configQuery = useQuery({
     queryKey: ['llm-config'],
     queryFn: getLlmConfig,
@@ -57,9 +67,13 @@ export function PlaygroundPage() {
   const [error, setError] = useState('');
   const [imagePrompt, setImagePrompt] = useState('');
   const [imageSize, setImageSize] = useState<(typeof imageSizes)[number]>('1024x1024');
+  const [imageMode, setImageMode] = useState<PlaygroundImageMode>('sync');
   const [referenceImages, setReferenceImages] = useState<File[]>([]);
   const [imageResults, setImageResults] = useState<PlaygroundImageResult[]>([]);
   const [imageError, setImageError] = useState('');
+  const [imageElapsedSeconds, setImageElapsedSeconds] = useState(0);
+  const [historySyncError, setHistorySyncError] = useState('');
+  const [replayNotice, setReplayNotice] = useState('');
 
   useEffect(() => {
     if (modelOptions.length > 0 && !modelOptions.includes(model)) {
@@ -81,27 +95,50 @@ export function PlaygroundPage() {
     }
   }, [defaultImageModel, imageModel, modelOptions]);
 
+  const recordHistory = useCallback((input: CreatePlaygroundHistoryInput | null) => {
+    if (!input) return;
+    setHistorySyncError('');
+    void createPlaygroundHistory(input)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['playground-history'] }))
+      .catch((historyError: Error) => {
+        setHistorySyncError(`任务已完成，但历史同步失败：${historyError.message}`);
+      });
+  }, [queryClient]);
+
   const mutation = useMutation({
-    mutationFn: sendChatCompletion,
-    onSuccess: (content) => {
+    mutationFn: (input: ChatMutationInput) => sendChatCompletion(input),
+    onSuccess: (content, input) => {
       setMessages((current) => [...current, { role: 'assistant', content }]);
       setError('');
+      recordHistory(buildTextHistoryRecord(input, { content }));
     },
-    onError: (err) => {
+    onError: (err, input) => {
       setError(err.message);
+      recordHistory(buildTextHistoryRecord(input, { error: err.message }));
     },
   });
 
   const imageMutation = useMutation({
-    mutationFn: generateImage,
-    onSuccess: (results) => {
+    mutationFn: (input: ImageMutationInput) => generateImage(input),
+    onSuccess: (results, input) => {
       setImageResults(results);
       setImageError('');
+      recordHistory(buildImageHistoryRecord(input, { results }));
     },
-    onError: (err) => {
+    onError: (err, input) => {
       setImageError(err.message);
+      recordHistory(buildImageHistoryRecord(input, { error: err.message }));
     },
   });
+
+  useEffect(() => {
+    if (!imageMutation.isPending) return;
+    const startedAt = Date.now();
+    const intervalId = window.setInterval(() => {
+      setImageElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [imageMutation.isPending]);
 
   const gatewayEnabled = configQuery.data?.enabled === true;
 
@@ -132,7 +169,14 @@ export function PlaygroundPage() {
     setMessages((current) => [...current, { role: 'user', content: prompt }]);
     setInput('');
     setError('');
-    mutation.mutate({ model: selectedModel, messages: nextMessages });
+    mutation.mutate({
+      model: selectedModel,
+      messages: nextMessages,
+      prompt,
+      useSystemPrompt,
+      systemPrompt: useSystemPrompt ? systemPrompt.trim() : '',
+      startedAt: Date.now(),
+    });
   }
 
   function handleImageSubmit(event: FormEvent<HTMLFormElement>) {
@@ -152,13 +196,48 @@ export function PlaygroundPage() {
       return;
     }
     setImageError('');
+    setImageElapsedSeconds(0);
     imageMutation.mutate({
       model: selectedModel,
       prompt,
       size: imageSize,
       referenceImages,
+      mode: imageMode,
+      startedAt: Date.now(),
     });
   }
+
+  const handleReplay = useCallback((record: PlaygroundHistoryRecord) => {
+    setHistorySyncError('');
+    if (record.taskKind === 'text') {
+      setActiveTab('chat');
+      setModel(record.model);
+      setInput(record.prompt);
+      setUseSystemPrompt(record.parameters.useSystemPrompt);
+      setSystemPrompt(record.parameters.systemPrompt);
+      setMessages([]);
+      setError('');
+      setReplayNotice('文字任务参数已回填，请确认后点击“发送测试”。');
+      window.setTimeout(() => document.getElementById('playground-message')?.focus(), 0);
+      return;
+    }
+
+    const replaySize = imageSizes.includes(record.parameters.size as (typeof imageSizes)[number])
+      ? record.parameters.size as (typeof imageSizes)[number]
+      : imageSizes[0];
+    setActiveTab('image');
+    setImageModel(record.model);
+    setImagePrompt(record.prompt);
+    setImageSize(replaySize);
+    setImageMode(record.parameters.mode);
+    setReferenceImages([]);
+    setImageResults([]);
+    setImageError('');
+    setReplayNotice(record.parameters.referenceFileNames.length > 0
+      ? `图片任务参数已回填；请重新选择参考图：${record.parameters.referenceFileNames.join('、')}。`
+      : '图片任务参数已回填，请确认后点击“生成图片”。');
+    window.setTimeout(() => document.getElementById('playground-image-prompt')?.focus(), 0);
+  }, []);
 
   return (
     <div className="page-stack">
@@ -174,7 +253,7 @@ export function PlaygroundPage() {
           </div>
           <div>
             <span>图片 API</span>
-            <strong>/v1/images/generations</strong>
+            <strong>/v1/images/generations · async:true</strong>
           </div>
           <div>
             <span>默认模型</span>
@@ -187,6 +266,12 @@ export function PlaygroundPage() {
         {gatewayEnabled !== true && (
           <div className="playground-warning" role="alert">
             当前未启用中转，发送测试会被后端拒绝。请先在 LLM 配置中开启“启用中转”并保存。
+          </div>
+        )}
+        {replayNotice && (
+          <div className="playground-replay-notice" role="status">
+            <span>{replayNotice}</span>
+            <button type="button" onClick={() => setReplayNotice('')}>关闭</button>
           </div>
         )}
         <div className="playground-tabs" role="tablist" aria-label="Playground 测试类型">
@@ -306,7 +391,7 @@ export function PlaygroundPage() {
                     <option value="">暂无可选模型</option>
                   )}
                 </select>
-                <small>文生图走 /v1/images/generations；上传参考图后走 /v1/images/edits。</small>
+                <small>同步模式走 /v1/images/generations 或 /v1/images/edits；异步模式文生图用 async:true，参考图/编辑用 multipart async=true 触发后台 job。</small>
               </label>
               <label>
                 <span>尺寸</span>
@@ -315,6 +400,14 @@ export function PlaygroundPage() {
                     <option key={item} value={item}>{item}</option>
                   ))}
                 </select>
+              </label>
+              <label>
+                <span>调用方式</span>
+                <select value={imageMode} onChange={(event) => setImageMode(event.target.value as PlaygroundImageMode)}>
+                  <option value="sync">同步：/v1/images/generations 或 /v1/images/edits</option>
+                  <option value="async">异步：generations async:true / edits async=true</option>
+                </select>
+                <small>同步用于复现 OpenAI-compatible API；异步用于验证星图帐号后台 job 链路。</small>
               </label>
               <label>
                 <span>提示词</span>
@@ -349,19 +442,40 @@ export function PlaygroundPage() {
             </form>
 
             <div className="playground-image-results" aria-label="生图结果">
-              {imageResults.length === 0 ? (
+              {imageMutation.isPending ? (
+                <div
+                  className="playground-empty playground-loading-status"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  图片生成中，请稍候。 · 已用 {imageElapsedSeconds}s
+                </div>
+              ) : imageResults.length === 0 ? (
                 <div className="playground-empty">暂无图片，提交提示词开始测试。</div>
               ) : (
                 imageResults.map((result, index) => (
                   <figure className="playground-image-result" key={`${result.src}-${index}`}>
                     <img alt={`生成结果 ${index + 1}`} src={result.src} />
-                    {result.revisedPrompt && <figcaption>{result.revisedPrompt}</figcaption>}
+                    {(result.revisedPrompt || result.jobId) && (
+                      <figcaption>
+                        {result.jobId && <span>Job: {result.jobId}</span>}
+                        {result.revisedPrompt && <span>{result.revisedPrompt}</span>}
+                      </figcaption>
+                    )}
                   </figure>
                 ))
               )}
             </div>
           </div>
         )}
+      </SectionCard>
+
+      <SectionCard
+        title="历史任务"
+        description="仅记录本页发起的文字和生图任务，按登录帐号同步到其他设备。"
+      >
+        <PlaygroundHistory onReplay={handleReplay} syncError={historySyncError} />
       </SectionCard>
     </div>
   );

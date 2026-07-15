@@ -163,6 +163,16 @@ export async function executeImageViaAdapter(
           quality: params.quality,
           n: params.count,
           ...params.params,
+          onSubmitted: (remoteId: string) => {
+            void taskStorageWriter.updateRemoteId(
+              taskId,
+              remoteId,
+              createTaskInvocationRouteSnapshot(
+                'image',
+                params.modelRef || params.model
+              )
+            );
+          },
         },
       }
     );

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../utils/settings-manager', () => ({
+  XINGTU_LOGIN_PROVIDER_PROFILE_ID: 'xingtu-login',
   resolveInvocationRoute: vi.fn(() => ({
     profileId: 'runtime',
     profileName: 'Runtime',

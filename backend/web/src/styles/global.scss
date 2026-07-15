@@ -589,6 +589,8 @@ code {
 }
 
 .playground-image-result figcaption {
+  display: grid;
+  gap: 4px;
   color: #6b7280;
   font-size: 12px;
   line-height: 1.6;

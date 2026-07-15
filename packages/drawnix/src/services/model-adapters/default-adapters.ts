@@ -1,5 +1,6 @@
 import { defaultGeminiClient } from '../../utils/gemini-api';
 import { asyncImageAPIService } from '../async-image-api-service';
+import { XINGTU_LOGIN_PROVIDER_PROFILE_ID } from '../../utils/settings-manager';
 import {
   audioAPIService,
   extractAudioGenerationResult,
@@ -134,6 +135,8 @@ function shouldUseAsyncImageEndpoint(
   _model: string
 ): boolean {
   return (
+    (context.provider?.profileId === XINGTU_LOGIN_PROVIDER_PROFILE_ID &&
+      context.provider?.credentialSource === 'oidc-session') ||
     context.binding?.protocol === 'openai.async.media' ||
     context.binding?.requestSchema === 'openai.async.image.form'
   );
@@ -180,8 +183,9 @@ export const geminiImageAdapter: ImageModelAdapter = {
             | undefined,
         }
       );
-      const { url, format } = asyncImageAPIService.extractUrlAndFormat(result);
-      return { url, format, raw: result };
+      const { url, urls, format } =
+        asyncImageAPIService.extractUrlAndFormat(result);
+      return { url, urls, format, raw: result };
     }
 
     const quality =
