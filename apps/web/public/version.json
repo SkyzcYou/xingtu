@@ -1,6 +1,8 @@
 {
-  "version": "6.7.19",
-  "buildTime": "2026-07-13T17:38:41.561Z",
+  "version": "6.7.20",
+  "buildTime": "2026-07-15T17:23:32.942Z",
   "gitCommit": "unknown",
-  "changelog": []
+  "changelog": [
+    "add async image jobs and playground history"
+  ]
 }

@@ -1,3 +1,13 @@
+## 6.7.20 (2026-07-15)
+
+### 🚀 Features
+
+- add async image jobs and playground history (b2f01671)
+
+### ❤️  Thank You
+
+- SkyzcYou <youzhengcai@gmail.com>
+
 ## 6.7.19 (2026-07-13)
 
 ### 🚀 Features

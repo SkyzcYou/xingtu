@@ -1,6 +1,19 @@
 {
   "versions": [
     {
+      "version": "6.7.20",
+      "date": "2026-07-15",
+      "changes": {
+        "features": [
+          "add async image jobs and playground history (b2f01671)"
+        ],
+        "fixes": [],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "add async image jobs and playground history (b2f01671)"
+    },
+    {
       "version": "6.7.19",
       "date": "2026-07-13",
       "changes": {
