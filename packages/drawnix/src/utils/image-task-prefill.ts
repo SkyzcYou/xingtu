@@ -12,6 +12,8 @@ export interface ImageGenerationReferenceImage {
 export interface ImageGenerationInitialData {
   prefillId: string;
   initialPrompt: string;
+  initialModel?: string;
+  initialModelRef?: ModelRef | null;
   initialWidth?: number;
   initialHeight?: number;
   initialResultUrl?: string;
@@ -210,6 +212,8 @@ export function buildImageTaskPrefillInitialData(
   return {
     prefillId: `${task.id}-${Date.now()}`,
     initialPrompt: readString(params.prompt) || '',
+    initialModel: readString(params.model),
+    initialModelRef: readModelRef(params.modelRef),
     initialWidth: readFiniteNumber(params.width),
     initialHeight: readFiniteNumber(params.height),
     initialResultUrl: readString(task.result?.url),

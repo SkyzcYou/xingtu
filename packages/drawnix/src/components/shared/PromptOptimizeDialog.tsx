@@ -862,8 +862,9 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
                       nextModelRef
                     );
                   }}
-                  onSelectModel={(model) => {
-                    const nextModelRef = getModelRefFromConfig(model);
+                  onSelectModel={(model, modelRef) => {
+                    const nextModelRef =
+                      modelRef ?? getModelRefFromConfig(model);
                     analytics.trackPromptAction({
                       action: 'model_select',
                       surface: 'prompt_optimize_dialog',

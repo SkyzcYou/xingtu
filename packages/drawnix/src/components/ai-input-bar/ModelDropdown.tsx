@@ -160,7 +160,7 @@ export interface ModelDropdownProps {
   /** 选择模型回调 */
   onSelect: (modelId: string, modelRef?: ModelRef | null) => void;
   /** 选择完整模型配置回调 */
-  onSelectModel?: (model: ModelConfig) => void;
+  onSelectModel?: (model: ModelConfig, modelRef?: ModelRef | null) => void;
   /** 语言 */
   language?: 'zh' | 'en';
   /** 模型列表（可选，默认为图片模型） */
@@ -619,8 +619,15 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
   const handleSelect = useCallback(
     (model: ModelConfig) => {
       closeContextMenu();
-      onSelect(model.id, createModelRef(model.sourceProfileId || null, model.id));
-      onSelectModel?.(model);
+      // Static models are displayed in the legacy API-key provider group.
+      // Keep that provider identity when the model is selected so callers do
+      // not resolve the request against the active Xingtu login preset.
+      const modelRef = createModelRef(
+        model.sourceProfileId || DEFAULT_PROVIDER_ID,
+        model.id
+      );
+      onSelect(model.id, modelRef);
+      onSelectModel?.(model, modelRef);
       setIsOpen(false);
       if (variant === 'form') {
         setSearchQuery(model.label || model.id);
@@ -741,7 +748,16 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
         }
         if (variant === 'form' && allowCustomValue && searchQuery.trim()) {
           // 如果是表单变体且有输入，但没有匹配的模型，则使用输入的内容
-          onSelect(searchQuery.trim());
+          const customModelId = searchQuery.trim();
+          const selectedProviderId =
+            providerGroups.some((group) => group.providerId === activeProviderId)
+              ? activeProviderId
+              : selectedProviderHint;
+          // `legacy-default` is an explicit API-key provider in the selector.
+          // Keep it on custom model input so route resolution cannot inherit
+          // the active preset's Xingtu login provider.
+          const customModelRef = createModelRef(selectedProviderId, customModelId);
+          onSelect(customModelId, customModelRef);
           setIsOpen(false);
           return true;
         }
@@ -757,8 +773,11 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
       allowCustomValue,
       currentModel,
       onSelect,
+      activeProviderId,
       searchQuery,
       selectedModel,
+      selectedProviderHint,
+      providerGroups,
       setIsOpen,
     ]
   );

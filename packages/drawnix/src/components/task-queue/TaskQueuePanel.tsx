@@ -770,6 +770,7 @@ export const TaskQueuePanel: React.FC<TaskQueuePanelProps> = ({
             ? parseInt(task.params.seconds, 10)
             : task.params.seconds, // 确保转换为数字
         initialModel: task.params.model, // 传递模型
+        initialModelRef: task.params.modelRef ?? null,
         initialSize: task.params.size, // 传递尺寸
         initialImages: task.params.uploadedImages, // 传递上传的图片（多图片格式）
         initialResultUrl: task.result?.url, // 传递结果URL用于预览

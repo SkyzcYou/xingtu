@@ -140,7 +140,9 @@ function resolveVideoModelRef(
 
   const alignedRef = getAlignedModelRef(modelId, modelRef);
   const matchedModel = findMatchingSelectableModel(models, modelId, alignedRef);
-  return getModelRefFromConfig(matchedModel) || alignedRef;
+  // Preserve an explicit provider ref when the matching model is static and
+  // therefore does not expose sourceProfileId.
+  return alignedRef || getModelRefFromConfig(matchedModel);
 }
 
 function getDefaultParamsFromConfigs(
@@ -201,6 +203,7 @@ interface AIVideoGenerationProps {
   initialKnowledgeContextRefs?: KnowledgeContextRef[];
   initialDuration?: number;
   initialModel?: VideoModel; // 新增：模型选择
+  initialModelRef?: ModelRef | null;
   initialSize?: string; // 新增：尺寸选择
   initialResultUrl?: string;
   selectedModel?: string;
@@ -224,6 +227,7 @@ const AIVideoGeneration = ({
   initialKnowledgeContextRefs = [],
   initialDuration,
   initialModel,
+  initialModelRef,
   initialSize,
   initialResultUrl,
   selectedModel,
@@ -254,13 +258,20 @@ const AIVideoGeneration = ({
   // Video model parameters - use state to support dynamic updates
   const initialRoute = resolveInvocationRoute('video');
   const initialPreferredModelId = initialModel || initialRoute.modelId;
+  const hasInitialModel = Boolean(initialModel);
   const initialPreferredModelRef = getAlignedModelRef(
     initialPreferredModelId,
-    initialModel && initialModel === selectedModel
+    hasInitialModel
+      ? initialModelRef !== undefined
+        ? initialModelRef
+        : initialModel === selectedModel
+        ? selectedModelRef
+        : initialRoute.modelId === initialPreferredModelId
+        ? createModelRef(initialRoute.profileId, initialRoute.modelId)
+        : null
+      : selectedModel
       ? selectedModelRef
-      : initialRoute.modelId === initialPreferredModelId
-      ? createModelRef(initialRoute.profileId, initialRoute.modelId)
-      : null
+      : createModelRef(initialRoute.profileId, initialRoute.modelId)
   );
   const initialMatchedModel =
     findMatchingSelectableModel(
@@ -276,7 +287,7 @@ const AIVideoGeneration = ({
   const initialResolvedModelRef = resolveVideoModelRef(
     videoModels,
     (initialMatchedModel?.id as VideoModel) || initialPreferredModelId,
-    getModelRefFromConfig(initialMatchedModel) || initialPreferredModelRef
+    initialPreferredModelRef || getModelRefFromConfig(initialMatchedModel)
   );
   const [currentModel, setCurrentModel] = useState<VideoModel>(
     (initialMatchedModel?.id as VideoModel) ||
@@ -730,6 +741,7 @@ const AIVideoGeneration = ({
       knowledgeContextRefs: initialKnowledgeContextRefs.map((ref) => ref.noteId),
       duration: initialDuration,
       model: initialModel,
+      modelRef: initialModelRef,
       size: initialSize,
       result: initialResultUrl,
     });
@@ -747,7 +759,15 @@ const AIVideoGeneration = ({
       initialModelAppliedRef.current = initialModel;
       setCurrentModel(initialModel as VideoModel);
       setCurrentModelRef(
-        resolveVideoModelRef(videoModels, initialModel, selectedModelRef)
+        resolveVideoModelRef(
+          videoModels,
+          initialModel,
+          initialModelRef !== undefined
+            ? initialModelRef
+            : initialModel === selectedModel
+            ? selectedModelRef
+            : null
+        )
       );
     }
 
@@ -794,8 +814,13 @@ const AIVideoGeneration = ({
     initialImages,
     initialKnowledgeContextRefs,
     initialDuration,
+    initialModel,
+    initialModelRef,
     initialSize,
     initialResultUrl,
+    selectedModel,
+    selectedModelRef,
+    videoModels,
     imageUploadConfig.labels,
     imageUploadConfig.labelsSignature,
     imageUploadConfig.maxCount,
@@ -1284,14 +1309,14 @@ const AIVideoGeneration = ({
                       onModelChange(value);
                       onModelRefChange?.(nextModelRef);
                     }}
-                    onSelectModel={(model: ModelConfig) => {
+                    onSelectModel={(model: ModelConfig, modelRef) => {
                       const nextModel = model.id as VideoModel;
                       initialModelAppliedRef.current = null; // 用户手动切换，解除保护
                       setCurrentModel(nextModel);
                       const nextModelRef = resolveVideoModelRef(
                         visibleVideoModels,
                         nextModel,
-                        getModelRefFromConfig(model)
+                        modelRef ?? getModelRefFromConfig(model)
                       );
                       setCurrentModelRef(nextModelRef);
                       setVideoSelectedParams(

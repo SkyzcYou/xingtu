@@ -32,6 +32,23 @@ vi.mock('../../utils/settings-manager', () => ({
   settingsManager: {
     waitForInitialization: waitForInitializationMock,
   },
+  providerPricingCacheSettings: {
+    get: vi.fn(() => []),
+    update: vi.fn(async () => undefined),
+  },
+  createModelRef: vi.fn((profileId?: string | null, modelId?: string | null) =>
+    profileId && modelId ? { profileId, modelId } : null
+  ),
+  resolveInvocationRoute: vi.fn(() => ({
+    routeType: 'image',
+    modelId: 'gpt-image-2',
+    profileId: null,
+    profileName: null,
+    providerType: null,
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'test-key',
+    source: 'legacy',
+  })),
   hasInvocationRouteCredentials: hasInvocationRouteCredentialsMock,
 }));
 
@@ -113,7 +130,15 @@ describe('image-generation-service', () => {
           quality: 'high',
           n: 2,
         },
-      })
+      }),
+      {
+        operation: 'image',
+        modelRef: null,
+        providerProfileId: null,
+        providerType: null,
+        modelId: 'gpt-image-2',
+        binding: null,
+      }
     );
 
     expect(trackExternalTaskMock).toHaveBeenCalledWith(

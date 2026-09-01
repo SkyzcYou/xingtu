@@ -1577,14 +1577,14 @@ export const FramePanel: React.FC<FramePanelProps> = ({
   );
 
   const handleOutlineImageModelConfigSelect = useCallback(
-    (model: ModelConfig) => {
+    (model: ModelConfig, modelRef?: ModelRef | null) => {
       analytics.trackPPTAction({
         action: 'image_model_select',
         source: 'project_drawer_outline',
         model: model.id,
       });
       setOutlineImageModel(model.id);
-      setOutlineImageModelRef(getModelRefFromConfig(model));
+      setOutlineImageModelRef(modelRef ?? getModelRefFromConfig(model));
     },
     []
   );

@@ -155,8 +155,11 @@ describe('image routing to default registered adapters', () => {
     );
   });
 
-  it('keeps legacy model-only GPT Image requests on the Tuzi GPT adapter', () => {
-    const adapter = resolveAdapterForInvocation('image', 'gpt-image-2', null);
+  it('routes explicit Tuzi GPT Image model refs to the Tuzi GPT adapter', () => {
+    const adapter = resolveAdapterForInvocation('image', 'gpt-image-2', {
+      profileId: 'tuzi',
+      modelId: 'gpt-image-2',
+    });
 
     expect(adapter?.id).toBe('tuzi-gpt-image-adapter');
   });

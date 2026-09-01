@@ -192,7 +192,15 @@ describe('gpt-image-adapter', () => {
     const fetcher = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
       const type = url.endsWith('.webp') ? 'image/webp' : 'image/png';
-      return new Response(new Blob(['ok'], { type }), { status: 200 });
+      // Return the test-environment Blob directly. Constructing an undici
+      // Response here makes response.blob() produce a cross-realm Blob that
+      // jsdom's FormData rejects.
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        blob: async () => new Blob(['ok'], { type }),
+      } as unknown as Response;
     });
 
     const body = await buildGPTImageEditFormData(

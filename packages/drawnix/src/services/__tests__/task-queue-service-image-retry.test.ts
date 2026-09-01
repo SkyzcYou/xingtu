@@ -113,6 +113,7 @@ async function setupTaskQueueServiceHarness(statusSequence: TaskStatus[]) {
 
   vi.doMock('../../utils/settings-manager', () => ({
     hasInvocationRouteCredentials: vi.fn(() => true),
+    getInvocationRouteCredentialStatusAsync: vi.fn(async () => 'ready'),
     createModelRef: (profileId?: string | null, modelId?: string | null) =>
       profileId || modelId
         ? {

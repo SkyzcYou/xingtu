@@ -81,6 +81,45 @@ describe('settings-manager', () => {
     localStorage.clear();
   });
 
+  it('显式 legacy-default 模型引用不会继承星图登录渠道', async () => {
+    mockSettingsManagerDeps();
+
+    localStorage.setItem(
+      DRAWNIX_SETTINGS_KEY,
+      JSON.stringify({
+        gemini: {
+          apiKey: 'api-key-channel',
+          baseUrl: 'https://api-key.example/v1',
+          imageModelName: 'api-key-image-model',
+        },
+        invocationPresets: [
+          {
+            id: 'default',
+            name: '默认方案',
+            isDefault: true,
+            image: {
+              defaultModelRef: {
+                profileId: 'xingtu-login',
+                modelId: 'xingtu-image-model',
+              },
+            },
+          },
+        ],
+      })
+    );
+
+    const { settingsManager } = await import('../settings-manager');
+    const route = settingsManager.resolveInvocationRoute('image', {
+      profileId: 'legacy-default',
+      modelId: 'api-key-image-model',
+    });
+
+    expect(route.profileId).toBe('legacy-default');
+    expect(route.credentialSource).toBe('api-key');
+    expect(route.apiKey).toBe('api-key-channel');
+    expect(route.baseUrl).toBe('https://api-key.example/v1');
+  });
+
   it('defaults missing compatibility while preserving managed profile details and explicit values', async () => {
     mockSettingsManagerDeps();
 

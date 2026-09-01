@@ -14,6 +14,10 @@ function imageTask(overrides: Partial<Task> = {}): Task {
     params: {
       prompt: '只修改涂抹区域',
       model: 'gpt-image-2',
+      modelRef: {
+        profileId: 'provider-image',
+        modelId: 'gpt-image-2',
+      },
       generationMode: 'image_edit',
       referenceImages: ['https://example.com/source.png'],
       maskImage: '/__aitu_cache__/image/mask.png',
@@ -36,6 +40,10 @@ describe('image-task-prefill', () => {
     expect(prefill.generationType).toBe('image');
     expect(prefill.prompt).toBe('只修改涂抹区域');
     expect(prefill.model).toBe('gpt-image-2');
+    expect(prefill.modelRef).toEqual({
+      profileId: 'provider-image',
+      modelId: 'gpt-image-2',
+    });
     expect(prefill.images).toEqual([
       {
         url: 'https://example.com/source.png',
@@ -55,6 +63,11 @@ describe('image-task-prefill', () => {
         maskImage: '/__aitu_cache__/image/mask.png',
       },
     ]);
+    expect(initialData.initialModel).toBe('gpt-image-2');
+    expect(initialData.initialModelRef).toEqual({
+      profileId: 'provider-image',
+      modelId: 'gpt-image-2',
+    });
   });
 
   it('多参考图任务不自动绑定单张 mask，避免错配', () => {

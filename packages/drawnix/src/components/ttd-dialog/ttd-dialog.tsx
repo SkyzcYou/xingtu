@@ -49,6 +49,21 @@ const MarkdownToDrawnix = lazy(() => import('./markdown-to-drawnix'));
 // 图像生成模式类型
 type ImageGenerationMode = 'single' | 'batch';
 
+interface SelectedModelSelection {
+  modelId: string;
+  modelRef: ModelRef | null;
+}
+
+function areModelRefsEqual(
+  left?: ModelRef | null,
+  right?: ModelRef | null
+): boolean {
+  return (
+    (left?.profileId || null) === (right?.profileId || null) &&
+    (left?.modelId || null) === (right?.modelId || null)
+  );
+}
+
 const TTDDialogComponent = ({
   container,
 }: {
@@ -76,14 +91,18 @@ const TTDDialogComponent = ({
   const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 模型选择状态
-  const [selectedImageModel, setSelectedImageModel] = useState<string>('');
-  const [selectedImageModelRef, setSelectedImageModelRef] =
-    useState<ModelRef | null>(null);
+  const [selectedImageSelection, setSelectedImageSelection] =
+    useState<SelectedModelSelection>({ modelId: '', modelRef: null });
+  const selectedImageModel = selectedImageSelection.modelId;
+  const selectedImageModelRef = selectedImageSelection.modelRef;
   const [selectedVideoModel, setSelectedVideoModel] = useState<string>('');
   const [selectedVideoModelRef, setSelectedVideoModelRef] =
     useState<ModelRef | null>(null);
   const lastPersistedImageSelectionRef = useRef<string | null>(null);
   const lastPersistedVideoSelectionRef = useRef<string | null>(null);
+  const pendingImageSelectionRef = useRef<string | null>(null);
+  const imageRouteWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const imageSelectionRevisionRef = useRef(0);
 
   const syncSelectedModelsFromRoutes = useCallback(() => {
     const imageRoute = resolveInvocationRoute('image');
@@ -101,23 +120,38 @@ const TTDDialogComponent = ({
       nextVideoModel
     );
 
-    setSelectedImageModel((prev) =>
-      prev === nextImageModel ? prev : nextImageModel
+    const nextImageSelectionKey = getSelectionKey(
+      nextImageModel,
+      nextImageModelRef
     );
-    setSelectedImageModelRef((prev) =>
-      getSelectionKey(nextImageModel, prev) ===
-      getSelectionKey(nextImageModel, nextImageModelRef)
-        ? prev
-        : nextImageModelRef
-    );
+    // A settings notification can arrive for an older queued write after the
+    // user has already selected a newer provider. Do not let that stale route
+    // overwrite the selection currently shown in the sidebar.
+    if (
+      !pendingImageSelectionRef.current ||
+      pendingImageSelectionRef.current === nextImageSelectionKey
+    ) {
+      if (pendingImageSelectionRef.current === nextImageSelectionKey) {
+        pendingImageSelectionRef.current = null;
+      }
+      setSelectedImageSelection((prev) => {
+        if (
+          prev.modelId === nextImageModel &&
+          areModelRefsEqual(prev.modelRef, nextImageModelRef)
+        ) {
+          return prev;
+        }
+        return {
+          modelId: nextImageModel,
+          modelRef: nextImageModelRef,
+        };
+      });
+    }
     setSelectedVideoModel((prev) =>
       prev === nextVideoModel ? prev : nextVideoModel
     );
     setSelectedVideoModelRef((prev) =>
-      getSelectionKey(nextVideoModel, prev) ===
-      getSelectionKey(nextVideoModel, nextVideoModelRef)
-        ? prev
-        : nextVideoModelRef
+      areModelRefsEqual(prev, nextVideoModelRef) ? prev : nextVideoModelRef
     );
   }, []);
 
@@ -141,18 +175,30 @@ const TTDDialogComponent = ({
     };
   }, [syncSelectedModelsFromRoutes]);
 
-  // 图片模型变更处理（同步更新到全局设置）
-  const handleImageModelChange = (value: string) => {
-    setSelectedImageModel(value);
-  };
+  // 图片模型与渠道必须作为一个选择原子更新，避免生成前读到旧渠道。
+  const handleImageModelSelectionChange = useCallback(
+    (value: string, valueRef: ModelRef | null) => {
+      const nextModelRef = valueRef
+        ? createModelRef(valueRef.profileId, value)
+        : null;
+      const nextSelectionKey = getSelectionKey(value, nextModelRef);
+      pendingImageSelectionRef.current = nextSelectionKey;
+      setSelectedImageSelection((prev) => {
+        if (
+          prev.modelId === value &&
+          areModelRefsEqual(prev.modelRef, nextModelRef)
+        ) {
+          return prev;
+        }
+        return { modelId: value, modelRef: nextModelRef };
+      });
+    },
+    []
+  );
 
   // 视频模型变更处理（同步更新到全局设置）
   const handleVideoModelChange = (value: string) => {
     setSelectedVideoModel(value);
-  };
-
-  const handleImageModelRefChange = (value: ModelRef | null) => {
-    setSelectedImageModelRef(value);
   };
 
   const handleVideoModelRefChange = (value: ModelRef | null) => {
@@ -173,10 +219,24 @@ const TTDDialogComponent = ({
     }
     lastPersistedImageSelectionRef.current = selectionKey;
 
-    void updateActiveInvocationRouteModel(
-      'image',
-      createModelRef(selectedImageModelRef?.profileId, selectedImageModel)
+    const nextModelRef = createModelRef(
+      selectedImageModelRef?.profileId,
+      selectedImageModel
     );
+    const revision = ++imageSelectionRevisionRef.current;
+    imageRouteWriteQueueRef.current = imageRouteWriteQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        // Coalesce rapid selections so an older async write cannot finish
+        // after the latest choice and restore the previous provider.
+        if (revision !== imageSelectionRevisionRef.current) {
+          return;
+        }
+        await updateActiveInvocationRouteModel('image', nextModelRef);
+      })
+      .catch((error) => {
+        console.error('[TTDDialog] failed to persist image model route', error);
+      });
   }, [selectedImageModel, selectedImageModelRef]);
 
   useEffect(() => {
@@ -207,6 +267,8 @@ const TTDDialogComponent = ({
     initialKnowledgeContextRefs?: KnowledgeContextRef[];
     initialResultUrl?: string; // 初始结果URL,用于显示预览
     initialAspectRatio?: string; // 选中 Frame 时自动匹配的宽高比
+    initialModel?: string;
+    initialModelRef?: ModelRef | null;
     targetFrameId?: string; // 目标 Frame ID（用于将生成结果插入到 Frame 内部）
     targetFrameDimensions?: { width: number; height: number }; // Frame 尺寸
     pptSlideImage?: boolean;
@@ -225,6 +287,7 @@ const TTDDialogComponent = ({
     initialImages?: any[]; // 支持多图片格式
     initialDuration?: number;
     initialModel?: VideoModel;
+    initialModelRef?: ModelRef | null;
     initialSize?: string;
     initialResultUrl?: string;
   }>({
@@ -379,6 +442,13 @@ const TTDDialogComponent = ({
               imageDialogInitialData.initialResultUrl ||
               imageDialogInitialData.resultUrl,
             initialAspectRatio: imageDialogInitialData.initialAspectRatio,
+            initialModel:
+              imageDialogInitialData.initialModel ||
+              imageDialogInitialData.model,
+            initialModelRef:
+              imageDialogInitialData.initialModelRef !== undefined
+                ? imageDialogInitialData.initialModelRef
+                : imageDialogInitialData.modelRef,
             targetFrameId: imageDialogInitialData.targetFrameId,
             targetFrameDimensions:
               imageDialogInitialData.targetFrameDimensions,
@@ -386,11 +456,31 @@ const TTDDialogComponent = ({
             pptSlidePrompt: imageDialogInitialData.pptSlidePrompt,
             pptReplaceElementId: imageDialogInitialData.pptReplaceElementId,
           });
-          if (imageDialogInitialData.initialModel) {
-            setSelectedImageModel(imageDialogInitialData.initialModel);
-          }
-          if (imageDialogInitialData.initialModelRef !== undefined) {
-            setSelectedImageModelRef(imageDialogInitialData.initialModelRef);
+          const resolvedImageModel =
+            imageDialogInitialData.initialModel || imageDialogInitialData.model;
+          const resolvedImageModelRef =
+            imageDialogInitialData.initialModelRef !== undefined
+              ? imageDialogInitialData.initialModelRef
+              : imageDialogInitialData.modelRef;
+          if (resolvedImageModel || resolvedImageModelRef !== undefined) {
+            setSelectedImageSelection((prev) => {
+              const nextModelId = resolvedImageModel || prev.modelId;
+              const nextModelRef =
+                resolvedImageModelRef !== undefined
+                  ? resolvedImageModelRef
+                    ? createModelRef(
+                        resolvedImageModelRef.profileId,
+                        nextModelId
+                      )
+                    : null
+                  : prev.modelRef?.modelId === nextModelId
+                  ? prev.modelRef
+                  : null;
+              return {
+                modelId: nextModelId,
+                modelRef: nextModelRef,
+              };
+            });
           }
           return;
         }
@@ -537,14 +627,22 @@ const TTDDialogComponent = ({
             initialResultUrl:
               videoDialogInitialData.initialResultUrl ||
               videoDialogInitialData.resultUrl,
+            initialModelRef:
+              videoDialogInitialData.initialModelRef !== undefined
+                ? videoDialogInitialData.initialModelRef
+                : videoDialogInitialData.modelRef,
           });
           const resolvedVideoModel =
             videoDialogInitialData.initialModel || videoDialogInitialData.model;
+          const resolvedVideoModelRef =
+            videoDialogInitialData.initialModelRef !== undefined
+              ? videoDialogInitialData.initialModelRef
+              : videoDialogInitialData.modelRef;
           if (resolvedVideoModel) {
             setSelectedVideoModel(resolvedVideoModel);
           }
-          if (videoDialogInitialData.initialModelRef !== undefined) {
-            setSelectedVideoModelRef(videoDialogInitialData.initialModelRef);
+          if (resolvedVideoModelRef !== undefined) {
+            setSelectedVideoModelRef(resolvedVideoModelRef);
           }
           return;
         }
@@ -780,8 +878,7 @@ const TTDDialogComponent = ({
                 onSwitchToSingle={() => handleImageModeChange('single')}
                 selectedModel={selectedImageModel}
                 selectedModelRef={selectedImageModelRef}
-                onModelChange={handleImageModelChange}
-                onModelRefChange={handleImageModelRefChange}
+                onModelSelectionChange={handleImageModelSelectionChange}
               />
             </Suspense>
           ) : (
@@ -806,6 +903,17 @@ const TTDDialogComponent = ({
               }
               initialResultUrl={aiImageData.initialResultUrl}
               initialAspectRatio={aiImageData.initialAspectRatio}
+              initialModel={
+                imageDialogInitialData?.initialModel ||
+                imageDialogInitialData?.model
+              }
+              initialModelRef={
+                imageDialogInitialData
+                  ? imageDialogInitialData.initialModelRef !== undefined
+                    ? imageDialogInitialData.initialModelRef
+                    : imageDialogInitialData.modelRef
+                  : undefined
+              }
               targetFrameId={aiImageData.targetFrameId}
               targetFrameDimensions={aiImageData.targetFrameDimensions}
               pptSlideImage={aiImageData.pptSlideImage}
@@ -813,8 +921,7 @@ const TTDDialogComponent = ({
               pptReplaceElementId={aiImageData.pptReplaceElementId}
               selectedModel={selectedImageModel}
               selectedModelRef={selectedImageModelRef}
-              onModelChange={handleImageModelChange}
-              onModelRefChange={handleImageModelRefChange}
+              onModelSelectionChange={handleImageModelSelectionChange}
               externalBatchId={imageDialogInitialData?.batchId}
               assetMetadata={imageDialogInitialData?.assetMetadata}
               initialAutoInsertToCanvas={imageDialogInitialData?.autoInsertToCanvas}
@@ -852,7 +959,17 @@ const TTDDialogComponent = ({
               []
             }
             initialDuration={aiVideoData.initialDuration}
-            initialModel={aiVideoData.initialModel}
+            initialModel={
+              videoDialogInitialData?.initialModel ||
+              videoDialogInitialData?.model
+            }
+            initialModelRef={
+              videoDialogInitialData
+                ? videoDialogInitialData.initialModelRef !== undefined
+                  ? videoDialogInitialData.initialModelRef
+                  : videoDialogInitialData.modelRef
+                : undefined
+            }
             initialSize={aiVideoData.initialSize}
             initialResultUrl={aiVideoData.initialResultUrl}
             selectedModel={selectedVideoModel}

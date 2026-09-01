@@ -329,10 +329,48 @@ function getDefaultTasks(): TaskRow[] {
   return initialTasks;
 }
 
+function areModelRefsEqual(
+  left?: ModelRef | null,
+  right?: ModelRef | null
+): boolean {
+  return (
+    (left?.profileId || null) === (right?.profileId || null) &&
+    (left?.modelId || null) === (right?.modelId || null)
+  );
+}
+
+function getAlignedModelRef(
+  modelId?: string | null,
+  modelRef?: ModelRef | null
+): ModelRef | null {
+  const normalized = createModelRef(modelRef?.profileId, modelRef?.modelId);
+  return normalized?.modelId === (modelId || null) ? normalized : null;
+}
+
+function resolveImageModelRef(
+  models: ModelConfig[],
+  modelId?: string | null,
+  modelRef?: ModelRef | null
+): ModelRef | null {
+  if (!modelId) {
+    return null;
+  }
+
+  const alignedRef = getAlignedModelRef(modelId, modelRef);
+  const matchedModel = findMatchingSelectableModel(models, modelId, alignedRef);
+  // Preserve an explicit provider ref when the matching model is static and
+  // therefore does not expose sourceProfileId.
+  return alignedRef || getModelRefFromConfig(matchedModel);
+}
+
 interface BatchImageGenerationProps {
   onSwitchToSingle?: () => void;
   selectedModel?: string;
   selectedModelRef?: ModelRef | null;
+  onModelSelectionChange?: (
+    value: string,
+    modelRef: ModelRef | null
+  ) => void;
   onModelChange?: (value: string) => void;
   onModelRefChange?: (value: ModelRef | null) => void;
 }
@@ -341,6 +379,7 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
   onSwitchToSingle,
   selectedModel: controlledSelectedModel,
   selectedModelRef: controlledSelectedModelRef,
+  onModelSelectionChange,
   onModelChange,
   onModelRefChange,
 }) => {
@@ -504,25 +543,38 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
 
   // 模型选择
   const initialRoute = resolveInvocationRoute('image');
+  const initialPreferredModelId =
+    controlledSelectedModel || initialRoute.modelId;
+  const initialPreferredModelRef = getAlignedModelRef(
+    initialPreferredModelId,
+    controlledSelectedModel
+      ? controlledSelectedModelRef
+      : createModelRef(initialRoute.profileId, initialRoute.modelId)
+  );
   const initialMatchedModel =
     findMatchingSelectableModel(
       imageModels,
-      initialRoute.modelId,
-      createModelRef(initialRoute.profileId, initialRoute.modelId)
+      initialPreferredModelId,
+      initialPreferredModelRef
     ) ||
     getPinnedSelectableModel(
       'image',
-      initialRoute.modelId,
-      createModelRef(initialRoute.profileId, initialRoute.modelId)
+      initialPreferredModelId,
+      initialPreferredModelRef
     );
+  const initialResolvedModelRef = resolveImageModelRef(
+    imageModels,
+    initialMatchedModel?.id || initialPreferredModelId,
+    initialPreferredModelRef || getModelRefFromConfig(initialMatchedModel)
+  );
   const [selectedModel, setSelectedModel] = useState<string>(
     initialMatchedModel?.id ||
+      initialPreferredModelId ||
       imageModels[0]?.id ||
       getDefaultImageModel()
   );
   const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
-    getModelRefFromConfig(initialMatchedModel) ||
-      createModelRef(initialRoute.profileId, initialRoute.modelId)
+    initialResolvedModelRef
   );
   const visibleImageModels = useMemo(() => {
     const currentMatch = findMatchingSelectableModel(
@@ -590,10 +642,37 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
       selectedModelRef
     );
     if (!matchedModel) {
-      setSelectedModel(visibleImageModels[0].id);
-      setSelectedModelRef(getModelRefFromConfig(visibleImageModels[0]));
+      const fallback = visibleImageModels[0];
+      setSelectedModel(fallback.id);
+      setSelectedModelRef((prev) => {
+        const nextRef = getModelRefFromConfig(fallback);
+        return areModelRefsEqual(prev, nextRef) ? prev : nextRef;
+      });
+      return;
     }
+
+    const nextModelRef = resolveImageModelRef(
+      visibleImageModels,
+      selectedModel,
+      selectedModelRef
+    );
+    setSelectedModelRef((prev) =>
+      areModelRefsEqual(prev, nextModelRef) ? prev : nextModelRef
+    );
   }, [selectedModel, selectedModelRef, visibleImageModels]);
+
+  const notifyModelSelectionChange = useCallback(
+    (modelId: string, modelRef: ModelRef | null) => {
+      if (onModelSelectionChange) {
+        onModelSelectionChange(modelId, modelRef);
+        return;
+      }
+
+      onModelChange?.(modelId);
+      onModelRefChange?.(modelRef);
+    },
+    [onModelChange, onModelRefChange, onModelSelectionChange]
+  );
 
   useEffect(() => {
     if (!controlledSelectedModel) {
@@ -611,15 +690,13 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
 
     if (currentSelectionKey !== nextSelectionKey) {
       setSelectedModel(controlledSelectedModel);
-      const matchedModel = findMatchingSelectableModel(
+      const nextRef = resolveImageModelRef(
         visibleImageModels,
         controlledSelectedModel,
         controlledSelectedModelRef
       );
-      setSelectedModelRef(
-        getModelRefFromConfig(matchedModel) ||
-          controlledSelectedModelRef ||
-          null
+      setSelectedModelRef((prev) =>
+        areModelRefsEqual(prev, nextRef) ? prev : nextRef
       );
     }
   }, [
@@ -3293,18 +3370,15 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
               <ModelDropdown
                 selectedModel={selectedModel}
                 selectedSelectionKey={selectedSelectionKey}
-                onSelect={(value) => {
+                onSelect={(value, modelRef) => {
+                  const nextModelRef = resolveImageModelRef(
+                    visibleImageModels,
+                    value,
+                    modelRef || null
+                  );
                   setSelectedModel(value);
-                  setSelectedModelRef(null);
-                  onModelChange?.(value);
-                  onModelRefChange?.(null);
-                }}
-                onSelectModel={(model: ModelConfig) => {
-                  setSelectedModel(model.id);
-                  const nextModelRef = getModelRefFromConfig(model);
                   setSelectedModelRef(nextModelRef);
-                  onModelChange?.(model.id);
-                  onModelRefChange?.(nextModelRef);
+                  notifyModelSelectionChange(value, nextModelRef);
                 }}
                 language={language}
                 models={visibleImageModels}

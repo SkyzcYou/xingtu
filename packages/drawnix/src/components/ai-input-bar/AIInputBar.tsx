@@ -457,6 +457,30 @@ function getModelRefFromConfig(model?: ModelConfig | null): ModelRef | null {
   return createModelRef(model.sourceProfileId || null, model.id);
 }
 
+function resolveStoredModelRef(
+  type: PersistedGenerationType,
+  modelId?: string | null,
+  model?: ModelConfig | null,
+  route?: ReturnType<typeof resolveInvocationRoute>
+): ModelRef | null {
+  if (!modelId) {
+    return getModelRefFromConfig(model);
+  }
+
+  const persisted = getPersistedModelSelection(type);
+  if (persisted?.modelId === modelId) {
+    return createModelRef(persisted.profileId, modelId);
+  }
+
+  const resolvedRoute =
+    route || resolveInvocationRoute(getRouteTypeForGenerationType(type));
+  if (resolvedRoute.modelId === modelId) {
+    return createModelRef(resolvedRoute.profileId, modelId);
+  }
+
+  return getModelRefFromConfig(model);
+}
+
 function getPromptLengthBucket(length: number): string {
   if (length <= 0) return '0';
   if (length <= 20) return '1-20';
@@ -564,27 +588,32 @@ function findMatchingSelectableModel(
   const expectedKey = getSelectionKey(modelId, modelRef);
   const expectedProfileId = modelRef?.profileId || null;
 
-  if (expectedProfileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID) {
-    return (
-      models.find((model) => getSelectionKeyForModel(model) === expectedKey) ||
-      models.find(
-        (model) =>
-          model.id === modelId &&
-          (model.sourceProfileId || null) === expectedProfileId
-      )
-    );
+  const exactMatch = models.find(
+    (model) => getSelectionKeyForModel(model) === expectedKey
+  );
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const profileMatch = models.find(
+    (model) =>
+      model.id === modelId &&
+      ((model.sourceProfileId || null) === expectedProfileId ||
+        (expectedProfileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID &&
+          !model.sourceProfileId))
+  );
+  if (profileMatch) {
+    return profileMatch;
+  }
+
+  // An explicit provider reference must not silently resolve to a same-named
+  // model from another provider.
+  if (expectedProfileId !== null) {
+    return undefined;
   }
 
   return (
-    models.find((model) => getSelectionKeyForModel(model) === expectedKey) ||
-    models.find(
-      (model) =>
-        model.id === modelId &&
-        (model.sourceProfileId || null) === expectedProfileId
-    ) ||
-    (expectedProfileId === null
-      ? models.find((model) => model.id === modelId && !model.sourceProfileId)
-      : undefined) ||
+    models.find((model) => model.id === modelId && !model.sourceProfileId) ||
     models.find((model) => model.id === modelId)
   );
 }
@@ -1253,24 +1282,64 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       resolvePreferredModelSelection('audio', audioModels) ||
       getModelConfig(getDefaultAudioModel());
     const initialImageRoute = resolveInvocationRoute('image');
-    const initialSelectedModelId =
+    const initialVideoRoute = resolveInvocationRoute('video');
+    const initialAudioRoute = resolveInvocationRoute('audio');
+    const initialSelectedRoute = resolveInvocationRoute(
+      getRouteTypeForGenerationType(initialGenerationType)
+    );
+    const initialImageModelId =
       initialImageModel?.id ||
       initialImageRoute.modelId ||
       getDefaultImageModel();
-    const initialSelectedModelRef =
-      getModelRefFromConfig(initialImageModel) ||
-      createModelRef(initialImageRoute.profileId, initialImageRoute.modelId);
+    const initialVideoModelId =
+      initialVideoModel?.id ||
+      initialVideoRoute.modelId ||
+      getDefaultVideoModel();
+    const initialAudioModelId =
+      initialAudioModel?.id ||
+      initialAudioRoute.modelId ||
+      getDefaultAudioModel();
+    const initialSelectedModelId =
+      initialSelectedModelConfig?.id ||
+      initialPreferences.selectedModel ||
+      initialSelectedRoute.modelId ||
+      getDefaultModelForRouteType(
+        getRouteTypeForGenerationType(initialGenerationType)
+      );
+    const initialImageModelRef = resolveStoredModelRef(
+      'image',
+      initialImageModelId,
+      initialImageModel,
+      initialImageRoute
+    );
+    const initialVideoModelRef = resolveStoredModelRef(
+      'video',
+      initialVideoModelId,
+      initialVideoModel,
+      initialVideoRoute
+    );
+    const initialAudioModelRef = resolveStoredModelRef(
+      'audio',
+      initialAudioModelId,
+      initialAudioModel,
+      initialAudioRoute
+    );
+    const initialSelectedModelRef = resolveStoredModelRef(
+      initialGenerationType,
+      initialSelectedModelId,
+      initialSelectedModelConfig,
+      initialSelectedRoute
+    );
     const initialSelectedModelKey = getSelectionKey(
-      initialSelectedModelConfig?.id || initialSelectedModelId,
-      getModelRefFromConfig(initialSelectedModelConfig) ||
-        initialSelectedModelRef
+      initialSelectedModelId,
+      initialSelectedModelRef
     );
     const initialScopedSelectedParams =
       initialGenerationType === 'agent'
         ? {}
         : loadScopedAIInputModelParams(
             initialGenerationType,
-            initialSelectedModelConfig?.id || initialSelectedModelId,
+            initialSelectedModelId,
             initialSelectedModelKey,
             initialPreferences.selectedParams
           );
@@ -1310,27 +1379,26 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     );
     // 当前选中的图片/视频/文本模型
     const [selectedModel, setSelectedModel] = useState(
-      initialSelectedModelConfig?.id || initialSelectedModelId
+      initialSelectedModelId
     );
     const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
-      getModelRefFromConfig(initialSelectedModelConfig) ||
-        initialSelectedModelRef
+      initialSelectedModelRef
     );
     const [selectedAgentImageModel, setSelectedAgentImageModel] = useState(
-      initialImageModel?.id || getDefaultImageModel()
+      initialImageModelId
     );
     const [selectedAgentImageModelRef, setSelectedAgentImageModelRef] =
-      useState<ModelRef | null>(getModelRefFromConfig(initialImageModel));
+      useState<ModelRef | null>(initialImageModelRef);
     const [selectedAgentVideoModel, setSelectedAgentVideoModel] = useState(
-      initialVideoModel?.id || getDefaultVideoModel()
+      initialVideoModelId
     );
     const [selectedAgentVideoModelRef, setSelectedAgentVideoModelRef] =
-      useState<ModelRef | null>(getModelRefFromConfig(initialVideoModel));
+      useState<ModelRef | null>(initialVideoModelRef);
     const [selectedAgentAudioModel, setSelectedAgentAudioModel] = useState(
-      initialAudioModel?.id || getDefaultAudioModel()
+      initialAudioModelId
     );
     const [selectedAgentAudioModelRef, setSelectedAgentAudioModelRef] =
-      useState<ModelRef | null>(getModelRefFromConfig(initialAudioModel));
+      useState<ModelRef | null>(initialAudioModelRef);
     const [selectedSkillMediaTypes, setSelectedSkillMediaTypes] = useState<
       SkillMediaType[]
     >([]);
@@ -1612,14 +1680,25 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         resolvePreferredModelSelection(generationType, modelsForType);
 
       if (nextModelConfig) {
+        const nextModelRef =
+          selectedModelRef?.modelId === nextModelConfig.id
+            ? selectedModelRef
+            : resolveStoredModelRef(
+                generationType,
+                nextModelConfig.id,
+                nextModelConfig
+              );
         const currentSelectionKey = getSelectionKey(
           selectedModel,
           selectedModelRef
         );
-        const nextSelectionKey = getSelectionKeyForModel(nextModelConfig);
+        const nextSelectionKey = getSelectionKey(
+          nextModelConfig.id,
+          nextModelRef
+        );
         if (currentSelectionKey !== nextSelectionKey) {
           setSelectedModel(nextModelConfig.id);
-          setSelectedModelRef(getModelRefFromConfig(nextModelConfig));
+          setSelectedModelRef(nextModelRef);
         }
       }
 
@@ -1666,8 +1745,16 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
         const nextModelConfig = resolvePreferredModelSelection(type, models);
         if (nextModelConfig) {
+          const nextModelRef =
+            selectedRef?.modelId === nextModelConfig.id
+              ? selectedRef
+              : resolveStoredModelRef(
+                  type,
+                  nextModelConfig.id,
+                  nextModelConfig
+                );
           setModelId(nextModelConfig.id);
-          setModelRef(getModelRefFromConfig(nextModelConfig));
+          setModelRef(nextModelRef);
         }
       };
 
@@ -2310,16 +2397,22 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             : nextGenerationType === 'text' || nextGenerationType === 'agent'
             ? textModels
             : imageModels;
+        const hasExplicitModelRef = detail.modelRef !== undefined;
         const nextModel =
           findMatchingSelectableModel(
             modelsForType,
             detail.model,
             detail.modelRef || null
           ) ||
-          findMatchingSelectableModel(modelsForType, detail.model, null) ||
+          (!hasExplicitModelRef
+            ? findMatchingSelectableModel(modelsForType, detail.model, null)
+            : undefined) ||
           resolvePreferredModelSelection(nextGenerationType, modelsForType);
-        const nextModelRef = getModelRefFromConfig(nextModel);
         const nextModelId = nextModel?.id || detail.model || selectedModel;
+        const nextModelRef =
+          detail.modelRef && detail.modelRef.modelId === nextModelId
+            ? detail.modelRef
+            : getModelRefFromConfig(nextModel);
         const nextScopeKey = getSelectionKey(nextModelId, nextModelRef);
         const nextParams =
           nextGenerationType === 'agent'
@@ -2976,7 +3069,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     }, []);
 
     const applyModelSelection = useCallback(
-      (model: ModelConfig) => {
+      (model: ModelConfig, modelRef?: ModelRef | null) => {
         const nextGenerationType = resolveGenerationTypeForModelSelection(
           generationType,
           model.type
@@ -2985,7 +3078,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         analytics.track('ai_input_change_model', {
           model: model.id,
           type: model.type,
-          profileId: model.sourceProfileId || null,
+          profileId: modelRef?.profileId || model.sourceProfileId || null,
         });
 
         // 清除触发符号
@@ -2994,7 +3087,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         // 更新状态（反显到下方下拉框）
         setGenerationType(nextGenerationType);
         setSelectedModel(model.id);
-        const nextModelRef = getModelRefFromConfig(model);
+        const nextModelRef = modelRef ?? getModelRefFromConfig(model);
         setSelectedModelRef(nextModelRef);
         setPersistedModelSelection(
           nextGenerationType as PersistedGenerationType,
@@ -3024,31 +3117,39 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
     // 处理模型选择（从下拉菜单）
     const handleModelSelect = useCallback(
-      (modelId: string) => {
+      (modelId: string, modelRef?: ModelRef | null) => {
+        const hasExplicitModelRef = modelRef !== undefined;
         const model =
           findMatchingSelectableModel(
             currentModels,
             modelId,
-            selectedModelRef
+            modelRef || null
           ) ||
-          findMatchingSelectableModel(currentModels, modelId, null) ||
+          (!hasExplicitModelRef
+            ? findMatchingSelectableModel(currentModels, modelId, null)
+            : undefined) ||
           getModelConfig(modelId);
         if (!model) return;
-        applyModelSelection(model);
+        applyModelSelection(model, modelRef);
       },
-      [applyModelSelection, currentModels, selectedModelRef]
+      [applyModelSelection, currentModels]
     );
 
     const handleModelConfigSelect = useCallback(
-      (model: ModelConfig) => {
-        applyModelSelection(model);
+      (model: ModelConfig, modelRef?: ModelRef | null) => {
+        applyModelSelection(model, modelRef);
       },
       [applyModelSelection]
     );
 
     const applyAgentMediaModelSelection = useCallback(
-      (type: SkillMediaType, model: ModelConfig) => {
-        const modelRef = getModelRefFromConfig(model);
+      (
+        type: SkillMediaType,
+        model: ModelConfig,
+        selectedModelRef?: ModelRef | null
+      ) => {
+        const modelRef =
+          selectedModelRef ?? getModelRefFromConfig(model);
         if (type === 'image') {
           setSelectedAgentImageModel(model.id);
           setSelectedAgentImageModelRef(modelRef);
@@ -3070,7 +3171,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         analytics.track('ai_input_change_agent_media_model', {
           model: model.id,
           type,
-          profileId: model.sourceProfileId || null,
+          profileId: modelRef?.profileId || model.sourceProfileId || null,
         });
       },
       []
@@ -3078,6 +3179,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
     const handleAgentMediaModelSelect = useCallback(
       (type: SkillMediaType, modelId: string, modelRef?: ModelRef | null) => {
+        const hasExplicitModelRef = modelRef !== undefined;
         const models =
           type === 'image'
             ? visibleAgentImageModels
@@ -3086,10 +3188,12 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             : visibleAgentAudioModels;
         const model =
           findMatchingSelectableModel(models, modelId, modelRef || null) ||
-          findMatchingSelectableModel(models, modelId, null) ||
+          (!hasExplicitModelRef
+            ? findMatchingSelectableModel(models, modelId, null)
+            : undefined) ||
           getModelConfig(modelId);
         if (!model) return;
-        applyAgentMediaModelSelection(type, model);
+        applyAgentMediaModelSelection(type, model, modelRef);
       },
       [
         applyAgentMediaModelSelection,
@@ -3100,8 +3204,12 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     );
 
     const handleAgentMediaModelConfigSelect = useCallback(
-      (type: SkillMediaType, model: ModelConfig) => {
-        applyAgentMediaModelSelection(type, model);
+      (
+        type: SkillMediaType,
+        model: ModelConfig,
+        modelRef?: ModelRef | null
+      ) => {
+        applyAgentMediaModelSelection(type, model, modelRef);
       },
       [applyAgentMediaModelSelection]
     );
@@ -5345,8 +5453,12 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                       onSelect={(modelId, modelRef) =>
                         handleAgentMediaModelSelect('image', modelId, modelRef)
                       }
-                      onSelectModel={(model) =>
-                        handleAgentMediaModelConfigSelect('image', model)
+                      onSelectModel={(model, modelRef) =>
+                        handleAgentMediaModelConfigSelect(
+                          'image',
+                          model,
+                          modelRef
+                        )
                       }
                       language={language}
                       models={visibleAgentImageModels}
@@ -5370,8 +5482,12 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                       onSelect={(modelId, modelRef) =>
                         handleAgentMediaModelSelect('video', modelId, modelRef)
                       }
-                      onSelectModel={(model) =>
-                        handleAgentMediaModelConfigSelect('video', model)
+                      onSelectModel={(model, modelRef) =>
+                        handleAgentMediaModelConfigSelect(
+                          'video',
+                          model,
+                          modelRef
+                        )
                       }
                       language={language}
                       models={visibleAgentVideoModels}
@@ -5395,8 +5511,12 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                       onSelect={(modelId, modelRef) =>
                         handleAgentMediaModelSelect('audio', modelId, modelRef)
                       }
-                      onSelectModel={(model) =>
-                        handleAgentMediaModelConfigSelect('audio', model)
+                      onSelectModel={(model, modelRef) =>
+                        handleAgentMediaModelConfigSelect(
+                          'audio',
+                          model,
+                          modelRef
+                        )
                       }
                       language={language}
                       models={visibleAgentAudioModels}

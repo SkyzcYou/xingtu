@@ -89,6 +89,8 @@ interface AIImageGenerationProps {
   initialHeight?: number;
   initialResultUrl?: string;
   initialAspectRatio?: string;
+  initialModel?: string;
+  initialModelRef?: ModelRef | null;
   targetFrameId?: string;
   targetFrameDimensions?: { width: number; height: number };
   pptSlideImage?: boolean;
@@ -96,6 +98,10 @@ interface AIImageGenerationProps {
   pptReplaceElementId?: string;
   selectedModel?: string;
   selectedModelRef?: ModelRef | null;
+  onModelSelectionChange?: (
+    value: string,
+    modelRef: ModelRef | null
+  ) => void;
   onModelChange?: (value: string) => void;
   onModelRefChange?: (value: ModelRef | null) => void;
   /** 外部传入的 batchId，用于任务关联（如视频分析器帧生成） */
@@ -170,6 +176,40 @@ function stripMaskFromReferenceImages(images: ReferenceImage[]) {
   return images.map(({ maskImage: _maskImage, ...image }) => image);
 }
 
+function areModelRefsEqual(
+  left?: ModelRef | null,
+  right?: ModelRef | null
+): boolean {
+  return (
+    (left?.profileId || null) === (right?.profileId || null) &&
+    (left?.modelId || null) === (right?.modelId || null)
+  );
+}
+
+function getAlignedModelRef(
+  modelId?: string | null,
+  modelRef?: ModelRef | null
+): ModelRef | null {
+  const normalized = createModelRef(modelRef?.profileId, modelRef?.modelId);
+  return normalized?.modelId === (modelId || null) ? normalized : null;
+}
+
+function resolveImageModelRef(
+  models: ModelConfig[],
+  modelId?: string | null,
+  modelRef?: ModelRef | null
+): ModelRef | null {
+  if (!modelId) {
+    return null;
+  }
+
+  const alignedRef = getAlignedModelRef(modelId, modelRef);
+  const matchedModel = findMatchingSelectableModel(models, modelId, alignedRef);
+  // A caller-provided ref carries the selected provider, while static model
+  // configs intentionally have no sourceProfileId. Keep the explicit ref.
+  return alignedRef || getModelRefFromConfig(matchedModel);
+}
+
 const AIImageGeneration = ({
   initialPrompt = '',
   initialImages = [],
@@ -179,6 +219,8 @@ const AIImageGeneration = ({
   initialHeight,
   initialResultUrl,
   initialAspectRatio,
+  initialModel,
+  initialModelRef,
   targetFrameId,
   targetFrameDimensions,
   pptSlideImage,
@@ -186,6 +228,7 @@ const AIImageGeneration = ({
   pptReplaceElementId,
   selectedModel,
   selectedModelRef,
+  onModelSelectionChange,
   onModelChange,
   onModelRefChange,
   externalBatchId,
@@ -195,32 +238,53 @@ const AIImageGeneration = ({
 }: AIImageGenerationProps = {}) => {
   const imageModels = useSelectableModels('image');
   const initialRoute = resolveInvocationRoute('image');
+  const initialPreferredModelId = initialModel || selectedModel || initialRoute.modelId;
+  const hasInitialModel = Boolean(initialModel);
+  const initialPreferredModelRef = getAlignedModelRef(
+    initialPreferredModelId,
+    hasInitialModel
+      ? initialModelRef !== undefined
+        ? initialModelRef
+        : selectedModel === initialPreferredModelId
+        ? selectedModelRef
+        : initialRoute.modelId === initialPreferredModelId
+        ? createModelRef(initialRoute.profileId, initialRoute.modelId)
+        : null
+      : selectedModel
+      ? selectedModelRef
+      : createModelRef(initialRoute.profileId, initialRoute.modelId)
+  );
   const initialMatchedModel =
     findMatchingSelectableModel(
       imageModels,
-      initialRoute.modelId,
-      createModelRef(initialRoute.profileId, initialRoute.modelId)
+      initialPreferredModelId,
+      initialPreferredModelRef
     ) ||
     getPinnedSelectableModel(
       'image',
-      initialRoute.modelId,
-      createModelRef(initialRoute.profileId, initialRoute.modelId)
+      initialPreferredModelId,
+      initialPreferredModelRef
     );
+  const initialResolvedModelRef = resolveImageModelRef(
+    imageModels,
+    initialMatchedModel?.id || initialPreferredModelId,
+    initialPreferredModelRef || getModelRefFromConfig(initialMatchedModel)
+  );
   const [currentModel, setCurrentModel] = useState(
     initialMatchedModel?.id ||
+      initialPreferredModelId ||
       imageModels[0]?.id ||
       getDefaultImageModel()
   );
   const [currentModelRef, setCurrentModelRef] = useState<ModelRef | null>(
-    getModelRefFromConfig(initialMatchedModel) ||
-      createModelRef(initialRoute.profileId, initialRoute.modelId)
+    initialResolvedModelRef
   );
   const initialSelectionKey = getSelectionKey(
     initialMatchedModel?.id ||
+      initialPreferredModelId ||
       imageModels[0]?.id ||
       getDefaultImageModel(),
-    getModelRefFromConfig(initialMatchedModel) ||
-      createModelRef(initialRoute.profileId, initialRoute.modelId)
+    initialResolvedModelRef
   );
   const initialScopedPreferences = loadScopedAIImageToolPreferences(
     initialMatchedModel?.id ||
@@ -375,6 +439,8 @@ const AIImageGeneration = ({
       height: initialHeight,
       result: initialResultUrl,
       aspectRatio: initialAspectRatio,
+      model: initialModel,
+      modelRef: initialModelRef,
       targetFrameId,
       pptSlideImage,
       pptSlidePrompt,
@@ -396,6 +462,19 @@ const AIImageGeneration = ({
     setUploadedImages(initialImages || []);
     if (initialWidth) setWidth(initialWidth);
     if (initialHeight) setHeight(initialHeight);
+    if (initialModel) {
+      setCurrentModel(initialModel);
+      const nextModelRef = resolveImageModelRef(
+        imageModels,
+        initialModel,
+        initialModelRef !== undefined
+          ? initialModelRef
+          : selectedModel === initialModel
+          ? selectedModelRef
+          : null
+      );
+      setCurrentModelRef(nextModelRef);
+    }
     // 如果有 Frame 匹配的宽高比，自动设置
     if (initialAspectRatio) {
       setAspectRatio(initialAspectRatio);
@@ -410,12 +489,17 @@ const AIImageGeneration = ({
     initialSelectedElementIds,
     initialWidth,
     initialHeight,
+    initialModel,
+    initialModelRef,
     initialResultUrl,
     initialAspectRatio,
     targetFrameId,
     pptSlideImage,
     pptSlidePrompt,
     pptReplaceElementId,
+    selectedModel,
+    selectedModelRef,
+    imageModels,
     isManualEdit,
     currentModel,
   ]);
@@ -463,6 +547,13 @@ const AIImageGeneration = ({
   }, [aspectRatio, onDraftChange, prompt, uploadedImages]);
 
   useEffect(() => {
+    // When the parent controls the sidebar selector, its route selection is
+    // the source of truth. Avoid a legacy settings listener briefly restoring
+    // the previous model/provider while the route write is in flight.
+    if (selectedModel !== undefined) {
+      return;
+    }
+
     const handleSettingsChange = (newSettings: any) => {
       const nextModel =
         newSettings.imageModelName ||
@@ -470,21 +561,39 @@ const AIImageGeneration = ({
         getDefaultImageModel();
       if (nextModel !== currentModel) {
         setCurrentModel(nextModel);
-        const matchedModel = findMatchingSelectableModel(
+        const nextModelRef = resolveImageModelRef(
           visibleImageModels,
           nextModel,
           currentModelRef
         );
-        setCurrentModelRef(getModelRefFromConfig(matchedModel) || null);
+        setCurrentModelRef(nextModelRef);
       }
     };
     geminiSettings.addListener(handleSettingsChange);
     return () => geminiSettings.removeListener(handleSettingsChange);
-  }, [currentModel, currentModelRef, visibleImageModels]);
+  }, [currentModel, currentModelRef, selectedModel, visibleImageModels]);
+
+  const notifyModelSelectionChange = useCallback(
+    (modelId: string, modelRef: ModelRef | null) => {
+      if (onModelSelectionChange) {
+        onModelSelectionChange(modelId, modelRef);
+        return;
+      }
+
+      onModelChange?.(modelId);
+      onModelRefChange?.(modelRef);
+    },
+    [onModelChange, onModelRefChange, onModelSelectionChange]
+  );
 
   useEffect(() => {
     if (visibleImageModels.length === 0) return;
     const matchedModel = findMatchingSelectableModel(
+      visibleImageModels,
+      currentModel,
+      currentModelRef
+    );
+    const nextModelRef = resolveImageModelRef(
       visibleImageModels,
       currentModel,
       currentModelRef
@@ -495,17 +604,20 @@ const AIImageGeneration = ({
       // 避免每次创建新对象引用导致级联重渲染
       const nextRef = getModelRefFromConfig(fallback);
       setCurrentModelRef((prev) => {
-        if (
-          prev &&
-          nextRef &&
-          prev.profileId === nextRef.profileId &&
-          prev.modelId === nextRef.modelId
-        ) {
+        if (areModelRefsEqual(prev, nextRef)) {
           return prev;
         }
         return nextRef;
       });
+      return;
     }
+
+    setCurrentModelRef((prev) => {
+      if (areModelRefsEqual(prev, nextModelRef)) {
+        return prev;
+      }
+      return nextModelRef;
+    });
   }, [currentModel, currentModelRef, visibleImageModels]);
 
   // Keep local模型状态与头部下拉（受控 selectedModel）同步，避免展示过期的参数列表
@@ -519,20 +631,13 @@ const AIImageGeneration = ({
 
     if (currentSelectionKey !== nextSelectionKey) {
       setCurrentModel(selectedModel);
-      const matchedModel = findMatchingSelectableModel(
+      const nextRef = resolveImageModelRef(
         visibleImageModels,
         selectedModel,
         selectedModelRef
       );
-      const nextRef =
-        getModelRefFromConfig(matchedModel) || selectedModelRef || null;
       setCurrentModelRef((prev) => {
-        if (
-          prev &&
-          nextRef &&
-          prev.profileId === nextRef.profileId &&
-          prev.modelId === nextRef.modelId
-        ) {
+        if (areModelRefsEqual(prev, nextRef)) {
           return prev;
         }
         return nextRef;
@@ -989,7 +1094,8 @@ const AIImageGeneration = ({
         >
           <div className="ai-image-generation-form">
             {/* 模型选择器 */}
-            {selectedModel !== undefined && onModelChange && (
+            {selectedModel !== undefined &&
+              (onModelSelectionChange || onModelChange) && (
               <div className="form-header-row">
                 <div className="model-selector-wrapper">
                   <ModelDropdown
@@ -998,18 +1104,15 @@ const AIImageGeneration = ({
                       currentModel,
                       currentModelRef
                     )}
-                    onSelect={(value) => {
+                    onSelect={(value, modelRef) => {
+                      const nextModelRef = resolveImageModelRef(
+                        visibleImageModels,
+                        value,
+                        modelRef || null
+                      );
                       setCurrentModel(value);
-                      setCurrentModelRef(null);
-                      onModelChange(value);
-                      onModelRefChange?.(null);
-                    }}
-                    onSelectModel={(model: ModelConfig) => {
-                      setCurrentModel(model.id);
-                      const nextModelRef = getModelRefFromConfig(model);
                       setCurrentModelRef(nextModelRef);
-                      onModelChange(model.id);
-                      onModelRefChange?.(nextModelRef);
+                      notifyModelSelectionChange(value, nextModelRef);
                     }}
                     language={language}
                     models={visibleImageModels}

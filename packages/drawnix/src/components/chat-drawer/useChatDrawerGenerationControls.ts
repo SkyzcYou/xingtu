@@ -18,9 +18,15 @@ import {
 } from '../../services/ai-generation-preferences-service';
 import { getEffectiveVideoCompatibleParams } from '../../services/video-binding-utils';
 import type { GenerationType } from '../../utils/ai-input-parser';
+import {
+  getPersistedModelSelection,
+  setPersistedModelSelection,
+  type PersistedGenerationType,
+} from '../../utils/ai-model-selection-storage';
 import { applyForcedSunoParams } from '../../utils/suno-model-aliases';
 import {
   createModelRef,
+  LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
   resolveInvocationRoute,
   type ModelRef,
 } from '../../utils/settings-manager';
@@ -46,6 +52,29 @@ function getModelRefFromConfig(model?: ModelConfig | null): ModelRef | null {
   return createModelRef(model.sourceProfileId || null, model.id);
 }
 
+function resolveStoredModelRef(
+  type: PersistedGenerationType,
+  modelId?: string | null,
+  model?: ModelConfig | null,
+  route?: ReturnType<typeof resolveInvocationRoute>
+): ModelRef | null {
+  if (!modelId) {
+    return getModelRefFromConfig(model);
+  }
+
+  const persisted = getPersistedModelSelection(type);
+  if (persisted?.modelId === modelId) {
+    return createModelRef(persisted.profileId, modelId);
+  }
+
+  const resolvedRoute = route || resolveInvocationRoute(getRouteType(type));
+  if (resolvedRoute.modelId === modelId) {
+    return createModelRef(resolvedRoute.profileId, modelId);
+  }
+
+  return getModelRefFromConfig(model);
+}
+
 function findMatchingSelectableModel(
   models: ModelConfig[],
   modelId: string,
@@ -54,11 +83,30 @@ function findMatchingSelectableModel(
   const expectedKey = getSelectionKey(modelId, modelRef);
   const expectedProfileId = modelRef?.profileId ?? null;
 
+  const exactMatch = models.find(
+    (model) => getSelectionKeyForModel(model) === expectedKey
+  );
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const profileMatch = models.find(
+    (model) =>
+      model.id === modelId &&
+      ((model.sourceProfileId || null) === expectedProfileId ||
+        (expectedProfileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID &&
+          !model.sourceProfileId))
+  );
+  if (profileMatch) {
+    return profileMatch;
+  }
+
+  if (expectedProfileId !== null) {
+    return undefined;
+  }
+
   return (
-    models.find((model) => getSelectionKeyForModel(model) === expectedKey) ||
-    (expectedProfileId === null
-      ? models.find((model) => model.id === modelId && !model.sourceProfileId)
-      : undefined) ||
+    models.find((model) => model.id === modelId && !model.sourceProfileId) ||
     models.find((model) => model.id === modelId)
   );
 }
@@ -117,7 +165,12 @@ export function useChatDrawerGenerationControls() {
     initialPreferences.selectedModel
   );
   const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
-    null
+    () =>
+      resolveStoredModelRef(
+        initialPreferences.generationType,
+        initialPreferences.selectedModel,
+        getModelConfig(initialPreferences.selectedModel)
+      )
   );
   const [selectedParams, setSelectedParams] = useState<Record<string, string>>(
     initialPreferences.selectedParams
@@ -147,12 +200,11 @@ export function useChatDrawerGenerationControls() {
   const resolvePreferredModelSelection = useCallback(
     (type: GenerationType, models: ModelConfig[]) => {
       const route = resolveInvocationRoute(getRouteType(type));
-      const routeModel =
-        findMatchingSelectableModel(
-          models,
-          route.modelId,
-          createModelRef(route.profileId, route.modelId)
-        ) || findMatchingSelectableModel(models, route.modelId, null);
+      const routeModel = findMatchingSelectableModel(
+        models,
+        route.modelId,
+        createModelRef(route.profileId, route.modelId)
+      );
       if (routeModel) {
         return routeModel;
       }
@@ -178,14 +230,25 @@ export function useChatDrawerGenerationControls() {
       resolvePreferredModelSelection(generationType, currentModels);
 
     if (nextModelConfig) {
+      const nextModelRef =
+        selectedModelRef?.modelId === nextModelConfig.id
+          ? selectedModelRef
+          : resolveStoredModelRef(
+              generationType,
+              nextModelConfig.id,
+              nextModelConfig
+            );
       const currentSelectionKey = getSelectionKey(
         selectedModel,
         selectedModelRef
       );
-      const nextSelectionKey = getSelectionKeyForModel(nextModelConfig);
+      const nextSelectionKey = getSelectionKey(
+        nextModelConfig.id,
+        nextModelRef
+      );
       if (currentSelectionKey !== nextSelectionKey) {
         setSelectedModel(nextModelConfig.id);
-        setSelectedModelRef(getModelRefFromConfig(nextModelConfig));
+        setSelectedModelRef(nextModelRef);
       }
     }
 
@@ -318,15 +381,24 @@ export function useChatDrawerGenerationControls() {
   ]);
 
   const applyModelSelection = useCallback(
-    (model: ModelConfig) => {
+    (model: ModelConfig, modelRef?: ModelRef | null) => {
       const nextGenerationType = resolveGenerationTypeForModelSelection(
         generationType,
         model.type
       );
-      const nextModelRef = getModelRefFromConfig(model);
+      const nextModelRef = modelRef ?? getModelRefFromConfig(model);
       setGenerationType(nextGenerationType);
       setSelectedModel(model.id);
       setSelectedModelRef(nextModelRef);
+      setPersistedModelSelection(
+        nextGenerationType as PersistedGenerationType,
+        {
+          modelId: model.id,
+          modelRef: nextModelRef,
+          providerIdHint: model.sourceProfileId || nextModelRef?.profileId,
+          vendorHint: model.vendor,
+        }
+      );
       setSelectedParams(
         nextGenerationType === 'agent'
           ? {}
@@ -342,19 +414,22 @@ export function useChatDrawerGenerationControls() {
 
   const handleModelSelect = useCallback(
     (modelId: string, modelRef?: ModelRef | null) => {
+      const hasExplicitModelRef = modelRef !== undefined;
       const model =
         findMatchingSelectableModel(currentModels, modelId, modelRef || null) ||
-        findMatchingSelectableModel(currentModels, modelId, null) ||
+        (!hasExplicitModelRef
+          ? findMatchingSelectableModel(currentModels, modelId, null)
+          : undefined) ||
         getModelConfig(modelId);
       if (!model) return;
-      applyModelSelection(model);
+      applyModelSelection(model, modelRef);
     },
     [applyModelSelection, currentModels]
   );
 
   const handleModelConfigSelect = useCallback(
-    (model: ModelConfig) => {
-      applyModelSelection(model);
+    (model: ModelConfig, modelRef?: ModelRef | null) => {
+      applyModelSelection(model, modelRef);
     },
     [applyModelSelection]
   );

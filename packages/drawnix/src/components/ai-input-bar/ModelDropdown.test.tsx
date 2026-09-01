@@ -180,4 +180,152 @@ describe('ModelDropdown', () => {
     expect(menu.style.width).toBe('680px');
     expect(menu.classList.contains('model-dropdown__menu--down')).toBe(true);
   });
+
+  it('选择列表模型时把渠道引用传给回调', () => {
+    const onSelect = vi.fn();
+
+    const { container } = render(
+      <ModelDropdown
+        selectedModel={baseModel.id}
+        selectedSelectionKey={baseModel.selectionKey}
+        models={[baseModel]}
+        onSelect={onSelect}
+      />
+    );
+
+    fireEvent.mouseDown(
+      container.querySelector('.model-dropdown__trigger--minimal') as HTMLElement
+    );
+    fireEvent.click(
+      document.body.querySelector('.model-dropdown__item') as HTMLElement
+    );
+
+    expect(onSelect).toHaveBeenCalledWith(baseModel.id, {
+      profileId: 'tuzi-provider',
+      modelId: baseModel.id,
+    });
+  });
+
+  it('选择无来源的静态模型时绑定默认 API KEY 渠道', () => {
+    const onSelect = vi.fn();
+    const staticModel: ModelConfig = {
+      id: 'static-image-model',
+      label: 'Static image model',
+      shortCode: 'static',
+      type: 'image',
+      vendor: ModelVendor.OTHER,
+    };
+
+    const { container } = render(
+      <ModelDropdown
+        selectedModel={staticModel.id}
+        models={[staticModel]}
+        onSelect={onSelect}
+      />
+    );
+
+    fireEvent.mouseDown(
+      container.querySelector('.model-dropdown__trigger--minimal') as HTMLElement
+    );
+    fireEvent.click(
+      document.body.querySelector('.model-dropdown__item') as HTMLElement
+    );
+
+    expect(onSelect).toHaveBeenCalledWith(staticModel.id, {
+      profileId: 'legacy-default',
+      modelId: staticModel.id,
+    });
+  });
+
+  it('两个模型选择回调共享同一个渠道引用', () => {
+    const onSelect = vi.fn();
+    const onSelectModel = vi.fn();
+
+    const { container } = render(
+      <ModelDropdown
+        selectedModel={baseModel.id}
+        selectedSelectionKey={baseModel.selectionKey}
+        models={[baseModel]}
+        onSelect={onSelect}
+        onSelectModel={onSelectModel}
+      />
+    );
+
+    fireEvent.mouseDown(
+      container.querySelector('.model-dropdown__trigger--minimal') as HTMLElement
+    );
+    fireEvent.click(
+      document.body.querySelector('.model-dropdown__item') as HTMLElement
+    );
+
+    const selectedRef = {
+      profileId: 'tuzi-provider',
+      modelId: baseModel.id,
+    };
+    expect(onSelect).toHaveBeenCalledWith(baseModel.id, selectedRef);
+    expect(onSelectModel).toHaveBeenCalledWith(baseModel, selectedRef);
+  });
+
+  it('输入未发现的模型时绑定当前渠道', () => {
+    const onSelect = vi.fn();
+
+    const { container } = render(
+      <ModelDropdown
+        selectedModel={baseModel.id}
+        selectedSelectionKey={baseModel.selectionKey}
+        models={[baseModel]}
+        onSelect={onSelect}
+        variant="form"
+      />
+    );
+
+    fireEvent.mouseDown(
+      container.querySelector('.model-dropdown__trigger--form') as HTMLElement
+    );
+    const input = container.querySelector(
+      '.model-dropdown__form-input'
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'custom-image-model' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSelect).toHaveBeenCalledWith('custom-image-model', {
+      profileId: 'tuzi-provider',
+      modelId: 'custom-image-model',
+    });
+  });
+
+  it('在默认 API KEY 渠道输入自定义模型时保留默认渠道引用', () => {
+    const onSelect = vi.fn();
+    const defaultModel: ModelConfig = {
+      id: 'default-image-model',
+      label: 'Default image model',
+      shortCode: 'default',
+      type: 'image',
+      vendor: ModelVendor.OTHER,
+    };
+
+    const { container } = render(
+      <ModelDropdown
+        selectedModel={defaultModel.id}
+        selectedSelectionKey={defaultModel.id}
+        models={[defaultModel]}
+        onSelect={onSelect}
+        variant="form"
+      />
+    );
+
+    fireEvent.mouseDown(
+      container.querySelector('.model-dropdown__trigger--form') as HTMLElement
+    );
+    const input = container.querySelector(
+      '.model-dropdown__form-input'
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'custom-default-model' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSelect).toHaveBeenCalledWith('custom-default-model', {
+      profileId: 'legacy-default',
+      modelId: 'custom-default-model',
+    });
+  });
 });
