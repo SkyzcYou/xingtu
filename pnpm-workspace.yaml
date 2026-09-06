@@ -2,3 +2,9 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'backend/web'
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - '@swc/core'
+  - core-js
+  - esbuild
+  - nx

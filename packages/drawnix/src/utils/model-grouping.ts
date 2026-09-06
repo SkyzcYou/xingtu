@@ -36,6 +36,15 @@ export interface ProviderGroup {
 /** 内置模型的默认供应商 ID */
 export const DEFAULT_PROVIDER_ID = LEGACY_DEFAULT_PROVIDER_PROFILE_ID;
 
+function hasRunnableProviderConfig(profile: ProviderProfile): boolean {
+  const baseUrl = typeof profile.baseUrl === 'string' ? profile.baseUrl : '';
+  const apiKey = typeof profile.apiKey === 'string' ? profile.apiKey : '';
+
+  return (
+    profile.enabled && baseUrl.trim().length > 0 && (profile.credentialSource === 'oidc-session' || apiKey.trim().length > 0)
+  );
+}
+
 function normalizeProviderId(model: ModelConfig): string {
   if (!model.sourceProfileId) {
     return DEFAULT_PROVIDER_ID;
@@ -72,13 +81,16 @@ export function groupModelsByProvider(
   }
 
   // vendor 排序权重
-  const vendorPriority = new Map(
-    DISCOVERY_VENDOR_ORDER.map((v, i) => [v, i])
-  );
+  const vendorPriority = new Map(DISCOVERY_VENDOR_ORDER.map((v, i) => [v, i]));
 
   const groups: ProviderGroup[] = [];
 
   for (const [pid, bucket] of buckets) {
+    const profile = profileMap.get(pid);
+    if (profile && profile.enabled === false) {
+      continue;
+    }
+
     // 按 vendor 分组
     const vendorMap = new Map<ModelVendor, ModelConfig[]>();
     for (const m of bucket) {
@@ -90,13 +102,10 @@ export function groupModelsByProvider(
       }
     }
 
-    const vendorCategories: VendorCategory[] = Array.from(
-      vendorMap.entries()
-    )
+    const vendorCategories: VendorCategory[] = Array.from(vendorMap.entries())
       .sort(
         (a, b) =>
-          (vendorPriority.get(a[0]) ?? 999) -
-          (vendorPriority.get(b[0]) ?? 999)
+          (vendorPriority.get(a[0]) ?? 999) - (vendorPriority.get(b[0]) ?? 999)
       )
       .map(([vendor, vendorModels]) => ({
         vendor,
@@ -104,7 +113,6 @@ export function groupModelsByProvider(
         models: sortModelsByDisplayPriority(vendorModels),
       }));
 
-    const profile = profileMap.get(pid);
     const isDefault = pid === DEFAULT_PROVIDER_ID;
 
     groups.push({
@@ -120,6 +128,27 @@ export function groupModelsByProvider(
     });
   }
 
+  for (const profile of providerProfiles) {
+    if (!hasRunnableProviderConfig(profile) || buckets.has(profile.id)) {
+      continue;
+    }
+
+    groups.push({
+      providerId: profile.id,
+      providerName:
+        profile.id === DEFAULT_PROVIDER_ID
+          ? profile.name || TUZI_DEFAULT_PROVIDER_NAME
+          : profile.name || profile.id,
+      providerIconUrl:
+        profile.id === DEFAULT_PROVIDER_ID
+          ? profile.iconUrl || TUZI_PROVIDER_ICON_URL
+          : profile.iconUrl,
+      vendorCategories: [],
+      totalCount: 0,
+    });
+  }
+
+  // default 置顶，其余按名称排序
   const getProviderOrder = (providerId: string) => {
     if (providerId === XINGTU_LOGIN_PROVIDER_PROFILE_ID) return 0;
     if (providerId === DEFAULT_PROVIDER_ID) return 1;

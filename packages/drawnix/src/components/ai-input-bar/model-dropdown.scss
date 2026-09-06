@@ -289,7 +289,7 @@ $green-health: #10b981;
   // 下拉菜单
   &__menu {
     position: absolute;
-    min-width: 520px;
+    min-width: 600px;
     max-height: 450px;
     background: var(--xingtu-glass-bg);
     border: 1px solid var(--xingtu-glass-border);
@@ -543,7 +543,6 @@ $green-health: #10b981;
       border-color: rgba(var(--xingtu-theme-accent-rgb), 0.8);
     }
   }
-
 }
 
 @keyframes model-dropdown-fade-in {
@@ -705,7 +704,6 @@ $green-health: #10b981;
       border-color: rgba(var(--xingtu-theme-accent-rgb), 0.45);
       color: $accent-primary;
     }
-
   }
 }
 

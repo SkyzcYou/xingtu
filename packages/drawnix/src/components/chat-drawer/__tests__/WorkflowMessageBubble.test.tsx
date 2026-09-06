@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import React from 'react';
 import {
   afterEach,
@@ -15,16 +17,24 @@ import {
   normalizeWorkflowStepsForDisplay,
 } from '../../../utils/workflow-bubble-status';
 
-vi.mock('../../shared/media-preview/UnifiedMediaViewer', () => ({
-  UnifiedMediaViewer: ({
+vi.mock('../../shared/MediaViewer', () => ({
+  MediaViewer: ({
     visible,
-    initialIndex,
+    items,
+    initialIndex = 0,
   }: {
     visible: boolean;
-    initialIndex: number | number[];
+    items: Array<{ url: string; type: string; title?: string }>;
+    initialIndex?: number;
   }) =>
     visible ? (
-      <div data-testid="unified-media-viewer">viewer-{initialIndex}</div>
+      <div
+        data-testid="media-viewer"
+        data-initial-index={initialIndex}
+        data-item-urls={items.map((item) => item.url).join('|')}
+      >
+        {items.length} items
+      </div>
     ) : null,
 }));
 
@@ -125,6 +135,9 @@ describe('WorkflowMessageBubble rendering', () => {
     expect(screen.getByText('3/3')).toBeTruthy();
     expect(screen.queryByText('生成图片 (1/3)')).toBeNull();
     expect(screen.queryByText('已生成')).toBeNull();
+    expect(screen.getByRole('img', { name: '生成结果 1' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: '生成结果 2' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: '生成结果 3' })).toBeTruthy();
     expect(
       screen
         .getByRole('button', { name: '查看执行详情' })
@@ -143,53 +156,36 @@ describe('WorkflowMessageBubble rendering', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('renders media results as preview buttons', () => {
+  it('opens generated media in the shared preview on double click', () => {
     render(<WorkflowMessageBubble workflow={createImageWorkflow()} />);
 
-    expect(screen.getByLabelText('生成结果')).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: '查看生成结果 1' })
-    ).toBeTruthy();
+    fireEvent.doubleClick(screen.getByRole('button', { name: '查看生成结果 2' }));
+
+    const viewer = screen.getByTestId('media-viewer');
+    expect(viewer.getAttribute('data-initial-index')).toBe('1');
+    expect(viewer.getAttribute('data-item-urls')).toBe(
+      [
+        '/__aitu_cache__/image/task-1.png',
+        '/__aitu_cache__/image/task-2.png',
+        '/__aitu_cache__/image/task-3.png',
+      ].join('|')
+    );
+    expect(viewer.textContent).toBe('3 items');
   });
 
-  it('opens the unified media viewer from a media result', () => {
-    render(<WorkflowMessageBubble workflow={createImageWorkflow()} />);
-
-    fireEvent.doubleClick(
-      screen.getByRole('button', { name: '查看生成结果 2' })
-    );
-
-    expect(screen.getByTestId('unified-media-viewer').textContent).toBe(
-      'viewer-1'
-    );
-  });
-
-  it('calls reply handler from the workflow media action row', () => {
+  it('exposes a reply action for completed generated media workflows', () => {
     const onReply = vi.fn();
+
     render(
-      <WorkflowMessageBubble workflow={createImageWorkflow()} onReply={onReply} />
+      <WorkflowMessageBubble
+        workflow={createImageWorkflow()}
+        onReply={onReply}
+      />
     );
 
     fireEvent.click(screen.getByRole('button', { name: '回复' }));
 
     expect(onReply).toHaveBeenCalledTimes(1);
-  });
-
-  it('omits markdown summary when generated media results are present', () => {
-    const workflow = createImageWorkflow({
-      steps: createImageWorkflow().steps.map((step, index) => ({
-        ...step,
-        result: {
-          content: '这段摘要不应重复显示',
-          imageUrl: `/__aitu_cache__/image/result-${index}.png`,
-        },
-      })),
-    });
-
-    render(<WorkflowMessageBubble workflow={workflow} />);
-
-    expect(screen.queryByText('这段摘要不应重复显示')).toBeNull();
-    expect(screen.getByLabelText('生成结果')).toBeTruthy();
   });
 
   it('keeps running workflow steps visible immediately', () => {

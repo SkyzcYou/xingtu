@@ -10,6 +10,7 @@
  */
 
 import type { ParsedGenerationParams } from '../../utils/ai-input-parser';
+import { isSeedance2ModelId } from '../../utils/seedance-model';
 import {
   cleanLLMResponse,
   parseWorkflowJson,
@@ -34,6 +35,8 @@ import { applyMediaModelDefaultsToArgs } from '../../services/agent/media-model-
 import type { SkillOutputType } from './skill-media-type';
 import { normalizeKnowledgeContextRefs } from '../../services/generation-context-service';
 import type { KnowledgeContextRef } from '../../types/task.types';
+import type { CanvasAssociationRef } from '../../types/shared/core.types';
+import { snapshotCanvasAssociationRefs } from './canvas-association-state';
 import type {
   WorkflowDefinition,
   WorkflowStep,
@@ -118,6 +121,10 @@ const GENERATION_CONTEXT_MCP_TOOLS = new Set([
   'generate_audio',
   'generate_text',
 ]);
+const CANVAS_ASSOCIATION_MCP_TOOLS = new Set([
+  ...GENERATION_CONTEXT_MCP_TOOLS,
+  'ai_analyze',
+]);
 
 function normalizeWorkflowKnowledgeContextRefs(
   refs?: KnowledgeContextRef[] | null
@@ -156,6 +163,33 @@ function applyKnowledgeContextToWorkflowSteps(
     return {
       ...step,
       args: withKnowledgeContextRefs(step.args, refs),
+    };
+  });
+}
+
+function normalizeWorkflowCanvasAssociations(
+  refs?: CanvasAssociationRef[] | null
+): CanvasAssociationRef[] {
+  return snapshotCanvasAssociationRefs(refs || []);
+}
+
+function applyCanvasAssociationsToWorkflowSteps(
+  steps: WorkflowStep[],
+  refs: CanvasAssociationRef[]
+): WorkflowStep[] {
+  return steps.map((step) => {
+    if (!CANVAS_ASSOCIATION_MCP_TOOLS.has(step.mcp)) {
+      return step;
+    }
+    const args = { ...step.args };
+    if (refs.length === 0) {
+      delete args.canvasAssociations;
+    } else {
+      args.canvasAssociations = refs.map((reference) => ({ ...reference }));
+    }
+    return {
+      ...step,
+      args,
     };
   });
 }
@@ -252,9 +286,12 @@ export function convertDirectGenerationToWorkflow(
     defaultModels,
     defaultModelRefs,
     knowledgeContextRefs,
+    canvasAssociations,
   } = params;
   const normalizedKnowledgeContextRefs =
     normalizeWorkflowKnowledgeContextRefs(knowledgeContextRefs);
+  const normalizedCanvasAssociations =
+    normalizeWorkflowCanvasAssociations(canvasAssociations);
 
   const steps: WorkflowStep[] = [];
 
@@ -280,17 +317,20 @@ export function convertDirectGenerationToWorkflow(
     if (generationType === 'image') {
       // 构建图片生成参数，size 为 undefined 时不传（让模型自动决定）
       // 注意：batchId 等参数直接放在 args 中，确保传输时不会丢失
-      const imageArgs: Record<string, unknown> = withKnowledgeContextRefs({
-        prompt,
-        model: modelId,
-        modelRef,
-        workflowId,
-        // 批量生成参数直接放在 args 中
-        batchId,
-        batchIndex: i + 1,
-        batchTotal: count,
-        globalIndex: i + 1,
-      }, normalizedKnowledgeContextRefs);
+      const imageArgs: Record<string, unknown> = withKnowledgeContextRefs(
+        {
+          prompt,
+          model: modelId,
+          modelRef,
+          workflowId,
+          // 批量生成参数直接放在 args 中
+          batchId,
+          batchIndex: i + 1,
+          batchTotal: count,
+          globalIndex: i + 1,
+        },
+        normalizedKnowledgeContextRefs
+      );
       if (size) {
         imageArgs.size = size;
       }
@@ -307,9 +347,79 @@ export function convertDirectGenerationToWorkflow(
           imageArgs.maskImage = selection.maskImage;
         }
       }
+      const {
+        generationMode,
+        referenceImages: targetReferenceImages,
+        maskImage: targetMaskImage,
+        replaceElementId,
+        targetElementId,
+        anchorId,
+        sourceTaskId,
+        sourcePrompt,
+        boundTargetFollowControlled,
+        semanticReplacement,
+        semanticReplacementOldName,
+        semanticReplacementOldDescription,
+        semanticReplacementBackgroundUrl,
+        semanticReplacementReferenceUrl,
+        semanticReplacementBackgroundElementId,
+        semanticReplacementForegroundUrl,
+        ...adapterExtraParams
+      } = extraParams || {};
+      if (
+        generationMode === 'text_to_image' ||
+        generationMode === 'image_to_image' ||
+        generationMode === 'image_edit'
+      ) {
+        imageArgs.generationMode = generationMode;
+      }
+      if (
+        Array.isArray(targetReferenceImages) &&
+        targetReferenceImages.every((url) => typeof url === 'string') &&
+        targetReferenceImages.length > 0
+      ) {
+        imageArgs.referenceImages = targetReferenceImages;
+      }
+      if (typeof targetMaskImage === 'string' && targetMaskImage.trim()) {
+        imageArgs.maskImage = targetMaskImage;
+      }
+      if (replaceElementId) imageArgs.replaceElementId = replaceElementId;
+      if (targetElementId) imageArgs.targetElementId = targetElementId;
+      if (anchorId) imageArgs.anchorId = anchorId;
+      if (sourceTaskId) imageArgs.sourceTaskId = sourceTaskId;
+      if (sourcePrompt) imageArgs.sourcePrompt = sourcePrompt;
+      if (boundTargetFollowControlled === true) {
+        imageArgs.boundTargetFollowControlled = true;
+      }
+      if (semanticReplacement === true) {
+        imageArgs.semanticReplacement = true;
+      }
+      if (typeof semanticReplacementOldName === 'string') {
+        imageArgs.semanticReplacementOldName = semanticReplacementOldName;
+      }
+      if (typeof semanticReplacementOldDescription === 'string') {
+        imageArgs.semanticReplacementOldDescription =
+          semanticReplacementOldDescription;
+      }
+      if (typeof semanticReplacementBackgroundUrl === 'string') {
+        imageArgs.semanticReplacementBackgroundUrl =
+          semanticReplacementBackgroundUrl;
+      }
+      if (typeof semanticReplacementReferenceUrl === 'string') {
+        imageArgs.semanticReplacementReferenceUrl =
+          semanticReplacementReferenceUrl;
+      }
+      if (typeof semanticReplacementBackgroundElementId === 'string') {
+        imageArgs.semanticReplacementBackgroundElementId =
+          semanticReplacementBackgroundElementId;
+      }
+      if (typeof semanticReplacementForegroundUrl === 'string') {
+        imageArgs.semanticReplacementForegroundUrl =
+          semanticReplacementForegroundUrl;
+      }
       // 透传额外参数（如 seedream_quality）
-      if (extraParams) {
-        imageArgs.params = extraParams;
+      if (Object.keys(adapterExtraParams).length > 0) {
+        imageArgs.params = adapterExtraParams;
       }
 
       steps.push({
@@ -323,32 +433,69 @@ export function convertDirectGenerationToWorkflow(
     } else if (generationType === 'video') {
       // 构建视频生成参数，size 为 undefined 时不传（让模型自动决定）
       // 注意：batchId 等参数直接放在 args 中，确保传输时不会丢失
-      const videoArgs: Record<string, unknown> = withKnowledgeContextRefs({
-        prompt,
-        model: modelId,
-        modelRef,
-        seconds: duration || '5',
-        workflowId,
-        // 批量生成参数直接放在 args 中
-        batchId,
-        batchIndex: i + 1,
-        batchTotal: count,
-        globalIndex: i + 1,
-      }, normalizedKnowledgeContextRefs);
+      const videoArgs: Record<string, unknown> = withKnowledgeContextRefs(
+        {
+          prompt,
+          model: modelId,
+          modelRef,
+          seconds: duration || '5',
+          workflowId,
+          // 批量生成参数直接放在 args 中
+          batchId,
+          batchIndex: i + 1,
+          batchTotal: count,
+          globalIndex: i + 1,
+        },
+        normalizedKnowledgeContextRefs
+      );
       if (size) {
         videoArgs.size = size;
       }
       if (referenceImages.length > 0) {
         videoArgs.referenceImages = referenceImages;
       }
+      const {
+        replaceElementId,
+        sourcePrompt,
+        boundTargetFollowControlled,
+        ...adapterVideoParams
+      } = extraParams || {};
+      if (replaceElementId) {
+        videoArgs.replaceElementId = replaceElementId;
+      }
+      if (sourcePrompt) {
+        videoArgs.sourcePrompt = sourcePrompt;
+      }
+      if (boundTargetFollowControlled === true) {
+        videoArgs.boundTargetFollowControlled = true;
+      }
       // 透传额外参数（如 ratio）
-      const videoParams: Record<string, string> = { ...(extraParams || {}) };
+      const videoParams: Record<string, unknown> = Object.fromEntries(
+        Object.entries(extraParams || {}).filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string'
+        )
+      );
       if (
         modelId === 'happyhorse-1.0-video-edit' &&
         selection?.videos?.[0] &&
         !videoParams.input_video
       ) {
         videoParams.input_video = selection.videos[0];
+      }
+      if (
+        isSeedance2ModelId(modelId) &&
+        selection?.videos?.[0] &&
+        !videoParams.input_video
+      ) {
+        videoParams.input_video = selection.videos[0];
+      }
+      if (isSeedance2ModelId(modelId)) {
+        if (selection?.videos?.length && !videoParams.input_videos) {
+          videoParams.input_videos = selection.videos;
+        }
+        if (selection?.audios?.length && !videoParams.input_audios) {
+          videoParams.input_audios = selection.audios;
+        }
       }
       if (Object.keys(videoParams).length > 0) {
         videoArgs.params = videoParams;
@@ -363,61 +510,72 @@ export function convertDirectGenerationToWorkflow(
         status: 'pending',
       });
     } else if (generationType === 'audio') {
+      const { replaceElementId, sourcePrompt, ...adapterAudioParams } =
+        extraParams || {};
       const sunoAction =
-        typeof extraParams?.sunoAction === 'string'
-          ? extraParams.sunoAction
+        typeof adapterAudioParams.sunoAction === 'string'
+          ? adapterAudioParams.sunoAction
           : 'music';
       const isLyricsAction = sunoAction === 'lyrics';
-      const audioArgs: Record<string, unknown> = withKnowledgeContextRefs({
-        prompt,
-        model: modelId,
-        modelRef,
-        sunoAction,
-        workflowId,
-        batchId,
-        batchIndex: i + 1,
-        batchTotal: count,
-        globalIndex: i + 1,
-      }, normalizedKnowledgeContextRefs);
+      const audioArgs: Record<string, unknown> = withKnowledgeContextRefs(
+        {
+          prompt,
+          model: modelId,
+          modelRef,
+          sunoAction,
+          workflowId,
+          batchId,
+          batchIndex: i + 1,
+          batchTotal: count,
+          globalIndex: i + 1,
+        },
+        normalizedKnowledgeContextRefs
+      );
+      if (replaceElementId) {
+        audioArgs.replaceElementId = replaceElementId;
+      }
+      if (sourcePrompt) {
+        audioArgs.sourcePrompt = sourcePrompt;
+      }
 
       // 从 Markdown 卡片内容解析 title/tags/lyrics（仅 music 动作且用户未手动设置时）
       if (!isLyricsAction && prompt) {
         const parsed = parseSunoFieldsFromMarkdown(prompt);
         if (parsed.title || parsed.tags) {
           audioArgs.prompt = parsed.lyrics;
-          if (parsed.title && !extraParams?.title) {
+          if (parsed.title && !adapterAudioParams.title) {
             audioArgs.title = parsed.title;
           }
-          if (parsed.tags && !extraParams?.tags) {
+          if (parsed.tags && !adapterAudioParams.tags) {
             audioArgs.tags = parsed.tags;
           }
         }
       }
 
-      if (extraParams) {
-        audioArgs.params = extraParams;
-        if (extraParams.notifyHook) {
-          audioArgs.notifyHook = extraParams.notifyHook;
+      if (Object.keys(adapterAudioParams).length > 0) {
+        audioArgs.params = adapterAudioParams;
+        if (adapterAudioParams.notifyHook) {
+          audioArgs.notifyHook = adapterAudioParams.notifyHook;
         }
-        if (!isLyricsAction && extraParams.mv) {
-          audioArgs.mv = extraParams.mv;
+        if (!isLyricsAction && adapterAudioParams.mv) {
+          audioArgs.mv = adapterAudioParams.mv;
         }
-        if (!isLyricsAction && extraParams.title) {
-          audioArgs.title = extraParams.title;
+        if (!isLyricsAction && adapterAudioParams.title) {
+          audioArgs.title = adapterAudioParams.title;
         }
-        if (!isLyricsAction && extraParams.tags) {
-          audioArgs.tags = extraParams.tags;
+        if (!isLyricsAction && adapterAudioParams.tags) {
+          audioArgs.tags = adapterAudioParams.tags;
         }
-        if (!isLyricsAction && extraParams.continueClipId) {
-          audioArgs.continueClipId = extraParams.continueClipId;
+        if (!isLyricsAction && adapterAudioParams.continueClipId) {
+          audioArgs.continueClipId = adapterAudioParams.continueClipId;
         }
         if (
           !isLyricsAction &&
-          extraParams.continueAt !== undefined &&
-          extraParams.continueAt !== null &&
-          extraParams.continueAt !== ''
+          adapterAudioParams.continueAt !== undefined &&
+          adapterAudioParams.continueAt !== null &&
+          adapterAudioParams.continueAt !== ''
         ) {
-          audioArgs.continueAt = Number(extraParams.continueAt);
+          audioArgs.continueAt = Number(adapterAudioParams.continueAt);
         }
       }
 
@@ -435,22 +593,40 @@ export function convertDirectGenerationToWorkflow(
         status: 'pending',
       });
     } else {
-      const textArgs: Record<string, unknown> = withKnowledgeContextRefs({
-        prompt,
-        model: modelId,
-        modelRef,
-        rawInput,
-        workflowId,
-        batchId,
-        batchIndex: i + 1,
-        batchTotal: count,
-        globalIndex: i + 1,
-      }, normalizedKnowledgeContextRefs);
+      const textArgs: Record<string, unknown> = withKnowledgeContextRefs(
+        {
+          prompt,
+          model: modelId,
+          modelRef,
+          rawInput,
+          workflowId,
+          batchId,
+          batchIndex: i + 1,
+          batchTotal: count,
+          globalIndex: i + 1,
+        },
+        normalizedKnowledgeContextRefs
+      );
       if (referenceImages.length > 0) {
         textArgs.referenceImages = referenceImages;
       }
-      if (extraParams) {
-        textArgs.params = extraParams;
+      const {
+        replaceElementId,
+        sourcePrompt,
+        boundTargetFollowControlled,
+        ...adapterTextParams
+      } = extraParams || {};
+      if (replaceElementId) {
+        textArgs.replaceElementId = replaceElementId;
+      }
+      if (sourcePrompt) {
+        textArgs.sourcePrompt = sourcePrompt;
+      }
+      if (boundTargetFollowControlled === true) {
+        textArgs.boundTargetFollowControlled = true;
+      }
+      if (Object.keys(adapterTextParams).length > 0) {
+        textArgs.params = adapterTextParams;
       }
 
       steps.push({
@@ -495,7 +671,10 @@ export function convertDirectGenerationToWorkflow(
     }`,
     scenarioType: 'direct_generation',
     generationType,
-    steps,
+    steps: applyCanvasAssociationsToWorkflowSteps(
+      steps,
+      normalizedCanvasAssociations
+    ),
     metadata: {
       prompt,
       userInstruction,
@@ -513,6 +692,10 @@ export function convertDirectGenerationToWorkflow(
       knowledgeContextRefs:
         normalizedKnowledgeContextRefs.length > 0
           ? normalizedKnowledgeContextRefs
+          : undefined,
+      canvasAssociations:
+        normalizedCanvasAssociations.length > 0
+          ? normalizedCanvasAssociations
           : undefined,
     },
     createdAt: Date.now(),
@@ -546,9 +729,12 @@ export function convertAgentFlowToWorkflow(
     defaultModels,
     defaultModelRefs,
     knowledgeContextRefs,
+    canvasAssociations,
   } = params;
   const normalizedKnowledgeContextRefs =
     normalizeWorkflowKnowledgeContextRefs(knowledgeContextRefs);
+  const normalizedCanvasAssociations =
+    normalizeWorkflowCanvasAssociations(canvasAssociations);
 
   // 使用唯一 ID（每次提交都是新的工作流）
   const workflowId = generateWorkflowId();
@@ -578,6 +764,10 @@ export function convertAgentFlowToWorkflow(
     knowledgeContextRefs:
       normalizedKnowledgeContextRefs.length > 0
         ? normalizedKnowledgeContextRefs
+        : undefined,
+    canvasAssociations:
+      normalizedCanvasAssociations.length > 0
+        ? normalizedCanvasAssociations
         : undefined,
   };
 
@@ -641,7 +831,10 @@ export function convertAgentFlowToWorkflow(
     description: 'AI 分析用户请求并执行相应操作',
     scenarioType: 'agent_flow',
     generationType,
-    steps,
+    steps: applyCanvasAssociationsToWorkflowSteps(
+      steps,
+      normalizedCanvasAssociations
+    ),
     metadata: {
       prompt,
       userInstruction,
@@ -659,6 +852,10 @@ export function convertAgentFlowToWorkflow(
       knowledgeContextRefs:
         normalizedKnowledgeContextRefs.length > 0
           ? normalizedKnowledgeContextRefs
+          : undefined,
+      canvasAssociations:
+        normalizedCanvasAssociations.length > 0
+          ? normalizedCanvasAssociations
           : undefined,
     },
     createdAt: Date.now(),
@@ -766,9 +963,12 @@ export async function convertSkillFlowToWorkflow(
     defaultModels,
     defaultModelRefs,
     knowledgeContextRefs,
+    canvasAssociations,
   } = params;
   const normalizedKnowledgeContextRefs =
     normalizeWorkflowKnowledgeContextRefs(knowledgeContextRefs);
+  const normalizedCanvasAssociations =
+    normalizeWorkflowCanvasAssociations(canvasAssociations);
 
   const workflowId = generateWorkflowId();
 
@@ -807,12 +1007,15 @@ export async function convertSkillFlowToWorkflow(
     userInputText
   );
   if (regexResult) {
-    const steps = applyKnowledgeContextToWorkflowSteps(
-      applyReferenceImagesToWorkflowSteps(
-        applyMediaDefaultsToWorkflowSteps(regexResult.steps, params, true),
-        referenceImages
+    const steps = applyCanvasAssociationsToWorkflowSteps(
+      applyKnowledgeContextToWorkflowSteps(
+        applyReferenceImagesToWorkflowSteps(
+          applyMediaDefaultsToWorkflowSteps(regexResult.steps, params, true),
+          referenceImages
+        ),
+        normalizedKnowledgeContextRefs
       ),
-      normalizedKnowledgeContextRefs
+      normalizedCanvasAssociations
     );
     return {
       id: workflowId,
@@ -840,6 +1043,10 @@ export async function convertSkillFlowToWorkflow(
         knowledgeContextRefs:
           normalizedKnowledgeContextRefs.length > 0
             ? normalizedKnowledgeContextRefs
+            : undefined,
+        canvasAssociations:
+          normalizedCanvasAssociations.length > 0
+            ? normalizedCanvasAssociations
             : undefined,
         parseMethod: 'regex',
       },
@@ -872,6 +1079,10 @@ export async function convertSkillFlowToWorkflow(
     knowledgeContextRefs:
       normalizedKnowledgeContextRefs.length > 0
         ? normalizedKnowledgeContextRefs
+        : undefined,
+    canvasAssociations:
+      normalizedCanvasAssociations.length > 0
+        ? normalizedCanvasAssociations
         : undefined,
   };
 
@@ -975,7 +1186,10 @@ export async function convertSkillFlowToWorkflow(
       scenarioType: 'skill_flow',
       skillId,
       generationType,
-      steps,
+      steps: applyCanvasAssociationsToWorkflowSteps(
+        steps,
+        normalizedCanvasAssociations
+      ),
       metadata: {
         prompt,
         userInstruction,
@@ -994,6 +1208,10 @@ export async function convertSkillFlowToWorkflow(
         knowledgeContextRefs:
           normalizedKnowledgeContextRefs.length > 0
             ? normalizedKnowledgeContextRefs
+            : undefined,
+        canvasAssociations:
+          normalizedCanvasAssociations.length > 0
+            ? normalizedCanvasAssociations
             : undefined,
         parseMethod: 'agent_fallback',
       },
@@ -1054,7 +1272,10 @@ export async function convertSkillFlowToWorkflow(
     scenarioType: 'skill_flow',
     skillId,
     generationType,
-    steps: roleSteps,
+    steps: applyCanvasAssociationsToWorkflowSteps(
+      roleSteps,
+      normalizedCanvasAssociations
+    ),
     metadata: {
       prompt,
       userInstruction,
@@ -1072,6 +1293,10 @@ export async function convertSkillFlowToWorkflow(
       knowledgeContextRefs:
         normalizedKnowledgeContextRefs.length > 0
           ? normalizedKnowledgeContextRefs
+          : undefined,
+      canvasAssociations:
+        normalizedCanvasAssociations.length > 0
+          ? normalizedCanvasAssociations
           : undefined,
       parseMethod: 'agent_fallback',
     },
@@ -1180,6 +1405,10 @@ function getStepDescription(
       return `生成图片: ${(args.prompt as string)?.substring(0, 30) || ''}...`;
     case 'generate_video':
       return `生成视频: ${(args.prompt as string)?.substring(0, 30) || ''}...`;
+    case 'generate_ppt_explainer_video':
+      return `生成PPT讲解视频: ${
+        (args.topic as string)?.substring(0, 30) || ''
+      }...`;
     case 'generate_audio':
       return `生成音频: ${(args.prompt as string)?.substring(0, 30) || ''}...`;
     case 'generate_text':

@@ -1,12 +1,43 @@
+// @vitest-environment jsdom
+
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { EnhancedChatInput } from '../EnhancedChatInput';
 
+const chatDrawerControlMock = vi.hoisted(() => ({
+  submitGenerationFromDrawer: vi.fn(async () => true),
+  getActiveSessionId: vi.fn(() => 'session-1'),
+}));
+
+const generationControlsMock = vi.hoisted(() => ({
+  controls: {
+    generationType: 'agent',
+    setGenerationType: vi.fn(),
+    selectedModel: 'gpt-5.4',
+    selectedModelRef: null,
+    selectedSelectionKey: 'gpt-5.4',
+    selectedParams: {},
+    compatibleParams: [],
+    selectedCount: 1,
+    setSelectedCount: vi.fn(),
+    currentModels: [],
+    handleModelSelect: vi.fn(),
+    handleModelConfigSelect: vi.fn(),
+    handleParamSelect: vi.fn(),
+  },
+}));
+const submitGenerationFromDrawerMock =
+  chatDrawerControlMock.submitGenerationFromDrawer;
+
 vi.mock('../../../contexts/ChatDrawerContext', () => ({
-  useChatDrawerControl: () => ({
-    submitGenerationFromDrawer: async () => true,
-  }),
+  useChatDrawerControl: () => chatDrawerControlMock,
 }));
 
 vi.mock('../../../hooks/usePromptHistory', () => ({
@@ -28,21 +59,7 @@ vi.mock('../../../contexts/AssetContext', () => ({
 }));
 
 vi.mock('../useChatDrawerGenerationControls', () => ({
-  useChatDrawerGenerationControls: () => ({
-    generationType: 'agent',
-    setGenerationType: () => undefined,
-    selectedModel: 'gpt-5.4',
-    selectedModelRef: null,
-    selectedSelectionKey: 'gpt-5.4',
-    selectedParams: {},
-    compatibleParams: [],
-    selectedCount: 1,
-    setSelectedCount: () => undefined,
-    currentModels: [],
-    handleModelSelect: () => undefined,
-    handleModelConfigSelect: () => undefined,
-    handleParamSelect: () => undefined,
-  }),
+  useChatDrawerGenerationControls: () => generationControlsMock.controls,
 }));
 
 vi.mock('../../shared/SelectedContentPreview', () => ({
@@ -76,7 +93,15 @@ vi.mock('../../icons', () => ({
   MediaLibraryIcon: () => <span aria-hidden="true">library</span>,
 }));
 
+beforeEach(() => {
+  generationControlsMock.controls.generationType = 'agent';
+  submitGenerationFromDrawerMock.mockClear();
+});
+
 afterEach(() => {
+  chatDrawerControlMock.submitGenerationFromDrawer.mockClear();
+  chatDrawerControlMock.getActiveSessionId.mockClear();
+  generationControlsMock.controls.generationType = 'agent';
   cleanup();
 });
 
@@ -124,5 +149,127 @@ describe('EnhancedChatInput placeholder', () => {
     );
 
     expect(screen.getByPlaceholderText('描述你想要的效果...')).toBeTruthy();
+  });
+
+  it('passes the active session id when submitting a drawer generation task', async () => {
+    generationControlsMock.controls.generationType = 'image';
+
+    render(
+      <EnhancedChatInput
+        selectedContent={[]}
+        onSend={() => undefined}
+        placeholder="继续描述要修改的内容..."
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('继续描述要修改的内容...'), {
+      target: { value: '继续生成一张图' },
+    });
+    fireEvent.click(screen.getByTestId('drawer-ai-send-btn'));
+
+    await waitFor(() => {
+      expect(
+        chatDrawerControlMock.submitGenerationFromDrawer
+      ).toHaveBeenCalled();
+    });
+    expect(
+      chatDrawerControlMock.submitGenerationFromDrawer
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: '继续生成一张图',
+        targetSessionId: 'session-1',
+      })
+    );
+  });
+});
+
+describe('EnhancedChatInput implicit workflow references', () => {
+  const implicitReferenceContent = [
+    {
+      type: 'image' as const,
+      name: '上一次生成结果',
+      url: '/previous-result.png',
+    },
+  ];
+
+  it('uses implicit references for image edits that mention prior results', async () => {
+    generationControlsMock.controls.generationType = 'image';
+
+    render(
+      <EnhancedChatInput
+        selectedContent={[]}
+        implicitReferenceContent={implicitReferenceContent}
+        onSend={() => undefined}
+      />
+    );
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: '把上面的人改成小李子' },
+    });
+    fireEvent.click(screen.getByTestId('drawer-ai-send-btn'));
+
+    expect(submitGenerationFromDrawerMock).toHaveBeenCalledTimes(1);
+    expect(submitGenerationFromDrawerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: '把上面的人改成小李子',
+        selectedContent: implicitReferenceContent,
+        generationType: 'image',
+      })
+    );
+  });
+
+  it('does not use implicit references for unrelated image prompts', async () => {
+    generationControlsMock.controls.generationType = 'image';
+
+    render(
+      <EnhancedChatInput
+        selectedContent={[]}
+        implicitReferenceContent={implicitReferenceContent}
+        onSend={() => undefined}
+      />
+    );
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: '生成一只猫' },
+    });
+    fireEvent.click(screen.getByTestId('drawer-ai-send-btn'));
+
+    expect(submitGenerationFromDrawerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedContent: [],
+      })
+    );
+  });
+
+  it('uses pinned reply references and consumes them after submit', async () => {
+    generationControlsMock.controls.generationType = 'image';
+    const onImplicitReferenceConsumed = vi.fn();
+
+    render(
+      <EnhancedChatInput
+        selectedContent={[]}
+        implicitReferenceContent={implicitReferenceContent}
+        implicitReferenceLabel="回复：图片生成"
+        implicitReferencePinned
+        onImplicitReferenceConsumed={onImplicitReferenceConsumed}
+        onSend={() => undefined}
+      />
+    );
+
+    expect(screen.getByText('回复：图片生成')).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: '换成小李子' },
+    });
+    fireEvent.click(screen.getByTestId('drawer-ai-send-btn'));
+
+    expect(submitGenerationFromDrawerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedContent: implicitReferenceContent,
+      })
+    );
+    await waitFor(() => {
+      expect(onImplicitReferenceConsumed).toHaveBeenCalledTimes(1);
+    });
   });
 });

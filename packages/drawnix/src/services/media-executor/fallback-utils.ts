@@ -20,6 +20,8 @@ import {
   AI_GENERATED_AUDIO_URL_PREFIX,
   isVirtualMediaUrl,
 } from '../../utils/virtual-media-url';
+import type { TaskResultVisibility } from '../../types/task.types';
+import type { CacheWarning } from '../../types/cache-warning.types';
 import {
   downloadVideoContentToLocalUrl,
   extractInlineVideoUrl,
@@ -64,6 +66,45 @@ export async function ensureBase64ForAI(
   return value;
 }
 
+interface MaterializeReferenceImagesOptions {
+  signal?: AbortSignal;
+  isCurrentAttempt?: () => boolean;
+  preserveUrl?: (url: string) => boolean;
+}
+
+function assertReferenceMaterializationActive(
+  options?: MaterializeReferenceImagesOptions
+): void {
+  options?.signal?.throwIfAborted();
+  if (options?.isCurrentAttempt?.() === false) {
+    const error = new Error('任务执行已被取消或替代');
+    error.name = 'AbortError';
+    throw error;
+  }
+}
+
+/** 串行物化参考图，避免多个 Blob 与 Base64 同时驻留内存。 */
+export async function materializeReferenceImagesSequentially(
+  referenceImages: readonly string[],
+  options?: MaterializeReferenceImagesOptions
+): Promise<string[]> {
+  const materialized: string[] = [];
+  for (const url of referenceImages) {
+    assertReferenceMaterializationActive(options);
+    if (options?.preserveUrl?.(url)) {
+      materialized.push(url);
+      continue;
+    }
+
+    const imageData = await unifiedCacheService.getImageForAI(url);
+    assertReferenceMaterializationActive(options);
+    const base64 = await ensureBase64ForAI(imageData, options?.signal);
+    assertReferenceMaterializationActive(options);
+    materialized.push(base64);
+  }
+  return materialized;
+}
+
 // 从共享模块重新导出
 export {
   isAsyncImageModel,
@@ -89,17 +130,24 @@ export async function pollVideoStatus(
   videoId: string,
   config: VideoAPIConfig,
   onProgress: (progress: number) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  isCurrentAttempt: () => boolean = () => true
 ): Promise<{ url: string }> {
   const maxAttempts = 120; // 最多轮询 10 分钟
   const interval = 5000; // 5 秒轮询间隔
   const maxConsecutiveErrors = 3; // 连续 HTTP 错误超过此数才放弃
   let consecutiveErrors = 0;
+  const assertPollingActive = () => {
+    signal?.throwIfAborted();
+    if (!isCurrentAttempt()) {
+      const error = new Error('视频轮询已被取消或替代');
+      error.name = 'AbortError';
+      throw error;
+    }
+  };
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    if (signal?.aborted) {
-      throw new Error('Video generation cancelled');
-    }
+    assertPollingActive();
     let data: any;
     try {
       const statusPath = resolveVideoPollPath(
@@ -124,6 +172,7 @@ export async function pollVideoStatus(
           signal,
         }
       );
+      assertPollingActive();
 
       if (!response.ok) {
         consecutiveErrors++;
@@ -136,10 +185,12 @@ export async function pollVideoStatus(
           );
         }
         await new Promise((resolve) => setTimeout(resolve, interval));
+        assertPollingActive();
         continue;
       }
 
       data = await response.json();
+      assertPollingActive();
     } catch (error: any) {
       // 网络错误（fetch 本身失败）也计入连续错误
       if (error?.name === 'AbortError') throw error;
@@ -151,6 +202,7 @@ export async function pollVideoStatus(
         throw error;
       }
       await new Promise((resolve) => setTimeout(resolve, interval));
+      assertPollingActive();
       continue;
     }
 
@@ -190,6 +242,7 @@ export async function pollVideoStatus(
               cacheKey: videoId,
             })
           : undefined);
+      assertPollingActive();
       if (!url) {
         throw new Error('No video URL in completed response');
       }
@@ -213,6 +266,7 @@ export async function pollVideoStatus(
 
     // 等待下一次轮询
     await new Promise((resolve) => setTimeout(resolve, interval));
+    assertPollingActive();
   }
 
   throw new Error('Video generation timeout');
@@ -226,8 +280,52 @@ import { generateImageAsync as sharedGenerateImageAsync } from '../media-api';
  */
 interface AsyncImageOptions {
   onProgress: (progress: number) => void;
+  onSubmissionAttempt?: () => void | Promise<void>;
   onSubmitted?: (remoteId: string) => void;
+  requestId?: string;
   signal?: AbortSignal;
+}
+
+function notifyCacheWarning(
+  options: Parameters<typeof cacheRemoteUrl>[5] | undefined,
+  error: unknown,
+  reasonCode?: CacheWarning['reasonCode'],
+  message?: string
+): void {
+  if (!options?.onCacheWarning) return;
+  const text = error instanceof Error ? error.message : String(error || '');
+  const normalized = text.toLowerCase();
+  const resolvedReason =
+    reasonCode ||
+    (normalized.includes('opaque') || normalized.includes('cors')
+      ? 'cors_opaque'
+      : normalized.includes('quota') || normalized.includes('storage')
+      ? 'storage_error'
+      : normalized.includes('http') || normalized.includes('failed to fetch')
+      ? 'http_error'
+      : normalized.includes('missing') || normalized.includes('not found')
+      ? 'cache_missing'
+      : normalized.includes('body') || normalized.includes('blob')
+      ? 'response_unreadable'
+      : normalized.includes('fetch') || normalized.includes('network')
+      ? 'network_error'
+      : 'unknown');
+  try {
+    options.onCacheWarning({
+      status: 'failed',
+      reasonCode: resolvedReason,
+      message:
+        message ||
+        '该资源未能缓存到浏览器，原始链接可能会过期，请尽快下载保存。',
+      detectedAt: Date.now(),
+      expiresHint: '原始链接可能带有效期',
+    });
+  } catch (callbackError) {
+    console.warn(
+      '[cacheRemoteUrl] Failed to report cache warning:',
+      callbackError
+    );
+  }
 }
 
 /**
@@ -264,8 +362,10 @@ export async function generateAsyncImage(
     },
     {
       onProgress: options.onProgress,
+      onSubmissionAttempt: options.onSubmissionAttempt,
       onSubmitted: options.onSubmitted,
       signal: options.signal,
+      requestId: options.requestId,
     }
   );
 
@@ -290,15 +390,58 @@ export async function cacheRemoteUrl(
   options?: {
     source?: 'AI_GENERATED' | 'PLAYBACK_CACHE';
     forceRemoteCache?: boolean;
+    returnLocalCacheUrl?: boolean;
+    cacheKey?: string;
+    materializeContentUrl?: boolean;
     extraMetadata?: Record<string, unknown>;
+    resultVisibility?: TaskResultVisibility;
+    signal?: AbortSignal;
+    onCacheWarning?: (warning: CacheWarning) => void;
   }
 ): Promise<string> {
+  options?.signal?.throwIfAborted();
   const normalizedUrl =
     mediaType === 'image' ? normalizeImageDataUrl(remoteUrl) : remoteUrl;
 
-  // 已经是本地路径，无需缓存
-  if (isVirtualMediaUrl(normalizedUrl)) {
+  // 已经是本地路径且不要求固化时，无需缓存。
+  if (isVirtualMediaUrl(normalizedUrl) && !options?.materializeContentUrl) {
     return normalizedUrl;
+  }
+
+  if (
+    options?.materializeContentUrl &&
+    (isVirtualMediaUrl(normalizedUrl) || normalizedUrl.startsWith('blob:'))
+  ) {
+    try {
+      const blob =
+        mediaType === 'image'
+          ? await unifiedCacheService.getCachedImageBlobWithThumbnailFallback(
+              normalizedUrl
+            )
+          : await unifiedCacheService.getCachedBlob(normalizedUrl);
+      if (blob && blob.size > 0) {
+        const cached = await unifiedCacheService.cacheLocalMediaByContent(
+          blob,
+          mediaType,
+          {
+            taskId,
+            source: options.source || 'AI_GENERATED',
+            ...options.extraMetadata,
+          }
+        );
+        return cached.url;
+      }
+      throw new Error('图片原图和缩略图缓存均不可用');
+    } catch (error) {
+      // 固化只是增强项，不能阻断原始 URL 的画布插入。远程/Blob/虚拟地址
+      // 仍交给图片加载链路处理；只有加载本身失败时才报告真正的插入错误。
+      console.warn(
+        '[cacheRemoteUrl] Failed to materialize media content, using original URL:',
+        error
+      );
+      notifyCacheWarning(options, error);
+      return normalizedUrl;
+    }
   }
 
   if (
@@ -311,40 +454,119 @@ export async function cacheRemoteUrl(
 
     try {
       const cacheSource = options?.source || 'AI_GENERATED';
-      if (await unifiedCacheService.isCached(normalizedUrl)) {
-        return normalizedUrl;
+      const suffix = index !== undefined ? `_${index}` : '';
+      const cacheKey = encodeURIComponent(options?.cacheKey || taskId);
+      const cacheTargetUrl = options?.returnLocalCacheUrl
+        ? `/__aitu_cache__/${mediaType}/${cacheKey}${suffix}.${format}`
+        : normalizedUrl;
+
+      if (await unifiedCacheService.isCached(cacheTargetUrl)) {
+        return cacheTargetUrl;
+      }
+      options?.signal?.throwIfAborted();
+
+      if (
+        options?.returnLocalCacheUrl &&
+        (await unifiedCacheService.isCached(normalizedUrl))
+      ) {
+        const cachedBlob = await unifiedCacheService.getCachedBlob(
+          normalizedUrl
+        );
+        options?.signal?.throwIfAborted();
+        if (cachedBlob && cachedBlob.size > 0) {
+          const migratedUrl = await unifiedCacheService.cacheMediaFromBlob(
+            cacheTargetUrl,
+            cachedBlob,
+            mediaType,
+            {
+              taskId,
+              source: cacheSource,
+              ...options?.extraMetadata,
+              ...(options?.resultVisibility
+                ? { resultVisibility: options.resultVisibility }
+                : {}),
+            }
+          );
+          options?.signal?.throwIfAborted();
+          if (
+            migratedUrl &&
+            (await unifiedCacheService.isCached(cacheTargetUrl))
+          ) {
+            return migratedUrl;
+          }
+          notifyCacheWarning(
+            options,
+            new Error('cache missing'),
+            'cache_missing',
+            '资源未能写入浏览器缓存，原始链接可能会过期，请尽快下载保存。'
+          );
+          return normalizedUrl;
+        }
       }
 
       const response = await fetch(normalizedUrl, {
         credentials: 'omit',
         cache: 'no-store',
         referrerPolicy: 'no-referrer',
+        ...(options?.signal ? { signal: options.signal } : {}),
       });
+      options?.signal?.throwIfAborted();
       if (!response.ok) {
+        notifyCacheWarning(
+          options,
+          new Error(`HTTP ${response.status}`),
+          'http_error',
+          `资源缓存请求失败（HTTP ${response.status}），原始链接可能会过期，请尽快下载保存。`
+        );
         return normalizedUrl;
       }
 
       const blob = await response.blob();
+      options?.signal?.throwIfAborted();
       if (blob.size === 0) {
+        notifyCacheWarning(
+          options,
+          new Error('empty response body'),
+          'response_unreadable',
+          '资源缓存响应为空，原始链接可能会过期，请尽快下载保存。'
+        );
         return normalizedUrl;
       }
 
-      await unifiedCacheService.cacheMediaFromBlob(
-        normalizedUrl,
+      const cacheUrl = await unifiedCacheService.cacheMediaFromBlob(
+        cacheTargetUrl,
         blob,
         mediaType,
         {
           taskId,
           source: cacheSource,
           ...options?.extraMetadata,
+          ...(options?.resultVisibility
+            ? { resultVisibility: options.resultVisibility }
+            : {}),
         }
+      );
+      options?.signal?.throwIfAborted();
+      if (!options?.returnLocalCacheUrl) {
+        return normalizedUrl;
+      }
+      if (cacheUrl && (await unifiedCacheService.isCached(cacheTargetUrl))) {
+        return cacheUrl;
+      }
+      notifyCacheWarning(
+        options,
+        new Error('cache missing'),
+        'cache_missing',
+        '资源未能写入浏览器缓存，原始链接可能会过期，请尽快下载保存。'
       );
       return normalizedUrl;
     } catch (error) {
+      options?.signal?.throwIfAborted();
       console.warn(
         '[cacheRemoteUrl] Remote media cache failed, using original URL:',
         error
       );
+      notifyCacheWarning(options, error);
       return normalizedUrl;
     }
   }
@@ -360,15 +582,26 @@ export async function cacheRemoteUrl(
   try {
     // data URL / 原始 base64：直接转 Blob 再缓存，避免把大串 base64 存进任务结果
     if (isDataURL(normalizedUrl)) {
-      const response = await fetch(normalizedUrl);
+      const response = options?.signal
+        ? await fetch(normalizedUrl, { signal: options.signal })
+        : await fetch(normalizedUrl);
+      options?.signal?.throwIfAborted();
       const blob = await response.blob();
+      options?.signal?.throwIfAborted();
       if (blob.size === 0) {
         console.warn(
           '[cacheRemoteUrl] Empty data URL blob, using original URL'
         );
+        notifyCacheWarning(
+          options,
+          new Error('empty data URL response body'),
+          'response_unreadable',
+          '资源缓存响应为空，请尽快下载保存。'
+        );
         return normalizedUrl;
       }
       const contentHash = await calculateBlobChecksum(blob);
+      options?.signal?.throwIfAborted();
       const hashedFormat = getFileExtension('', blob.type);
       const contentAddressedUrl =
         mediaType === 'audio'
@@ -391,16 +624,29 @@ export async function cacheRemoteUrl(
           taskId,
           ...(mediaType === 'audio' ? { source: 'AI_GENERATED' } : {}),
           ...options?.extraMetadata,
+          ...(options?.resultVisibility
+            ? { resultVisibility: options.resultVisibility }
+            : {}),
         }
       );
-      return (await unifiedCacheService.isCached(contentAddressedUrl))
-        ? contentAddressedUrl
-        : normalizedUrl;
+      options?.signal?.throwIfAborted();
+      if (await unifiedCacheService.isCached(contentAddressedUrl)) {
+        return contentAddressedUrl;
+      }
+      notifyCacheWarning(
+        options,
+        new Error('cache missing'),
+        'cache_missing',
+        '资源未能写入浏览器缓存，请尽快下载保存。'
+      );
+      return normalizedUrl;
     }
 
     return normalizedUrl;
   } catch (error) {
+    options?.signal?.throwIfAborted();
     console.warn('[cacheRemoteUrl] Cache failed, using original URL:', error);
+    notifyCacheWarning(options, error);
     return normalizedUrl;
   }
 }
@@ -415,6 +661,23 @@ export async function cacheRemoteUrls(
   format: string,
   options?: Parameters<typeof cacheRemoteUrl>[5]
 ): Promise<string[]> {
+  if (options?.forceRemoteCache) {
+    const cachedUrls: string[] = [];
+    for (const [index, url] of urls.entries()) {
+      cachedUrls.push(
+        await cacheRemoteUrl(
+          url,
+          taskId,
+          mediaType,
+          format,
+          urls.length > 1 ? index : undefined,
+          options
+        )
+      );
+    }
+    return cachedUrls;
+  }
+
   return Promise.all(
     urls.map((url, i) =>
       cacheRemoteUrl(

@@ -2,7 +2,7 @@ import type { GenerationType } from '../../utils/ai-input-parser';
 import type { ModelRef } from '../../utils/settings-manager';
 import type { KnowledgeContextRef } from '../../types/task.types';
 
-export type PendingSubmitContentType = 'image' | 'video' | 'graphics' | 'text';
+export type PendingSubmitContentType = 'image' | 'audio' | 'video' | 'graphics' | 'text';
 
 export interface PendingSubmitContent {
   type: PendingSubmitContentType;
@@ -41,6 +41,7 @@ const STORAGE_KEY = 'aitu:ai-input:pending-submit-after-auth:v1';
 const DRAFT_TTL_MS = 60 * 60 * 1000;
 const VALID_CONTENT_TYPES = new Set<PendingSubmitContentType>([
   'image',
+  'audio',
   'video',
   'graphics',
   'text',

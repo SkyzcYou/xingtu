@@ -63,6 +63,10 @@ export class GeminiClient {
       count?: number;
       model?: string; // 支持指定模型
       modelRef?: ModelRef | null;
+      requestId?: string;
+      signal?: AbortSignal;
+      onSubmissionAttempt?: () => void | Promise<void>;
+      onResponse?: (response: Response) => void | Promise<void>;
     } = {}
   ) {
     return generateImageWithGemini(prompt, options);

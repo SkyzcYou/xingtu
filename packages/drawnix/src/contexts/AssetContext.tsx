@@ -45,7 +45,7 @@ import {
   AssetCategory as AssetCategoryEnum,
   DEFAULT_FILTER_STATE,
 } from '../types/asset.types';
-import { TaskType } from '../types/task.types';
+import { isUserVisibleTaskResult, TaskType } from '../types/task.types';
 import { AssetContext } from './asset-context-instance';
 import { audioPlaylistService } from '../services/audio-playlist-service';
 import { setGlobalAssetMap } from '../stores/asset-map-store';
@@ -60,6 +60,7 @@ import {
   isLegacyCacheUrl,
 } from '../utils/virtual-media-url';
 import { isInternalLibraryExcludedCache } from '../utils/asset-utils';
+import { getSupportedImageFileMimeType } from '../data/blob';
 
 /**
  * Asset Provider Props
@@ -616,11 +617,25 @@ export function AssetProvider({ children }: AssetProviderProps) {
         // 直接从 IndexedDB 获取所有缓存媒体的元数据
         // 这比遍历 Cache Storage 快得多
         const cachedMediaList = await unifiedCacheService.getAllCachedMedia();
+        const internalResultTaskIds =
+          await taskStorageReader.getInternalResultTaskIds(
+            cachedMediaList.flatMap((item) =>
+              item.metadata?.taskId ? [item.metadata.taskId] : []
+            )
+          );
 
         const assets: Asset[] = [];
         const metadataByNormalizedUrl = new Map<string, CachedMedia>();
 
         for (const item of cachedMediaList) {
+          if (
+            !isUserVisibleTaskResult(item.metadata) ||
+            (item.metadata?.taskId &&
+              internalResultTaskIds.has(item.metadata.taskId))
+          ) {
+            continue;
+          }
+
           // 统一使用 pathname
           const pathname = item.url.startsWith('/')
             ? item.url
@@ -1034,8 +1049,8 @@ export function AssetProvider({ children }: AssetProviderProps) {
           name || (file instanceof File ? file.name : `asset-${Date.now()}`);
 
         const mimeType =
-          file instanceof File
-            ? file.type
+          type === AssetTypeEnum.IMAGE && file instanceof File
+            ? getSupportedImageFileMimeType(file) || file.type
             : file.type || 'application/octet-stream';
 
         // console.log('[AssetContext] Calling assetStorageService.addAsset...');

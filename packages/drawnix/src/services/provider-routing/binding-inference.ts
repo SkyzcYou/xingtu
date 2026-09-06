@@ -9,9 +9,15 @@ import type {
   VideoApiCompatibility,
 } from '../../utils/settings-types';
 import {
+  getSeedance2Capabilities,
+  isSeedance2ModelId,
+} from '../../utils/seedance-model';
+import {
+  isTuziGPTImageLegacyAlias,
   OFFICIAL_GPT_IMAGE_EDIT_REQUEST_SCHEMA,
   TUZI_GPT_IMAGE_EDIT_REQUEST_SCHEMA,
 } from '../model-adapters/image-request-schemas';
+import { isTuziCompatibleBaseUrl } from './tuzi-api-endpoints';
 import { inferAllBindingHintsFromEndpoints } from './endpoint-binding-inference';
 import type { ProviderModelBinding, ProviderProfileSnapshot } from './types';
 
@@ -168,6 +174,10 @@ function isSeedanceModel(model: ModelConfig): boolean {
   return model.id.toLowerCase().includes('seedance');
 }
 
+function isSeedance2Model(model: ModelConfig): boolean {
+  return isSeedance2ModelId(model.id);
+}
+
 function shouldPreferAsyncImageBinding(
   profile: ProviderProfileSnapshot,
   model: ModelConfig
@@ -210,22 +220,7 @@ function isTuziProfile(profile: ProviderProfileSnapshot): boolean {
 }
 
 function isTuziBaseUrl(baseUrl: string): boolean {
-  const normalizedBaseUrl = baseUrl.trim().toLowerCase();
-  if (!normalizedBaseUrl) {
-    return false;
-  }
-
-  try {
-    const url = new URL(
-      /^[a-z][a-z\d+\-.]*:\/\//i.test(normalizedBaseUrl)
-        ? normalizedBaseUrl
-        : `https://${normalizedBaseUrl}`
-    );
-    const hostname = url.hostname.toLowerCase();
-    return hostname === 'tu-zi.com' || hostname.endsWith('.tu-zi.com');
-  } catch {
-    return false;
-  }
+  return isTuziCompatibleBaseUrl(baseUrl);
 }
 
 function normalizeImageApiCompatibilityMode(
@@ -263,7 +258,10 @@ function resolveImageApiCompatibility(
     return 'openai-gpt-image';
   }
 
-  if (isTuziProfile(profile) && isGptImageModel(model)) {
+  if (
+    isTuziProfile(profile) &&
+    (isGptImageModel(model) || isTuziGPTImageLegacyAlias(model.id))
+  ) {
     return 'tuzi-gpt-image';
   }
 
@@ -432,6 +430,9 @@ function inferImageBindings(
   const bindings: ProviderModelBinding[] = [];
   const isGeminiImageModel =
     isGeminiFamilyModel(model) && !isAsyncImageModel(model.id);
+  const isGPTImageCompatibleModel =
+    isGptImageModel(model) ||
+    (isTuziProfile(profile) && isTuziGPTImageLegacyAlias(model.id));
 
   if (isMidjourneyModel(model)) {
     bindings.push(
@@ -509,10 +510,10 @@ function inferImageBindings(
     );
     const requestSchema = isSeedreamModel(model)
       ? 'openai.image.seedream-json'
-      : isGptImageModel(model) &&
+      : isGPTImageCompatibleModel &&
         resolvedImageApiCompatibility === 'openai-gpt-image'
       ? 'openai.image.gpt-generation-json'
-      : isGptImageModel(model) &&
+      : isGPTImageCompatibleModel &&
         resolvedImageApiCompatibility === 'tuzi-gpt-image'
       ? 'tuzi.image.gpt-generation-json'
       : 'openai.image.basic-json';
@@ -555,7 +556,7 @@ function inferImageBindings(
 
     if (
       !shouldPreferAsyncImageBinding(profile, model) &&
-      isGptImageModel(model) &&
+      isGPTImageCompatibleModel &&
       resolvedImageApiCompatibility === 'openai-gpt-image'
     ) {
       bindings.push(
@@ -582,7 +583,7 @@ function inferImageBindings(
 
     if (
       !shouldPreferAsyncImageBinding(profile, model) &&
-      isGptImageModel(model) &&
+      isGPTImageCompatibleModel &&
       resolvedImageApiCompatibility === 'tuzi-gpt-image'
     ) {
       bindings.push(
@@ -654,7 +655,7 @@ function inferVideoBindings(
     );
   }
 
-  if (isSeedanceModel(model) && !useXingliuVideoFormat) {
+  if (isSeedanceModel(model) && !isSeedance2Model(model) && !useXingliuVideoFormat) {
     bindings.push(
       buildBinding(profile, model, {
         protocol: 'seedance.task',
@@ -720,6 +721,28 @@ function inferVideoBindings(
     profile.providerType === 'custom' ||
     useXingliuVideoFormat
   ) {
+    const seedance2Capabilities = useXingliuVideoFormat ? null : getSeedance2Capabilities(model.id);
+    const seedance2Metadata = seedance2Capabilities
+      ? {
+          video: {
+            allowedDurations: Array.from(
+              {
+                length:
+                  seedance2Capabilities.maxDuration -
+                  seedance2Capabilities.minDuration +
+                  1,
+              },
+              (_, index) => String(seedance2Capabilities.minDuration + index)
+            ),
+            defaultDuration: String(seedance2Capabilities.defaultDuration),
+            durationMode: 'request-param' as const,
+            durationField: 'duration',
+            strictDurationValidation: true,
+            resultMode: 'download-content' as const,
+            downloadPathTemplate: '/videos/{taskId}/content',
+          },
+        }
+      : undefined;
     const soraDownloadMetadata = isSoraModel(model)
       ? {
           video: {
@@ -731,7 +754,9 @@ function inferVideoBindings(
     bindings.push(
       buildBinding(profile, model, {
         protocol: 'openai.async.video',
-        requestSchema: 'openai.video.form-input-reference',
+        requestSchema: isSeedance2Model(model) && !useXingliuVideoFormat
+          ? 'doubao.seedance-2.video.content-json'
+          : 'openai.video.form-input-reference',
         responseSchema: 'openai.async.task',
         submitPath: useXingliuVideoFormat ? '/v1/videos' : '/videos',
         baseUrlStrategy: useXingliuVideoFormat ? 'trim-v1' : undefined,
@@ -739,7 +764,8 @@ function inferVideoBindings(
           ? '/v1/videos/{taskId}'
           : '/videos/{taskId}',
         metadata:
-          isSoraModel(model) && isOfficialOpenAIProfile(profile)
+          seedance2Metadata ||
+          (isSoraModel(model) && isOfficialOpenAIProfile(profile)
             ? {
                 video: {
                   allowedDurations: ['4', '8', '12'],
@@ -763,7 +789,7 @@ function inferVideoBindings(
                   strictDurationValidation: false,
                 },
               }
-            : soraDownloadMetadata,
+            : soraDownloadMetadata),
         priority: profile.providerType === 'openai-compatible' ? 320 : 160,
         confidence:
           profile.providerType === 'openai-compatible' ? 'high' : 'medium',

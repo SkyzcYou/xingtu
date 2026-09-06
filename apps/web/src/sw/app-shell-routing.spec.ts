@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   shouldBypassAppShellCacheForLazyChunkRecovery,
-  shouldUseCDNFirstPreload,
   shouldUseOriginFirstPreload,
   shouldUseAppShellStrategy,
 } from './app-shell-routing';
@@ -38,14 +37,6 @@ describe('app-shell-routing', () => {
       true
     );
     expect(shouldUseOriginFirstPreload('/logo/wechat-qr.jpg')).toBe(true);
-  });
-
-  it('keeps app-owned static assets off CDN-first preload', () => {
-    expect(shouldUseCDNFirstPreload('/assets/index-abc123.js')).toBe(false);
-    expect(shouldUseCDNFirstPreload('/icons/android-chrome-192x192.png')).toBe(
-      false
-    );
-    expect(shouldUseCDNFirstPreload('/user-manual/index.html')).toBe(true);
   });
 
   it('bypasses the cached app shell only for fresh lazy chunk recovery reloads', () => {

@@ -17,7 +17,15 @@ import React, {
 } from 'react';
 import { copyToClipboard } from '../../utils/runtime-helpers';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Copy, ExternalLink, Plus, Search, X } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  Plus,
+  Search,
+  X,
+} from 'lucide-react';
 import { MessagePlugin } from 'tdesign-react';
 import {
   IMAGE_MODELS,
@@ -55,20 +63,50 @@ import {
 import { compareModelsByDisplayPriority } from '../../utils/model-sort';
 import {
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
-  TUZI_ORIGINAL_PROVIDER_PROFILE_ID,
   createModelRef,
   type ModelRef,
   type ProviderProfile,
 } from '../../utils/settings-manager';
+import { runtimeModelDiscovery } from '../../utils/runtime-model-discovery';
+import { queueProviderSettingsNavigation } from '../settings-dialog/provider-settings-navigation';
 
-const SETTINGS_PROVIDER_NAV_EVENT = 'aitu:settings:provider-nav';
+const lazyProviderModelLoads = new Map<string, Promise<void>>();
 
-type ProviderSettingsIntent =
-  | { action: 'select'; profileId: string }
-  | { action: 'create' };
+function ensureProviderModels(profile?: ProviderProfile | null): void {
+  if (
+    !profile?.id.startsWith('tuzi-managed-') ||
+    !profile.apiKey.trim() ||
+    !profile.baseUrl.trim()
+  ) {
+    return;
+  }
+
+  const state = runtimeModelDiscovery.getState(profile.id);
+  if (state.discoveredModels.length > 0 || state.status === 'loading') return;
+  if (lazyProviderModelLoads.has(profile.id)) return;
+
+  const load = runtimeModelDiscovery
+    .discover(profile.id, profile.baseUrl, profile.apiKey)
+    .then((models) => {
+      runtimeModelDiscovery.applySelection(
+        profile.id,
+        models.map((model) => model.id)
+      );
+    })
+    .catch((error) => {
+      console.warn('[ModelDropdown] Failed to load provider models:', error);
+    })
+    .finally(() => {
+      lazyProviderModelLoads.delete(profile.id);
+    });
+  lazyProviderModelLoads.set(profile.id, load);
+}
 
 function normalizeSearchText(value?: string | null): string {
-  return (value || '').toLowerCase().replace(/[\s\-_.:/]+/g, '').trim();
+  return (value || '')
+    .toLowerCase()
+    .replace(/[\s\-_.:/]+/g, '')
+    .trim();
 }
 
 const ModelDropdownPriceTag: React.FC<{ model: ModelConfig }> = React.memo(
@@ -90,9 +128,7 @@ const ModelDropdownDescFallback: React.FC<{ model: ModelConfig }> = React.memo(
   ({ model }) => {
     const meta = useModelMeta(model.sourceProfileId, model.id);
     if (!meta?.description) return null;
-    return (
-      <div className="model-dropdown__item-desc">{meta.description}</div>
-    );
+    return <div className="model-dropdown__item-desc">{meta.description}</div>;
   }
 );
 
@@ -185,6 +221,12 @@ export interface ModelDropdownProps {
   providerProfilesOverride?: ProviderProfile[];
   /** 是否显示供应商管理入口 */
   showProviderAction?: boolean;
+  /** 无候选模型时触发器显示的短文案 */
+  emptyTriggerLabel?: string;
+  /** 无候选模型时菜单显示的说明 */
+  emptyText?: string;
+  /** 仅允许反显 models 中的候选项，不回退到静态模型目录 */
+  strictModelList?: boolean;
 }
 
 /**
@@ -207,6 +249,9 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
   onOpenChange,
   providerProfilesOverride,
   showProviderAction = true,
+  emptyTriggerLabel,
+  emptyText,
+  strictModelList = false,
 }) => {
   const { setAppState } = useDrawnix();
   const { value: isOpen, setValue: setIsOpen } = useControllableState({
@@ -270,13 +315,6 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
       ),
     [providerGroups]
   );
-  const providerModelCountMap = useMemo(
-    () =>
-      new Map(
-        providerGroups.map((group) => [group.providerId, group.totalCount])
-      ),
-    [providerGroups]
-  );
   const getModelProviderName = useCallback(
     (model: ModelConfig) =>
       providerNameMap.get(model.sourceProfileId || DEFAULT_PROVIDER_ID) ||
@@ -298,9 +336,7 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
   const activeCategory = useMemo(() => {
     if (!activeProvider) return null;
     return (
-      activeProvider.vendorCategories.find(
-        (c) => c.vendor === activeVendor
-      ) ||
+      activeProvider.vendorCategories.find((c) => c.vendor === activeVendor) ||
       activeProvider.vendorCategories[0] ||
       null
     );
@@ -342,7 +378,7 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
   const currentModel =
     models.find(
       (model) => getModelKey(model) === (selectedSelectionKey || selectedModel)
-    ) || getModelConfig(selectedModel);
+    ) || (strictModelList ? undefined : getModelConfig(selectedModel));
   const currentProfile = useMemo(
     () => (currentModel ? getModelProfile(currentModel) : null),
     [currentModel, getModelProfile]
@@ -390,11 +426,12 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
         return { model, score };
       })
       .filter(({ score }) => score > 0)
-      .sort((a, b) =>
-        b.score - a.score ||
-        compareModelsByDisplayPriority(a.model, b.model, {
-          fallbackOrderMap: modelOrderMap,
-        })
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          compareModelsByDisplayPriority(a.model, b.model, {
+            fallbackOrderMap: modelOrderMap,
+          })
       );
   }, [getModelProviderName, models, searchQuery, modelOrderMap]);
 
@@ -417,18 +454,14 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
         count: g.totalCount,
         icon: g.providerIconUrl ? (
           <ModelSourceIcon
-            vendor={
-              g.vendorCategories[0]?.vendor || ('OTHER' as ModelVendor)
-            }
+            vendor={g.vendorCategories[0]?.vendor || ('OTHER' as ModelVendor)}
             profileName={g.providerName}
             iconUrl={g.providerIconUrl}
             size={16}
           />
         ) : (
           <ModelVendorMark
-            vendor={
-              g.vendorCategories[0]?.vendor || ('OTHER' as ModelVendor)
-            }
+            vendor={g.vendorCategories[0]?.vendor || ('OTHER' as ModelVendor)}
             size={16}
           />
         ),
@@ -457,8 +490,9 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
       const group = providerGroups.find((g) => g.providerId === providerId);
       setActiveVendor(group?.vendorCategories[0]?.vendor ?? null);
       setHighlightedIndex(0);
+      ensureProviderModels(providerProfileMap.get(providerId));
     },
-    [providerGroups]
+    [providerGroups, providerProfileMap]
   );
 
   // 切换厂商分类
@@ -477,39 +511,13 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
   );
 
   const handleOpenProviderSettings = useCallback(() => {
-    const availableProfiles = effectiveProviderProfiles.filter(
-      (profile) => profile.id !== LEGACY_DEFAULT_PROVIDER_PROFILE_ID
-    );
-    const lastProfile =
-      availableProfiles[availableProfiles.length - 1] || null;
-    const lastProfileModelCount = lastProfile
-      ? providerModelCountMap.get(lastProfile.id) || 0
-      : 0;
-
-    const intent: ProviderSettingsIntent =
-      lastProfile && lastProfileModelCount === 0
-        ? { action: 'select', profileId: lastProfile.id }
-        : availableProfiles.some(
-            (profile) =>
-              profile.id === TUZI_ORIGINAL_PROVIDER_PROFILE_ID &&
-              (providerModelCountMap.get(profile.id) || 0) === 0
-          )
-        ? { action: 'select', profileId: TUZI_ORIGINAL_PROVIDER_PROFILE_ID }
-        : { action: 'create' };
-
-    (
-      window as typeof window & {
-        __aituPendingProviderNavigationIntent?: ProviderSettingsIntent;
-      }
-    ).__aituPendingProviderNavigationIntent = intent;
-    window.dispatchEvent(
-      new CustomEvent<ProviderSettingsIntent>(SETTINGS_PROVIDER_NAV_EVENT, {
-        detail: intent,
-      })
-    );
+    queueProviderSettingsNavigation({
+      action: 'select',
+      profileId: LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+    });
     setIsOpen(false);
     setAppState((prev) => ({ ...prev, openSettings: true }));
-  }, [effectiveProviderProfiles, providerModelCountMap, setAppState, setIsOpen]);
+  }, [setAppState, setIsOpen]);
 
   // 当过滤结果变化时，高亮选中模型或重置到第一项
   useEffect(() => {
@@ -549,7 +557,10 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
       const validVendors = currentProvider.vendorCategories.map(
         (c) => c.vendor
       );
-      if (!activeVendor || !validVendors.includes(activeVendor as ModelVendor)) {
+      if (
+        !activeVendor ||
+        !validVendors.includes(activeVendor as ModelVendor)
+      ) {
         setActiveVendor(validVendors[0] ?? null);
       }
     }
@@ -574,10 +585,22 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
       if (disabled) return;
       const next = !isOpen;
       if (next) {
-        setActiveProviderId(selectedProviderHint);
+        const hintedGroup = providerGroups.find(
+          (group) => group.providerId === selectedProviderHint
+        );
+        const fallbackGroup =
+          providerGroups.find((group) => group.totalCount > 0) ||
+          providerGroups[0];
+        const nextProviderId =
+          hintedGroup?.totalCount || !fallbackGroup
+            ? selectedProviderHint
+            : fallbackGroup.providerId;
+        setActiveProviderId(nextProviderId);
         if (selectedVendorHint) {
           setActiveVendor(selectedVendorHint);
         }
+        ensureProviderModels(providerProfileMap.get(selectedProviderHint));
+        ensureProviderModels(providerProfileMap.get(nextProviderId));
       }
       if (next) {
         // 打开时清空搜索，默认展示当前供应商/分类
@@ -596,6 +619,8 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
       currentModel,
       selectedModel,
       selectedProviderHint,
+      providerGroups,
+      providerProfileMap,
       selectedVendorHint,
     ]
   );
@@ -657,7 +682,8 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
   const getModelDocsUrl = useCallback(
     (modelId: string): string | undefined => {
       const model = models.find((m) => m.id === modelId);
-      return modelPricingService.getModelPrice(model?.sourceProfileId, modelId)?.docsUrl;
+      return modelPricingService.getModelPrice(model?.sourceProfileId, modelId)
+        ?.docsUrl;
     },
     [models]
   );
@@ -667,13 +693,18 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
       const model = models.find((m) => m.id === modelId);
       if (model?.description) return model.description;
       if (!model?.sourceProfileId) return undefined;
-      return modelPricingService.getModelPrice(model.sourceProfileId, modelId)?.description;
+      return modelPricingService.getModelPrice(model.sourceProfileId, modelId)
+        ?.description;
     },
     [models]
   );
 
   const buildContextMenuItems = useCallback(
-    ({ modelId }: { modelId: string }): ContextMenuEntry<{ modelId: string }>[] => {
+    ({
+      modelId,
+    }: {
+      modelId: string;
+    }): ContextMenuEntry<{ modelId: string }>[] => {
       const desc = getModelDescription(modelId);
       const items: ContextMenuEntry<{ modelId: string }>[] = [
         { key: 'model-id', label: modelId, disabled: true },
@@ -682,7 +713,16 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
         items.push({
           key: 'model-desc',
           label: (
-            <span style={{ fontSize: 11, color: 'var(--td-text-color-secondary)', whiteSpace: 'normal', lineHeight: 1.4, display: 'block', maxWidth: 260 }}>
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--td-text-color-secondary)',
+                whiteSpace: 'normal',
+                lineHeight: 1.4,
+                display: 'block',
+                maxWidth: 260,
+              }}
+            >
               {desc.length > 80 ? desc.slice(0, 80) + '…' : desc}
             </span>
           ),
@@ -696,7 +736,7 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
           label: language === 'zh' ? '复制模型名' : 'Copy model name',
           icon: <Copy size={14} />,
           onSelect: ({ modelId: id }) => handleCopyModelId(id),
-        },
+        }
       );
       const docsUrl = getModelDocsUrl(modelId);
       if (docsUrl) {
@@ -817,7 +857,11 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
           aria-haspopup="listbox"
           aria-expanded={isOpen}
           aria-label={`${
-            currentModel?.shortLabel || currentModel?.label || selectedModel
+            currentModel?.shortLabel ||
+            currentModel?.label ||
+            emptyTriggerLabel ||
+            selectedModel ||
+            (language === 'zh' ? '无可用模型' : 'No models')
           } (↑↓ Tab)`}
           disabled={disabled}
         >
@@ -838,11 +882,22 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
               className="model-dropdown__trigger-source-icon"
             />
           ) : null}
-          <span className="model-dropdown__at">#</span>
-          <span className="model-dropdown__code">{shortCode}</span>
+          {currentModel ? (
+            <>
+              <span className="model-dropdown__at">#</span>
+              <span className="model-dropdown__code">{shortCode}</span>
+            </>
+          ) : (
+            <span className="model-dropdown__code">
+              {emptyTriggerLabel ||
+                (language === 'zh' ? '无可用模型' : 'No models')}
+            </span>
+          )}
           <ModelHealthBadge
             modelId={selectedModel}
-            profileId={currentProfile?.id || currentModel?.sourceProfileId || null}
+            profileId={
+              currentProfile?.id || currentModel?.sourceProfileId || null
+            }
           />
           <ChevronDown
             size={14}
@@ -906,7 +961,9 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
           />
           <ModelHealthBadge
             modelId={selectedModel}
-            profileId={currentProfile?.id || currentModel?.sourceProfileId || null}
+            profileId={
+              currentProfile?.id || currentModel?.sourceProfileId || null
+            }
           />
         </div>
         <ChevronDown
@@ -1029,7 +1086,9 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
                           setSearchQuery('');
                           searchInputRef.current?.focus();
                         }}
-                        aria-label={language === 'zh' ? '清空搜索' : 'Clear search'}
+                        aria-label={
+                          language === 'zh' ? '清空搜索' : 'Clear search'
+                        }
                       >
                         <X size={14} />
                       </button>
@@ -1153,8 +1212,8 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
                   ) : (
                     <div className="model-dropdown__empty">
                       {language === 'zh'
-                        ? '未找到匹配的模型'
-                        : 'No matching models'}
+                        ? emptyText || '未找到匹配的模型'
+                        : emptyText || 'No matching models'}
                     </div>
                   )}
                 </div>

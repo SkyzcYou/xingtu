@@ -1,5 +1,6 @@
 import {
   getCompatibleParams,
+  ALL_PARAMS,
   SORA_MODE_PARAM_ID,
   type ParamConfig,
 } from '../constants/model-config';
@@ -13,6 +14,12 @@ import type {
   ProviderVideoBindingMetadata,
   ResolvedProviderContext,
 } from './provider-routing/types';
+
+export {
+  areSeedanceAudioDataUrlsWithinLimit,
+  isPublicHttpMediaUrl,
+  isSeedanceAudioReference,
+} from '../utils/virtual-media-url';
 
 const FIXED_SORA_DURATION_MODEL_PATTERN = /^sora-2-(\d+)s$/i;
 const DEFAULT_VIDEO_POLL_PATH = '/videos/{taskId}';
@@ -51,17 +58,20 @@ function normalizeStringParams(
     return {};
   }
 
-  return Object.entries(params).reduce<Record<string, string>>((acc, [key, value]) => {
-    if (value === undefined || value === null) {
-      return acc;
-    }
+  return Object.entries(params).reduce<Record<string, string>>(
+    (acc, [key, value]) => {
+      if (value === undefined || value === null) {
+        return acc;
+      }
 
-    const normalized = String(value).trim();
-    if (normalized) {
-      acc[key] = normalized;
-    }
-    return acc;
-  }, {});
+      const normalized = String(value).trim();
+      if (normalized) {
+        acc[key] = normalized;
+      }
+      return acc;
+    },
+    {}
+  );
 }
 
 function normalizeDurationValue(
@@ -162,7 +172,9 @@ function inferDefaultSoraMode(
   const allowedDurations = binding?.metadata?.video?.allowedDurations || [];
   if (
     allowedDurations.length === SORA_API_ALLOWED_DURATIONS.length &&
-    allowedDurations.every((value, index) => value === SORA_API_ALLOWED_DURATIONS[index])
+    allowedDurations.every(
+      (value, index) => value === SORA_API_ALLOWED_DURATIONS[index]
+    )
   ) {
     return 'api';
   }
@@ -178,7 +190,8 @@ function resolveSoraMode(
     return null;
   }
 
-  const selectedMode = normalizeStringParams(params)[SORA_MODE_PARAM_ID]?.toLowerCase();
+  const selectedMode =
+    normalizeStringParams(params)[SORA_MODE_PARAM_ID]?.toLowerCase();
   if (selectedMode && SORA_MODE_VALUES.has(selectedMode)) {
     return selectedMode as 'api' | 'web';
   }
@@ -189,7 +202,8 @@ function resolveSoraMode(
 function getExplicitSoraMode(
   params?: Record<string, unknown> | null
 ): 'api' | 'web' | null {
-  const selectedMode = normalizeStringParams(params)[SORA_MODE_PARAM_ID]?.toLowerCase();
+  const selectedMode =
+    normalizeStringParams(params)[SORA_MODE_PARAM_ID]?.toLowerCase();
   if (selectedMode && SORA_MODE_VALUES.has(selectedMode)) {
     return selectedMode as 'api' | 'web';
   }
@@ -502,8 +516,8 @@ export function getEffectiveVideoModelConfig(
   )
     ? (metadata.defaultDuration as string)
     : allowedDurations.includes(baseConfig.defaultDuration)
-      ? baseConfig.defaultDuration
-      : allowedDurations[0];
+    ? baseConfig.defaultDuration
+    : allowedDurations[0];
 
   return {
     ...baseConfig,
@@ -529,7 +543,11 @@ export function getEffectiveVideoDefaultParams(
   duration: string;
   size: string;
 } {
-  const config = getEffectiveVideoModelConfigForSelection(modelId, modelRef, params);
+  const config = getEffectiveVideoModelConfigForSelection(
+    modelId,
+    modelRef,
+    params
+  );
   return {
     duration: config.defaultDuration,
     size: config.defaultSize,
@@ -541,11 +559,18 @@ export function getEffectiveVideoCompatibleParams(
   modelRef?: ModelRef | string | null,
   params?: Record<string, unknown> | null
 ): ParamConfig[] {
-  const compatibleParams = getCompatibleParams(modelId);
+  let compatibleParams = getCompatibleParams(modelId);
   const plan = resolveInvocationPlanFromRoute('video', modelRef || modelId);
-  const metadata = getResolvedVideoBindingMetadata(modelId, plan?.binding || null, params);
+  const metadata = getResolvedVideoBindingMetadata(
+    modelId,
+    plan?.binding || null,
+    params
+  );
   const selectedKlingAction = resolveSelectedKlingAction(params);
   const isXingliuVideo = isXingliuVideoBinding(plan?.binding || null, metadata);
+  if (isXingliuVideo && /seedance/i.test(modelId)) {
+    compatibleParams = ALL_PARAMS.filter((param) => param.compatibleTags?.includes('seedance'));
+  }
   const xingliuSeedanceCapability = resolveXingliuSeedanceCapability(modelId);
   const effectiveConfig = getEffectiveVideoModelConfigForSelection(
     modelId,
@@ -694,7 +719,11 @@ export function getDefaultVideoExtraParams(
   modelRef?: ModelRef | string | null,
   params?: Record<string, unknown> | null
 ): Record<string, string> {
-  const compatibleParams = getEffectiveVideoCompatibleParams(modelId, modelRef, params);
+  const compatibleParams = getEffectiveVideoCompatibleParams(
+    modelId,
+    modelRef,
+    params
+  );
   const normalizedParams = normalizeStringParams(params);
 
   return compatibleParams.reduce<Record<string, string>>((acc, param) => {
@@ -831,7 +860,8 @@ export function resolveVideoDownloadPath(
   binding?: ProviderModelBinding | null
 ): string {
   const metadata = getResolvedVideoBindingMetadata(modelId, binding);
-  const template = metadata?.downloadPathTemplate || DEFAULT_VIDEO_DOWNLOAD_PATH;
+  const template =
+    metadata?.downloadPathTemplate || DEFAULT_VIDEO_DOWNLOAD_PATH;
   return resolveTemplatePath(template, videoId);
 }
 
@@ -841,6 +871,9 @@ export async function downloadVideoContentToLocalUrl(params: {
   binding?: ProviderModelBinding | null;
   modelId?: string | null;
   cacheKey?: string;
+  resultVisibility?: 'user' | 'internal';
+  signal?: AbortSignal;
+  fallbackToObjectUrl?: boolean;
 }): Promise<string> {
   const response = await providerTransport.send(params.provider, {
     path: resolveVideoDownloadPath(
@@ -853,12 +886,15 @@ export async function downloadVideoContentToLocalUrl(params: {
     headers: {
       Accept: 'video/*,application/octet-stream',
     },
+    signal: params.signal,
   });
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
     throw new Error(
-      `视频内容下载失败: ${response.status}${errorText ? ` - ${errorText}` : ''}`
+      `视频内容下载失败: ${response.status}${
+        errorText ? ` - ${errorText}` : ''
+      }`
     );
   }
 
@@ -876,9 +912,15 @@ export async function downloadVideoContentToLocalUrl(params: {
     await unifiedCacheService.cacheMediaFromBlob(localUrl, blob, 'video', {
       taskId: cacheKey,
       model: params.modelId || undefined,
+      ...(params.resultVisibility
+        ? { resultVisibility: params.resultVisibility }
+        : {}),
     });
     return localUrl;
-  } catch {
+  } catch (error) {
+    if (params.fallbackToObjectUrl === false) {
+      throw error;
+    }
     return URL.createObjectURL(blob);
   }
 }

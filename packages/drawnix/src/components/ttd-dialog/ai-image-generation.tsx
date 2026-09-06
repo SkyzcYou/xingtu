@@ -40,7 +40,7 @@ import {
   ASPECT_RATIO_OPTIONS,
   convertAspectRatioToSize,
 } from '../../constants/image-aspect-ratios';
-import { getDefaultImageModel } from '../../constants/model-config';
+import { getDefaultImageModel, type ModelConfig } from '../../constants/model-config';
 import { DialogTaskList } from '../task-queue/DialogTaskList';
 import { LS_KEYS } from '../../constants/storage-keys';
 import {
@@ -58,10 +58,11 @@ import {
   getImageTaskReferenceImages,
 } from '../../utils/image-task-prefill';
 import {
-  geminiSettings,
-  hasInvocationRouteCredentials,
-  resolveInvocationRoute,
   createModelRef,
+  resolveInvocationRoute,
+  geminiSettings,
+  invocationPresetsSettings,
+  hasInvocationRouteCredentials,
   type ModelRef,
 } from '../../utils/settings-manager';
 import { promptForApiKey } from '../../utils/gemini-api';
@@ -69,7 +70,6 @@ import { buildMJPromptSuffix } from '../../utils/mj-params';
 import {
   getCompatibleParams,
   getSizeOptionsForModel,
-  type ModelConfig,
 } from '../../constants/model-config';
 import { useSelectableModels } from '../../hooks/use-runtime-models';
 import { getPinnedSelectableModel } from '../../utils/runtime-model-discovery';
@@ -77,6 +77,9 @@ import {
   findMatchingSelectableModel,
   getModelRefFromConfig,
   getSelectionKey,
+  resolveActiveImageModelSelection,
+  resolveImageSubmissionModelSelection,
+  type ResolvedModelSelection,
 } from '../../utils/model-selection';
 import { KnowledgeNoteContextSelector } from '../shared';
 
@@ -96,6 +99,12 @@ interface AIImageGenerationProps {
   pptSlideImage?: boolean;
   pptSlidePrompt?: string;
   pptReplaceElementId?: string;
+  replaceElementId?: string;
+  targetElementId?: string;
+  anchorId?: string;
+  sourceTaskId?: string;
+  sourcePrompt?: string;
+  promptMeta?: GenerationParams['promptMeta'];
   selectedModel?: string;
   selectedModelRef?: ModelRef | null;
   onModelSelectionChange?: (
@@ -226,6 +235,12 @@ const AIImageGeneration = ({
   pptSlideImage,
   pptSlidePrompt,
   pptReplaceElementId,
+  replaceElementId,
+  targetElementId,
+  anchorId,
+  sourceTaskId,
+  sourcePrompt,
+  promptMeta,
   selectedModel,
   selectedModelRef,
   onModelSelectionChange,
@@ -336,6 +351,7 @@ const AIImageGeneration = ({
   );
   const [mobilePanel, setMobilePanel] = useState<'config' | 'tasks'>('config');
   const containerRef = useRef<HTMLDivElement>(null);
+  const promptPasteScopeRef = useRef<HTMLDivElement>(null);
   const { viewportWidth } = useDeviceType();
   const isCompactLayout = viewportWidth <= 768;
 
@@ -346,6 +362,24 @@ const AIImageGeneration = ({
   const { language } = useI18n();
   const { createTask } = useTaskQueue();
   const generatingLockRef = useRef(false);
+
+  const applyCurrentModelSelection = useCallback(
+    (selection: ResolvedModelSelection) => {
+      setCurrentModel((prev) =>
+        prev === selection.modelId ? prev : selection.modelId
+      );
+      setCurrentModelRef((prev) => {
+        if (
+          prev?.profileId === selection.modelRef?.profileId &&
+          prev?.modelId === selection.modelRef?.modelId
+        ) {
+          return prev;
+        }
+        return selection.modelRef;
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     return promptStorageService.subscribeChanges(() => {
@@ -433,7 +467,9 @@ const AIImageGeneration = ({
     const propsKey = JSON.stringify({
       prompt: initialPrompt,
       images: initialImages?.map((img) => img.url),
-      knowledgeContextRefs: initialKnowledgeContextRefs.map((ref) => ref.noteId),
+      knowledgeContextRefs: initialKnowledgeContextRefs.map(
+        (ref) => ref.noteId
+      ),
       elementIds: initialSelectedElementIds,
       width: initialWidth,
       height: initialHeight,
@@ -547,32 +583,33 @@ const AIImageGeneration = ({
   }, [aspectRatio, onDraftChange, prompt, uploadedImages]);
 
   useEffect(() => {
-    // When the parent controls the sidebar selector, its route selection is
-    // the source of truth. Avoid a legacy settings listener briefly restoring
-    // the previous model/provider while the route write is in flight.
-    if (selectedModel !== undefined) {
-      return;
-    }
-
-    const handleSettingsChange = (newSettings: any) => {
-      const nextModel =
-        newSettings.imageModelName ||
-        visibleImageModels[0]?.id ||
-        getDefaultImageModel();
-      if (nextModel !== currentModel) {
-        setCurrentModel(nextModel);
-        const nextModelRef = resolveImageModelRef(
-          visibleImageModels,
-          nextModel,
-          currentModelRef
-        );
-        setCurrentModelRef(nextModelRef);
+    const handleSettingsChange = () => {
+      // 受控模式由父组件统一同步，避免 route 监听与 props 双向抢写。
+      if (selectedModel !== undefined) {
+        return;
+      }
+      const nextSelection =
+        resolveActiveImageModelSelection(visibleImageModels);
+      if (
+        getSelectionKey(currentModel, currentModelRef) !==
+        nextSelection.selectionKey
+      ) {
+        applyCurrentModelSelection(nextSelection);
       }
     };
     geminiSettings.addListener(handleSettingsChange);
-    return () => geminiSettings.removeListener(handleSettingsChange);
-  }, [currentModel, currentModelRef, selectedModel, visibleImageModels]);
-
+    invocationPresetsSettings.addListener(handleSettingsChange);
+    return () => {
+      geminiSettings.removeListener(handleSettingsChange);
+      invocationPresetsSettings.removeListener(handleSettingsChange);
+    };
+  }, [
+    applyCurrentModelSelection,
+    currentModel,
+    currentModelRef,
+    selectedModel,
+    visibleImageModels,
+  ]);
   const notifyModelSelectionChange = useCallback(
     (modelId: string, modelRef: ModelRef | null) => {
       if (onModelSelectionChange) {
@@ -620,32 +657,29 @@ const AIImageGeneration = ({
     });
   }, [currentModel, currentModelRef, visibleImageModels]);
 
-  // Keep local模型状态与头部下拉（受控 selectedModel）同步，避免展示过期的参数列表
+  // 受控模型只允许从父组件单向同步，提交期的 route 纠偏不能反写交互状态。
   useEffect(() => {
     if (!selectedModel) {
       return;
     }
 
-    const currentSelectionKey = getSelectionKey(currentModel, currentModelRef);
-    const nextSelectionKey = getSelectionKey(selectedModel, selectedModelRef);
-
-    if (currentSelectionKey !== nextSelectionKey) {
-      setCurrentModel(selectedModel);
-      const nextRef = resolveImageModelRef(
-        visibleImageModels,
-        selectedModel,
-        selectedModelRef
-      );
-      setCurrentModelRef((prev) => {
-        if (areModelRefsEqual(prev, nextRef)) {
-          return prev;
-        }
-        return nextRef;
-      });
+    const matchedModel = findMatchingSelectableModel(
+      visibleImageModels,
+      selectedModel,
+      selectedModelRef
+    );
+    if (!matchedModel) {
+      return;
     }
+
+    const nextModelRef = getModelRefFromConfig(matchedModel);
+    applyCurrentModelSelection({
+      modelId: matchedModel.id,
+      modelRef: nextModelRef,
+      selectionKey: getSelectionKey(matchedModel.id, nextModelRef),
+    });
   }, [
-    currentModel,
-    currentModelRef,
+    applyCurrentModelSelection,
     selectedModel,
     selectedModelRef,
     visibleImageModels,
@@ -821,9 +855,29 @@ const AIImageGeneration = ({
         return;
       }
 
+      const activeSelection =
+        resolveActiveImageModelSelection(visibleImageModels);
+      const submissionSelection = resolveImageSubmissionModelSelection({
+        models: visibleImageModels,
+        currentModel,
+        currentModelRef,
+        controlledModel: selectedModel,
+        controlledModelRef: selectedModelRef,
+        activeSelection,
+      });
+      if (
+        getSelectionKey(currentModel, currentModelRef) !==
+        submissionSelection.selectionKey
+      ) {
+        applyCurrentModelSelection(submissionSelection);
+      }
+
       // 先检查 API Key，没有则弹窗获取（只弹一次，避免批量生成时多次弹窗）
       if (
-        !hasInvocationRouteCredentials('image', currentModelRef || currentModel)
+        !hasInvocationRouteCredentials(
+          'image',
+          submissionSelection.modelRef || submissionSelection.modelId
+        )
       ) {
         const newApiKey = await promptForApiKey();
         if (!newApiKey) {
@@ -847,15 +901,16 @@ const AIImageGeneration = ({
           typeof height === 'string' ? parseInt(height) || 1024 : height;
         // Convert File objects to base64 data URLs for serialization
         const convertedImages = await convertImagesToSerializable();
-        const uploadedImageParams = stripMaskFromReferenceImages(convertedImages);
+        const uploadedImageParams =
+          stripMaskFromReferenceImages(convertedImages);
 
         // 如果数量大于1，使用批量生成
         if (effectiveCount > 1) {
           const batchTaskIds: string[] = [];
           const batchId = `batch_${Date.now()}`;
 
-          const currentImageModel =
-            currentModel || resolveInvocationRoute('image').modelId;
+          const currentImageModel = submissionSelection.modelId;
+          const submissionModelRef = submissionSelection.modelRef;
 
           const finalPrompt = currentImageModel.startsWith('mj')
             ? [prompt.trim(), buildMJPromptSuffix(mjSelectedParams)]
@@ -885,7 +940,7 @@ const AIImageGeneration = ({
               aspectRatio,
               size: finalSize,
               model: currentImageModel,
-              modelRef: currentModelRef || null,
+              modelRef: submissionModelRef,
               uploadedImages: uploadedImageParams,
               batchId,
               batchIndex: i + 1,
@@ -899,6 +954,12 @@ const AIImageGeneration = ({
               pptSlideImage,
               pptSlidePrompt,
               pptReplaceElementId,
+              replaceElementId,
+              targetElementId,
+              anchorId,
+              sourceTaskId,
+              sourcePrompt,
+              promptMeta,
               ...maskEditParams,
               ...(extraParams ? { params: extraParams } : {}),
             };
@@ -934,8 +995,8 @@ const AIImageGeneration = ({
         // 单个任务生成
 
         // Get current image model from settings
-        const currentImageModel =
-          currentModel || resolveInvocationRoute('image').modelId;
+        const currentImageModel = submissionSelection.modelId;
+        const submissionModelRef = submissionSelection.modelRef;
 
         const finalPrompt = currentImageModel.startsWith('mj')
           ? [prompt.trim(), buildMJPromptSuffix(mjSelectedParams)]
@@ -965,7 +1026,7 @@ const AIImageGeneration = ({
           aspectRatio,
           size: finalSize,
           model: currentImageModel,
-          modelRef: currentModelRef || null,
+          modelRef: submissionModelRef,
           // 保存上传的图片（已转换为可序列化的格式）
           uploadedImages: uploadedImageParams,
           autoInsertToCanvas:
@@ -981,6 +1042,12 @@ const AIImageGeneration = ({
           pptSlideImage,
           pptSlidePrompt,
           pptReplaceElementId,
+          replaceElementId,
+          targetElementId,
+          anchorId,
+          sourceTaskId,
+          sourcePrompt,
+          promptMeta,
           ...maskEditParams,
           ...(extraParams ? { params: extraParams } : {}),
         };
@@ -1151,6 +1218,7 @@ const AIImageGeneration = ({
                   : 'Reference Images (Optional)'
               }
               onError={setError}
+              pasteScopeRef={promptPasteScopeRef}
             />
 
             <PromptInput
@@ -1161,6 +1229,7 @@ const AIImageGeneration = ({
               type="image"
               disabled={isGenerating}
               onError={setError}
+              rootRef={promptPasteScopeRef}
             />
 
             <KnowledgeNoteContextSelector

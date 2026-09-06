@@ -9,6 +9,7 @@
   bottom: 100%;
   left: 0;
   right: 0;
+  min-width: 600px;
   margin-bottom: 8px;
   background: var(--xingtu-glass-bg);
   border: 1px solid var(--xingtu-glass-border);
@@ -221,6 +222,12 @@
     font-size: 12px;
     color: var(--xingtu-glass-text-tertiary);
     text-align: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .ai-input-bar .ai-model-selector {
+    min-width: 0;
   }
 }
 

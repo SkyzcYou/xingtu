@@ -6,7 +6,11 @@
  */
 
 import type { ModelRef } from '../../utils/settings-manager';
-import type { GenerationParams } from '../../types/shared/core.types';
+import type {
+  GenerationParams,
+  TaskResultVisibility,
+} from '../../types/shared/core.types';
+import type { CacheWarning } from '../../types/cache-warning.types';
 import type { ExecutionOptions } from './types';
 import { taskStorageWriter } from './task-storage-writer';
 import { createTaskInvocationRouteSnapshot } from '../task-invocation-route';
@@ -20,7 +24,6 @@ import {
   classifyApiCredentialError,
   dispatchApiAuthError,
 } from '../../utils/api-auth-error-event';
-import { unifiedCacheService } from '../unified-cache-service';
 import {
   getAdapterContextFromSettings,
   GPT_IMAGE_EDIT_REQUEST_SCHEMAS,
@@ -28,15 +31,43 @@ import {
 } from '../model-adapters';
 import type { ImageModelAdapter, VideoModelAdapter } from '../model-adapters';
 import {
-  ensureBase64ForAI,
+  materializeReferenceImagesSequentially,
   cacheRemoteUrl,
   cacheRemoteUrls,
 } from './fallback-utils';
+import { isImageSubmissionOutcomeUnknownError } from '../provider-routing';
+import {
+  attachImageRecoveryRequestId,
+  buildImageRecoveryUrl,
+  readImageRecoveryRequestId,
+} from '../image-generation-recovery-metadata';
 
 type ImageGenerationMode = 'text_to_image' | 'image_to_image' | 'image_edit';
 type ImageInputFidelity = 'high' | 'low';
 type ImageBackground = 'transparent' | 'opaque' | 'auto';
 type ImageOutputFormat = 'png' | 'jpeg' | 'webp';
+
+const supportsRemoteImageReferences = (requestSchema?: string): boolean =>
+  requestSchema === 'tuzi.image.gpt-generation-json' ||
+  requestSchema === 'tuzi.image.gpt-edit-json';
+
+function isCurrentExecutionAttempt(options?: ExecutionOptions): boolean {
+  return !options?.signal?.aborted && options?.isCurrentAttempt?.() !== false;
+}
+
+function assertCurrentExecutionAttempt(options?: ExecutionOptions): void {
+  if (!isCurrentExecutionAttempt(options)) {
+    const error = new Error('任务执行已被取消或替代');
+    error.name = 'AbortError';
+    throw error;
+  }
+}
+
+function createStorageWriteGuard(options?: ExecutionOptions): {
+  shouldUpdate: () => boolean;
+} {
+  return { shouldUpdate: () => isCurrentExecutionAttempt(options) };
+}
 
 function getStringParam(
   params: { params?: Record<string, unknown> },
@@ -87,6 +118,7 @@ export async function executeImageViaAdapter(
   taskId: string,
   adapter: ImageModelAdapter,
   params: {
+    requestId?: string;
     prompt: string;
     model: string;
     modelRef?: ModelRef | null;
@@ -103,17 +135,33 @@ export async function executeImageViaAdapter(
     outputCompression?: number;
     params?: Record<string, unknown>;
     assetMetadata?: GenerationParams['assetMetadata'];
+    resultVisibility?: TaskResultVisibility;
     preferredRequestSchema?: string | readonly string[];
   },
   options?: ExecutionOptions,
   startTime?: number
 ): Promise<void> {
   const logStartTime = startTime || Date.now();
+  const submissionRequestId = params.requestId || taskId;
   const preferredRequestSchema = resolvePreferredRequestSchema(params);
+  const adapterContext = getAdapterContextFromSettings(
+    'image',
+    params.modelRef || params.model,
+    {
+      preferredRequestSchema,
+    }
+  );
+  const invocationRoute = createTaskInvocationRouteSnapshot(
+    'image',
+    params.modelRef || params.model,
+    { bindingId: adapterContext.binding?.id }
+  );
+  const requestModel =
+    adapterContext.binding?.modelId || params.modelRef?.modelId || params.model;
 
   const logId = startLLMApiLog({
     endpoint: `adapter:${adapter.id}`,
-    model: params.model,
+    model: requestModel,
     taskType: 'image',
     prompt: params.prompt,
     hasReferenceImages:
@@ -124,27 +172,55 @@ export async function executeImageViaAdapter(
     ),
     taskId,
   });
+  let recoveryRequestId: string | undefined;
+  let recoveryUrl: string | undefined;
 
   try {
     let processedImages: string[] | undefined;
     if (params.referenceImages && params.referenceImages.length > 0) {
-      processedImages = await Promise.all(
-        params.referenceImages.map(async (imgUrl) => {
-          const imageData = await unifiedCacheService.getImageForAI(imgUrl);
-          return ensureBase64ForAI(imageData, options?.signal);
-        })
+      processedImages = await materializeReferenceImagesSequentially(
+        params.referenceImages,
+        {
+          ...options,
+          preserveUrl: (imgUrl) =>
+            supportsRemoteImageReferences(
+              adapterContext.binding?.requestSchema
+            ) && /^https?:\/\//i.test(imgUrl),
+        }
       );
     }
 
     options?.onProgress?.({ progress: 10, phase: 'submitting' });
 
     const result = await adapter.generateImage(
-      getAdapterContextFromSettings('image', params.modelRef || params.model, {
-        preferredRequestSchema,
-      }),
+      {
+        ...adapterContext,
+        requestId: submissionRequestId,
+        onSubmissionAttempt: async () => {
+          await options?.onSubmissionAttempt?.(invocationRoute);
+        },
+        signal: options?.signal,
+        onResponse: (response) => {
+          recoveryRequestId =
+            readImageRecoveryRequestId(response) || recoveryRequestId;
+          recoveryUrl =
+            buildImageRecoveryUrl(
+              adapterContext.baseUrl,
+              submissionRequestId
+            ) || recoveryUrl;
+          if (recoveryRequestId) {
+            void taskStorageWriter.updateImageRecovery(taskId, {
+              requestId: recoveryRequestId,
+              url: recoveryUrl,
+              status: 'idle',
+              checkedAt: Date.now(),
+            });
+          }
+        },
+      },
       {
         prompt: params.prompt,
-        model: params.model,
+        model: requestModel,
         modelRef: params.modelRef || null,
         size: params.size,
         generationMode:
@@ -176,6 +252,7 @@ export async function executeImageViaAdapter(
         },
       }
     );
+    assertCurrentExecutionAttempt(options);
 
     const duration = Date.now() - logStartTime;
 
@@ -192,22 +269,60 @@ export async function executeImageViaAdapter(
     // 缓存远程签名 URL 到本地，避免 Referer 校验导致 403
     const fmt = result.format || 'png';
     const allUrls = result.urls?.length ? result.urls : [result.url];
+    let cacheWarning: CacheWarning | undefined;
     const cachedUrls = await cacheRemoteUrls(allUrls, taskId, 'image', fmt, {
+      forceRemoteCache: true,
+      returnLocalCacheUrl: true,
+      cacheKey: submissionRequestId,
       extraMetadata: params.assetMetadata
         ? { ...params.assetMetadata }
         : undefined,
+      resultVisibility: params.resultVisibility,
+      onCacheWarning: (warning) => {
+        cacheWarning ||= warning;
+      },
     });
+    assertCurrentExecutionAttempt(options);
     const cachedPrimary = cachedUrls[0];
 
-    await taskStorageWriter.completeTask(taskId, {
-      url: cachedPrimary,
-      urls: cachedUrls.length > 1 ? cachedUrls : undefined,
-      format: fmt,
-      size: 0,
+    await taskStorageWriter.updateImageRecovery(taskId, {
+      requestId: recoveryRequestId || submissionRequestId,
+      url:
+        recoveryUrl ||
+        buildImageRecoveryUrl(adapterContext.baseUrl, submissionRequestId),
+      status: 'succeeded',
+      urls: allUrls,
+      checkedAt: Date.now(),
     });
+
+    const completed = await taskStorageWriter.completeTask(
+      taskId,
+      {
+        url: cachedPrimary,
+        urls: cachedUrls.length > 1 ? cachedUrls : undefined,
+        format: fmt,
+        size: 0,
+        width: result.width,
+        height: result.height,
+        ...(cacheWarning ? { cacheWarning } : {}),
+      },
+      submissionRequestId,
+      createStorageWriteGuard(options)
+    );
+    if (completed === false) {
+      const staleAttemptError = new Error('图片提交已被取消或替代');
+      staleAttemptError.name = 'AbortError';
+      throw staleAttemptError;
+    }
   } catch (error: any) {
+    attachImageRecoveryRequestId(error, recoveryRequestId);
     const duration = Date.now() - logStartTime;
     const errorMessage = error.message || 'Image generation failed (adapter)';
+
+    if (options?.isCurrentAttempt?.() === false) {
+      failLLMApiLog(logId, { duration, errorMessage });
+      throw error;
+    }
 
     const credentialErrorKind = classifyApiCredentialError(error);
     if (credentialErrorKind) {
@@ -219,10 +334,18 @@ export async function executeImageViaAdapter(
     }
 
     failLLMApiLog(logId, { duration, errorMessage });
-    await taskStorageWriter.failTask(taskId, {
-      code: 'IMAGE_GENERATION_ERROR',
-      message: errorMessage,
-    });
+    if (isImageSubmissionOutcomeUnknownError(error)) {
+      throw error;
+    }
+    await taskStorageWriter.failTask(
+      taskId,
+      {
+        code: 'IMAGE_GENERATION_ERROR',
+        message: errorMessage,
+      },
+      submissionRequestId,
+      createStorageWriteGuard(options)
+    );
     throw error;
   }
 }
@@ -246,11 +369,13 @@ export async function executeVideoViaAdapter(
     referenceImages?: string[];
     inputReference?: string;
     params?: Record<string, unknown>;
+    resultVisibility?: TaskResultVisibility;
   },
   options?: ExecutionOptions,
   startTime?: number
 ): Promise<void> {
   const logStartTime = startTime || Date.now();
+  let remoteIdWrite: Promise<unknown> | undefined;
 
   const refUrls =
     (params.referenceImages && params.referenceImages.length > 0
@@ -274,16 +399,12 @@ export async function executeVideoViaAdapter(
   try {
     let processedImages: string[] | undefined;
     if (refUrls && refUrls.length > 0) {
-      processedImages = await Promise.all(
-        refUrls.map(async (url) => {
-          if (isVirtualPath(url)) {
-            const imageData = await unifiedCacheService.getImageForAI(url);
-            return ensureBase64ForAI(imageData, options?.signal);
-          }
-          return url;
-        })
-      );
+      processedImages = await materializeReferenceImagesSequentially(refUrls, {
+        ...options,
+        preserveUrl: (url) => !isVirtualPath(url),
+      });
     }
+    assertCurrentExecutionAttempt(options);
 
     options?.onProgress?.({ progress: 10, phase: 'submitting' });
 
@@ -303,6 +424,12 @@ export async function executeVideoViaAdapter(
         params: {
           ...params.params,
           onProgress: (progress: number) => {
+            if (
+              options?.signal?.aborted ||
+              options?.isCurrentAttempt?.() === false
+            ) {
+              return;
+            }
             const safeProgress = Math.min(100, Math.max(10, progress));
             options?.onProgress?.({
               progress: safeProgress,
@@ -310,18 +437,29 @@ export async function executeVideoViaAdapter(
             });
           },
           onSubmitted: (videoId: string) => {
-            void taskStorageWriter.updateRemoteId(
+            if (
+              options?.signal?.aborted ||
+              options?.isCurrentAttempt?.() === false
+            ) {
+              return;
+            }
+            remoteIdWrite = taskStorageWriter.updateRemoteId(
               taskId,
               videoId,
               createTaskInvocationRouteSnapshot(
                 'video',
                 params.modelRef || params.model
-              )
+              ),
+              undefined,
+              createStorageWriteGuard(options)
             );
           },
         },
       }
     );
+    assertCurrentExecutionAttempt(options);
+    await remoteIdWrite;
+    assertCurrentExecutionAttempt(options);
 
     const duration = Date.now() - logStartTime;
 
@@ -341,18 +479,34 @@ export async function executeVideoViaAdapter(
       result.url,
       taskId,
       'video',
-      videoFmt
+      videoFmt,
+      undefined,
+      {
+        signal: options?.signal,
+        resultVisibility: params.resultVisibility,
+      }
     );
+    assertCurrentExecutionAttempt(options);
 
-    await taskStorageWriter.completeTask(taskId, {
-      url: cachedVideoUrl,
-      format: videoFmt,
-      size: 0,
-      duration: result.duration,
-    });
+    await taskStorageWriter.completeTask(
+      taskId,
+      {
+        url: cachedVideoUrl,
+        format: videoFmt,
+        size: 0,
+        duration: result.duration,
+      },
+      undefined,
+      createStorageWriteGuard(options)
+    );
   } catch (error: any) {
     const duration = Date.now() - logStartTime;
     const errorMessage = error.message || 'Video generation failed (adapter)';
+
+    if (options?.signal?.aborted || options?.isCurrentAttempt?.() === false) {
+      failLLMApiLog(logId, { duration, errorMessage });
+      throw error;
+    }
 
     const credentialErrorKind = classifyApiCredentialError(error);
     if (credentialErrorKind) {
@@ -364,10 +518,15 @@ export async function executeVideoViaAdapter(
     }
 
     failLLMApiLog(logId, { duration, errorMessage });
-    await taskStorageWriter.failTask(taskId, {
-      code: error.code || 'VIDEO_GENERATION_ERROR',
-      message: errorMessage,
-    });
+    await taskStorageWriter.failTask(
+      taskId,
+      {
+        code: error.code || 'VIDEO_GENERATION_ERROR',
+        message: errorMessage,
+      },
+      undefined,
+      createStorageWriteGuard(options)
+    );
     throw error;
   }
 }

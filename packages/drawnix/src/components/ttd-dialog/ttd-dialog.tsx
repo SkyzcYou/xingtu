@@ -82,6 +82,9 @@ const TTDDialogComponent = ({
     'ai-image-dialog';
   const videoDialogInitialData =
     dialogInitialDataByType?.[DialogType.aiVideoGeneration] ?? null;
+  const [imageDialogManualModeKey, setImageDialogManualModeKey] = useState<
+    string | null
+  >(null);
 
   // 移动端和平板端不显示批量出图
   const showBatchTab = !isMobile && !isTablet;
@@ -210,6 +213,13 @@ const TTDDialogComponent = ({
       return;
     }
 
+    if (
+      selectedImageModelRef?.modelId &&
+      selectedImageModelRef.modelId !== selectedImageModel
+    ) {
+      return;
+    }
+
     const selectionKey = getSelectionKey(
       selectedImageModel,
       selectedImageModelRef
@@ -244,6 +254,13 @@ const TTDDialogComponent = ({
       return;
     }
 
+    if (
+      selectedVideoModelRef?.modelId &&
+      selectedVideoModelRef.modelId !== selectedVideoModel
+    ) {
+      return;
+    }
+
     const selectionKey = getSelectionKey(
       selectedVideoModel,
       selectedVideoModelRef
@@ -274,11 +291,49 @@ const TTDDialogComponent = ({
     pptSlideImage?: boolean;
     pptSlidePrompt?: string;
     pptReplaceElementId?: string;
+    replaceElementId?: string;
+    targetElementId?: string;
+    anchorId?: string;
+    sourceTaskId?: string;
+    sourcePrompt?: string;
+    promptMeta?: Record<string, unknown>;
   }>({
     initialPrompt: '',
     initialImages: [],
     selectedElementIds: [],
   });
+  const resolvedAiImageData = imageDialogInitialData
+    ? {
+        initialPrompt:
+          imageDialogInitialData.initialPrompt ||
+          imageDialogInitialData.prompt ||
+          '',
+        initialImages:
+          imageDialogInitialData.initialImages ||
+          imageDialogInitialData.uploadedImages ||
+          [],
+        selectedElementIds: [],
+        initialKnowledgeContextRefs:
+          imageDialogInitialData.initialKnowledgeContextRefs ||
+          imageDialogInitialData.knowledgeContextRefs ||
+          [],
+        initialResultUrl:
+          imageDialogInitialData.initialResultUrl ||
+          imageDialogInitialData.resultUrl,
+        initialAspectRatio: imageDialogInitialData.initialAspectRatio,
+        targetFrameId: imageDialogInitialData.targetFrameId,
+        targetFrameDimensions: imageDialogInitialData.targetFrameDimensions,
+        pptSlideImage: imageDialogInitialData.pptSlideImage,
+        pptSlidePrompt: imageDialogInitialData.pptSlidePrompt,
+        pptReplaceElementId: imageDialogInitialData.pptReplaceElementId,
+        replaceElementId: imageDialogInitialData.replaceElementId,
+        targetElementId: imageDialogInitialData.targetElementId,
+        anchorId: imageDialogInitialData.anchorId,
+        sourceTaskId: imageDialogInitialData.sourceTaskId,
+        sourcePrompt: imageDialogInitialData.sourcePrompt,
+        promptMeta: imageDialogInitialData.promptMeta,
+      }
+    : aiImageData;
 
   // AI 视频生成的初始数据
   const [aiVideoData, setAiVideoData] = useState<{
@@ -308,9 +363,6 @@ const TTDDialogComponent = ({
         return 'single';
       }
     });
-  const [imageDialogManualModeKey, setImageDialogManualModeKey] = useState<
-    string | null
-  >(null);
   const shouldForceImageDialogSingleMode =
     Boolean(imageDialogInitialData) &&
     imageDialogManualModeKey !== imageDialogSessionKey;
@@ -450,11 +502,16 @@ const TTDDialogComponent = ({
                 ? imageDialogInitialData.initialModelRef
                 : imageDialogInitialData.modelRef,
             targetFrameId: imageDialogInitialData.targetFrameId,
-            targetFrameDimensions:
-              imageDialogInitialData.targetFrameDimensions,
+            targetFrameDimensions: imageDialogInitialData.targetFrameDimensions,
             pptSlideImage: imageDialogInitialData.pptSlideImage,
             pptSlidePrompt: imageDialogInitialData.pptSlidePrompt,
             pptReplaceElementId: imageDialogInitialData.pptReplaceElementId,
+            replaceElementId: imageDialogInitialData.replaceElementId,
+            targetElementId: imageDialogInitialData.targetElementId,
+            anchorId: imageDialogInitialData.anchorId,
+            sourceTaskId: imageDialogInitialData.sourceTaskId,
+            sourcePrompt: imageDialogInitialData.sourcePrompt,
+            promptMeta: imageDialogInitialData.promptMeta,
           });
           const resolvedImageModel =
             imageDialogInitialData.initialModel || imageDialogInitialData.model;
@@ -622,8 +679,7 @@ const TTDDialogComponent = ({
               videoDialogInitialData.initialModel ||
               videoDialogInitialData.model,
             initialSize:
-              videoDialogInitialData.initialSize ||
-              videoDialogInitialData.size,
+              videoDialogInitialData.initialSize || videoDialogInitialData.size,
             initialResultUrl:
               videoDialogInitialData.initialResultUrl ||
               videoDialogInitialData.resultUrl,
@@ -884,15 +940,12 @@ const TTDDialogComponent = ({
           ) : (
             <AIImageGeneration
               key={imageDialogSessionKey}
-              initialPrompt={aiImageData.initialPrompt}
-              initialImages={aiImageData.initialImages}
+              initialPrompt={resolvedAiImageData.initialPrompt}
+              initialImages={resolvedAiImageData.initialImages}
               initialKnowledgeContextRefs={
-                aiImageData.initialKnowledgeContextRefs ||
-                imageDialogInitialData?.initialKnowledgeContextRefs ||
-                imageDialogInitialData?.knowledgeContextRefs ||
-                []
+                resolvedAiImageData.initialKnowledgeContextRefs || []
               }
-              selectedElementIds={aiImageData.selectedElementIds}
+              selectedElementIds={resolvedAiImageData.selectedElementIds}
               initialWidth={
                 imageDialogInitialData?.initialWidth ||
                 imageDialogInitialData?.width
@@ -901,8 +954,8 @@ const TTDDialogComponent = ({
                 imageDialogInitialData?.initialHeight ||
                 imageDialogInitialData?.height
               }
-              initialResultUrl={aiImageData.initialResultUrl}
-              initialAspectRatio={aiImageData.initialAspectRatio}
+              initialResultUrl={resolvedAiImageData.initialResultUrl}
+              initialAspectRatio={resolvedAiImageData.initialAspectRatio}
               initialModel={
                 imageDialogInitialData?.initialModel ||
                 imageDialogInitialData?.model
@@ -914,17 +967,25 @@ const TTDDialogComponent = ({
                     : imageDialogInitialData.modelRef
                   : undefined
               }
-              targetFrameId={aiImageData.targetFrameId}
-              targetFrameDimensions={aiImageData.targetFrameDimensions}
-              pptSlideImage={aiImageData.pptSlideImage}
-              pptSlidePrompt={aiImageData.pptSlidePrompt}
-              pptReplaceElementId={aiImageData.pptReplaceElementId}
+              targetFrameId={resolvedAiImageData.targetFrameId}
+              targetFrameDimensions={resolvedAiImageData.targetFrameDimensions}
+              pptSlideImage={resolvedAiImageData.pptSlideImage}
+              pptSlidePrompt={resolvedAiImageData.pptSlidePrompt}
+              pptReplaceElementId={resolvedAiImageData.pptReplaceElementId}
+              replaceElementId={resolvedAiImageData.replaceElementId}
+              targetElementId={resolvedAiImageData.targetElementId}
+              anchorId={resolvedAiImageData.anchorId}
+              sourceTaskId={resolvedAiImageData.sourceTaskId}
+              sourcePrompt={resolvedAiImageData.sourcePrompt}
+              promptMeta={resolvedAiImageData.promptMeta as any}
               selectedModel={selectedImageModel}
               selectedModelRef={selectedImageModelRef}
               onModelSelectionChange={handleImageModelSelectionChange}
               externalBatchId={imageDialogInitialData?.batchId}
               assetMetadata={imageDialogInitialData?.assetMetadata}
-              initialAutoInsertToCanvas={imageDialogInitialData?.autoInsertToCanvas}
+              initialAutoInsertToCanvas={
+                imageDialogInitialData?.autoInsertToCanvas
+              }
               onDraftChange={imageDialogInitialData?.onDraftChange}
             />
           ))}
@@ -977,7 +1038,9 @@ const TTDDialogComponent = ({
             onModelChange={handleVideoModelChange}
             onModelRefChange={handleVideoModelRefChange}
             externalBatchId={videoDialogInitialData?.batchId}
-            initialAutoInsertToCanvas={videoDialogInitialData?.autoInsertToCanvas}
+            initialAutoInsertToCanvas={
+              videoDialogInitialData?.autoInsertToCanvas
+            }
             onDraftChange={videoDialogInitialData?.onDraftChange}
           />
         )}
