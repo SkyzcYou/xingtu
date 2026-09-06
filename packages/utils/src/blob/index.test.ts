@@ -1,13 +1,19 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import {
   blobToBase64,
+  calculateBlobChecksum,
   pureBase64ToBlob,
   dataUrlToBlob,
   blobToDataUrl,
 } from './index';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('blobToBase64', () => {
   it('should convert text Blob to base64', async () => {
@@ -124,11 +130,42 @@ describe('roundtrip conversions', () => {
   });
 
   it('should roundtrip blobToDataUrl -> dataUrlToBlob', async () => {
-    const original = new Blob(['Binary data'], { type: 'application/octet-stream' });
+    const original = new Blob(['Binary data'], {
+      type: 'application/octet-stream',
+    });
     const dataUrl = await blobToDataUrl(original);
     const restored = dataUrlToBlob(dataUrl);
 
     expect(restored.size).toBe(original.size);
     expect(await readBlobAsText(restored)).toBe(await readBlobAsText(original));
+  });
+});
+
+describe('calculateBlobChecksum', () => {
+  it('should calculate SHA-256 without SubtleCrypto', async () => {
+    vi.stubGlobal('crypto', {});
+
+    const checksum = await calculateBlobChecksum(
+      new Blob(['Hello'], { type: 'text/plain' })
+    );
+
+    expect(checksum).toBe(
+      '185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969'
+    );
+  });
+
+  it('should match Node SHA-256 across padding and stream chunk boundaries', async () => {
+    vi.stubGlobal('crypto', {});
+
+    for (const size of [55, 56, 63, 64, 65, 1024 * 1024 + 17]) {
+      const bytes = new Uint8Array(size);
+      for (let index = 0; index < size; index += 1) {
+        bytes[index] = index % 251;
+      }
+
+      const checksum = await calculateBlobChecksum(new Blob([bytes]));
+      const expected = createHash('sha256').update(bytes).digest('hex');
+      expect(checksum).toBe(expected);
+    }
   });
 });

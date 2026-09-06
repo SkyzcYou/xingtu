@@ -24,6 +24,7 @@ import {
 } from '../../constants/model-config';
 import { geminiSettings, type ModelRef } from '../../utils/settings-manager';
 import { normalizeToClosestImageSize } from '../../services/media-api/utils';
+import { generateTaskId } from '../../utils/task-utils';
 import {
   getAdapterContextFromSettings,
   resolveAdapterForInvocation,
@@ -109,6 +110,18 @@ export interface ImageGenerationParams {
   pptSlidePrompt?: string;
   /** 重新生成时需要替换的旧整页图片元素 ID */
   pptReplaceElementId?: string;
+  /** 重新生成时需要原地替换的画布图片元素 ID */
+  replaceElementId?: string;
+  /** 目标绑定的画布图片元素 ID */
+  targetElementId?: string;
+  /** 目标绑定的图片生成 anchor ID */
+  anchorId?: string;
+  /** 目标替换任务的来源任务 ID */
+  sourceTaskId?: string;
+  /** 目标替换任务的来源提示词 */
+  sourcePrompt?: string;
+  /** 是否由支持永久跟随开关的 AI 任务栏目标提交 */
+  boundTargetFollowControlled?: boolean;
   /** 是否自动插入画布 */
   autoInsertToCanvas?: boolean;
   /** 提示词历史轻量元数据 */
@@ -117,6 +130,8 @@ export interface ImageGenerationParams {
   assetMetadata?: GenerationParams['assetMetadata'];
   /** 本次生成使用的知识库笔记轻量引用 */
   knowledgeContextRefs?: KnowledgeContextRef[];
+  /** 本次生成显式提及的画布元素轻量引用 */
+  canvasAssociations?: GenerationParams['canvasAssociations'];
   /** 连环画生成器动作元数据 */
   comicCreatorAction?: 'page-image';
   /** 连环画记录 ID */
@@ -167,7 +182,10 @@ function buildQueueAdapterParams(
 /**
  * 直接调用 API 生成图片（async 模式）
  */
-async function executeAsync(params: ImageGenerationParams): Promise<MCPResult> {
+async function executeAsync(
+  params: ImageGenerationParams,
+  requestId: string
+): Promise<MCPResult> {
   const { prompt, size, referenceImages, modelRef } = params;
 
   const promptError = validatePrompt(prompt);
@@ -195,10 +213,18 @@ async function executeAsync(params: ImageGenerationParams): Promise<MCPResult> {
       };
     }
 
-    const result = await adapter.generateImage(
-      getAdapterContextFromSettings('image', modelRef || requestedModel, {
+    const adapterContext = getAdapterContextFromSettings(
+      'image',
+      modelRef || requestedModel,
+      {
         preferredRequestSchema,
-      }),
+      }
+    );
+    const result = await adapter.generateImage(
+      {
+        ...adapterContext,
+        requestId,
+      },
       {
         prompt,
         model: requestedModel,
@@ -236,12 +262,16 @@ async function executeAsync(params: ImageGenerationParams): Promise<MCPResult> {
         format: format === 'bin' ? result.format || 'png' : format,
         prompt,
         size: size || '1x1',
+        requestId,
       },
       type: 'image',
     };
   } catch (error: any) {
     console.error('[ImageGenerationTool] Generation failed:', error);
-    return wrapApiError(error, '图片生成失败');
+    return {
+      ...wrapApiError(error, '图片生成失败'),
+      data: { requestId },
+    };
   }
 }
 
@@ -280,9 +310,16 @@ function getImageQueueConfig(params: ImageGenerationParams) {
         pptSlideImage: params.pptSlideImage,
         pptSlidePrompt: params.pptSlidePrompt,
         pptReplaceElementId: params.pptReplaceElementId,
+        replaceElementId: params.replaceElementId,
+        targetElementId: params.targetElementId,
+        anchorId: params.anchorId,
+        sourceTaskId: params.sourceTaskId,
+        sourcePrompt: params.sourcePrompt,
+        boundTargetFollowControlled: params.boundTargetFollowControlled,
         promptMeta: params.promptMeta,
         assetMetadata: params.assetMetadata,
         knowledgeContextRefs: params.knowledgeContextRefs,
+        canvasAssociations: params.canvasAssociations,
         comicCreatorAction: params.comicCreatorAction,
         comicCreatorRecordId: params.comicCreatorRecordId,
         comicCreatorPageId: params.comicCreatorPageId,
@@ -479,7 +516,7 @@ export const imageGenerationTool: MCPTool = {
       );
     }
 
-    return executeAsync(typedParams);
+    return executeAsync(typedParams, options?.retryTaskId || generateTaskId());
   },
 };
 

@@ -6,6 +6,7 @@ import type {
   ProviderBindingConfidence,
   ProviderModelBinding,
   ProviderProfileSnapshot,
+  ProviderProtocol,
   ResolvedProviderContext,
 } from './types';
 
@@ -70,6 +71,20 @@ function normalizePreferredRequestSchemas(
     .filter((schema) => schema.length > 0);
 }
 
+function normalizeRequiredProtocols(
+  requiredProtocol?: ProviderProtocol | readonly ProviderProtocol[] | null
+): ProviderProtocol[] {
+  const rawValues = Array.isArray(requiredProtocol)
+    ? requiredProtocol
+    : requiredProtocol
+    ? [requiredProtocol]
+    : [];
+
+  return rawValues
+    .map((protocol) => protocol.trim())
+    .filter((protocol): protocol is ProviderProtocol => protocol.length > 0);
+}
+
 function buildProviderContext(
   profile: ProviderProfileSnapshot
 ): ResolvedProviderContext {
@@ -90,6 +105,9 @@ function findPriorityBinding(
   profile: ProviderProfileSnapshot
 ): ProviderModelBinding | undefined {
   if (!profile.preferAsyncImageEndpoint) return undefined;
+  if (bindings.some((candidate) => candidate.source === 'manual')) {
+    return undefined;
+  }
   return bindings.find(
     (candidate) =>
       candidate.operation === 'image' &&
@@ -134,30 +152,46 @@ export class InvocationPlanner {
       );
     }
 
+    const requiredProtocols = normalizeRequiredProtocols(
+      request.requiredProtocol
+    );
     const bindings = this.repositories
       .getModelBindings(targetModelRef, request.operation)
       .filter(
         (binding) =>
           binding.profileId === targetModelRef.profileId &&
           binding.modelId === targetModelRef.modelId &&
-          binding.operation === request.operation
+          binding.operation === request.operation &&
+          (requiredProtocols.length === 0 ||
+            requiredProtocols.includes(binding.protocol))
       )
       .sort(compareBindings);
 
     if (bindings.length === 0) {
       throw new InvocationPlanningError(
-        `No protocol binding for ${targetModelRef.profileId}/${targetModelRef.modelId}/${request.operation}`
+        `No protocol binding for ${targetModelRef.profileId}/${
+          targetModelRef.modelId
+        }/${request.operation}${
+          requiredProtocols.length > 0
+            ? ` matching ${requiredProtocols.join(', ')}`
+            : ''
+        }`
       );
     }
 
     const preferredSchemas = normalizePreferredRequestSchemas(
       request.preferredRequestSchema
     );
+    const manualBinding = bindings.find(
+      (candidate) => candidate.source === 'manual'
+    );
     const priorityBinding = request.bindingId
       ? undefined
       : findPriorityBinding(bindings, profile);
     const binding = request.bindingId
       ? bindings.find((candidate) => candidate.id === request.bindingId)
+      : manualBinding
+      ? manualBinding
       : priorityBinding
       ? priorityBinding
       : preferredSchemas.length > 0

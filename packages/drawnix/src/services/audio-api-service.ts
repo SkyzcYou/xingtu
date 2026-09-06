@@ -28,6 +28,13 @@ import {
   failLLMApiLog,
   updateLLMApiLogMetadata,
 } from './media-executor/llm-api-logger';
+import {
+  buildManualHttpRequestPayload,
+  buildManualHttpVariables,
+  getManualHttpTemplate,
+  normalizeManualTaskResponse,
+  renderTemplate,
+} from './provider-routing/manual-http-template';
 
 export interface AudioGenerationParams {
   model: string;
@@ -35,6 +42,7 @@ export interface AudioGenerationParams {
   prompt: string;
   title?: string;
   tags?: string;
+  instrumental?: boolean;
   mv?: string;
   sunoAction?: string;
   notifyHook?: string;
@@ -130,9 +138,9 @@ function resolveAudioProviderContext(
 
 function resolveAudioPlanContext(routeModel?: string | ModelRef | null): {
   providerContext: ResolvedProviderContext;
-  binding: NonNullable<
-    ReturnType<typeof resolveInvocationPlanFromRoute>
-  >['binding'] | null;
+  binding:
+    | NonNullable<ReturnType<typeof resolveInvocationPlanFromRoute>>['binding']
+    | null;
 } {
   const plan = resolveInvocationPlanFromRoute('audio', routeModel);
   return {
@@ -143,9 +151,9 @@ function resolveAudioPlanContext(routeModel?: string | ModelRef | null): {
 
 function inferAudioBaseUrlStrategy(
   providerContext: ResolvedProviderContext,
-  binding?: NonNullable<
-    ReturnType<typeof resolveInvocationPlanFromRoute>
-  >['binding'] | null
+  binding?:
+    | NonNullable<ReturnType<typeof resolveInvocationPlanFromRoute>>['binding']
+    | null
 ): ProviderBaseUrlStrategy | undefined {
   if (binding?.baseUrlStrategy) {
     return binding.baseUrlStrategy;
@@ -163,9 +171,7 @@ function inferAudioBaseUrlStrategy(
 }
 
 function replaceTaskIdTemplate(pathTemplate: string, taskId: string): string {
-  return pathTemplate
-    .replace('{taskId}', taskId)
-    .replace('{task_id}', taskId);
+  return pathTemplate.replace('{taskId}', taskId).replace('{task_id}', taskId);
 }
 
 function normalizeStatus(value: unknown): string {
@@ -188,7 +194,9 @@ function normalizeSunoAction(value: unknown): SunoAction | undefined {
   return undefined;
 }
 
-function resolveSunoModelId(model?: string | ModelRef | null): string | undefined {
+function resolveSunoModelId(
+  model?: string | ModelRef | null
+): string | undefined {
   if (!model) {
     return undefined;
   }
@@ -335,7 +343,11 @@ function extractLyricsPayload(payload: any): AudioLyricsPayload | null {
   let fallback: AudioLyricsPayload | null = null;
 
   for (const candidate of candidates) {
-    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    if (
+      !candidate ||
+      typeof candidate !== 'object' ||
+      Array.isArray(candidate)
+    ) {
       continue;
     }
 
@@ -456,7 +468,9 @@ function extractAudioClips(payload: any): AudioClipRecord[] {
 }
 
 function resolveClipIdentifier(clip: AudioClipRecord): string | undefined {
-  return normalizeOptionalString(clip.clip_id) || normalizeOptionalString(clip.id);
+  return (
+    normalizeOptionalString(clip.clip_id) || normalizeOptionalString(clip.id)
+  );
 }
 
 function createClipIdentifierMemory(): ClipIdentifierMemory {
@@ -500,7 +514,10 @@ function applyRememberedClipIdentifiers(
     }
 
     let rememberedClipId: string | undefined;
-    if (typeof clip.batch_index === 'number' && Number.isFinite(clip.batch_index)) {
+    if (
+      typeof clip.batch_index === 'number' &&
+      Number.isFinite(clip.batch_index)
+    ) {
       rememberedClipId = memory.byBatchIndex.get(clip.batch_index);
     }
     if (!rememberedClipId) {
@@ -537,7 +554,9 @@ function normalizeAudioClipResult(
     imageLargeUrl: normalizeOptionalString(clip.image_large_url),
     duration:
       clip.duration ??
-      (typeof clip.metadata?.duration === 'number' ? clip.metadata.duration : null),
+      (typeof clip.metadata?.duration === 'number'
+        ? clip.metadata.duration
+        : null),
     modelName: normalizeOptionalString(clip.model_name),
     majorModelVersion: normalizeOptionalString(clip.major_model_version),
   };
@@ -563,7 +582,8 @@ function extractFailureReason(payload: any, clips: AudioClipRecord[]): string {
     }
   }
 
-  return normalizeSunoAction(payload?.action || payload?.data?.action) === 'lyrics'
+  return normalizeSunoAction(payload?.action || payload?.data?.action) ===
+    'lyrics'
     ? '歌词生成失败'
     : '音乐生成失败';
 }
@@ -598,9 +618,13 @@ function normalizeAudioTaskResponse(
 ): AudioTaskResponse {
   const extractedClips = extractAudioClips(payload).sort((left, right) => {
     const leftIndex =
-      typeof left.batch_index === 'number' ? left.batch_index : Number.MAX_SAFE_INTEGER;
+      typeof left.batch_index === 'number'
+        ? left.batch_index
+        : Number.MAX_SAFE_INTEGER;
     const rightIndex =
-      typeof right.batch_index === 'number' ? right.batch_index : Number.MAX_SAFE_INTEGER;
+      typeof right.batch_index === 'number'
+        ? right.batch_index
+        : Number.MAX_SAFE_INTEGER;
     return leftIndex - rightIndex;
   });
   if (clipMemory) {
@@ -619,11 +643,12 @@ function normalizeAudioTaskResponse(
       normalizeStatus(payload?.data?.data?.action) ||
       undefined,
     status: normalizeLifecycleStatus(payload),
-    progress: resolveProgressValue(
-      payload?.progress,
-      payload?.data?.progress,
-      payload?.data?.data?.progress
-    ) ??
+    progress:
+      resolveProgressValue(
+        payload?.progress,
+        payload?.data?.progress,
+        payload?.data?.data?.progress
+      ) ??
       (clips.length > 0 &&
       clips.every((clip) =>
         isTerminalSuccess(normalizeStatus(clip.status || clip.state))
@@ -673,9 +698,20 @@ function buildMusicSubmitBody(params: AudioGenerationParams): string {
     mv: resolveVersionValue(params),
   };
 
+  const instrumental =
+    params.instrumental ??
+    (typeof params.params?.instrumental === 'boolean'
+      ? params.params.instrumental
+      : params.params?.instrumental === 'true');
+  if (instrumental) {
+    body.make_instrumental = true;
+  }
+
   const title =
     params.title ||
-    (typeof params.params?.title === 'string' ? params.params.title : undefined);
+    (typeof params.params?.title === 'string'
+      ? params.params.title
+      : undefined);
   const tags =
     params.tags ||
     (typeof params.params?.tags === 'string' ? params.params.tags : undefined);
@@ -730,10 +766,7 @@ function buildMusicSubmitBody(params: AudioGenerationParams): string {
   ) {
     body.infill_start_s = infillStartSValue;
   }
-  if (
-    typeof infillEndSValue === 'number' &&
-    Number.isFinite(infillEndSValue)
-  ) {
+  if (typeof infillEndSValue === 'number' && Number.isFinite(infillEndSValue)) {
     body.infill_end_s = infillEndSValue;
   }
 
@@ -769,9 +802,9 @@ function buildSubmitBody(params: AudioGenerationParams): string {
 
 function resolveSubmitPath(
   params: AudioGenerationParams,
-  binding?: NonNullable<
-    ReturnType<typeof resolveInvocationPlanFromRoute>
-  >['binding'] | null
+  binding?:
+    | NonNullable<ReturnType<typeof resolveInvocationPlanFromRoute>>['binding']
+    | null
 ): string {
   const action = resolveRequestedAction(params);
   const submitPathByAction = binding?.metadata?.audio?.submitPathByAction;
@@ -820,10 +853,15 @@ export function extractAudioGenerationResult(
 
   const urls = clipsWithAudio
     .map((clip) => clip.audioUrl)
-    .filter((url): url is string => typeof url === 'string' && url.trim().length > 0);
+    .filter(
+      (url): url is string => typeof url === 'string' && url.trim().length > 0
+    );
   const clipIds = clipsWithAudio
     .map((clip) => clip.clipId || clip.id)
-    .filter((clipId): clipId is string => typeof clipId === 'string' && clipId.length > 0);
+    .filter(
+      (clipId): clipId is string =>
+        typeof clipId === 'string' && clipId.length > 0
+    );
 
   return {
     url: primaryUrl,
@@ -849,8 +887,52 @@ function hasResolvedTaskResult(response: AudioTaskResponse): boolean {
     );
   }
 
-  return typeof response.lyrics?.text === 'string' &&
-    response.lyrics.text.trim().length > 0;
+  return (
+    typeof response.lyrics?.text === 'string' &&
+    response.lyrics.text.trim().length > 0
+  );
+}
+
+function normalizeManualAudioTaskResponse(
+  payload: unknown,
+  fallbackTaskId = '',
+  binding?:
+    | NonNullable<ReturnType<typeof resolveInvocationPlanFromRoute>>['binding']
+    | null,
+  usePollPaths = false
+): AudioTaskResponse {
+  const template = getManualHttpTemplate(binding?.metadata);
+  const task = normalizeManualTaskResponse(
+    payload,
+    usePollPaths
+      ? template?.pollResponsePaths ||
+          template?.pollPaths ||
+          template?.responsePaths
+      : template?.responsePaths
+  );
+  const audioUrls = [task.audioUrl, ...(task.audioUrls || [])].filter(
+    (url): url is string => Boolean(url)
+  );
+  const resultUrls = [task.resultUrl, ...(task.resultUrls || [])].filter(
+    (url): url is string => Boolean(url)
+  );
+  const urls = audioUrls.length > 0 ? audioUrls : resultUrls;
+  const status = task.status || (urls.length > 0 ? 'completed' : 'processing');
+
+  return {
+    taskId: task.taskId || fallbackTaskId,
+    status,
+    progress: task.progress,
+    failReason: task.error || '',
+    clips: urls.map((url, index) => ({
+      id: `${task.taskId || fallbackTaskId || 'manual'}-${index}`,
+      clip_id: `${task.taskId || fallbackTaskId || 'manual'}-${index}`,
+      status,
+      audio_url: url,
+      batch_index: index,
+    })),
+    raw: payload,
+  };
 }
 
 class AudioAPIService {
@@ -861,6 +943,7 @@ class AudioAPIService {
       params.modelRef || params.model
     );
     const baseUrlStrategy = inferAudioBaseUrlStrategy(providerContext, binding);
+    const manualHttpTemplate = getManualHttpTemplate(binding?.metadata);
 
     if (!providerContext.apiKey) {
       throw new Error('API Key 未配置，请先配置 API Key');
@@ -868,7 +951,28 @@ class AudioAPIService {
 
     const action = resolveRequestedAction(params);
     const submitPath = resolveSubmitPath(params, binding);
-    const body = buildSubmitBody(params);
+    const variables = buildManualHttpVariables({
+      model: params.model,
+      modelRef: params.modelRef || null,
+      prompt: params.prompt,
+      duration: params.params?.duration as string | number | undefined,
+      params: {
+        ...params.params,
+        title: params.title,
+        tags: params.tags,
+        instrumental: params.instrumental,
+        make_instrumental: params.instrumental,
+        mv: params.mv,
+        sunoAction: params.sunoAction,
+        notifyHook: params.notifyHook,
+      },
+    });
+    const manualPayload = manualHttpTemplate
+      ? await buildManualHttpRequestPayload(manualHttpTemplate, variables)
+      : null;
+    const body = manualHttpTemplate
+      ? manualPayload?.body
+      : buildSubmitBody(params);
     const startTime = Date.now();
 
     const logId = startLLMApiLog({
@@ -882,10 +986,27 @@ class AudioAPIService {
     let response: Response;
     try {
       response = await providerTransport.send(providerContext, {
-        path: submitPath,
+        path: manualHttpTemplate
+          ? (renderTemplate(submitPath, variables) as string)
+          : submitPath,
         baseUrlStrategy,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: manualHttpTemplate?.method || 'POST',
+        headers: {
+          ...(manualPayload?.contentType
+            ? { 'Content-Type': manualPayload.contentType }
+            : {}),
+          ...(!manualPayload?.contentType &&
+          body !== undefined &&
+          !(body instanceof FormData)
+            ? { 'Content-Type': 'application/json' }
+            : {}),
+          ...(manualHttpTemplate
+            ? (renderTemplate(
+                manualHttpTemplate.headers || {},
+                variables
+              ) as Record<string, string>)
+            : {}),
+        },
         body,
       });
     } catch (error: any) {
@@ -905,7 +1026,9 @@ class AudioAPIService {
         errorMessage: errorText.substring(0, 500),
       });
       const error = new Error(
-        `${action === 'lyrics' ? '歌词' : '音乐'}生成提交失败: ${response.status} - ${errorText}`
+        `${action === 'lyrics' ? '歌词' : '音乐'}生成提交失败: ${
+          response.status
+        } - ${errorText}`
       );
       (error as any).apiErrorBody = errorText;
       (error as any).httpStatus = response.status;
@@ -913,7 +1036,9 @@ class AudioAPIService {
     }
 
     const payload = await response.json();
-    const result = normalizeAudioTaskResponse(payload);
+    const result = manualHttpTemplate
+      ? normalizeManualAudioTaskResponse(payload, '', binding)
+      : normalizeAudioTaskResponse(payload);
     const duration = Date.now() - startTime;
 
     completeLLMApiLog(logId, {
@@ -941,6 +1066,7 @@ class AudioAPIService {
 
     const { providerContext, binding } = resolveAudioPlanContext(routeModel);
     const baseUrlStrategy = inferAudioBaseUrlStrategy(providerContext, binding);
+    const manualHttpTemplate = getManualHttpTemplate(binding?.metadata);
 
     if (!providerContext.apiKey) {
       throw new Error('API Key 未配置');
@@ -949,11 +1075,25 @@ class AudioAPIService {
     const path = binding?.pollPathTemplate
       ? replaceTaskIdTemplate(binding.pollPathTemplate, taskId)
       : `/suno/fetch/${taskId}`;
+    const variables = buildManualHttpVariables({
+      model:
+        typeof routeModel === 'string' ? routeModel : routeModel?.modelId || '',
+      taskId,
+      params: {},
+    });
 
     const response = await providerTransport.send(providerContext, {
-      path,
+      path: manualHttpTemplate
+        ? (renderTemplate(path, variables) as string)
+        : path,
       baseUrlStrategy,
       method: 'GET',
+      headers: manualHttpTemplate
+        ? (renderTemplate(
+            manualHttpTemplate.headers || {},
+            variables
+          ) as Record<string, string>)
+        : undefined,
     });
 
     if (!response.ok) {
@@ -967,7 +1107,9 @@ class AudioAPIService {
     }
 
     const payload = await response.json();
-    return normalizeAudioTaskResponse(payload, taskId);
+    return manualHttpTemplate
+      ? normalizeManualAudioTaskResponse(payload, taskId, binding, true)
+      : normalizeAudioTaskResponse(payload, taskId);
   }
 
   async generateAudioWithPolling(
@@ -985,7 +1127,9 @@ class AudioAPIService {
 
     if (!submitResponse.taskId.trim()) {
       throw new Error(
-        `${resolveRequestedAction(params) === 'lyrics' ? '歌词' : '音乐'}生成提交成功，但未返回任务 ID`
+        `${
+          resolveRequestedAction(params) === 'lyrics' ? '歌词' : '音乐'
+        }生成提交成功，但未返回任务 ID`
       );
     }
 
@@ -1006,7 +1150,10 @@ class AudioAPIService {
       );
     }
 
-    if (isTerminalSuccess(submitResponse.status) && hasResolvedTaskResult(submitResponse)) {
+    if (
+      isTerminalSuccess(submitResponse.status) &&
+      hasResolvedTaskResult(submitResponse)
+    ) {
       return submitResponse;
     }
 
@@ -1063,7 +1210,11 @@ class AudioAPIService {
 
       try {
         const payload = await this.queryAudioTask(taskId, options.routeModel);
-        const result = normalizeAudioTaskResponse(payload.raw, taskId, clipMemory);
+        const result = normalizeAudioTaskResponse(
+          payload.raw,
+          taskId,
+          clipMemory
+        );
         consecutiveErrors = 0;
 
         if (onProgress) {

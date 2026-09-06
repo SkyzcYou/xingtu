@@ -2,6 +2,7 @@ import { normalizeImageDataUrl } from '@aitu/utils';
 import type { KnowledgeContextRef, Task } from '../types/task.types';
 import type { ModelRef } from './settings-manager';
 import type { AIInputPrefillEventDetail } from '../services/ai-input-ui-events';
+import { resolveTaskInvocationRouteModel } from '../services/task-invocation-route';
 
 export interface ImageGenerationReferenceImage {
   url: string;
@@ -27,7 +28,9 @@ function readString(value: unknown): string | undefined {
 }
 
 function readFiniteNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function readPositiveInteger(value: unknown): number | undefined {
@@ -102,7 +105,10 @@ function normalizeReferenceImage(
   if (typeof value === 'string') {
     const url = readString(value);
     return url
-      ? { url: normalizeImageDataUrl(url), name: `${labelPrefix} ${index + 1}` }
+      ? {
+          url: normalizeImageDataUrl(url),
+          name: `${labelPrefix} ${index + 1}`,
+        }
       : null;
   }
 
@@ -208,17 +214,22 @@ export function buildImageTaskPrefillInitialData(
 ): ImageGenerationInitialData {
   const params = task.params as Record<string, unknown>;
   const knowledgeContextRefs = getImageTaskKnowledgeContextRefs(task);
+  const routeModel = resolveTaskInvocationRouteModel(task);
+  const modelRef = typeof routeModel === 'string' ? null : routeModel;
+  const model =
+    modelRef?.modelId ||
+    (typeof routeModel === 'string' ? routeModel : readString(params.model));
 
   return {
     prefillId: `${task.id}-${Date.now()}`,
     initialPrompt: readString(params.prompt) || '',
-    initialModel: readString(params.model),
-    initialModelRef: readModelRef(params.modelRef),
     initialWidth: readFiniteNumber(params.width),
     initialHeight: readFiniteNumber(params.height),
     initialResultUrl: readString(task.result?.url),
     initialAspectRatio: readString(params.aspectRatio),
     initialImages: getImageTaskReferenceImages(task),
+    ...(model ? { initialModel: model } : {}),
+    initialModelRef: modelRef,
     ...(knowledgeContextRefs.length > 0
       ? { initialKnowledgeContextRefs: knowledgeContextRefs }
       : {}),
@@ -231,7 +242,11 @@ export function buildImageTaskAIInputPrefillData(
   const params = task.params as Record<string, unknown>;
   const nestedParams = readStringParams(params.params);
   const size = readString(params.size) || readString(params.aspectRatio);
-  const model = readString(params.model);
+  const routeModel = resolveTaskInvocationRouteModel(task);
+  const modelRef = typeof routeModel === 'string' ? null : routeModel;
+  const model =
+    modelRef?.modelId ||
+    (typeof routeModel === 'string' ? routeModel : readString(params.model));
   const count = readPositiveInteger(params.batchTotal);
   const knowledgeContextRefs = getImageTaskKnowledgeContextRefs(task);
 
@@ -240,7 +255,7 @@ export function buildImageTaskAIInputPrefillData(
     prompt: readString(params.prompt) || '',
     images: getImageTaskReferenceImages(task),
     ...(model ? { model } : {}),
-    modelRef: readModelRef(params.modelRef),
+    modelRef: modelRef || readModelRef(params.modelRef),
     ...(knowledgeContextRefs.length > 0 ? { knowledgeContextRefs } : {}),
     params: {
       ...nestedParams,

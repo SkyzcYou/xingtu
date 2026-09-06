@@ -63,8 +63,10 @@ interface PollingOptions {
   interval?: number;
   maxAttempts?: number;
   signal?: AbortSignal;
+  requestId?: string;
+  onSubmissionAttempt?: () => void | Promise<void>;
   onProgress?: (progress: number, status: string) => void;
-  onSubmitted?: (taskId: string) => void;
+  onSubmitted?: (taskId: string) => void | Promise<void>;
   routeModel?: string | ModelRef | null;
 }
 
@@ -219,7 +221,9 @@ function resolveProviderContext(
 }
 
 function isLocalResolvableImage(value: string): boolean {
-  return value.startsWith('/__aitu_cache__/') || value.startsWith('/asset-library/');
+  return (
+    value.startsWith('/__aitu_cache__/') || value.startsWith('/asset-library/')
+  );
 }
 
 async function normalizeImageFormValue(value: string): Promise<string> {
@@ -243,7 +247,9 @@ async function appendReferenceImage(
   value: string,
   index: number
 ): Promise<void> {
-  const normalized = normalizeImageDataUrl(await normalizeImageFormValue(value));
+  const normalized = normalizeImageDataUrl(
+    await normalizeImageFormValue(value)
+  );
   try {
     const match = normalized.match(/^data:([^;,]+)?;base64,(.*)$/);
     if (match) {
@@ -270,9 +276,12 @@ async function appendReferenceImage(
 class AsyncImageAPIService {
   private async submit(
     params: AsyncImageGenerationParams,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    requestId?: string
   ): Promise<AsyncImageSubmitResponse> {
-    const providerContext = resolveProviderContext(params.modelRef || params.model);
+    const providerContext = resolveProviderContext(
+      params.modelRef || params.model
+    );
 
     const formData = new FormData();
     formData.append('model', params.model);
@@ -333,6 +342,7 @@ class AsyncImageAPIService {
     const response = await providerTransport.send(providerContext, {
       path: '/videos',
       method: 'POST',
+      requestId,
       body: formData,
       signal,
       timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
@@ -405,16 +415,19 @@ class AsyncImageAPIService {
       interval = 5000,
       maxAttempts,
       signal,
+      requestId,
+      onSubmissionAttempt,
       onProgress,
       onSubmitted,
     } = options;
     const maxPollingAttempts =
       maxAttempts ?? getDefaultImagePollingMaxAttempts(interval);
 
-    const submitResp = await this.submit(params, signal);
+    await onSubmissionAttempt?.();
+    const submitResp = await this.submit(params, signal, requestId);
 
     if (onSubmitted) {
-      onSubmitted(submitResp.id);
+      await onSubmitted(submitResp.id);
     }
 
     if (onProgress) {

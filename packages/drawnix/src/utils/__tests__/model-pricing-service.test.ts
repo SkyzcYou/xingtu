@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPricingSourceSignature,
+  derivePricingUrl,
   formatModelPrice,
   getPricingCacheTtlMs,
   isPricingCacheEligibleForWarmup,
@@ -51,9 +52,9 @@ describe('model-pricing-service', () => {
     expect(
       getPricingCacheTtlMs('https://api.tu-zi.com/api/pricing?group=default')
     ).toBe(TUZI_PRICING_CACHE_TTL_MS);
-    expect(
-      getPricingCacheTtlMs('https://business.tu-zi.com/api/pricing')
-    ).toBe(TUZI_PRICING_CACHE_TTL_MS);
+    expect(getPricingCacheTtlMs('https://business.tu-zi.com/api/pricing')).toBe(
+      TUZI_PRICING_CACHE_TTL_MS
+    );
   });
 
   it('对非 Tuzi 价格接口保持默认短缓存', () => {
@@ -92,7 +93,9 @@ describe('model-pricing-service', () => {
       groups: [],
       prices: {},
     };
-    expect(isPricingCacheEligibleForWarmup(manualReadyCache, sourceSignature)).toBe(true);
+    expect(
+      isPricingCacheEligibleForWarmup(manualReadyCache, sourceSignature)
+    ).toBe(true);
 
     const explicitlyDisabledCache: ProviderPricingCache = {
       ...manualReadyCache,
@@ -106,7 +109,9 @@ describe('model-pricing-service', () => {
       ...manualReadyCache,
       autoRefreshSourceSignature: undefined,
     };
-    expect(isPricingCacheEligibleForWarmup(legacyCache, sourceSignature)).toBe(true);
+    expect(isPricingCacheEligibleForWarmup(legacyCache, sourceSignature)).toBe(
+      true
+    );
 
     expect(isPricingCacheEligibleForWarmup(null, sourceSignature)).toBe(false);
   });

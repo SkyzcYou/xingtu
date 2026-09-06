@@ -24,7 +24,12 @@ import type { ModelRef } from '../utils/settings-manager';
 import type { Task } from '../types/task.types';
 
 /** 选中内容类型 */
-export type SelectedContentType = 'image' | 'video' | 'graphics' | 'text';
+export type SelectedContentType =
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'graphics'
+  | 'text';
 
 /** 选中内容项 */
 export interface SelectedContentItem {
@@ -52,6 +57,7 @@ export interface DrawerGenerationSubmitParams {
   selectedModelRef?: ModelRef | null;
   selectedParams: Record<string, string>;
   selectedCount: number;
+  targetSessionId?: string | null;
 }
 
 export type DrawerGenerationSubmitter = (
@@ -89,6 +95,8 @@ interface ChatDrawerContextValue {
   ) => Promise<boolean>;
   /** 根据任务队列事件同步已有工作流消息 */
   syncWorkflowTaskUpdate: (task: Task) => boolean;
+  /** 获取当前会话 ID */
+  getActiveSessionId: () => string | null;
 }
 
 const ChatDrawerContext = createContext<ChatDrawerContextValue | null>(null);
@@ -163,6 +171,10 @@ export const ChatDrawerProvider: React.FC<ChatDrawerProviderProps> = ({
     return chatDrawerRef.current?.syncWorkflowTaskUpdate(task) ?? false;
   }, []);
 
+  const getActiveSessionId = useCallback(() => {
+    return chatDrawerRef.current?.getActiveSessionId() ?? null;
+  }, []);
+
   return (
     <ChatDrawerContext.Provider
       value={{
@@ -178,6 +190,7 @@ export const ChatDrawerProvider: React.FC<ChatDrawerProviderProps> = ({
         registerGenerationSubmitter,
         submitGenerationFromDrawer,
         syncWorkflowTaskUpdate,
+        getActiveSessionId,
       }}
     >
       {children}
@@ -214,6 +227,7 @@ export function useChatDrawerControl() {
     registerGenerationSubmitter,
     submitGenerationFromDrawer,
     syncWorkflowTaskUpdate,
+    getActiveSessionId,
   } = useChatDrawer();
 
   return {
@@ -280,6 +294,8 @@ export function useChatDrawerControl() {
     submitGenerationFromDrawer,
     /** 根据任务队列事件同步已有工作流消息 */
     syncWorkflowTaskUpdate,
+    /** 获取当前会话 ID */
+    getActiveSessionId,
   };
 }
 

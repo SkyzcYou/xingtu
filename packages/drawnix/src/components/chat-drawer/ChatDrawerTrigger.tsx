@@ -6,6 +6,7 @@
 
 import React from 'react';
 
+import { ATTACHED_ELEMENT_CLASS_NAME } from '@plait/core';
 import { ChevronLeftIcon } from 'tdesign-icons-react';
 import { HoverTip } from '../shared';
 
@@ -28,7 +29,7 @@ export const ChatDrawerTrigger: React.FC<ChatDrawerTriggerProps> = React.memo(
     return (
       <HoverTip content={isOpen ? '收起对话' : '展开对话'}>
         <button
-          className={`chat-drawer-trigger ${
+          className={`chat-drawer-trigger ${ATTACHED_ELEMENT_CLASS_NAME} ${
             isOpen ? 'chat-drawer-trigger--active' : ''
           }`}
           data-track={

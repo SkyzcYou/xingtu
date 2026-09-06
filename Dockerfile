@@ -4,7 +4,10 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV NODE_OPTIONS="--max-old-space-size=8192"
 
-WORKDIR /app
+ARG GITHUB_SHA=unknown
+ENV GITHUB_SHA=${GITHUB_SHA}
+
+COPY . /builder
 
 RUN corepack enable
 

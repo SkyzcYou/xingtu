@@ -13,6 +13,7 @@ import {
   MODEL_PRICING_FEATURE_ENABLED,
   modelPricingService,
 } from '../../utils/model-pricing-service';
+import { isPptExplainerTask } from '../../services/ppt-explainer/validation';
 
 export interface DrawnixDeferredRuntimeProps {
   board: DrawnixBoard | null;
@@ -122,7 +123,10 @@ export function DrawnixDeferredRuntime({
       return;
     }
 
-    return runWhenIdle(() => {
+    let disposed = false;
+    let taskSubscription: { unsubscribe: () => void } | undefined;
+    let cancelVideoRecoveries: (() => void) | undefined;
+    const cancelIdle = runWhenIdle(() => {
       const resumeTasks = async () => {
         try {
           const { workflowRecoveryPromise } = await import(
@@ -141,10 +145,51 @@ export function DrawnixDeferredRuntime({
             import('../../services/media-executor/fallback-executor'),
             import('../../services/task-queue'),
           ]);
-        const allTasks = taskQueueService.getAllTasks();
-        fallbackMediaExecutor.resumePendingTasks((taskId, status, updates) => {
-          taskQueueService.updateTaskStatus(taskId, status, updates);
-        }, allTasks);
+        if (disposed) return;
+        cancelVideoRecoveries = () =>
+          fallbackMediaExecutor.cancelAllPendingTaskRecoveries();
+
+        const resumeVideoTasks = (
+          tasks: ReturnType<typeof taskQueueService.getAllTasks>
+        ) =>
+          fallbackMediaExecutor.resumePendingTasks(
+            (taskId, status, updates) => {
+              taskQueueService.updateTaskStatus(taskId, status, updates);
+            },
+            tasks.filter((task) => !isPptExplainerTask(task)),
+            (taskId) => {
+              const token = taskQueueService.getTaskExecutionToken(taskId);
+              return () =>
+                Boolean(
+                  token &&
+                    taskQueueService.isTaskExecutionTokenCurrent(taskId, token)
+                );
+            }
+          );
+
+        taskSubscription = taskQueueService
+          .observeTaskUpdates()
+          .subscribe((event) => {
+            const task = event.task;
+            if (event.type === 'taskDeleted') {
+              if (!isPptExplainerTask(task)) {
+                fallbackMediaExecutor.cancelPendingTask(task.id);
+              }
+            } else if (event.type === 'taskCreated') {
+              if (!isPptExplainerTask(task)) {
+                void resumeVideoTasks([task]);
+              }
+            } else if (
+              event.type === 'taskUpdated' &&
+              task.type === 'video' &&
+              !isPptExplainerTask(task) &&
+              task.status === 'processing' &&
+              task.remoteId
+            ) {
+              void resumeVideoTasks([task]);
+            }
+          });
+        await resumeVideoTasks(taskQueueService.getAllTasks());
       };
 
       resumeTasks().catch((error) => {
@@ -154,6 +199,13 @@ export function DrawnixDeferredRuntime({
         );
       });
     }, 5000);
+
+    return () => {
+      disposed = true;
+      cancelIdle();
+      taskSubscription?.unsubscribe();
+      cancelVideoRecoveries?.();
+    };
   }, [isTaskStorageReady]);
 
   useEffect(() => {
@@ -214,6 +266,7 @@ export function DrawnixDeferredRuntime({
                 'generate_grid_image',
                 'generate_inspiration_board',
                 'generate_ppt',
+                'generate_ppt_explainer_video',
               ];
               if (
                 step.mcp === 'ai_analyze' ||
@@ -533,7 +586,7 @@ export function DrawnixDeferredRuntime({
     };
   }, [board, isTaskStorageReady]);
 
-  useTaskExecutor();
+  useTaskExecutor(isTaskStorageReady);
   useAutoInsertToCanvas({
     enabled: true,
     insertPrompt: false,

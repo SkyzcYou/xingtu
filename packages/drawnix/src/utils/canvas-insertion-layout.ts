@@ -93,9 +93,7 @@ export function shouldDebugCanvasInsertion(): boolean {
   }
 
   try {
-    const isDev =
-      typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
-    return isDev || window.localStorage?.getItem(CANVAS_INSERTION_DEBUG_FLAG) === '1';
+    return window.localStorage?.getItem(CANVAS_INSERTION_DEBUG_FLAG) === '1';
   } catch {
     return false;
   }
@@ -367,6 +365,7 @@ export function precalculateGroupedGridLayout<T extends { groupId?: string }>(
   } = {}
 ): { positions: Point[]; bounds: FlowBounds } {
   const {
+    horizontalGap = CANVAS_INSERTION_LAYOUT.DEFAULT_HORIZONTAL_GAP,
     verticalGap = CANVAS_INSERTION_LAYOUT.DEFAULT_VERTICAL_GAP,
   } = options;
 
@@ -396,7 +395,8 @@ export function precalculateGroupedGridLayout<T extends { groupId?: string }>(
       bounds = mergeFlowBounds(bounds, point, groupSizes[index]);
     });
 
-    cursorY = groupLayout.bounds.y + groupLayout.bounds.height + verticalGap;
+    cursorY =
+      groupLayout.bounds.y + groupLayout.bounds.height + verticalGap;
     offset += group.length;
   }
 

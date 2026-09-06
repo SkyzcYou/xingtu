@@ -201,8 +201,9 @@ class VideoAPIService {
     // 开始记录 LLM API 调用（降级模式直接调用）
     const referenceCount =
       params.inputReferences?.length || (params.inputReference ? 1 : 0);
+    const submitPath = binding?.submitPath || '/videos';
     const logId = startLLMApiLog({
-      endpoint: '/v1/videos',
+      endpoint: submitPath,
       model: params.model,
       taskType: 'video',
       prompt: params.prompt,
@@ -298,7 +299,7 @@ class VideoAPIService {
     }
 
     const response = await providerTransport.send(providerContext, {
-      path: binding?.submitPath || '/videos',
+      path: submitPath,
       baseUrlStrategy: binding?.baseUrlStrategy,
       method: 'POST',
       headers: requestHeaders,

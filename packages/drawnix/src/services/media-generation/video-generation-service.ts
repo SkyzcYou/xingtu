@@ -76,6 +76,8 @@ export async function generateVideo(
       size: options.size,
       params: options.params,
       promptMeta: options.promptMeta,
+      resultVisibility: options.resultVisibility,
+      autoInsertToCanvas: options.autoInsertToCanvas,
     },
     invocationRoute
   );
@@ -89,9 +91,15 @@ export async function generateVideo(
       prompt: sanitizedParams.prompt,
       model: options.model || 'veo3',
       modelRef: options.modelRef || null,
+      duration:
+        typeof options.duration === 'string'
+          ? parseInt(options.duration, 10)
+          : options.duration,
       size: options.size,
       params: options.params,
       promptMeta: options.promptMeta,
+      resultVisibility: options.resultVisibility,
+      autoInsertToCanvas: options.autoInsertToCanvas,
     },
     createdAt: now,
     updatedAt: now,
@@ -100,9 +108,25 @@ export async function generateVideo(
     executionPhase: TaskExecutionPhase.SUBMITTING,
     progress: 0,
   });
+  const executionToken = taskQueueService.getTaskExecutionToken(taskId);
+  const isCurrentAttempt = () =>
+    Boolean(
+      executionToken &&
+        taskQueueService.isTaskExecutionTokenCurrent(taskId, executionToken)
+    );
+  const assertCurrentAttempt = () => {
+    options.signal?.throwIfAborted();
+    if (!isCurrentAttempt()) {
+      const error = new Error('视频任务已被取消或替代');
+      error.name = 'AbortError';
+      throw error;
+    }
+  };
+  assertCurrentAttempt();
 
   // 通知调用方 taskId，以便提前持久化到工作流步骤
-  options.onTaskCreated?.(taskId);
+  await options.onTaskCreated?.(taskId);
+  assertCurrentAttempt();
 
   // 构建 executor 参数
   const executorParams: VideoGenerationParams = {
@@ -116,6 +140,7 @@ export async function generateVideo(
     inputReferences: options.inputReferences,
     referenceImages: options.referenceImages,
     params: options.params,
+    resultVisibility: options.resultVisibility,
   };
 
   // 调用 executor 执行
@@ -123,15 +148,23 @@ export async function generateVideo(
     ? executorFactory.getFallbackExecutor()
     : await executorFactory.getExecutor();
 
-  await executor.generateVideo(executorParams, { signal: options.signal });
+  await executor.generateVideo(executorParams, {
+    signal: options.signal,
+    isCurrentAttempt,
+  });
+  assertCurrentAttempt();
 
   // 等待任务完成（轮询 IndexedDB）
   const result = await waitForTaskCompletion(taskId, {
     signal: options.signal,
+    isCurrentAttempt,
     onProgress: (updatedTask) => {
-      taskQueueService.syncTaskFromStorage(taskId, updatedTask);
+      if (isCurrentAttempt()) {
+        taskQueueService.syncTaskFromStorage(taskId, updatedTask);
+      }
     },
   });
+  assertCurrentAttempt();
 
   if (!result.success || !result.task) {
     const errorTask = result.task || {

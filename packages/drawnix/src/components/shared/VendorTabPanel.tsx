@@ -127,20 +127,21 @@ export const VendorTabPanel: React.FC<VendorTabPanelProps> = ({
           {middleTabs.map(({ id, label, count, icon }) => {
             const isActive = activeMiddleTab === id;
             return (
-              <button
-                key={id}
-                className={`vendor-tab-panel__tab ${
-                  isActive ? 'vendor-tab-panel__tab--active' : ''
-                }`}
-                onClick={() => handleMiddleTabClick(id)}
-                type="button"
-              >
-                {icon ? (
-                  <span className="vendor-tab-panel__tab-icon">{icon}</span>
-                ) : null}
-                <span className="vendor-tab-panel__tab-label">{label}</span>
-                <span className="vendor-tab-panel__tab-count">{count}</span>
-              </button>
+              <HoverTip key={id} content={label} showArrow={false}>
+                <button
+                  className={`vendor-tab-panel__tab ${
+                    isActive ? 'vendor-tab-panel__tab--active' : ''
+                  }`}
+                  onClick={() => handleMiddleTabClick(id)}
+                  type="button"
+                >
+                  {icon ? (
+                    <span className="vendor-tab-panel__tab-icon">{icon}</span>
+                  ) : null}
+                  <span className="vendor-tab-panel__tab-label">{label}</span>
+                  <span className="vendor-tab-panel__tab-count">{count}</span>
+                </button>
+              </HoverTip>
             );
           })}
         </div>

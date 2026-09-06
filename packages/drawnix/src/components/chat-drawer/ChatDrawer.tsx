@@ -36,6 +36,7 @@ import type {
   ChatDrawerProps,
   ChatDrawerRef,
   ChatSession,
+  ChatSessionGenerationState,
   WorkflowMessageData,
   WorkflowMessageParams,
   AgentLogEntry,
@@ -53,7 +54,7 @@ import {
   shouldUseImplicitWorkflowReferences,
 } from './workflow-media-results';
 
-import { analytics } from '../../utils/posthog-analytics';
+import { analytics } from '../../utils/umami-analytics';
 import { HoverTip } from '../shared';
 import './chat-drawer.scss';
 
@@ -119,6 +120,71 @@ const getDefaultDrawerWidth = () =>
   clampDrawerWidth(
     Math.floor(window.innerWidth * CHAT_CONSTANTS.DRAWER_DEFAULT_WIDTH_RATIO)
   );
+const MAX_DRAFT_CONTENT_ITEMS = 8;
+const MAX_DRAFT_INLINE_URL_LENGTH = 2048;
+
+function getDefaultSessionModelSelection(): {
+  model: string | undefined;
+  modelRef: ModelRef | null;
+} {
+  const route = resolveInvocationRoute('text');
+  return {
+    model: route.modelId,
+    modelRef: createModelRef(route.profileId, route.modelId),
+  };
+}
+
+function getSessionModelSelection(session?: ChatSession | null): {
+  model: string | undefined;
+  modelRef: ModelRef | null;
+} {
+  if (session?.sessionModel) {
+    return {
+      model: session.sessionModel,
+      modelRef:
+        session.sessionModelRef || createModelRef(null, session.sessionModel),
+    };
+  }
+
+  return getDefaultSessionModelSelection();
+}
+
+function sanitizeDraftUploadedContent(
+  items: SelectedContentItem[]
+): SelectedContentItem[] {
+  return items.slice(0, MAX_DRAFT_CONTENT_ITEMS).map((item) => {
+    const next: SelectedContentItem = {
+      type: item.type,
+      name: item.name,
+    };
+
+    if (
+      item.url &&
+      (!item.url.startsWith('data:') ||
+        item.url.length <= MAX_DRAFT_INLINE_URL_LENGTH)
+    ) {
+      next.url = item.url;
+    }
+    if (
+      item.maskImage &&
+      (!item.maskImage.startsWith('data:') ||
+        item.maskImage.length <= MAX_DRAFT_INLINE_URL_LENGTH)
+    ) {
+      next.maskImage = item.maskImage;
+    }
+    if (item.text) {
+      next.text = item.text.slice(0, 4096);
+    }
+    if (typeof item.width === 'number') {
+      next.width = item.width;
+    }
+    if (typeof item.height === 'number') {
+      next.height = item.height;
+    }
+
+    return next;
+  });
+}
 
 function getMessageStatusForWorkflow(
   workflow: WorkflowMessageData
@@ -134,6 +200,18 @@ function getMessageStatusForWorkflow(
   }
 }
 
+function findWorkflowMessageIdInMap(
+  workflowMessages: Map<string, WorkflowMessageData>,
+  workflowId: string
+): string | null {
+  for (const [msgId, workflow] of workflowMessages.entries()) {
+    if (workflow.id === workflowId) {
+      return msgId;
+    }
+  }
+  return null;
+}
+
 export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
   ({ defaultOpen = false, onOpenChange }, ref) => {
     // Initialize state from cache synchronously to prevent flash
@@ -143,6 +221,11 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
     });
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+    const activeSessionIdRef = useRef<string | null>(null);
+    const updateActiveSessionId = useCallback((sessionId: string | null) => {
+      activeSessionIdRef.current = sessionId;
+      setActiveSessionId(sessionId);
+    }, []);
     const [showSessions, setShowSessions] = useState(false);
 
     // 抽屉宽度状态（从缓存初始化）
@@ -171,13 +254,10 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
     // 临时模型选择（仅在当前会话中有效，不影响全局设置）
     // 默认值从当前文本路由读取，保留供应商来源信息
     const [sessionModel, setSessionModel] = useState<string | undefined>(() => {
-      return resolveInvocationRoute('text').modelId;
+      return getDefaultSessionModelSelection().model;
     });
     const [sessionModelRef, setSessionModelRef] = useState<ModelRef | null>(
-      () => {
-        const route = resolveInvocationRoute('text');
-        return createModelRef(route.profileId, route.modelId);
-      }
+      () => getDefaultSessionModelSelection().modelRef
     );
 
     // 工作流消息状态：存储当前会话中的工作流数据
@@ -185,18 +265,26 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
       Map<string, WorkflowMessageData>
     >(new Map());
     const workflowMessagesRef = useRef(workflowMessages);
-    const [replyTarget, setReplyTarget] = useState<WorkflowMessageData | null>(
-      null
-    );
-    const [implicitReferenceContent, setImplicitReferenceContent] = useState<
-      SelectedContentItem[]
-    >([]);
     // 当前正在更新的工作流消息 ID
     const currentWorkflowMsgIdRef = useRef<string | null>(null);
+    const currentWorkflowSessionIdRef = useRef<string | null>(null);
+    const pendingStoredWorkflowTaskSyncRef = useRef<Set<string>>(new Set());
     // 正在重试的工作流 ID
     const [retryingWorkflowId, setRetryingWorkflowId] = useState<string | null>(
       null
     );
+    const [replyTarget, setReplyTarget] = useState<{
+      messageId: string;
+      workflow: WorkflowMessageData;
+    } | null>(null);
+    const clearWorkflowState = useCallback(() => {
+      const emptyWorkflowMessages = new Map<string, WorkflowMessageData>();
+      workflowMessagesRef.current = emptyWorkflowMessages;
+      setWorkflowMessages(emptyWorkflowMessages);
+      currentWorkflowMsgIdRef.current = null;
+      currentWorkflowSessionIdRef.current = null;
+      setReplyTarget(null);
+    }, []);
 
     // 获取重试执行器和选中内容（从 Context），以及状态同步方法
     const {
@@ -268,6 +356,36 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
       setIsDragging(true);
     }, []);
 
+    const loadSessionState = useCallback(
+      async (sessionId: string, sessionHint?: ChatSession | null) => {
+        const session =
+          sessionHint || (await chatStorageService.getSession(sessionId));
+        const modelSelection = getSessionModelSelection(session);
+        setSessionModel(modelSelection.model);
+        setSessionModelRef(modelSelection.modelRef);
+
+        const messages = await chatStorageService.getMessages(sessionId);
+        const newWorkflowMessages = new Map<string, WorkflowMessageData>();
+
+        for (const msg of messages) {
+          if (msg.workflow) {
+            newWorkflowMessages.set(msg.id, msg.workflow);
+          }
+        }
+
+        workflowMessagesRef.current = newWorkflowMessages;
+        setWorkflowMessages(newWorkflowMessages);
+        const runningWorkflow = messages.find(
+          (m) => m.workflow && m.status === MessageStatus.STREAMING
+        );
+        currentWorkflowMsgIdRef.current = runningWorkflow?.id || null;
+        currentWorkflowSessionIdRef.current = runningWorkflow
+          ? sessionId
+          : null;
+      },
+      []
+    );
+
     // 处理工具调用回调
     const handleToolCalls = useCallback(
       async (
@@ -286,7 +404,8 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
             taskId?: string;
           }>
         >,
-        aiAnalysis?: string
+        aiAnalysis?: string,
+        targetSessionId?: string
       ) => {
         // console.log('[ChatDrawer] Tool calls received:', toolCalls.length, 'aiAnalysis:', aiAnalysis?.substring(0, 50));
 
@@ -313,12 +432,17 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
         };
 
         // 更新工作流状态
-        setWorkflowMessages((prev) => {
-          const newMap = new Map(prev);
-          newMap.set(messageId, workflowData);
-          return newMap;
-        });
-        currentWorkflowMsgIdRef.current = messageId;
+        if (
+          !targetSessionId ||
+          activeSessionIdRef.current === targetSessionId
+        ) {
+          setWorkflowMessages((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(messageId, workflowData);
+            return newMap;
+          });
+          currentWorkflowMsgIdRef.current = messageId;
+        }
 
         // 持久化工作流数据到存储
         chatStorageService.updateMessage(messageId, { workflow: workflowData });
@@ -340,59 +464,61 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           });
 
           // 更新步骤状态
-          setWorkflowMessages((prev) => {
-            const newMap = new Map(prev);
-            const workflow = newMap.get(messageId);
-            if (workflow) {
-              const updatedWorkflow = {
-                ...workflow,
-                steps: workflow.steps.map((step, idx) => {
-                  const result = results[idx];
-                  return {
-                    ...step,
-                    status: result?.success
-                      ? ('completed' as const)
-                      : ('failed' as const),
-                    error: result?.error,
-                    result: result?.data,
-                  };
-                }),
+          const updatedWorkflow = {
+            ...workflowData,
+            steps: workflowData.steps.map((step, idx) => {
+              const result = results[idx];
+              return {
+                ...step,
+                status: result?.success
+                  ? ('completed' as const)
+                  : ('failed' as const),
+                error: result?.error,
+                result: result?.data,
               };
-              newMap.set(messageId, updatedWorkflow);
-              // 持久化更新后的工作流
-              chatStorageService.updateMessage(messageId, {
-                workflow: updatedWorkflow,
-                status: MessageStatus.SUCCESS,
-              });
-            }
-            return newMap;
+            }),
+          };
+          chatStorageService.updateMessage(messageId, {
+            workflow: updatedWorkflow,
+            status: MessageStatus.SUCCESS,
           });
+          if (
+            !targetSessionId ||
+            activeSessionIdRef.current === targetSessionId
+          ) {
+            setWorkflowMessages((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(messageId, updatedWorkflow);
+              return newMap;
+            });
+          }
 
           // console.log('[ChatDrawer] Tools executed:', results.length);
         } catch (error: any) {
           console.error('[ChatDrawer] Tool execution failed:', error);
           // 标记所有步骤失败
-          setWorkflowMessages((prev) => {
-            const newMap = new Map(prev);
-            const workflow = newMap.get(messageId);
-            if (workflow) {
-              const updatedWorkflow = {
-                ...workflow,
-                steps: workflow.steps.map((step) => ({
-                  ...step,
-                  status: 'failed' as const,
-                  error: error.message || '执行失败',
-                })),
-              };
-              newMap.set(messageId, updatedWorkflow);
-              // 持久化失败状态
-              chatStorageService.updateMessage(messageId, {
-                workflow: updatedWorkflow,
-                status: MessageStatus.FAILED,
-              });
-            }
-            return newMap;
+          const updatedWorkflow = {
+            ...workflowData,
+            steps: workflowData.steps.map((step) => ({
+              ...step,
+              status: 'failed' as const,
+              error: error.message || '执行失败',
+            })),
+          };
+          chatStorageService.updateMessage(messageId, {
+            workflow: updatedWorkflow,
+            status: MessageStatus.FAILED,
           });
+          if (
+            !targetSessionId ||
+            activeSessionIdRef.current === targetSessionId
+          ) {
+            setWorkflowMessages((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(messageId, updatedWorkflow);
+              return newMap;
+            });
+          }
         }
       },
       []
@@ -422,30 +548,19 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
         let activeId: string | null = null;
         if (drawerState.activeSessionId) {
           activeId = drawerState.activeSessionId;
-          setActiveSessionId(drawerState.activeSessionId);
+          updateActiveSessionId(drawerState.activeSessionId);
         } else if (loadedSessions.length > 0) {
           activeId = loadedSessions[0].id;
-          setActiveSessionId(loadedSessions[0].id);
+          updateActiveSessionId(loadedSessions[0].id);
         }
 
         // 加载活动会话的工作流数据
         if (activeId) {
           try {
-            const messages = await chatStorageService.getMessages(activeId);
-            const newWorkflowMessages = new Map<string, WorkflowMessageData>();
-
-            for (const msg of messages) {
-              if (msg.workflow) {
-                newWorkflowMessages.set(msg.id, msg.workflow);
-              }
-            }
-
-            setWorkflowMessages(newWorkflowMessages);
-            // 如果有正在进行的工作流，设置为当前工作流
-            const runningWorkflow = messages.find(
-              (m) => m.workflow && m.status === MessageStatus.STREAMING
+            const activeSession = loadedSessions.find(
+              (session) => session.id === activeId
             );
-            currentWorkflowMsgIdRef.current = runningWorkflow?.id || null;
+            await loadSessionState(activeId, activeSession);
           } catch (error) {
             console.error(
               '[ChatDrawer] Failed to load workflow messages:',
@@ -456,10 +571,11 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
       };
 
       init();
-    }, []);
+    }, [loadSessionState, updateActiveSessionId]);
 
     // Save drawer state when it changes
     useEffect(() => {
+      activeSessionIdRef.current = activeSessionId;
       chatStorageService.setDrawerState({
         isOpen,
         activeSessionId,
@@ -491,7 +607,7 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
             (async () => {
               const newSession = await chatStorageService.createSession();
               setSessions((prev) => [newSession, ...prev]);
-              setActiveSessionId(newSession.id);
+              updateActiveSessionId(newSession.id);
               // Store message again for the session effect to pick up
               pendingMessageRef.current = msg;
             })();
@@ -503,7 +619,7 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           }
         }
       }
-    }, [appState.openSettings, activeSessionId]);
+    }, [appState.openSettings, activeSessionId, updateActiveSessionId]);
 
     // Handle Escape key to close drawer
     useEffect(() => {
@@ -733,15 +849,27 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
     const handleNewSession = useCallback(async () => {
       analytics.track('chat_session_create');
       const newSession = await chatStorageService.createSession();
+      const defaultModelSelection = getDefaultSessionModelSelection();
+      newSession.sessionModel = defaultModelSelection.model;
+      newSession.sessionModelRef = defaultModelSelection.modelRef;
+      await chatStorageService.updateSession(
+        newSession.id,
+        {
+          sessionModel: defaultModelSelection.model,
+          sessionModelRef: defaultModelSelection.modelRef,
+          draftInput: '',
+          draftUploadedContent: [],
+        },
+        { preserveUpdatedAt: true }
+      );
       setSessions((prev) => [newSession, ...prev]);
-      setActiveSessionId(newSession.id);
+      updateActiveSessionId(newSession.id);
       setShowSessions(false);
-      // 清空工作流消息
-      setWorkflowMessages(new Map());
-      currentWorkflowMsgIdRef.current = null;
-      // 重置临时模型选择
-      setSessionModel(undefined);
-    }, []);
+      clearWorkflowState();
+      // 重置为当前默认文本模型
+      setSessionModel(defaultModelSelection.model);
+      setSessionModelRef(defaultModelSelection.modelRef);
+    }, [clearWorkflowState, updateActiveSessionId]);
 
     // Toggle session list
     const handleToggleSessions = useCallback(() => {
@@ -749,36 +877,26 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
     }, []);
 
     // Select session（从存储中加载工作流数据）
-    const handleSelectSession = useCallback(async (sessionId: string) => {
-      analytics.track('chat_session_select');
-      setActiveSessionId(sessionId);
-      setShowSessions(false);
-      // 重置临时模型选择
-      setSessionModel(undefined);
+    const handleSelectSession = useCallback(
+      async (sessionId: string) => {
+        analytics.track('chat_session_select');
+        updateActiveSessionId(sessionId);
+        setShowSessions(false);
+        clearWorkflowState();
 
-      // 从存储中加载会话的消息，提取工作流数据
-      try {
-        const messages = await chatStorageService.getMessages(sessionId);
-        const newWorkflowMessages = new Map<string, WorkflowMessageData>();
-
-        for (const msg of messages) {
-          if (msg.workflow) {
-            newWorkflowMessages.set(msg.id, msg.workflow);
-          }
+        // 从存储中加载会话的消息，提取工作流数据
+        try {
+          await loadSessionState(sessionId);
+        } catch (error) {
+          console.error(
+            '[ChatDrawer] Failed to load workflow messages:',
+            error
+          );
+          clearWorkflowState();
         }
-
-        setWorkflowMessages(newWorkflowMessages);
-        // 如果有正在进行的工作流，设置为当前工作流
-        const runningWorkflow = messages.find(
-          (m) => m.workflow && m.status === MessageStatus.STREAMING
-        );
-        currentWorkflowMsgIdRef.current = runningWorkflow?.id || null;
-      } catch (error) {
-        console.error('[ChatDrawer] Failed to load workflow messages:', error);
-        setWorkflowMessages(new Map());
-        currentWorkflowMsgIdRef.current = null;
-      }
-    }, []);
+      },
+      [clearWorkflowState, loadSessionState, updateActiveSessionId]
+    );
 
     // Delete session
     const handleDeleteSession = useCallback(
@@ -789,12 +907,31 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           const updated = prev.filter((s) => s.id !== sessionId);
           if (activeSessionId === sessionId) {
             const newActive = updated[0] || null;
-            setActiveSessionId(newActive?.id || null);
+            updateActiveSessionId(newActive?.id || null);
+            clearWorkflowState();
+            if (newActive) {
+              void loadSessionState(newActive.id, newActive).catch((error) => {
+                console.error(
+                  '[ChatDrawer] Failed to load workflow messages:',
+                  error
+                );
+                clearWorkflowState();
+              });
+            } else {
+              const defaultModelSelection = getDefaultSessionModelSelection();
+              setSessionModel(defaultModelSelection.model);
+              setSessionModelRef(defaultModelSelection.modelRef);
+            }
           }
           return updated;
         });
       },
-      [activeSessionId]
+      [
+        activeSessionId,
+        clearWorkflowState,
+        loadSessionState,
+        updateActiveSessionId,
+      ]
     );
 
     // Rename session
@@ -807,25 +944,6 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
         );
       },
       []
-    );
-
-    const clearWorkflowReply = useCallback(() => {
-      setReplyTarget(null);
-      setImplicitReferenceContent([]);
-    }, []);
-
-    const handleWorkflowReply = useCallback(
-      (workflow: WorkflowMessageData) => {
-        const references = getLatestWorkflowImageReferences([workflow]);
-        if (references.length === 0) {
-          return;
-        }
-        setReplyTarget(workflow);
-        setImplicitReferenceContent(references);
-        setIsOpen(true);
-        onOpenChange?.(true);
-      },
-      [onOpenChange]
     );
 
     const withImplicitWorkflowReferences = useCallback((msg: Message): Message => {
@@ -889,7 +1007,8 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
             textLength: outgoingMsg.parts
               .filter((part) => part.type === 'text')
               .reduce(
-                (total, part) => total + String((part as any).text || '').length,
+                (total, part) =>
+                  total + String((part as any).text || '').length,
                 0
               ),
           });
@@ -909,7 +1028,7 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           if (!activeSessionId) {
             const newSession = await chatStorageService.createSession();
             setSessions((prev) => [newSession, ...prev]);
-            setActiveSessionId(newSession.id);
+            updateActiveSessionId(newSession.id);
             // Store message to send after session is created
             pendingMessageRef.current = outgoingMsg;
             return;
@@ -921,7 +1040,14 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           pendingMessageRef.current = outgoingMsg;
         }
       },
-      [activeSessionId, chatHandler, appState, setAppState, withImplicitWorkflowReferences]
+      [
+        activeSessionId,
+        chatHandler,
+        appState,
+        setAppState,
+        updateActiveSessionId,
+        withImplicitWorkflowReferences,
+      ]
     );
 
     // 发送工作流消息
@@ -933,6 +1059,7 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           textModel,
           autoOpen = true,
           appendToCurrentSession,
+          appendToSessionId,
         } = params;
         // 根据 autoOpen 参数决定是否打开抽屉
         if (autoOpen) {
@@ -947,7 +1074,8 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
 
         const sessionTarget = resolveWorkflowSessionTarget(
           activeSessionId,
-          appendToCurrentSession
+          appendToCurrentSession,
+          appendToSessionId
         );
 
         // 构建显示用的消息内容
@@ -1035,7 +1163,7 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           newSession.title = title;
 
           setSessions((prev) => [newSession, ...prev]);
-          setActiveSessionId(newSession.id);
+          updateActiveSessionId(newSession.id);
           targetSessionId = newSession.id;
           shouldReplaceMessages = true;
         }
@@ -1094,13 +1222,16 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           ],
         };
 
-        // 存储工作流数据到内存。同步写 ref，避免任务事件比 React
-        // state effect 更快到达时找不到刚创建的 workflow 气泡。
-        const nextWorkflowMessages = new Map(workflowMessagesRef.current);
-        nextWorkflowMessages.set(workflowMsgId, workflow);
-        workflowMessagesRef.current = nextWorkflowMessages;
-        setWorkflowMessages(nextWorkflowMessages);
+        // 只把当前会话的 workflow 写入内存；非当前会话只持久化，
+        // 避免后台话题的任务状态污染当前话题。
+        if (activeSessionIdRef.current === targetSessionId) {
+          const nextWorkflowMessages = new Map(workflowMessagesRef.current);
+          nextWorkflowMessages.set(workflowMsgId, workflow);
+          workflowMessagesRef.current = nextWorkflowMessages;
+          setWorkflowMessages(nextWorkflowMessages);
+        }
         currentWorkflowMsgIdRef.current = workflowMsgId;
+        currentWorkflowSessionIdRef.current = targetSessionId;
 
         // 持久化用户消息到本地存储
         const userChatMsg: ChatMessageType = {
@@ -1166,6 +1297,10 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           )
         );
 
+        if (activeSessionIdRef.current !== targetSessionId) {
+          return;
+        }
+
         if (shouldReplaceMessages) {
           // 新建会话时直接替换为新会话消息。
           chatHandler.setMessagesWithRaw?.(
@@ -1180,58 +1315,148 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           );
         }
       },
-      [activeSessionId, chatHandler, onOpenChange]
+      [activeSessionId, chatHandler, onOpenChange, updateActiveSessionId]
+    );
+
+    const [shouldRenderChat, setShouldRenderChat] = useState(false);
+
+    useEffect(() => {
+      if (isOpen) {
+        setShouldRenderChat(true);
+      }
+    }, [isOpen]);
+
+    const implicitReferenceContent = useMemo(() => {
+      if (replyTarget) {
+        return getLatestWorkflowImageReferences([replyTarget.workflow]);
+      }
+
+      if (!shouldRenderChat) {
+        return [];
+      }
+
+      return getLatestWorkflowImageReferences(workflowMessages.values());
+    }, [replyTarget, shouldRenderChat, workflowMessages]);
+
+    const implicitReferenceLabel = replyTarget
+      ? `回复：${replyTarget.workflow.name || '生成结果'}`
+      : undefined;
+
+    const handleWorkflowReply = useCallback(
+      (messageId: string, workflow: WorkflowMessageData) => {
+        setReplyTarget({ messageId, workflow });
+      },
+      []
+    );
+
+    const handleClearReplyTarget = useCallback(() => {
+      setReplyTarget(null);
+    }, []);
+
+    const handleSubmitDrawerGeneration = useCallback(
+      async (message: Message) => {
+        const textPart = message.parts.find((part) => part.type === 'text');
+        const prompt =
+          textPart && 'text' in textPart && typeof textPart.text === 'string'
+            ? textPart.text
+            : '';
+        const hasFilePart = message.parts.some(
+          (part) => part.type === 'data-file' || part.type === 'image_url'
+        );
+
+        if (
+          !hasFilePart &&
+          implicitReferenceContent.length > 0 &&
+          (replyTarget || shouldUseImplicitWorkflowReferences(prompt))
+        ) {
+          const referenceParts: Message['parts'] = implicitReferenceContent
+            .filter((item) => item.url)
+            .map((item, index) => ({
+              type: 'data-file' as const,
+              data: {
+                filename: `previous-result-${index + 1}.png`,
+                mediaType: 'image/png',
+                url: item.url,
+              },
+            }));
+
+          await handleSendWrapper({
+            ...message,
+            parts: [...message.parts, ...referenceParts],
+          });
+          return;
+        }
+
+        await handleSendWrapper(message);
+      },
+      [handleSendWrapper, implicitReferenceContent, replyTarget]
     );
 
     // 更新当前工作流消息（同时持久化到本地存储）
     const handleUpdateWorkflowMessage = useCallback(
       async (workflow: WorkflowMessageData) => {
         let msgId = currentWorkflowMsgIdRef.current;
+        let sessionId = currentWorkflowSessionIdRef.current;
 
         if (msgId) {
-          const currentWorkflow = workflowMessages.get(msgId);
-          if (currentWorkflow && currentWorkflow.id !== workflow.id) {
+          const currentWorkflow = workflowMessagesRef.current.get(msgId);
+          if (currentWorkflow && currentWorkflow.id === workflow.id) {
+            sessionId = activeSessionIdRef.current;
+          } else if (currentWorkflow && currentWorkflow.id !== workflow.id) {
             msgId = null;
-          }
-        }
-
-        // If no current msgId (or it points to another workflow), try to find
-        // the existing message by workflow ID. This also handles page recovery.
-        if (!msgId) {
-          for (const [id, wf] of workflowMessages.entries()) {
-            if (wf.id === workflow.id) {
-              msgId = id;
-              currentWorkflowMsgIdRef.current = id;
-              // console.log('[ChatDrawer] Found existing message for workflow:', workflow.id, 'msgId:', id);
-              break;
-            }
+            sessionId = null;
           }
         }
 
         if (!msgId) {
-          // console.log('[ChatDrawer] No message ID found for workflow update, skipping:', workflow.id);
+          const mappedMsgId = findWorkflowMessageIdInMap(
+            workflowMessagesRef.current,
+            workflow.id
+          );
+          if (mappedMsgId) {
+            msgId = mappedMsgId;
+            sessionId = activeSessionIdRef.current;
+          }
+        }
+
+        if (!msgId) {
+          const storedMessage = await chatStorageService.findWorkflowMessage(
+            workflow.id
+          );
+          if (storedMessage) {
+            msgId = storedMessage.id;
+            sessionId = storedMessage.sessionId;
+          }
+        }
+
+        if (!msgId) {
           return;
         }
 
-        setWorkflowMessages((prev) => {
-          const newMap = new Map(prev);
-          newMap.set(msgId!, workflow);
-          return newMap;
+        currentWorkflowMsgIdRef.current = msgId;
+        currentWorkflowSessionIdRef.current = sessionId;
+
+        if (!sessionId || sessionId === activeSessionIdRef.current) {
+          const nextWorkflowMessages = new Map(workflowMessagesRef.current);
+          nextWorkflowMessages.set(msgId, workflow);
+          workflowMessagesRef.current = nextWorkflowMessages;
+          setWorkflowMessages(nextWorkflowMessages);
+          chatHandler.updateRawMessageWorkflow?.(msgId, workflow);
+        }
+
+        await chatStorageService.updateMessage(msgId, {
+          workflow,
+          status: getMessageStatusForWorkflow(workflow),
         });
-
-        // 持久化到本地存储
-        chatStorageService.updateMessage(msgId, { workflow });
-
-        // 同步更新 chatHandler 中的原始消息，确保多轮对话上下文正确
-        chatHandler.updateRawMessageWorkflow?.(msgId, workflow);
       },
-      [activeSessionId, sessions, chatHandler, workflowMessages]
+      [chatHandler]
     );
 
     const handleSyncWorkflowTaskUpdate = useCallback(
       (task: Task): boolean => {
         const currentWorkflowMessages = workflowMessagesRef.current;
         let targetMsgId: string | null = null;
+        const targetSessionId: string | null = activeSessionIdRef.current;
         let updatedWorkflow: WorkflowMessageData | null = null;
 
         for (const [msgId, workflow] of currentWorkflowMessages.entries()) {
@@ -1244,20 +1469,76 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
         }
 
         if (!targetMsgId || !updatedWorkflow) {
-          return false;
+          if (pendingStoredWorkflowTaskSyncRef.current.has(task.id)) {
+            return true;
+          }
+          pendingStoredWorkflowTaskSyncRef.current.add(task.id);
+          void (async () => {
+            const message = await chatStorageService.findWorkflowMessageByTask(
+              (workflow) =>
+                Boolean(applyTaskUpdateToWorkflowMessage(workflow, task))
+            );
+            if (!message?.workflow) {
+              return;
+            }
+
+            const candidate = applyTaskUpdateToWorkflowMessage(
+              message.workflow,
+              task
+            );
+            if (!candidate) {
+              return;
+            }
+
+            await chatStorageService.updateMessage(message.id, {
+              workflow: candidate,
+              status: getMessageStatusForWorkflow(candidate),
+            });
+            currentWorkflowMsgIdRef.current = message.id;
+            currentWorkflowSessionIdRef.current = message.sessionId;
+
+            if (activeSessionIdRef.current === message.sessionId) {
+              const nextWorkflowMessages = new Map(workflowMessagesRef.current);
+              nextWorkflowMessages.set(message.id, candidate);
+              workflowMessagesRef.current = nextWorkflowMessages;
+              setWorkflowMessages(nextWorkflowMessages);
+              chatHandler.updateRawMessageWorkflow?.(message.id, candidate);
+            }
+          })()
+            .catch((error) => {
+              console.warn(
+                '[ChatDrawer] Failed to sync stored workflow:',
+                error
+              );
+            })
+            .finally(() => {
+              pendingStoredWorkflowTaskSyncRef.current.delete(task.id);
+            });
+          return true;
         }
 
         const nextWorkflowMessages = new Map(currentWorkflowMessages);
         nextWorkflowMessages.set(targetMsgId, updatedWorkflow);
         workflowMessagesRef.current = nextWorkflowMessages;
         currentWorkflowMsgIdRef.current = targetMsgId;
-        setWorkflowMessages(nextWorkflowMessages);
+        currentWorkflowSessionIdRef.current = targetSessionId;
+        if (
+          !targetSessionId ||
+          targetSessionId === activeSessionIdRef.current
+        ) {
+          setWorkflowMessages(nextWorkflowMessages);
+        }
 
         chatStorageService.updateMessage(targetMsgId, {
           workflow: updatedWorkflow,
           status: getMessageStatusForWorkflow(updatedWorkflow),
         });
-        chatHandler.updateRawMessageWorkflow?.(targetMsgId, updatedWorkflow);
+        if (
+          !targetSessionId ||
+          targetSessionId === activeSessionIdRef.current
+        ) {
+          chatHandler.updateRawMessageWorkflow?.(targetMsgId, updatedWorkflow);
+        }
 
         return true;
       },
@@ -1415,6 +1696,7 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
         appendAgentLog: handleAppendAgentLog,
         updateThinkingContent: handleUpdateThinkingContent,
         isOpen: () => isOpen,
+        getActiveSessionId: () => activeSessionId,
         retryWorkflowFromStep: async (
           workflow: WorkflowMessageData,
           stepIndex: number
@@ -1440,6 +1722,7 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
       }),
       [
         isOpen,
+        activeSessionId,
         handleToggle,
         handleSendWrapper,
         handleSendWorkflowMessage,
@@ -1465,6 +1748,76 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
     // Get current session title
     const currentSession = sessions.find((s) => s.id === activeSessionId);
     const title = currentSession?.title || '新对话';
+
+    const updateSessionInMemory = useCallback(
+      (sessionId: string, updates: Partial<ChatSession>) => {
+        setSessions((prev) =>
+          prev.map((session) =>
+            session.id === sessionId ? { ...session, ...updates } : session
+          )
+        );
+      },
+      []
+    );
+
+    const handleSessionModelChange = useCallback(
+      (modelId: string, modelRef?: ModelRef | null) => {
+        const nextModelRef = modelRef || createModelRef(null, modelId);
+        setSessionModel(modelId);
+        setSessionModelRef(nextModelRef);
+
+        if (!activeSessionId) {
+          return;
+        }
+
+        const updates: Partial<ChatSession> = {
+          sessionModel: modelId,
+          sessionModelRef: nextModelRef,
+        };
+        updateSessionInMemory(activeSessionId, updates);
+        void chatStorageService.updateSession(activeSessionId, updates, {
+          preserveUpdatedAt: true,
+        });
+      },
+      [activeSessionId, updateSessionInMemory]
+    );
+
+    const handleGenerationStateChange = useCallback(
+      (generationState: ChatSessionGenerationState) => {
+        if (!activeSessionId) {
+          return;
+        }
+
+        const updates: Partial<ChatSession> = { generationState };
+        updateSessionInMemory(activeSessionId, updates);
+        void chatStorageService.updateSession(activeSessionId, updates, {
+          preserveUpdatedAt: true,
+        });
+      },
+      [activeSessionId, updateSessionInMemory]
+    );
+
+    const handleDraftChange = useCallback(
+      (
+        sessionId: string,
+        draft: {
+          draftInput: string;
+          draftUploadedContent: SelectedContentItem[];
+        }
+      ) => {
+        const updates: Partial<ChatSession> = {
+          draftInput: draft.draftInput,
+          draftUploadedContent: sanitizeDraftUploadedContent(
+            draft.draftUploadedContent
+          ),
+        };
+        updateSessionInMemory(sessionId, updates);
+        void chatStorageService.updateSession(sessionId, updates, {
+          preserveUpdatedAt: true,
+        });
+      },
+      [updateSessionInMemory]
+    );
 
     // 标题编辑状态
     const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -1514,6 +1867,11 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
       }
     }, [isEditingTitle]);
 
+    useEffect(() => {
+      setIsEditingTitle(false);
+      setEditingTitleValue('');
+    }, [activeSessionId]);
+
     const domRef = useRef<HTMLDivElement>(null);
     // 使用自定义 hook 处理文本选择和复制，同时阻止事件冒泡
     useTextSelection(domRef, {
@@ -1521,12 +1879,6 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
       stopPropagation: true,
     });
 
-    const [shouldRenderChat, setShouldRenderChat] = useState(false);
-    useEffect(() => {
-      if (isOpen) {
-        setShouldRenderChat(true);
-      }
-    }, [isOpen]);
     return (
       <>
         <ChatDrawerTrigger
@@ -1586,12 +1938,7 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
                 <ModelSelector
                   value={sessionModel}
                   valueRef={sessionModelRef}
-                  onChange={(modelId, modelRef) => {
-                    setSessionModel(modelId);
-                    setSessionModelRef(
-                      modelRef || createModelRef(null, modelId)
-                    );
-                  }}
+                  onChange={handleSessionModelChange}
                 />
                 <div className="chat-drawer__session-actions">
                   <HoverTip content="会话列表">
@@ -1647,23 +1994,33 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
                     handler={wrappedHandler}
                     workflowMessages={workflowMessages}
                     retryingWorkflowId={retryingWorkflowId}
-                    handleWorkflowRetry={handleWorkflowRetry}
                     handleWorkflowReply={handleWorkflowReply}
+                    handleWorkflowRetry={handleWorkflowRetry}
                   />
                 </Suspense>
               )}
 
               <EnhancedChatInput
+                activeSessionId={activeSessionId}
                 selectedContent={selectedContent}
-                onSend={handleSendWrapper}
-                placeholder="继续描述要修改的内容..."
                 implicitReferenceContent={implicitReferenceContent}
-                implicitReferenceLabel={
-                  replyTarget ? '已引用工作流生成结果' : undefined
-                }
+                implicitReferenceLabel={implicitReferenceLabel}
                 implicitReferencePinned={Boolean(replyTarget)}
-                onImplicitReferenceClear={clearWorkflowReply}
-                onImplicitReferenceConsumed={clearWorkflowReply}
+                onClearImplicitReference={
+                  replyTarget ? handleClearReplyTarget : undefined
+                }
+                onImplicitReferenceConsumed={
+                  replyTarget ? handleClearReplyTarget : undefined
+                }
+                generationState={currentSession?.generationState || null}
+                draftInput={currentSession?.draftInput || ''}
+                draftUploadedContent={
+                  currentSession?.draftUploadedContent || []
+                }
+                onGenerationStateChange={handleGenerationStateChange}
+                onDraftChange={handleDraftChange}
+                onSend={handleSubmitDrawerGeneration}
+                placeholder="继续描述要修改的内容..."
               />
             </div>
           </div>

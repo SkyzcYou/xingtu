@@ -21,6 +21,7 @@ import { SelectedContentPreview } from '../shared/SelectedContentPreview';
 import type { SelectedContentItem } from '../../contexts/ChatDrawerContext';
 import { useChatDrawerControl } from '../../contexts/ChatDrawerContext';
 import type { Message } from '../../types/chat-ui.types';
+import type { ChatSessionGenerationState } from '../../types/chat.types';
 import { usePromptHistory } from '../../hooks/usePromptHistory';
 import { useI18n } from '../../i18n';
 import { useAssets } from '../../contexts/AssetContext';
@@ -39,18 +40,31 @@ import { MediaLibraryModal } from '../media-library/MediaLibraryModal';
 import { ImageUploadIcon, MediaLibraryIcon } from '../icons';
 import { HoverTip } from '../shared';
 import { useChatDrawerGenerationControls } from './useChatDrawerGenerationControls';
+import { shouldUseImplicitWorkflowReferences } from './workflow-media-results';
 import '../ai-input-bar/ai-input-bar.scss';
 
 interface EnhancedChatInputProps {
+  activeSessionId?: string | null;
   selectedContent: SelectedContentItem[];
-  onSend: (message: Message) => void | Promise<void>;
-  disabled?: boolean;
-  placeholder?: string;
   implicitReferenceContent?: SelectedContentItem[];
   implicitReferenceLabel?: string;
   implicitReferencePinned?: boolean;
-  onImplicitReferenceClear?: () => void;
+  onClearImplicitReference?: () => void;
   onImplicitReferenceConsumed?: () => void;
+  generationState?: ChatSessionGenerationState | null;
+  draftInput?: string;
+  draftUploadedContent?: SelectedContentItem[];
+  onGenerationStateChange?: (state: ChatSessionGenerationState) => void;
+  onDraftChange?: (
+    sessionId: string,
+    draft: {
+      draftInput: string;
+      draftUploadedContent: SelectedContentItem[];
+    }
+  ) => void;
+  onSend: (message: Message) => void | Promise<void>;
+  disabled?: boolean;
+  placeholder?: string;
 }
 
 /**
@@ -65,58 +79,114 @@ export interface EnhancedChatInputRef {
   focus: () => void;
 }
 
-function dedupeContentByUrl(items: SelectedContentItem[]): SelectedContentItem[] {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    const key = item.url || item.text || item.name;
-    if (!key) return true;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 export const EnhancedChatInput = forwardRef<
   EnhancedChatInputRef,
   EnhancedChatInputProps
 >(
   (
     {
+      activeSessionId = null,
       selectedContent,
-      onSend,
-      disabled = false,
-      placeholder = '输入消息...',
       implicitReferenceContent = [],
       implicitReferenceLabel,
       implicitReferencePinned = false,
-      onImplicitReferenceClear,
+      onClearImplicitReference,
       onImplicitReferenceConsumed,
+      generationState = null,
+      draftInput = '',
+      draftUploadedContent = [],
+      onGenerationStateChange,
+      onDraftChange,
+      onSend,
+      disabled = false,
+      placeholder = '输入消息...',
     },
     ref
   ) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const [input, setInput] = useState('');
-    const [uploadedContent, setUploadedContent] = useState<
-      SelectedContentItem[]
-    >([]);
+    const activeSessionIdRef = useRef<string | null>(activeSessionId);
+    const isRestoringSessionRef = useRef(false);
+    const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+      null
+    );
+    const [input, setInput] = useState(draftInput);
+    const [uploadedContent, setUploadedContent] =
+      useState<SelectedContentItem[]>(draftUploadedContent);
     const [showMediaLibrary, setShowMediaLibrary] = useState(false);
     const allContent = useMemo(
-      () =>
-        dedupeContentByUrl([
-          ...uploadedContent,
-          ...implicitReferenceContent,
-          ...selectedContent,
-        ]),
-      [implicitReferenceContent, selectedContent, uploadedContent]
+      () => [...uploadedContent, ...selectedContent],
+      [selectedContent, uploadedContent]
     );
+    const hasExplicitContent = allContent.length > 0;
     const hasSelection = allContent.length > 0;
     const { addHistory: addPromptHistory } = usePromptHistory();
     const { language } = useI18n();
     const { addAsset } = useAssets();
     const chatDrawerControl = useChatDrawerControl();
-    const generationControls = useChatDrawerGenerationControls();
+    const generationControls = useChatDrawerGenerationControls({
+      sessionId: activeSessionId,
+      sessionGenerationState: generationState,
+      onSessionGenerationStateChange: onGenerationStateChange,
+    });
+
+    useEffect(() => {
+      const previousSessionId = activeSessionIdRef.current;
+      if (previousSessionId === activeSessionId) {
+        return;
+      }
+
+      if (previousSessionId) {
+        if (draftSaveTimeoutRef.current) {
+          clearTimeout(draftSaveTimeoutRef.current);
+          draftSaveTimeoutRef.current = null;
+        }
+        onDraftChange?.(previousSessionId, {
+          draftInput: input,
+          draftUploadedContent: uploadedContent,
+        });
+      }
+
+      activeSessionIdRef.current = activeSessionId;
+      isRestoringSessionRef.current = true;
+      setInput(draftInput);
+      setUploadedContent(draftUploadedContent);
+    }, [
+      activeSessionId,
+      draftInput,
+      draftUploadedContent,
+      input,
+      onDraftChange,
+      uploadedContent,
+    ]);
+
+    useEffect(() => {
+      if (!activeSessionId) {
+        return;
+      }
+      if (isRestoringSessionRef.current) {
+        isRestoringSessionRef.current = false;
+        return;
+      }
+
+      if (draftSaveTimeoutRef.current) {
+        clearTimeout(draftSaveTimeoutRef.current);
+      }
+      draftSaveTimeoutRef.current = setTimeout(() => {
+        onDraftChange?.(activeSessionId, {
+          draftInput: input,
+          draftUploadedContent: uploadedContent,
+        });
+      }, 300);
+
+      return () => {
+        if (draftSaveTimeoutRef.current) {
+          clearTimeout(draftSaveTimeoutRef.current);
+          draftSaveTimeoutRef.current = null;
+        }
+      };
+    }, [activeSessionId, input, onDraftChange, uploadedContent]);
 
     const appendUploadedContent = useCallback(
       (items: SelectedContentItem[]) => {
@@ -271,14 +341,24 @@ export const EnhancedChatInput = forwardRef<
     // 发送消息
     const submitGeneration = useCallback(
       async (trimmedInput: string) => {
+        const shouldUseImplicitReferences =
+          allContent.length === 0 &&
+          implicitReferenceContent.length > 0 &&
+          generationControls.generationType !== 'agent' &&
+          (implicitReferencePinned ||
+            shouldUseImplicitWorkflowReferences(trimmedInput));
+        const generationContent = shouldUseImplicitReferences
+          ? implicitReferenceContent
+          : allContent;
         const submitted = await chatDrawerControl.submitGenerationFromDrawer({
           prompt: trimmedInput,
-          selectedContent: allContent,
+          selectedContent: generationContent,
           generationType: generationControls.generationType,
           selectedModel: generationControls.selectedModel,
           selectedModelRef: generationControls.selectedModelRef,
           selectedParams: generationControls.selectedParams,
           selectedCount: generationControls.selectedCount,
+          targetSessionId: chatDrawerControl.getActiveSessionId(),
         });
 
         if (!submitted) {
@@ -288,17 +368,21 @@ export const EnhancedChatInput = forwardRef<
 
         setInput('');
         setUploadedContent([]);
-        onImplicitReferenceConsumed?.();
+        if (shouldUseImplicitReferences) {
+          onImplicitReferenceConsumed?.();
+        }
       },
       [
         chatDrawerControl,
-        onImplicitReferenceConsumed,
         generationControls.generationType,
         generationControls.selectedCount,
         generationControls.selectedModel,
         generationControls.selectedModelRef,
         generationControls.selectedParams,
         allContent,
+        implicitReferenceContent,
+        implicitReferencePinned,
+        onImplicitReferenceConsumed,
       ]
     );
 
@@ -332,7 +416,7 @@ export const EnhancedChatInput = forwardRef<
               mediaType: 'image/png',
               url: item.url || '',
             },
-          } as any);
+          });
         } else if (item.type === 'video') {
           parts.push({
             type: 'data-file',
@@ -341,7 +425,7 @@ export const EnhancedChatInput = forwardRef<
               mediaType: 'video/mp4',
               url: item.url || '',
             },
-          } as any);
+          });
         }
       });
 
@@ -356,24 +440,30 @@ export const EnhancedChatInput = forwardRef<
         addPromptHistory(trimmedInput, hasSelection, 'agent');
       }
 
-      void Promise.resolve(onSend(message))
-        .then(() => {
-          onImplicitReferenceConsumed?.();
-        })
-        .catch((error) => {
-          console.error('[EnhancedChatInput] send failed:', error);
-        });
+      void Promise.resolve(onSend(message)).catch((error) => {
+        console.error('[EnhancedChatInput] send failed:', error);
+      });
       setInput('');
       setUploadedContent([]);
+      if (
+        allContent.length === 0 &&
+        implicitReferenceContent.length > 0 &&
+        (implicitReferencePinned ||
+          shouldUseImplicitWorkflowReferences(trimmedInput))
+      ) {
+        onImplicitReferenceConsumed?.();
+      }
     }, [
       input,
       allContent,
       generationControls.generationType,
       submitGeneration,
       onSend,
-      onImplicitReferenceConsumed,
       addPromptHistory,
       hasSelection,
+      implicitReferenceContent,
+      implicitReferencePinned,
+      onImplicitReferenceConsumed,
     ]);
 
     // 键盘事件处理
@@ -409,29 +499,6 @@ export const EnhancedChatInput = forwardRef<
 
       return (
         <div className="enhanced-chat-input__selection">
-          {implicitReferenceContent.length > 0 && (
-            <div
-              className={`enhanced-chat-input__implicit-reference ${
-                implicitReferencePinned
-                  ? 'enhanced-chat-input__implicit-reference--pinned'
-                  : ''
-              }`}
-            >
-              <span>
-                {implicitReferenceLabel ||
-                  (language === 'zh' ? '已引用生成结果' : 'Referenced result')}
-              </span>
-              {onImplicitReferenceClear && (
-                <button
-                  type="button"
-                  onClick={onImplicitReferenceClear}
-                  className="enhanced-chat-input__implicit-clear"
-                >
-                  {language === 'zh' ? '移除' : 'Remove'}
-                </button>
-              )}
-            </div>
-          )}
           <SelectedContentPreview
             items={allContent}
             language="zh"
@@ -443,6 +510,62 @@ export const EnhancedChatInput = forwardRef<
       );
     };
 
+    const renderImplicitReferenceContent = () => {
+      const shouldShowImplicitReferences =
+        !hasExplicitContent &&
+        implicitReferenceContent.length > 0 &&
+        (implicitReferencePinned || shouldUseImplicitWorkflowReferences(input));
+
+      if (!shouldShowImplicitReferences) {
+        return null;
+      }
+
+      return (
+        <div className="enhanced-chat-input__selection enhanced-chat-input__selection--implicit">
+          <div className="enhanced-chat-input__implicit-reference-header">
+            <span className="enhanced-chat-input__implicit-reference-label">
+              {implicitReferenceLabel ||
+                (language === 'zh'
+                  ? '输入修改描述后，将以上一次生成结果作为参考'
+                  : 'Using the previous generated results as references')}
+            </span>
+            {onClearImplicitReference && (
+              <button
+                type="button"
+                className="enhanced-chat-input__implicit-reference-clear"
+                onClick={onClearImplicitReference}
+                aria-label={language === 'zh' ? '取消回复' : 'Cancel reply'}
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <SelectedContentPreview
+            items={implicitReferenceContent}
+            language="zh"
+            enableHoverPreview={true}
+          />
+        </div>
+      );
+    };
+
+    const renderComposerPreview = () => {
+      const selectedPreview = renderSelectedContent();
+      const implicitPreview = renderImplicitReferenceContent();
+
+      if (!selectedPreview && !implicitPreview) {
+        return null;
+      }
+
+      return (
+        <>
+          {selectedPreview}
+          {implicitPreview}
+        </>
+      );
+    };
+
+    const composerPreview = renderComposerPreview();
     const isActive = (input.trim() || allContent.length > 0) && !disabled;
     const isGenerationMode = generationControls.generationType !== 'agent';
 
@@ -451,9 +574,9 @@ export const EnhancedChatInput = forwardRef<
         <div className="enhanced-chat-input__composer-scope ai-input-bar">
           <AIInputComposerShell
             variant="drawer"
-            expanded={Boolean(input.trim()) || allContent.length > 0}
+            expanded={Boolean(input.trim()) || Boolean(composerPreview)}
             disabled={disabled}
-            preview={renderSelectedContent()}
+            preview={composerPreview}
             textarea={
               <textarea
                 ref={textareaRef}

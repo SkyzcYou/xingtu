@@ -7,7 +7,11 @@
 import localforage from 'localforage';
 import { generateUUID } from '../utils/runtime-helpers';
 import { CHAT_STORAGE_KEYS, CHAT_CONSTANTS } from '../constants/CHAT_CONSTANTS';
-import type { ChatSession, ChatMessage, DrawerState } from '../types/chat.types';
+import type {
+  ChatSession,
+  ChatMessage,
+  DrawerState,
+} from '../types/chat.types';
 
 // Initialize localforage instances
 const sessionsStore = localforage.createInstance({
@@ -62,7 +66,7 @@ export async function getAllSessions(): Promise<ChatSession[]> {
     sessions.push(value);
   });
   // Wait for browser idle time before sorting to avoid blocking
-  await new Promise<void>(resolve => {
+  await new Promise<void>((resolve) => {
     if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
       (window as Window).requestIdleCallback(() => resolve(), { timeout: 50 });
     } else {
@@ -75,11 +79,18 @@ export async function getAllSessions(): Promise<ChatSession[]> {
 
 export async function updateSession(
   id: string,
-  updates: Partial<ChatSession>
+  updates: Partial<ChatSession>,
+  options?: { preserveUpdatedAt?: boolean }
 ): Promise<void> {
   const session = await getSession(id);
   if (session) {
-    const updated = { ...session, ...updates, updatedAt: Date.now() };
+    const updated = {
+      ...session,
+      ...updates,
+      updatedAt: options?.preserveUpdatedAt
+        ? session.updatedAt
+        : updates.updatedAt || Date.now(),
+    };
     await sessionsStore.setItem(id, updated);
   }
 }
@@ -122,6 +133,34 @@ export async function getMessages(sessionId: string): Promise<ChatMessage[]> {
   });
   // Sort by timestamp ascending (oldest first)
   return messages.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+export async function findWorkflowMessage(
+  workflowId: string
+): Promise<ChatMessage | null> {
+  const matched = await messagesStore.iterate<ChatMessage, ChatMessage | void>(
+    (value) => {
+      if (value.workflow?.id === workflowId) {
+        return value;
+      }
+      return undefined;
+    }
+  );
+  return matched || null;
+}
+
+export async function findWorkflowMessageByTask(
+  matcher: (workflow: NonNullable<ChatMessage['workflow']>) => boolean
+): Promise<ChatMessage | null> {
+  const matched = await messagesStore.iterate<ChatMessage, ChatMessage | void>(
+    (value) => {
+      if (value.workflow && matcher(value.workflow)) {
+        return value;
+      }
+      return undefined;
+    }
+  );
+  return matched || null;
 }
 
 export async function updateMessage(
@@ -181,7 +220,10 @@ export function setDrawerState(state: Partial<DrawerState>): void {
   try {
     const current = getDrawerState();
     const updated = { ...current, ...state };
-    localStorage.setItem(CHAT_STORAGE_KEYS.DRAWER_STATE, JSON.stringify(updated));
+    localStorage.setItem(
+      CHAT_STORAGE_KEYS.DRAWER_STATE,
+      JSON.stringify(updated)
+    );
   } catch (error) {
     console.error('[ChatStorage] Failed to set drawer state:', error);
   }
@@ -195,6 +237,12 @@ export async function clearAllData(): Promise<void> {
   await sessionsStore.clear();
   await messagesStore.clear();
   localStorage.removeItem(CHAT_STORAGE_KEYS.DRAWER_STATE);
+}
+
+export async function clearConversationHistory(): Promise<void> {
+  await sessionsStore.clear();
+  await messagesStore.clear();
+  setDrawerState({ activeSessionId: null });
 }
 
 // ============================================================================
@@ -212,11 +260,14 @@ export const chatStorageService = {
   deleteSession,
   addMessage,
   getMessages,
+  findWorkflowMessage,
+  findWorkflowMessageByTask,
   updateMessage,
   deleteMessage,
   getDrawerState,
   setDrawerState,
   clearAllData,
+  clearConversationHistory,
   generateId,
   generateTitle,
 };

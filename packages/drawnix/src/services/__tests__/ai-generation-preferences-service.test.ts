@@ -341,6 +341,58 @@ describe('ai-generation-preferences-service', () => {
     });
   });
 
+  it('迁移 Seedance 2.0 的旧组合尺寸偏好', async () => {
+    const { loadScopedAIVideoToolPreferences, saveScopedAIInputModelParams } =
+      await import('../ai-generation-preferences-service');
+
+    saveScopedAIInputModelParams(
+      'video',
+      'doubao-seedance-2-0-260128',
+      {
+        duration: '8',
+        size: '480p@21:9',
+      },
+      'provider-a::doubao-seedance-2-0-260128'
+    );
+
+    expect(
+      loadScopedAIVideoToolPreferences(
+        'doubao-seedance-2-0-260128',
+        'provider-a::doubao-seedance-2-0-260128'
+      )
+    ).toMatchObject({
+      duration: '8',
+      size: '480p',
+      extraParams: expect.objectContaining({ ratio: '21:9' }),
+    });
+  });
+
+  it('迁移 Seedance 2.5 的旧组合偏好时移除不受支持的分辨率', async () => {
+    const { loadScopedAIVideoToolPreferences, saveScopedAIInputModelParams } =
+      await import('../ai-generation-preferences-service');
+
+    saveScopedAIInputModelParams(
+      'video',
+      'doubao-seedance-2-5-260628',
+      {
+        duration: '30',
+        size: '1080p@1:1',
+      },
+      'provider-a::doubao-seedance-2-5-260628'
+    );
+
+    expect(
+      loadScopedAIVideoToolPreferences(
+        'doubao-seedance-2-5-260628',
+        'provider-a::doubao-seedance-2-5-260628'
+      )
+    ).toMatchObject({
+      duration: '30',
+      size: '',
+      extraParams: expect.objectContaining({ ratio: '1:1' }),
+    });
+  });
+
   it('AI 视频工具保存参数时同步回 AI 输入栏', async () => {
     const {
       loadScopedAIInputModelParams,

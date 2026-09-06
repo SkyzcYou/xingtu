@@ -1,3 +1,4 @@
+import { createModelRef, resolveInvocationRoute } from '../../utils/settings-manager';
 /**
  * Batch Image Generation Component
  *
@@ -41,8 +42,6 @@ import {
 } from '../../types/task.types';
 import {
   hasInvocationRouteCredentials,
-  resolveInvocationRoute,
-  createModelRef,
   type ModelRef,
 } from '../../utils/settings-manager';
 import { getDefaultImageModel } from '../../constants/model-config';
@@ -66,6 +65,9 @@ import {
   findMatchingSelectableModel,
   getModelRefFromConfig,
   getSelectionKey,
+  resolveActiveImageModelSelection,
+  resolveImageSubmissionModelSelection,
+  type ResolvedModelSelection,
 } from '../../utils/model-selection';
 import type { ModelConfig } from '../../constants/model-config';
 import './batch-image-generation.scss';
@@ -92,6 +94,15 @@ interface TaskRow {
   count: number;
   // 预览相关 - 关联到任务队列的taskId
   taskIds: string[]; // 关联的任务队列ID列表（一行可能生成多个任务）
+}
+
+function getCompletedImageResults(
+  tasks: Task[]
+): Array<{ task: Task; url: string }> {
+  return tasks.flatMap((task) => {
+    const url = task.result?.url;
+    return task.status === TaskStatus.COMPLETED && url ? [{ task, url }] : [];
+  });
 }
 
 // 单元格位置
@@ -386,7 +397,7 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
   const { language } = useI18n();
   const { confirm, confirmDialog } = useConfirmDialog();
   const imageModels = useSelectableModels('image');
-  const { createTask, tasks: queueTasks } = useTaskQueue();
+  const { createTask, deleteTask, tasks: queueTasks } = useTaskQueue();
   const { addAsset, assets: libraryAssets, loadAssets } = useAssets();
   const { isMobile, isTablet } = useDeviceType();
 
@@ -605,6 +616,26 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
     return loadScopedAIImageToolPreferences(selectedModel, selectedSelectionKey)
       .extraParams;
   }, [selectedModel, selectedSelectionKey]);
+
+  const applySelectedModelSelection = useCallback(
+    (selection: ResolvedModelSelection) => {
+      setSelectedModel((prev) =>
+        prev === selection.modelId ? prev : selection.modelId
+      );
+      setSelectedModelRef((prev) => {
+        if (
+          prev?.profileId === selection.modelRef?.profileId &&
+          prev?.modelId === selection.modelRef?.modelId
+        ) {
+          return prev;
+        }
+        return selection.modelRef;
+      });
+      onModelChange?.(selection.modelId);
+      onModelRefChange?.(selection.modelRef);
+    },
+    [onModelChange, onModelRefChange]
+  );
 
   useEffect(() => {
     setTasks((prev) => {
@@ -1888,6 +1919,62 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
     [queueTasks]
   );
 
+  // 删除单张已生成图片：同步移除任务记录与当前行关联，避免刷新后恢复预览。
+  const deleteGeneratedImage = useCallback(
+    async (rowId: number, generatedTask: Task) => {
+      const confirmed = await confirm({
+        title: language === 'zh' ? '删除生成图片' : 'Delete Generated Image',
+        description:
+          language === 'zh'
+            ? '删除后将从批量预览和任务记录中移除，已插入画布的图片不受影响。'
+            : 'This removes the image from the batch preview and task history. Images already inserted on the canvas are not affected.',
+        confirmText: language === 'zh' ? '删除' : 'Delete',
+        cancelText: language === 'zh' ? '取消' : 'Cancel',
+        confirmTheme: 'danger',
+      });
+      if (!confirmed) return;
+
+      setTasks((prev) => {
+        const rowIndex = prev.findIndex((row) => row.id === rowId);
+        const currentRow = prev[rowIndex];
+        if (!currentRow?.taskIds.includes(generatedTask.id)) {
+          return prev;
+        }
+
+        const nextTasks = [...prev];
+        nextTasks[rowIndex] = {
+          ...currentRow,
+          taskIds: currentRow.taskIds.filter((id) => id !== generatedTask.id),
+        };
+        return nextTasks;
+      });
+      deleteTask(generatedTask.id);
+      MessagePlugin.success(
+        language === 'zh' ? '已删除生成图片' : 'Generated image deleted'
+      );
+    },
+    [confirm, deleteTask, language]
+  );
+
+  const renderGeneratedImageDeleteButton = (
+    rowId: number,
+    generatedTask: Task,
+    className = ''
+  ) => (
+    <button
+      type="button"
+      className={`generated-image-delete-button ${className}`.trim()}
+      aria-label={language === 'zh' ? '删除生成图片' : 'Delete generated image'}
+      title={language === 'zh' ? '删除生成图片' : 'Delete generated image'}
+      onClick={(e) => {
+        e.stopPropagation();
+        void deleteGeneratedImage(rowId, generatedTask);
+      }}
+    >
+      <DeleteIcon size={className ? '14px' : '12px'} />
+    </button>
+  );
+
   // 导出 Excel（包含参考图和预览图）
   const exportToExcel = useCallback(async () => {
     try {
@@ -2168,11 +2255,25 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
     async (validTasks: { task: TaskRow; rowIndex: number }[]) => {
       setIsSubmitting(true);
       try {
+        const activeSelection =
+          resolveActiveImageModelSelection(visibleImageModels);
+        const submissionSelection = resolveImageSubmissionModelSelection({
+          models: visibleImageModels,
+          currentModel: selectedModel,
+          currentModelRef: selectedModelRef,
+          controlledModel: controlledSelectedModel,
+          controlledModelRef: controlledSelectedModelRef,
+          activeSelection,
+        });
+        if (selectedSelectionKey !== submissionSelection.selectionKey) {
+          applySelectedModelSelection(submissionSelection);
+        }
+
         // 先检查 API Key，没有则弹窗获取（只弹一次）
         if (
           !hasInvocationRouteCredentials(
             'image',
-            selectedModelRef || selectedModel
+            submissionSelection.modelRef || submissionSelection.modelId
           )
         ) {
           // 退出编辑模式，防止输入被捕获到表格
@@ -2197,9 +2298,12 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
         for (const { task, rowIndex } of validTasks) {
           const generateCount = task.count || 1;
           const batchId = `batch_${task.id}_${globalBatchTimestamp}`;
+          const currentImageModel =
+            submissionSelection.modelId || 'gemini-2.5-flash-image-vip';
+          const submissionModelRef = submissionSelection.modelRef;
           const rowParams = normalizeRowParamsForModel(
             task,
-            selectedModel,
+            currentImageModel,
             defaultModelParams
           );
           const normalizedAspectRatio =
@@ -2208,10 +2312,6 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
             normalizedAspectRatio === 'auto'
               ? undefined
               : normalizedAspectRatio;
-          const currentImageModel =
-            selectedModel ||
-            resolveInvocationRoute('image').modelId ||
-            'gemini-2.5-flash-image-vip';
           const isMJModel = currentImageModel.startsWith('mj');
           const finalPrompt = isMJModel
             ? [task.prompt.trim(), buildMJPromptSuffix(rowParams)]
@@ -2239,7 +2339,7 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
               aspectRatio: normalizedAspectRatio,
               size: normalizedSize,
               model: currentImageModel,
-              modelRef: selectedModelRef || null,
+              modelRef: submissionModelRef,
               uploadedImages,
               batchId,
               batchIndex: i + 1,
@@ -2284,15 +2384,20 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
       }
     },
     [
+      applySelectedModelSelection,
+      controlledSelectedModel,
+      controlledSelectedModelRef,
       createTask,
       defaultModelParams,
       knowledgeContextRefs,
       language,
       selectedModel,
       selectedModelRef,
+      selectedSelectionKey,
       setTasks,
       setEditingCell,
       setActiveCell,
+      visibleImageModels,
     ]
   );
 
@@ -3054,11 +3159,10 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
             {(rowInfo.status === 'generating' ||
               rowInfo.status === 'completed') &&
               (() => {
-                const completedUrls = rowInfo.tasks
-                  .filter(
-                    (t) => t.status === TaskStatus.COMPLETED && t.result?.url
-                  )
-                  .map((t) => t.result!.url);
+                const completedResults = getCompletedImageResults(
+                  rowInfo.tasks
+                );
+                const completedUrls = completedResults.map(({ url }) => url);
                 const isGenerating = rowInfo.status === 'generating';
                 const processingCount = rowInfo.tasks.filter(
                   (t) =>
@@ -3079,11 +3183,11 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
                 // 有已完成的图片
                 return (
                   <div className="preview-images">
-                    {completedUrls
+                    {completedResults
                       .slice(0, isGenerating ? 2 : 3)
-                      .map((url, idx) => (
+                      .map(({ task: completedTask, url }, idx) => (
                         <HoverTip
-                          key={idx}
+                          key={completedTask.id}
                           content={
                             language === 'zh'
                               ? '点击放大，左右切换'
@@ -3104,6 +3208,10 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
                               showSkeleton={false}
                               eager
                             />
+                            {renderGeneratedImageDeleteButton(
+                              task.id,
+                              completedTask
+                            )}
                           </div>
                         </HoverTip>
                       ))}
@@ -3170,40 +3278,45 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
             )}
             {rowInfo.status === 'partial' &&
               (() => {
-                const partialUrls = rowInfo.tasks
-                  .filter(
-                    (t) => t.status === TaskStatus.COMPLETED && t.result?.url
-                  )
-                  .map((t) => t.result!.url);
+                const completedResults = getCompletedImageResults(
+                  rowInfo.tasks
+                );
+                const partialUrls = completedResults.map(({ url }) => url);
                 return (
                   <div className="preview-partial">
                     <div className="preview-images">
-                      {partialUrls.slice(0, 2).map((url, idx) => (
-                        <HoverTip
-                          key={idx}
-                          content={
-                            language === 'zh'
-                              ? '点击放大，左右切换'
-                              : 'Click to enlarge, swipe to navigate'
-                          }
-                          showArrow={false}
-                        >
-                          <div
-                            className="preview-thumb clickable"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openImagePreview(partialUrls, idx);
-                            }}
+                      {completedResults
+                        .slice(0, 2)
+                        .map(({ task: completedTask, url }, idx) => (
+                          <HoverTip
+                            key={completedTask.id}
+                            content={
+                              language === 'zh'
+                                ? '点击放大，左右切换'
+                                : 'Click to enlarge, swipe to navigate'
+                            }
+                            showArrow={false}
                           >
-                            <RetryImage
-                              src={url}
-                              alt={`Result ${idx + 1}`}
-                              showSkeleton={false}
-                              eager
-                            />
-                          </div>
-                        </HoverTip>
-                      ))}
+                            <div
+                              className="preview-thumb clickable"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openImagePreview(partialUrls, idx);
+                              }}
+                            >
+                              <RetryImage
+                                src={url}
+                                alt={`Result ${idx + 1}`}
+                                showSkeleton={false}
+                                eager
+                              />
+                              {renderGeneratedImageDeleteButton(
+                                task.id,
+                                completedTask
+                              )}
+                            </div>
+                          </HoverTip>
+                        ))}
                     </div>
                     <span className="preview-partial-info">
                       ⚠️ {rowInfo.completedCount}/{rowInfo.tasks.length}
@@ -3904,31 +4017,34 @@ const BatchImageGeneration: React.FC<BatchImageGenerationProps> = ({
             const taskRow = tasks[galleryRowIndex];
             if (!taskRow) return null;
             const rowInfo = getRowTasksInfo(taskRow);
-            const completedTasks = rowInfo.tasks.filter(
-              (t) => t.status === TaskStatus.COMPLETED && t.result?.url
-            );
-            const galleryUrls = completedTasks.map((t) => t.result!.url);
+            const completedResults = getCompletedImageResults(rowInfo.tasks);
+            const galleryUrls = completedResults.map(({ url }) => url);
 
             return (
               <div className="row-gallery-content">
                 <div className="gallery-grid">
-                  {completedTasks.map((t, idx) => (
+                  {completedResults.map(({ task: completedTask, url }, idx) => (
                     <div
-                      key={t.id}
+                      key={completedTask.id}
                       className="gallery-item"
                       onClick={() => openImagePreview(galleryUrls, idx)}
                     >
                       <RetryImage
-                        src={t.result!.url}
+                        src={url}
                         alt={`Result ${idx + 1}`}
                         showSkeleton={false}
                         eager
                       />
                       <span className="gallery-item-index">{idx + 1}</span>
+                      {renderGeneratedImageDeleteButton(
+                        taskRow.id,
+                        completedTask,
+                        'gallery-delete-button'
+                      )}
                     </div>
                   ))}
                 </div>
-                {completedTasks.length === 0 && (
+                {completedResults.length === 0 && (
                   <div className="gallery-empty">
                     {language === 'zh' ? '暂无生成结果' : 'No results yet'}
                   </div>

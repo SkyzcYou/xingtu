@@ -1,6 +1,8 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import classNames from 'classnames';
 import type { PlaitBoard } from '@plait/core';
+import { Copy } from 'lucide-react';
+import { MessagePlugin } from 'tdesign-react';
 import { useImageGenerationAnchorController } from '../../hooks/useImageGenerationAnchorController';
 import { taskQueueService } from '../../services/task-queue';
 import { workflowCompletionService } from '../../services/workflow-completion-service';
@@ -52,6 +54,14 @@ export const ImageGenerationAnchorContent: React.FC<
 > = ({ board, element, selected }) => {
   const { viewModel } = useImageGenerationAnchorController({ anchor: element });
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const relatedTasks = useMemo(
+    () => getTasksForImageGenerationAnchor(element, taskQueueService.getAllTasks()),
+    [element]
+  );
+  const resolvedTask = useMemo(
+    () => selectPrimaryImageGenerationAnchorTask(element, relatedTasks),
+    [element, relatedTasks]
+  );
   const isGhost = viewModel.anchorType === 'ghost';
   const batchPreview = viewModel.batchPreview;
   const isStack = Boolean(batchPreview);
@@ -86,17 +96,28 @@ export const ImageGenerationAnchorContent: React.FC<
 
   const detailItems = useMemo(
     () => [
+      {
+        label: '编号',
+        value:
+          resolvedTask?.id ||
+          element.primaryTaskId ||
+          element.taskIds[0] ||
+          element.workflowId,
+        copyable: true,
+      },
       { label: '阶段', value: viewModel.phaseLabel },
       { label: '形态', value: viewModel.anchorType },
       { label: '过渡', value: viewModel.transitionMode },
       {
         label: '任务',
         value: element.primaryTaskId || (element.taskIds[0] ?? '待绑定'),
+        copyable: true,
       },
-      { label: '工作流', value: element.workflowId },
+      { label: '工作流', value: element.workflowId, copyable: true },
       { label: '错误', value: viewModel.error || '无' },
     ],
     [
+      resolvedTask?.id,
       element.primaryTaskId,
       element.taskIds,
       element.workflowId,
@@ -113,12 +134,44 @@ export const ImageGenerationAnchorContent: React.FC<
     },
     []
   );
+  const stopInteractionStart = useCallback(
+    (event: React.PointerEvent | React.MouseEvent) => {
+      event.stopPropagation();
+      event.preventDefault();
+    },
+    []
+  );
+  const failureIdentifier =
+    resolvedTask?.id ||
+    element.primaryTaskId ||
+    element.taskIds[0] ||
+    element.workflowId;
   const stopPointer = useCallback(
     (event: React.PointerEvent | React.MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
     },
     []
+  );
+  const copyText = useCallback(
+    async (
+      event: React.PointerEvent | React.MouseEvent,
+      value?: string | null
+    ) => {
+      stopPointer(event);
+      if (!value) {
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(value);
+        MessagePlugin.success('已复制 ID');
+      } catch (error) {
+        console.error('[ImageGenerationAnchor] Failed to copy text:', error);
+        MessagePlugin.error('复制失败');
+      }
+    },
+    [stopPointer]
   );
 
   const handleAction = useCallback(
@@ -133,10 +186,6 @@ export const ImageGenerationAnchorContent: React.FC<
       }
 
       if (actionType === 'retry') {
-        const relatedTasks = getTasksForImageGenerationAnchor(
-          element,
-          taskQueueService.getAllTasks()
-        );
         const retryableTask =
           relatedTasks.find(
             (task) =>
@@ -162,12 +211,35 @@ export const ImageGenerationAnchorContent: React.FC<
           return;
         }
 
+        const retryablePostProcessingStatus = retryableTask
+          ? workflowCompletionService.getPostProcessingStatus(retryableTask.id)
+              ?.status
+          : undefined;
+
         if (retryableTask) {
           ImageGenerationAnchorTransforms.updateAnchor(
             board,
             element.id,
             buildImageGenerationAnchorPresentationPatch('retrying')
           );
+
+          if (
+            retryableTask.status === TaskStatus.FAILED ||
+            retryableTask.status === TaskStatus.CANCELLED
+          ) {
+            taskQueueService.retryTask(retryableTask.id);
+            return;
+          }
+
+          if (
+            retryableTask.status === TaskStatus.COMPLETED &&
+            retryablePostProcessingStatus === 'failed'
+          ) {
+            taskQueueService.retryTask(retryableTask.id, {
+              allowCompleted: true,
+            });
+            return;
+          }
         }
 
         window.dispatchEvent(
@@ -182,7 +254,15 @@ export const ImageGenerationAnchorContent: React.FC<
         board.deleteFragment([element]);
       }
     },
-    [board, element]
+    [board, element, relatedTasks]
+  );
+  const runDeferredAction = useCallback(
+    (actionType: ImageGenerationAnchorActionType) => {
+      window.setTimeout(() => {
+        handleAction(actionType);
+      }, 0);
+    },
+    [handleAction]
   );
 
   const renderCore = () => {
@@ -207,14 +287,38 @@ export const ImageGenerationAnchorContent: React.FC<
             >
               {failedErrorSummary}
             </span>
+            {failureIdentifier ? (
+              <span className="image-generation-anchor__error-id">
+                <span className="image-generation-anchor__error-id-text">
+                  ID: {failureIdentifier}
+                </span>
+                <button
+                  type="button"
+                  className="image-generation-anchor__copy-button"
+                  onPointerDown={stopInteractionStart}
+                  onMouseDown={stopInteractionStart}
+                  onPointerUp={stopEventPropagation}
+                  onMouseUp={stopEventPropagation}
+                  onClick={(event) => {
+                    void copyText(event, failureIdentifier);
+                  }}
+                  aria-label="复制 ID"
+                  title="复制 ID"
+                >
+                  <Copy size={12} />
+                </button>
+              </span>
+            ) : null}
             <button
               type="button"
               className="image-generation-anchor__error-link"
-              onPointerDown={stopEventPropagation}
-              onMouseDown={stopEventPropagation}
+              onPointerDown={stopInteractionStart}
+              onMouseDown={stopInteractionStart}
+              onPointerUp={stopEventPropagation}
+              onMouseUp={stopEventPropagation}
               onClick={(event) => {
                 stopPointer(event);
-                handleAction('details');
+                runDeferredAction('details');
               }}
             >
               {detailsOpen ? '收起详情' : '查看详情'}
@@ -440,7 +544,26 @@ export const ImageGenerationAnchorContent: React.FC<
                 {item.label}
               </span>
               <span className="image-generation-anchor__detail-value">
-                {item.value}
+                <span className="image-generation-anchor__detail-value-text">
+                  {item.value}
+                </span>
+                {item.copyable && item.value ? (
+                  <button
+                    type="button"
+                    className="image-generation-anchor__copy-button image-generation-anchor__copy-button--detail"
+                    onPointerDown={stopInteractionStart}
+                    onMouseDown={stopInteractionStart}
+                    onPointerUp={stopEventPropagation}
+                    onMouseUp={stopEventPropagation}
+                    onClick={(event) => {
+                      void copyText(event, item.value);
+                    }}
+                    aria-label={`复制${item.label}`}
+                    title={`复制${item.label}`}
+                  >
+                    <Copy size={12} />
+                  </button>
+                ) : null}
               </span>
             </div>
           ))}

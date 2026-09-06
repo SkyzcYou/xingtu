@@ -1,6 +1,7 @@
 import type { ModelType } from '../../constants/model-config';
 import type {
   ImageApiCompatibility,
+  ManualHttpTemplateMetadata,
   ModelRef,
   ProviderCredentialSource,
   ProviderProfile,
@@ -22,6 +23,7 @@ export type ProviderProtocol =
   | 'kling.video'
   | 'seedance.task'
   | 'happyhorse.video'
+  | 'tuzi.ppt-explainer'
   | (string & Record<never, never>);
 
 export type ProviderBindingConfidence = 'high' | 'medium' | 'low';
@@ -29,12 +31,68 @@ export type ProviderBindingConfidence = 'high' | 'medium' | 'low';
 export type ProviderBindingSource = 'discovered' | 'template' | 'manual';
 
 export type ProviderAuthStrategy = 'bearer' | 'header' | 'query' | 'custom';
-export type ProviderBaseUrlStrategy = 'preserve' | 'trim-v1';
+export type ProviderBaseUrlStrategy = 'preserve' | 'trim-v1' | 'ensure-v1';
 export type ProviderVideoDurationMode = 'request-param' | 'model-alias';
 export type ProviderVideoResultMode = 'inline-url' | 'download-content';
 export type ProviderTextImageInputMode =
   | 'openai-image_url'
   | 'google-inline-data';
+
+export type ProviderPptExplainerSourceKind = 'topic' | 'current_ppt' | 'pptx';
+export type ProviderPptExplainerPresentationInput = 'pptx' | 'slide_images';
+export type ProviderPptExplainerPresenterMode =
+  | 'single_voice'
+  | 'dual_voice'
+  | 'single_avatar'
+  | 'dual_avatar';
+export type ProviderPptExplainerCancelMethod = 'DELETE' | 'POST';
+
+export interface ProviderPptExplainerResponsePaths {
+  status?: string;
+  error?: string;
+  remoteId?: string;
+  progress?: string;
+  finalVideoUrl?: string;
+}
+
+export interface ProviderPptExplainerStatusMapping {
+  queued: string[];
+  processing: string[];
+  completed: string[];
+  failed: string[];
+  cancelled?: string[];
+}
+
+export interface ProviderPptExplainerBindingMetadata {
+  capabilities: {
+    sources: ProviderPptExplainerSourceKind[];
+    presentationInputs: ProviderPptExplainerPresentationInput[];
+    presenterModes: ProviderPptExplainerPresenterMode[];
+    finalComposition: boolean;
+    /** Explicit opt-in: the binding clones a supplied sample before narration. */
+    referenceAudioVoiceCloning?: boolean;
+  };
+  /** Multipart mapping for voice-cloning samples. Required when capability is enabled. */
+  referenceAudio?: {
+    fieldName: string;
+    acceptedMimeTypes?: string[];
+  };
+  responsePaths: {
+    submit: ProviderPptExplainerResponsePaths & { remoteId: string };
+    poll: ProviderPptExplainerResponsePaths & {
+      status: string;
+      finalVideoUrl: string;
+    };
+    cancel?: ProviderPptExplainerResponsePaths;
+  };
+  statusMapping: ProviderPptExplainerStatusMapping;
+  progressScale?: 'percent' | 'ratio';
+  idempotencyHeader?: string;
+  cancel?: {
+    pathTemplate: string;
+    method: ProviderPptExplainerCancelMethod;
+  };
+}
 
 export interface ProviderVideoBindingMetadata {
   videoApiCompatibility?: VideoApiCompatibility;
@@ -67,6 +125,11 @@ export interface ProviderImageBindingMetadata {
   action?: 'generation' | 'edit';
   maxImageCount?: number;
   supportsMask?: boolean;
+  /** Provider explicitly supports semantic layer decomposition responses. */
+  layerDecomposition?: {
+    enabled: boolean;
+    path?: string;
+  };
 }
 
 export interface ProviderBindingMetadata {
@@ -74,6 +137,13 @@ export interface ProviderBindingMetadata {
   image?: ProviderImageBindingMetadata;
   video?: ProviderVideoBindingMetadata;
   audio?: ProviderAudioBindingMetadata;
+  pptExplainer?: ProviderPptExplainerBindingMetadata;
+  /** Explicit opt-in for native semantic layer decomposition. */
+  layerDecomposition?: {
+    enabled: boolean;
+    path?: string;
+  };
+  manualHttp?: ManualHttpTemplateMetadata;
   [key: string]: unknown;
 }
 
@@ -167,6 +237,7 @@ export interface InvocationPlanRequest {
   fallbackModelRef?: ModelRef | null;
   bindingId?: string | null;
   preferredRequestSchema?: string | readonly string[] | null;
+  requiredProtocol?: ProviderProtocol | readonly ProviderProtocol[] | null;
 }
 
 export interface InvocationPlannerRepositories {
@@ -188,6 +259,14 @@ export interface ProviderTransportRequest {
   timeoutMs?: number;
   credentials?: RequestCredentials;
   fetcher?: typeof fetch;
+  /** 图片提交的本地任务 ID；仅在供应商与运行时允许时写入 X-Request-Id。 */
+  requestId?: string;
+  /** 是否允许同步图片请求在网络结果未知时进入 Request ID 恢复。 */
+  allowImageSubmissionOutcomeRecovery?: boolean;
+  /** 响应体将通过 provider transport 的有界 reader 读取。 */
+  controlledResponseBody?: boolean;
+  /** Observe the final response before its body is consumed. */
+  onResponse?: (response: Response) => void | Promise<void>;
 }
 
 export interface PreparedProviderTransportRequest {

@@ -43,6 +43,7 @@ $text-dark: var(--xingtu-glass-text-primary);
   &__tabs-list {
     display: flex;
     flex-direction: column;
+    gap: 3px;
     min-height: min-content;
   }
 
@@ -158,7 +159,7 @@ $text-dark: var(--xingtu-glass-text-primary);
 
   // compact 模式
   &--compact &__tabs {
-    width: 108px;
+    width: 148px;
   }
 
   &--compact &__tab {
@@ -167,7 +168,7 @@ $text-dark: var(--xingtu-glass-text-primary);
   }
 
   &--compact &__middle-tabs {
-    width: 108px;
+    width: 132px;
   }
 }
 

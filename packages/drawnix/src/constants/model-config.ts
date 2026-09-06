@@ -7,6 +7,12 @@
  * 参数配置用于 SmartSuggestionPanel 的 - 参数提示功能
  */
 
+import {
+  isSeedance2ModelId,
+  isSeedance25ModelId,
+  SEEDANCE_25_MODEL_ID,
+} from '../utils/seedance-model';
+
 /**
  * 模型类型
  */
@@ -176,6 +182,12 @@ export interface ModelConfig {
 }
 
 const BUILT_IN_MODEL_RECOMMENDATION_SCORES: Readonly<Record<string, number>> = {
+  'gpt-5.6-sol': 109,
+  'gpt-5.6-terra': 108,
+  'gpt-5.6-luna': 107,
+  'deepseek-v4-pro': 106,
+  'deepseek-v4-flash': 105,
+  'deepseek-v4-flash-0731': 104,
   'gpt-5.5': 99,
   'claude-opus-4-6': 98,
   'gpt-5.4': 97,
@@ -225,6 +237,10 @@ const BUILT_IN_MODEL_RECOMMENDATION_SCORES: Readonly<Record<string, number>> = {
   'gemini-3-pro-image-preview-4k': 41,
 
   kling_video: 98,
+  [SEEDANCE_25_MODEL_ID]: 102,
+  'doubao-seedance-2-0-260128': 101,
+  'doubao-seedance-2-0-fast-260128': 100,
+  'doubao-seedance-2-0-mini-260615': 99,
   'seedance-1.5-pro': 97,
   'seedance-1.0-pro': 96,
   'seedance-1.0-pro-fast': 95,
@@ -595,6 +611,18 @@ export const IMAGE_MODEL_MORE_OPTIONS: ModelConfig[] = [
     tags: ['seedream'],
   },
   {
+    id: 'doubao-seedream-5-0-pro-260628',
+    label: 'Seedream 5.0 Pro',
+    shortLabel: 'Seedream 5.0 Pro',
+    shortCode: 'sd5p',
+    description: '即梦 Seedream 5.0 Pro 图片模型',
+    type: 'image',
+    vendor: ModelVendor.DOUBAO,
+    supportsTools: false,
+    imageDefaults: IMAGE_2K_DEFAULT_PARAMS,
+    tags: ['seedream', 'pro'],
+  },
+  {
     id: 'seedream-v4',
     label: 'Seedream V4',
     shortLabel: 'Seedream V4',
@@ -700,6 +728,12 @@ const SEEDANCE_DEFAULT_PARAMS: VideoModelDefaults = {
   aspectRatio: '16:9',
 };
 
+const SEEDANCE_25_DEFAULT_PARAMS: VideoModelDefaults = {
+  duration: '8',
+  size: '',
+  aspectRatio: '16:9',
+};
+
 /** HappyHorse 模型默认参数（5秒，1080P） */
 const HAPPYHORSE_DEFAULT_PARAMS: VideoModelDefaults = {
   duration: '5',
@@ -720,6 +754,48 @@ const BUILT_IN_VIDEO_MODELS: ModelConfig[] = [
     vendor: ModelVendor.KLING,
     supportsTools: true,
     videoDefaults: KLING_DEFAULT_PARAMS,
+  },
+  {
+    id: SEEDANCE_25_MODEL_ID,
+    label: 'Seedance 2.5',
+    shortCode: 'sc25',
+    description: 'Seedance 2.5 音视频联合生成，支持 4-30 秒与 7 种画面比例',
+    type: 'video',
+    vendor: ModelVendor.DOUBAO,
+    videoDefaults: SEEDANCE_25_DEFAULT_PARAMS,
+    tags: ['new', 'seedance', 'seedance-2'],
+  },
+  {
+    id: 'doubao-seedance-2-0-260128',
+    label: 'Seedance 2.0',
+    shortCode: 'sc20',
+    description:
+      'Seedance 2.0 多模态视频生成，支持 4-12 秒与 480p/720p/1080p 输出',
+    type: 'video',
+    vendor: ModelVendor.DOUBAO,
+    isVip: true,
+    videoDefaults: SEEDANCE_DEFAULT_PARAMS,
+    tags: ['new', 'seedance', 'seedance-2'],
+  },
+  {
+    id: 'doubao-seedance-2-0-fast-260128',
+    label: 'Seedance 2.0 Fast',
+    shortCode: 'sc20f',
+    description: 'Seedance 2.0 高速视频生成，支持 4-12 秒与 480p/720p/1080p',
+    type: 'video',
+    vendor: ModelVendor.DOUBAO,
+    videoDefaults: SEEDANCE_DEFAULT_PARAMS,
+    tags: ['new', 'seedance', 'seedance-2'],
+  },
+  {
+    id: 'doubao-seedance-2-0-mini-260615',
+    label: 'Seedance 2.0 Mini',
+    shortCode: 'sc20m',
+    description: 'Seedance 2.0 轻量视频生成，支持 4-12 秒与 480p/720p/1080p',
+    type: 'video',
+    vendor: ModelVendor.DOUBAO,
+    videoDefaults: SEEDANCE_DEFAULT_PARAMS,
+    tags: ['new', 'seedance', 'seedance-2'],
   },
   {
     id: 'seedance-1.5-pro',
@@ -1072,7 +1148,69 @@ export const VIDEO_MODELS: ModelConfig[] = applyBuiltInRecommendedScores([
 /**
  * 文本/Agent 模型配置
  */
-export const TEXT_MODELS: ModelConfig[] = applyBuiltInRecommendedScores([
+const BUILT_IN_TEXT_MODELS: ModelConfig[] = applyBuiltInRecommendedScores([
+  {
+    id: 'gpt-5.6-sol',
+    label: 'GPT-5.6 Sol',
+    shortCode: 'g56s',
+    description: 'GPT-5.6 通用推理、代码与智能体路由',
+    type: 'text',
+    vendor: ModelVendor.GPT,
+    isVip: true,
+    supportsTools: true,
+    tags: ['new'],
+  },
+  {
+    id: 'gpt-5.6-terra',
+    label: 'GPT-5.6 Terra',
+    shortCode: 'g56t',
+    description: 'GPT-5.6 通用推理、代码与复杂任务路由',
+    type: 'text',
+    vendor: ModelVendor.GPT,
+    isVip: true,
+    supportsTools: true,
+    tags: ['new'],
+  },
+  {
+    id: 'gpt-5.6-luna',
+    label: 'GPT-5.6 Luna',
+    shortCode: 'g56l',
+    description: 'GPT-5.6 高响应文本与代码路由',
+    type: 'text',
+    vendor: ModelVendor.GPT,
+    supportsTools: true,
+    tags: ['new'],
+  },
+  {
+    id: 'deepseek-v4-pro',
+    label: 'DeepSeek V4 Pro',
+    shortCode: 'dsv4p',
+    description: 'DeepSeek V4 通用对话、代码与工具调用路由',
+    type: 'text',
+    vendor: ModelVendor.DEEPSEEK,
+    supportsTools: true,
+    tags: ['new'],
+  },
+  {
+    id: 'deepseek-v4-flash',
+    label: 'DeepSeek V4 Flash',
+    shortCode: 'dsv4f',
+    description: 'DeepSeek V4 低延迟文本与代码路由',
+    type: 'text',
+    vendor: ModelVendor.DEEPSEEK,
+    supportsTools: true,
+    tags: ['new'],
+  },
+  {
+    id: 'deepseek-v4-flash-0731',
+    label: 'DeepSeek V4 Flash 0731',
+    shortCode: 'dsv4f7',
+    description: 'DeepSeek V4 Flash 0731 高速路由',
+    type: 'text',
+    vendor: ModelVendor.DEEPSEEK,
+    supportsTools: true,
+    tags: ['new'],
+  },
   {
     id: 'deepseek-v3.2',
     label: 'DeepSeek V3.2',
@@ -1319,6 +1457,35 @@ export const TEXT_MODELS: ModelConfig[] = applyBuiltInRecommendedScores([
   },
 ]);
 
+export const DEFAULT_HIDDEN_MODEL_IDS = new Set([
+  'gpt-5',
+  'gpt-5-all',
+  'gpt-5-chat-latest',
+  'gpt-5-gizmo*',
+  'gpt-5-mini',
+  'gpt-5-nano',
+  'gpt-5-pro',
+  'gpt-5-pro-all',
+  'gpt-5-pro-async',
+  'gpt-5-thinking-all',
+  'gpt-5.1',
+  'gpt-5.1-all',
+  'gpt-5.1-thinking',
+  'gpt-5.1-thinking-all',
+  'gpt-5.2',
+  'gpt-5.2-all',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+]);
+
+export function isDefaultModelHidden(modelId: string): boolean {
+  return DEFAULT_HIDDEN_MODEL_IDS.has(modelId.toLowerCase());
+}
+
+export const TEXT_MODELS: ModelConfig[] = BUILT_IN_TEXT_MODELS.filter(
+  (model) => !isDefaultModelHidden(model.id)
+);
+
 /**
  * 音频模型
  *
@@ -1397,6 +1564,7 @@ export function getStaticModelsByType(type: ModelType): ModelConfig[] {
 export function getStaticModelConfig(modelId: string): ModelConfig | undefined {
   return (
     ALL_MODELS.find((model) => model.id === modelId) ||
+    BUILT_IN_TEXT_MODELS.find((model) => model.id === modelId) ||
     HIDDEN_VIDEO_MODELS.find((model) => model.id === modelId)
   );
 }
@@ -1666,6 +1834,29 @@ const SEEDANCE_MODEL_IDS = [
   'seedance-1.0-lite',
 ];
 
+const SEEDANCE_20_MODEL_IDS = [
+  'doubao-seedance-2-0-260128',
+  'doubao-seedance-2-0-fast-260128',
+  'doubao-seedance-2-0-mini-260615',
+];
+
+const SEEDANCE_2_MODEL_IDS = [...SEEDANCE_20_MODEL_IDS, SEEDANCE_25_MODEL_ID];
+
+const SEEDANCE_25_DURATION_OPTIONS = Array.from({ length: 27 }, (_, index) => {
+  const value = String(index + 4);
+  return { value, label: `${value}秒` };
+});
+
+const SEEDANCE_25_RATIO_OPTIONS = [
+  { value: '16:9', label: '16:9 横屏' },
+  { value: '4:3', label: '4:3 横屏' },
+  { value: '1:1', label: '1:1 方形' },
+  { value: '3:4', label: '3:4 竖屏' },
+  { value: '9:16', label: '9:16 竖屏' },
+  { value: '21:9', label: '21:9 超宽屏' },
+  { value: 'adaptive', label: 'Auto' },
+];
+
 /** HappyHorse 视频模型 ID */
 const HAPPYHORSE_MODEL_IDS = [
   'happyhorse-1.0-i2v',
@@ -1681,10 +1872,16 @@ const SEEDREAM_IMAGE_MODEL_IDS = [
   'doubao-seedream-4-0-250828',
   'doubao-seedream-4-5-251128',
   'doubao-seedream-5-0-260128',
+  'doubao-seedream-5-0-pro-260628',
 ];
 
 /** GPT Image 2 模型 ID（支持扩展比例） */
-const GPT_IMAGE_2_MODEL_IDS = ['gpt-image-2-vip', 'gpt-image-2'];
+export const GPT_IMAGE_2_MODEL_IDS = [
+  'gpt-image-2-vip',
+  'gpt-image-2',
+  'gpt-image2-vip',
+  'gpt-image2',
+];
 
 /** 所有 GPT 图片模型 ID */
 const GPT_IMAGE_MODEL_IDS = [...GPT_IMAGE_2_MODEL_IDS];
@@ -1834,6 +2031,21 @@ export const VIDEO_PARAMS: ParamConfig[] = [
     compatibleTags: ['seedance'],
     modelType: 'video',
   },
+  // Seedance 2.0 时长参数（官方 JSON 接口：4-12 秒）
+  {
+    id: 'duration',
+    label: '视频时长',
+    shortLabel: '时长',
+    description: '生成视频的时长（秒）',
+    valueType: 'enum',
+    options: Array.from({ length: 9 }, (_, index) => {
+      const value = String(index + 4);
+      return { value, label: `${value}秒` };
+    }),
+    defaultValue: '5',
+    compatibleModels: SEEDANCE_2_MODEL_IDS,
+    modelType: 'video',
+  },
   // Seedance 分辨率参数（480p/720p/1080p）
   {
     id: 'size',
@@ -1849,6 +2061,93 @@ export const VIDEO_PARAMS: ParamConfig[] = [
     defaultValue: '720p',
     compatibleModels: SEEDANCE_MODEL_IDS,
     compatibleTags: ['seedance'],
+    modelType: 'video',
+  },
+  // Seedance 2.0 官方 JSON 接口将分辨率与比例作为独立字段。
+  {
+    id: 'size',
+    label: '视频分辨率',
+    shortLabel: '分辨率',
+    description: 'Seedance 2.0 resolution',
+    valueType: 'enum',
+    options: [
+      { value: '1080p', label: '1080p' },
+      { value: '720p', label: '720p' },
+      { value: '480p', label: '480p' },
+    ],
+    defaultValue: '720p',
+    compatibleModels: SEEDANCE_20_MODEL_IDS,
+    modelType: 'video',
+  },
+  {
+    id: 'ratio',
+    label: '视频比例',
+    shortLabel: '比例',
+    description: 'Seedance 2.0 ratio',
+    valueType: 'enum',
+    options: [
+      { value: '16:9', label: '16:9 横屏' },
+      { value: '4:3', label: '4:3 横屏' },
+      { value: '1:1', label: '1:1 方形' },
+      { value: '3:4', label: '3:4 竖屏' },
+      { value: '9:16', label: '9:16 竖屏' },
+      { value: '21:9', label: '21:9 超宽' },
+      { value: 'adaptive', label: '自适应' },
+    ],
+    defaultValue: '16:9',
+    compatibleModels: SEEDANCE_2_MODEL_IDS,
+    modelType: 'video',
+  },
+  {
+    id: 'generate_audio',
+    label: '生成音频',
+    shortLabel: '音频',
+    description: '是否为 Seedance 2.0 生成同步音频',
+    valueType: 'enum',
+    options: [
+      { value: 'true', label: '开启' },
+      { value: 'false', label: '关闭' },
+    ],
+    defaultValue: 'true',
+    compatibleModels: SEEDANCE_2_MODEL_IDS,
+    modelType: 'video',
+  },
+  {
+    id: 'watermark',
+    label: '水印',
+    shortLabel: '水印',
+    description: '是否添加 Seedance 2.0 水印',
+    valueType: 'enum',
+    options: [
+      { value: 'true', label: '开启' },
+      { value: 'false', label: '关闭' },
+    ],
+    defaultValue: 'false',
+    compatibleModels: SEEDANCE_2_MODEL_IDS,
+    modelType: 'video',
+  },
+  {
+    id: 'seed',
+    label: '随机种子',
+    shortLabel: 'Seed',
+    description: 'Seedance 2.0 seed，留空则由上游决定',
+    valueType: 'number',
+    step: 1,
+    integer: true,
+    compatibleModels: SEEDANCE_20_MODEL_IDS,
+    modelType: 'video',
+  },
+  {
+    id: 'camera_fixed',
+    label: '固定镜头',
+    shortLabel: '镜头',
+    description: 'Seedance 2.0 camera_fixed',
+    valueType: 'enum',
+    options: [
+      { value: 'true', label: '开启' },
+      { value: 'false', label: '关闭' },
+    ],
+    compatibleModels: SEEDANCE_20_MODEL_IDS,
     modelType: 'video',
   },
   // Seedance 宽高比参数
@@ -2243,6 +2542,21 @@ export const AUDIO_PARAMS: ParamConfig[] = [
     shortLabel: '风格',
     description: '可选，使用逗号分隔多个风格标签',
     valueType: 'string',
+    compatibleModels: ['suno_music'],
+    compatibleTags: ['suno', 'audio', 'music'],
+    modelType: 'audio',
+  },
+  {
+    id: 'instrumental',
+    label: '纯音乐',
+    shortLabel: '纯音乐',
+    description: '只生成乐器演奏，不生成演唱人声',
+    valueType: 'enum',
+    options: [
+      { value: 'false', label: '可包含人声' },
+      { value: 'true', label: '仅纯音乐' },
+    ],
+    defaultValue: 'false',
     compatibleModels: ['suno_music'],
     compatibleTags: ['suno', 'audio', 'music'],
     modelType: 'audio',
@@ -2674,9 +2988,10 @@ export function getCompatibleParams(modelId: string): ParamConfig[] {
   }
   // 这里不再自动按 doubao 分类，避免与 seedream 重复；若需要可通过 tags 显式声明
 
-  return ALL_PARAMS.filter((param) => {
+  const compatibleParams = ALL_PARAMS.filter((param) => {
     // 检查模型类型是否匹配
     if (param.modelType !== modelConfig.type) return false;
+    if (isSeedance2ModelId(modelId) && param.compatibleTags?.includes('seedance')) return false;
     // 检查标签兼容（可选）
     const tagMatched = param.compatibleTags
       ? param.compatibleTags.some((tag) => modelTags.has(tag.toLowerCase()))
@@ -2686,6 +3001,28 @@ export function getCompatibleParams(modelId: string): ParamConfig[] {
       param.compatibleModels.includes(modelId) ||
       (param.compatibleModels.length === 0 && !param.compatibleTags?.length);
     return idMatched || tagMatched;
+  });
+
+  if (!isSeedance25ModelId(modelId)) {
+    return compatibleParams;
+  }
+
+  return compatibleParams.map((param) => {
+    if (param.id === 'duration') {
+      return {
+        ...param,
+        options: SEEDANCE_25_DURATION_OPTIONS,
+        defaultValue: '8',
+      };
+    }
+    if (param.id === 'ratio') {
+      return {
+        ...param,
+        options: SEEDANCE_25_RATIO_OPTIONS,
+        defaultValue: '16:9',
+      };
+    }
+    return param;
   });
 }
 

@@ -7,6 +7,7 @@
 import { CryptoUtils } from './crypto-utils';
 import { DRAWNIX_SETTINGS_KEY } from '../constants/storage';
 import { configIndexedDBWriter } from './config-indexeddb-writer';
+import { isTuziEmbeddedMode } from '../services/tuzi-embedded-config';
 import type { GeminiConfig } from './gemini-api/types';
 import type { VideoAPIConfig } from './config-indexeddb-writer';
 import type { ProviderPricingCache } from './model-pricing-types';
@@ -20,6 +21,7 @@ import {
   type InvocationPreset,
   type InvocationRouteCredentialStatus,
   type ModelRef,
+  type ProviderCatalogManualBinding,
   type ProviderAuthType,
   type ProviderCapabilities,
   type ProviderCatalog,
@@ -56,6 +58,7 @@ export {
   type InvocationPreset,
   type InvocationRouteCredentialStatus,
   type ModelRef,
+  type ProviderCatalogManualBinding,
   type ProviderAuthType,
   type ProviderCapabilities,
   type ProviderCatalog,
@@ -600,6 +603,115 @@ class SettingsManager {
     };
   }
 
+  private normalizeModelType(value: unknown): ModelType | null {
+    return value === 'image' ||
+      value === 'video' ||
+      value === 'text' ||
+      value === 'audio'
+      ? value
+      : null;
+  }
+
+  private normalizeManualBindingConfidence(
+    value: unknown
+  ): ProviderCatalogManualBinding['confidence'] {
+    return value === 'high' || value === 'medium' || value === 'low'
+      ? value
+      : 'high';
+  }
+
+  private normalizeManualBindingBaseUrlStrategy(
+    value: unknown
+  ): ProviderCatalogManualBinding['baseUrlStrategy'] {
+    return value === 'trim-v1' || value === 'preserve' ? value : undefined;
+  }
+
+  private normalizeManualBindingMetadata(
+    value: unknown
+  ): Record<string, unknown> | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined;
+    }
+
+    return this.cloneValue(value as Record<string, unknown>);
+  }
+
+  private normalizeProviderCatalogManualBindings(
+    bindings: unknown
+  ): ProviderCatalogManualBinding[] {
+    if (!Array.isArray(bindings)) {
+      return [];
+    }
+
+    const result = new Map<string, ProviderCatalogManualBinding>();
+
+    bindings.forEach((binding) => {
+      if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
+        return;
+      }
+
+      const draft = binding as Partial<ProviderCatalogManualBinding>;
+      const id = typeof draft.id === 'string' ? draft.id.trim() : '';
+      const modelId =
+        typeof draft.modelId === 'string' ? draft.modelId.trim() : '';
+      const operation = this.normalizeModelType(draft.operation);
+      const protocol =
+        typeof draft.protocol === 'string' ? draft.protocol.trim() : '';
+      const requestSchema =
+        typeof draft.requestSchema === 'string'
+          ? draft.requestSchema.trim()
+          : '';
+      const responseSchema =
+        typeof draft.responseSchema === 'string'
+          ? draft.responseSchema.trim()
+          : '';
+      const submitPath =
+        typeof draft.submitPath === 'string' ? draft.submitPath.trim() : '';
+
+      if (
+        !id ||
+        !modelId ||
+        !operation ||
+        !protocol ||
+        !requestSchema ||
+        !responseSchema ||
+        !submitPath
+      ) {
+        return;
+      }
+
+      const pollPathTemplate =
+        typeof draft.pollPathTemplate === 'string' &&
+        draft.pollPathTemplate.trim()
+          ? draft.pollPathTemplate.trim()
+          : undefined;
+      const priority =
+        typeof draft.priority === 'number' && Number.isFinite(draft.priority)
+          ? draft.priority
+          : 900;
+
+      result.set(id, {
+        id,
+        modelId,
+        operation,
+        protocol,
+        requestSchema,
+        responseSchema,
+        submitPath,
+        baseUrlStrategy: this.normalizeManualBindingBaseUrlStrategy(
+          draft.baseUrlStrategy
+        ),
+        pollPathTemplate,
+        priority,
+        confidence: this.normalizeManualBindingConfidence(draft.confidence),
+        source: 'manual',
+        metadata: this.normalizeManualBindingMetadata(draft.metadata),
+      });
+    });
+
+    return [...result.values()];
+  }
+
   private buildLegacyDefaultProfile(
     gemini: GeminiSettings,
     profile?: Partial<ProviderProfile>
@@ -970,6 +1082,9 @@ class SettingsManager {
               (id): id is string => typeof id === 'string'
             )
           : [],
+        manualBindings: this.normalizeProviderCatalogManualBindings(
+          draft.manualBindings
+        ),
         sourceBaseUrl:
           typeof draft.sourceBaseUrl === 'string'
             ? draft.sourceBaseUrl
@@ -1494,6 +1609,16 @@ class SettingsManager {
     try {
       const urlParams = new URLSearchParams(window.location.search);
 
+      if (isTuziEmbeddedMode()) {
+        if (urlParams.has('settings') || urlParams.has('apiKey')) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('settings');
+          url.searchParams.delete('apiKey');
+          window.history.replaceState({}, document.title, url.toString());
+        }
+        return;
+      }
+
       // 处理settings参数
       const settingsParam = urlParams.get('settings');
       if (settingsParam) {
@@ -1871,6 +1996,21 @@ class SettingsManager {
     );
   }
 
+  private getEmbeddedManagedProvider(): ProviderProfile | null {
+    if (!isTuziEmbeddedMode()) return null;
+    const managed = this.settings.providerProfiles.filter(
+      (profile) =>
+        profile.id.startsWith('tuzi-managed-') &&
+        profile.enabled !== false &&
+        Boolean(profile.apiKey?.trim())
+    );
+    return (
+      managed.find((profile) => profile.pricingGroup === 'default') ||
+      managed[0] ||
+      null
+    );
+  }
+
   private getProviderCatalogById(
     profileId?: string | null
   ): ProviderCatalog | null {
@@ -1917,6 +2057,66 @@ class SettingsManager {
     return catalog.discoveredModels.filter(
       (model) => model.type === routeType && selectedIds.has(model.id)
     );
+  }
+
+  private getUniqueManualBindingProfileId(
+    routeType: ModelType,
+    modelId?: string | null
+  ): string | null {
+    const normalizedModelId = normalizeNullableString(modelId);
+    if (!normalizedModelId) {
+      return null;
+    }
+
+    const enabledProfileIds = new Set(
+      this.settings.providerProfiles
+        .filter(
+          (profile) =>
+            profile.id !== LEGACY_DEFAULT_PROVIDER_PROFILE_ID &&
+            profile.enabled !== false
+        )
+        .map((profile) => profile.id)
+    );
+    const matchingProfileIds = new Set<string>();
+
+    for (const catalog of this.settings.providerCatalogs) {
+      if (!enabledProfileIds.has(catalog.profileId)) {
+        continue;
+      }
+
+      const hasSelectedModel =
+        catalog.selectedModelIds.includes(normalizedModelId);
+      const hasSelectedModelType = catalog.discoveredModels.some(
+        (model) => model.id === normalizedModelId && model.type === routeType
+      );
+      const hasManualBinding = (catalog.manualBindings || []).some(
+        (binding) =>
+          binding.modelId === normalizedModelId &&
+          binding.operation === routeType &&
+          binding.source === 'manual'
+      );
+      const reusableCustomHttpBindings = (catalog.manualBindings || []).filter(
+        (binding) =>
+          binding.operation === routeType &&
+          binding.source === 'manual' &&
+          binding.protocol === 'custom-http' &&
+          binding.requestSchema === 'custom-http' &&
+          Boolean(binding.metadata?.manualHttp)
+      );
+      const hasUniqueReusableCustomHttpBinding =
+        hasSelectedModelType && reusableCustomHttpBindings.length === 1;
+
+      if (
+        hasSelectedModel &&
+        (hasManualBinding || hasUniqueReusableCustomHttpBinding)
+      ) {
+        matchingProfileIds.add(catalog.profileId);
+      }
+    }
+
+    return matchingProfileIds.size === 1
+      ? Array.from(matchingProfileIds)[0]
+      : null;
   }
 
   public getActiveInvocationPreset(): InvocationPreset | null {
@@ -2006,6 +2206,12 @@ class SettingsManager {
           );
     const normalizedRequestedModelId = requestedModelRef?.modelId || null;
     const normalizedPresetModelId = presetModelRef?.modelId || null;
+    const manualBindingProfileId = requestedModelRef?.profileId
+      ? null
+      : this.getUniqueManualBindingProfileId(
+          routeType,
+          normalizedRequestedModelId
+        );
     const requestedStaticModel = normalizedRequestedModelId
       ? getModelConfig(normalizedRequestedModelId)
       : null;
@@ -2014,11 +2220,20 @@ class SettingsManager {
       Boolean(requestedModelRef?.profileId) ||
       normalizedRequestedModelId === normalizedPresetModelId ||
       !requestedStaticModel;
-    const profile = this.getProviderProfileById(
+    let profile = this.getProviderProfileById(
       requestedModelRef?.profileId ||
+        manualBindingProfileId ||
         (shouldInheritPresetProfile ? presetModelRef?.profileId : null) ||
         null
     );
+    const hasExplicitProfile = Boolean(requestedModelRef?.profileId);
+    if (
+      !hasExplicitProfile &&
+      isTuziEmbeddedMode() &&
+      (!profile || !profile.apiKey?.trim())
+    ) {
+      profile = this.getEmbeddedManagedProvider();
+    }
     const profileModels = profile
       ? this.getSelectedModelsForProfile(profile.id, routeType)
       : [];

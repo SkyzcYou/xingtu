@@ -10,7 +10,12 @@ import {
 } from './image-size-quality-resolver';
 import { asyncImageAPIService } from '../async-image-api-service';
 import { XINGTU_LOGIN_PROVIDER_PROFILE_ID } from '../../utils/settings-manager';
+import {
+  normalizeTuziGPTImageModelId,
+  shouldRetryTuziGPTImageAlias,
+} from './image-request-schemas';
 import { sendAdapterRequest } from './context';
+import { readProviderResponseJson } from '../provider-routing';
 import { registerModelAdapter } from './registry';
 import type {
   AdapterContext,
@@ -24,6 +29,25 @@ const GPT_IMAGE_BACKGROUND_VALUES = new Set(['transparent', 'opaque', 'auto']);
 const GPT_IMAGE_MODERATION_VALUES = new Set(['low', 'auto']);
 const GPT_IMAGE_INPUT_FIDELITY_VALUES = new Set(['high', 'low']);
 const GPT_IMAGE_RESPONSE_FORMAT_VALUES = new Set(['url', 'b64_json']);
+const IMAGE_DIMENSIONS_TIMEOUT_MS = 15_000;
+
+function isTuziProviderBaseUrl(baseUrl?: string | null): boolean {
+  const normalized = (baseUrl || '').trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  try {
+    const url = new URL(
+      /^[a-z][a-z\d+\-.]*:\/\//i.test(normalized)
+        ? normalized
+        : `https://${normalized}`
+    );
+    return url.hostname === 'tu-zi.com' || url.hostname.endsWith('.tu-zi.com');
+  } catch {
+    return false;
+  }
+}
 
 function getStringParam(
   params: Record<string, unknown> | undefined,
@@ -352,6 +376,49 @@ function normalizeImageValue(
   return normalizeImageDataUrl(value, mimeType);
 }
 
+function normalizeImageDimension(value: unknown): number | undefined {
+  const dimension =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && /^\d+$/.test(value.trim())
+      ? Number(value)
+      : NaN;
+
+  return Number.isSafeInteger(dimension) && dimension > 0
+    ? dimension
+    : undefined;
+}
+
+function readImageDimensions(
+  value: unknown
+): { width: number; height: number } | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const width = normalizeImageDimension(record.width);
+  const height = normalizeImageDimension(record.height);
+  if (width && height) {
+    return { width, height };
+  }
+
+  if (typeof record.size !== 'string') {
+    return undefined;
+  }
+
+  const match = record.size.trim().match(/^(\d+)\s*[x×]\s*(\d+)$/i);
+  if (!match) {
+    return undefined;
+  }
+
+  const sizeWidth = normalizeImageDimension(match[1]);
+  const sizeHeight = normalizeImageDimension(match[2]);
+  return sizeWidth && sizeHeight && sizeWidth > 32 && sizeHeight > 32
+    ? { width: sizeWidth, height: sizeHeight }
+    : undefined;
+}
+
 export function parseGPTImageResponse(
   response: unknown,
   fallbackFormat?: string
@@ -364,21 +431,28 @@ export function parseGPTImageResponse(
     typeof data?.output_format === 'string'
       ? data.output_format
       : fallbackFormat;
+  const responseDimensions = readImageDimensions(response);
 
   if (Array.isArray(data?.data)) {
-    const urls = data.data
-      .map((item) =>
-        normalizeImageValue(item.b64_json || item.url, formatHint || 'png')
-      )
-      .filter(Boolean) as string[];
-    const firstUrl = urls[0];
+    const images = data.data.flatMap((item) => {
+      const url = normalizeImageValue(
+        item.b64_json || item.url,
+        formatHint || 'png'
+      );
+      return url
+        ? [{ url, dimensions: readImageDimensions(item) || responseDimensions }]
+        : [];
+    });
+    const firstImage = images[0];
 
-    if (firstUrl) {
-      const format = getFileExtension(firstUrl) || formatHint || 'png';
+    if (firstImage) {
+      const urls = images.map((item) => item.url);
+      const format = getFileExtension(firstImage.url) || formatHint || 'png';
       return {
-        url: firstUrl,
+        url: firstImage.url,
         urls,
         format: format === 'bin' ? formatHint || 'png' : format,
+        ...(firstImage.dimensions || {}),
         raw: response,
       };
     }
@@ -387,8 +461,67 @@ export function parseGPTImageResponse(
   throw new Error('GPT Image API 未返回有效的图片数据');
 }
 
+export async function resolveGeneratedImageDimensions(
+  result: ImageGenerationResult,
+  signal?: AbortSignal
+): Promise<ImageGenerationResult> {
+  const width = normalizeImageDimension(result.width);
+  const height = normalizeImageDimension(result.height);
+  if (width && height) {
+    return result;
+  }
+
+  if (typeof Image === 'undefined' || !result.url || signal?.aborted) {
+    return result;
+  }
+
+  const dimensions = await new Promise<
+    { width: number; height: number } | undefined
+  >((resolve) => {
+    const image = new Image();
+    let settled = false;
+
+    const finish = (value?: { width: number; height: number }) => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', handleAbort);
+      image.onload = null;
+      image.onerror = null;
+      if (!value) {
+        image.src = '';
+      }
+      resolve(value);
+    };
+    const handleAbort = () => finish();
+    const timeoutId = globalThis.setTimeout(
+      () => finish(),
+      IMAGE_DIMENSIONS_TIMEOUT_MS
+    );
+
+    image.referrerPolicy = 'no-referrer';
+    image.decoding = 'async';
+    image.onload = () => {
+      const actualWidth = normalizeImageDimension(image.naturalWidth);
+      const actualHeight = normalizeImageDimension(image.naturalHeight);
+      finish(
+        actualWidth && actualHeight
+          ? { width: actualWidth, height: actualHeight }
+          : undefined
+      );
+    };
+    image.onerror = () => finish();
+    signal?.addEventListener('abort', handleAbort, { once: true });
+    image.src = result.url;
+  });
+
+  return dimensions ? { ...result, ...dimensions } : result;
+}
+
 async function readErrorMessage(response: Response): Promise<string> {
-  const data = await response.json().catch(() => null);
+  const data = await readProviderResponseJson<Record<string, any>>(
+    response
+  ).catch(() => null);
   if (typeof data?.error === 'string') {
     return data.error;
   }
@@ -419,31 +552,63 @@ export const gptImageAdapter: ImageModelAdapter = {
   ],
   defaultModel: 'gpt-image-2',
   async generateImage(context, request) {
+    const requestModel =
+      context.binding?.modelId || request.modelRef?.modelId || request.model;
+    const isTuziRequest = isTuziProviderBaseUrl(
+      context.provider?.baseUrl || context.baseUrl
+    );
+    console.debug('[gpt-image-adapter] generateImage called', {
+      bindingProtocol: context.binding?.protocol,
+      bindingRequestSchema: context.binding?.requestSchema,
+      bindingSubmitPath: context.binding?.submitPath,
+      generationMode: request.generationMode,
+      hasReferenceImages: !!(
+        request.referenceImages && request.referenceImages.length > 0
+      ),
+      referenceImagesCount: request.referenceImages?.length ?? 0,
+      hasMaskImage: !!request.maskImage,
+    });
     const isEditRequest = isGPTImageEditRequest(
-      request,
+      { ...request, model: requestModel },
       context.binding?.requestSchema
     );
-    const editFormData = isEditRequest
-      ? await buildGPTImageEditFormData(request, context.fetcher)
-      : null;
-    const generationBody = isEditRequest
-      ? null
-      : buildGPTImageGenerationBody(request);
-    const outputFormat = editFormData
-      ? (editFormData.get('output_format') as string | null) || undefined
-      : typeof generationBody?.output_format === 'string'
-      ? generationBody.output_format
-      : undefined;
-
+    console.debug('[gpt-image-adapter] isEditRequest:', isEditRequest);
+    const buildRequestBody = async (model: string | undefined) => {
+      const normalizedRequest = { ...request, model };
+      return isEditRequest
+        ? await buildGPTImageEditFormData(normalizedRequest, context.fetcher)
+        : JSON.stringify(buildGPTImageGenerationBody(normalizedRequest));
+    };
+    let requestBody = await buildRequestBody(requestModel);
+    const outputFormat = isEditRequest
+      ? (requestBody as FormData).get('output_format')?.toString()
+      : (() => {
+          const body = JSON.parse(requestBody as string) as Record<
+            string,
+            unknown
+          >;
+          return typeof body.output_format === 'string'
+            ? body.output_format
+            : undefined;
+        })();
+    const sendRequest = (body: BodyInit) =>
+      sendAdapterRequest(context, {
+        path: resolveGPTImagePath(context, isEditRequest),
+        method: 'POST',
+        headers: isEditRequest
+          ? undefined
+          : { 'Content-Type': 'application/json' },
+        body,
+      });
     if (shouldUseXingtuAccountAsyncImage(context)) {
       if (!request.model) {
         throw new Error('GPT Image 请求缺少模型 ID');
       }
       if (isEditRequest) {
-        editFormData?.append('async', 'true');
+        (requestBody as FormData).append('async', 'true');
       }
       const result = await asyncImageAPIService.generateXingtuBackendJobWithPolling(
-        editFormData || JSON.stringify(generationBody),
+        requestBody,
         request.model,
         {
           interval: 5000,
@@ -461,23 +626,27 @@ export const gptImageAdapter: ImageModelAdapter = {
       return { url, urls, format: format || outputFormat || 'png', raw: result };
     }
 
-    const response = await sendAdapterRequest(context, {
-      path: resolveGPTImagePath(context, isEditRequest),
-      method: 'POST',
-      headers: isEditRequest
-        ? undefined
-        : {
-            'Content-Type': 'application/json',
-          },
-      body: editFormData || JSON.stringify(generationBody),
-    });
+    let response = await sendRequest(requestBody);
+
+    if (
+      isTuziRequest &&
+      (await shouldRetryTuziGPTImageAlias(response, requestModel))
+    ) {
+      requestBody = await buildRequestBody(
+        normalizeTuziGPTImageModelId(requestModel)
+      );
+      response = await sendRequest(requestBody);
+    }
 
     if (!response.ok) {
       throw new Error(await readErrorMessage(response));
     }
 
-    const result = await response.json();
-    return parseGPTImageResponse(result, outputFormat);
+    const result = await readProviderResponseJson(response);
+    return resolveGeneratedImageDimensions(
+      parseGPTImageResponse(result, outputFormat),
+      context.signal
+    );
   },
 };
 

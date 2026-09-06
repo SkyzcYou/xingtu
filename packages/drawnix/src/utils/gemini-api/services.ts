@@ -29,6 +29,8 @@ import {
 import { getDefaultImageModel } from '../../constants/model-config';
 import {
   providerTransport,
+  readProviderResponseJson,
+  readProviderResponseText,
   resolveInvocationPlanFromRoute,
   type ResolvedProviderContext,
   type ProviderAuthStrategy,
@@ -191,6 +193,10 @@ export async function generateImageWithGemini(
     count?: number;
     model?: string; // 支持指定模型
     modelRef?: ModelRef | null;
+    requestId?: string;
+    signal?: AbortSignal;
+    onSubmissionAttempt?: () => void | Promise<void>;
+    onResponse?: (response: Response) => void | Promise<void>;
   } = {}
 ): Promise<any> {
   // 等待设置管理器初始化完成
@@ -222,6 +228,10 @@ async function generateImageDirect(
     count?: number;
     model?: string;
     modelRef?: ModelRef | null;
+    requestId?: string;
+    signal?: AbortSignal;
+    onSubmissionAttempt?: () => void | Promise<void>;
+    onResponse?: (response: Response) => void | Promise<void>;
   },
   modelName: string,
   routeModel?: string | ModelRef | null
@@ -240,8 +250,9 @@ async function generateImageDirect(
       ? options.image
       : [options.image]
     : undefined;
+  const submitPath = runtimeConfig.binding?.submitPath || '/images/generations';
   const logId = startLLMApiLog({
-    endpoint: '/images/generations',
+    endpoint: submitPath,
     model: modelName,
     taskType: 'image',
     prompt,
@@ -281,6 +292,12 @@ async function generateImageDirect(
         ],
         {
           stream: false,
+          requestId: options.requestId,
+          signal: options.signal,
+          ...(options.onSubmissionAttempt
+            ? { onSubmissionAttempt: options.onSubmissionAttempt }
+            : {}),
+          onResponse: options.onResponse,
           generationConfig: {
             responseModalities: ['IMAGE'],
             imageConfig: {
@@ -310,8 +327,9 @@ async function generateImageDirect(
       return normalizedResult;
     }
 
-    const headers = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      ...(options.requestId ? { 'X-Request-Id': options.requestId } : {}),
     };
 
     // 构建请求体 - 强调生成图片
@@ -349,19 +367,25 @@ async function generateImageDirect(
       data.n = Math.min(Math.max(Math.round(options.count), 1), 10);
     }
 
+    await options.onSubmissionAttempt?.();
     const response = await providerTransport.send(
       buildProviderContextFromConfig(validatedConfig),
       {
-        path: '/images/generations',
+        path: validatedConfig.binding?.submitPath || '/images/generations',
+        baseUrlStrategy: validatedConfig.binding?.baseUrlStrategy,
         method: 'POST',
         headers,
         body: JSON.stringify(data),
+        signal: options.signal,
         timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
+        requestId: options.requestId,
+        controlledResponseBody: true,
+        onResponse: options.onResponse,
       }
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await readProviderResponseText(response);
       console.error('[ImageAPI] Request failed:', response.status, errorText);
       const duration = Date.now() - startTime;
       failLLMApiLog(logId, {
@@ -377,7 +401,9 @@ async function generateImageDirect(
       throw error;
     }
 
-    const result = await response.json();
+    const result = await readProviderResponseJson<Record<string, any>>(
+      response
+    );
     const duration = Date.now() - startTime;
 
     // 提取结果 URL
@@ -642,7 +668,7 @@ export async function sendChatWithGemini(
         signal
       );
     } else {
-      response = await callApiWithRetry(validatedConfig, messages);
+      response = await callApiWithRetry(validatedConfig, messages, signal);
       resultText = response.choices?.[0]?.message?.content || '';
     }
 

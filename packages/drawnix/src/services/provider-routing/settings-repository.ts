@@ -25,6 +25,7 @@ import {
 } from '../../utils/settings-manager';
 import { InvocationPlanner } from './invocation-planner';
 import { inferBindingsForProviderCatalog } from './binding-inference';
+import { isTuziCompatibleBaseUrl } from './tuzi-api-endpoints';
 import { modelPricingService } from '../../utils/model-pricing-service';
 import type {
   InvocationPlan,
@@ -35,6 +36,7 @@ import type {
   ProviderModelBinding,
   ProviderProfileSnapshot,
 } from './types';
+import type { ProviderCatalogManualBinding } from '../../utils/settings-types';
 
 export interface SettingsInvocationPlannerOptions {
   includeLegacyProfile?: boolean;
@@ -68,22 +70,7 @@ function inferProviderTypeFromBaseUrl(
 }
 
 function isTuziBaseUrl(baseUrl: string): boolean {
-  const normalizedBaseUrl = baseUrl.trim().toLowerCase();
-  if (!normalizedBaseUrl) {
-    return false;
-  }
-
-  try {
-    const url = new URL(
-      /^[a-z][a-z\d+\-.]*:\/\//i.test(normalizedBaseUrl)
-        ? normalizedBaseUrl
-        : `https://${normalizedBaseUrl}`
-    );
-    const hostname = url.hostname.toLowerCase();
-    return hostname === 'tu-zi.com' || hostname.endsWith('.tu-zi.com');
-  } catch {
-    return false;
-  }
+  return isTuziCompatibleBaseUrl(baseUrl);
 }
 
 function inferAuthType(
@@ -273,6 +260,67 @@ function groupBindingsByModel(
   return grouped;
 }
 
+function inheritUniqueCustomHttpBinding(
+  bindings: ProviderModelBinding[],
+  modelRef: NormalizedModelRef,
+  operation: ModelType
+): ProviderModelBinding | null {
+  const catalog = providerCatalogsSettings
+    .get()
+    .find((item) => item.profileId === modelRef.profileId);
+  const isSelectedModel =
+    catalog?.selectedModelIds.includes(modelRef.modelId) &&
+    catalog.discoveredModels.some(
+      (model) => model.id === modelRef.modelId && model.type === operation
+    );
+  if (!isSelectedModel) {
+    return null;
+  }
+
+  const reusableBindings = bindings.filter(
+    (binding) =>
+      binding.profileId === modelRef.profileId &&
+      binding.operation === operation &&
+      binding.source === 'manual' &&
+      binding.protocol === 'custom-http' &&
+      binding.requestSchema === 'custom-http' &&
+      Boolean(binding.metadata?.manualHttp)
+  );
+  if (reusableBindings.length !== 1) {
+    return null;
+  }
+
+  const template = reusableBindings[0];
+  return {
+    ...template,
+    id: `${modelRef.profileId}:${modelRef.modelId}:${operation}:manual:inherited-custom-http`,
+    modelId: modelRef.modelId,
+    source: 'manual',
+  };
+}
+
+function toManualProviderModelBinding(
+  profileId: string,
+  binding: ProviderCatalogManualBinding
+): ProviderModelBinding {
+  return {
+    id: binding.id,
+    profileId,
+    modelId: binding.modelId,
+    operation: binding.operation,
+    protocol: binding.protocol,
+    requestSchema: binding.requestSchema,
+    responseSchema: binding.responseSchema,
+    submitPath: binding.submitPath,
+    baseUrlStrategy: binding.baseUrlStrategy,
+    pollPathTemplate: binding.pollPathTemplate,
+    priority: binding.priority,
+    confidence: binding.confidence,
+    source: 'manual',
+    metadata: binding.metadata,
+  };
+}
+
 export function listSettingsProviderProfiles(
   options: SettingsInvocationPlannerOptions = {}
 ): ProviderProfileSnapshot[] {
@@ -300,11 +348,17 @@ export function listSettingsModelBindings(
       return [];
     }
     const pricingCache = modelPricingService.getCache(catalog.profileId);
-    return inferBindingsForProviderCatalog(
+    const inferredBindings = inferBindingsForProviderCatalog(
       profile,
       catalog.discoveredModels,
       pricingCache?.modelEndpoints ?? null
     );
+
+    const manualBindings = (catalog.manualBindings || []).map((binding) =>
+      toManualProviderModelBinding(catalog.profileId, binding)
+    );
+
+    return [...inferredBindings, ...manualBindings];
   });
   const legacyBindings =
     options.includeLegacyProfile === false
@@ -329,6 +383,9 @@ export function listSettingsModelBindings(
 export function createSettingsInvocationPlannerRepositories(
   options: SettingsInvocationPlannerOptions = {}
 ): InvocationPlannerRepositories {
+  const bindings = listSettingsModelBindings(options);
+  const groupedBindings = groupBindingsByModel(bindings);
+
   return {
     getProviderProfile(profileId: string) {
       return (
@@ -338,14 +395,22 @@ export function createSettingsInvocationPlannerRepositories(
       );
     },
     getModelBindings(modelRef: NormalizedModelRef, operation: ModelType) {
-      const groupedBindings = groupBindingsByModel(
-        listSettingsModelBindings(options)
-      );
-      return (
+      const directBindings =
         groupedBindings.get(
           `${modelRef.profileId}:${modelRef.modelId}:${operation}`
-        ) || []
+        ) || [];
+      if (directBindings.some((binding) => binding.source === 'manual')) {
+        return directBindings;
+      }
+
+      const inheritedBinding = inheritUniqueCustomHttpBinding(
+        bindings,
+        modelRef,
+        operation
       );
+      return inheritedBinding
+        ? [inheritedBinding, ...directBindings]
+        : directBindings;
     },
   };
 }

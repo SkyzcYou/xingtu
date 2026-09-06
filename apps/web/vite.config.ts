@@ -1,8 +1,7 @@
 /// <reference types='vitest' />
-import { defineConfig, Plugin } from 'vite';
+import { defineConfig, Plugin, type ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
-import type { OutputAsset, OutputBundle, OutputChunk } from 'rollup';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -11,6 +10,11 @@ import { visualizer } from 'rollup-plugin-visualizer';
 
 const require = createRequire(import.meta.url);
 const workspaceRoot = path.resolve(__dirname, '../..');
+const devCacheNamespace = crypto
+  .createHash('sha256')
+  .update(workspaceRoot)
+  .digest('hex')
+  .slice(0, 8);
 
 // Read version from public/version.json
 const versionPath = path.resolve(__dirname, 'public/version.json');
@@ -49,6 +53,22 @@ const IDLE_PREFETCH_DEFAULTS = [
 type IdlePrefetchGroup = (typeof IDLE_PREFETCH_GROUPS)[number];
 
 type ManifestEntry = { url: string; revision: string };
+type OutputAsset = {
+  type: 'asset';
+  fileName: string;
+  source?: string | Uint8Array;
+};
+type OutputChunk = {
+  type: 'chunk';
+  fileName: string;
+  code: string;
+  facadeModuleId: string | null;
+  modules: Record<string, unknown>;
+  referencedFiles: string[];
+  imports: string[];
+  dynamicImports: string[];
+};
+type OutputBundle = Record<string, OutputAsset | OutputChunk>;
 type ViteOutputChunk = OutputChunk & {
   viteMetadata?: {
     importedCss?: Set<string>;
@@ -96,6 +116,106 @@ const PRECACHE_ALWAYS_INCLUDE = new Set([
   '/manifest.json',
   '/favicon.ico',
 ]);
+const DEV_FRAME_ANCESTORS =
+  "'self' localhost:* 127.0.0.1:* http://192.168.50.225:* https://api.tu-zi.com";
+const DEV_SERVER_PORT = Number(
+  process.env.OPENTU_PORT || process.env.VITE_PORT || process.env.PORT || 7200
+);
+const TUZI_DEV_PROXY_PREFIX = '/__opentu_tuzi_proxy__';
+// Browser requests include X-Request-Id, which Tuzi's public CORS preflight does
+// not currently allow. Keep the same-origin proxy on for local development;
+// VITE_TUZI_DEV_PROXY=0 remains the explicit escape hatch.
+const TUZI_DEV_PROXY_ENABLED = process.env.VITE_TUZI_DEV_PROXY !== '0';
+const TUZI_DEV_PROXY_LOCAL_TARGET = process.env.VITE_TUZI_DEV_PROXY_TARGET;
+const TUZI_DEV_PROXY_TARGETS: Readonly<Record<string, string>> = {
+  api: TUZI_DEV_PROXY_LOCAL_TARGET || 'https://api.tu-zi.com',
+  apius: 'https://apius.tu-zi.com',
+  apicdn: 'https://apicdn.tu-zi.com',
+  sydney: 'https://api.sydney-ai.com',
+  ourzhishi: 'https://api.ourzhishi.top',
+  'ourzhishi-sz': 'https://apisz.ourzhishi.top',
+};
+const TUZI_LOCAL_GATEWAY_TARGET =
+  process.env.VITE_TUZI_LOCAL_GATEWAY_TARGET || 'http://127.0.0.1:4173';
+const LAYER_DECOMPOSER_PROXY_TARGET =
+  process.env.VITE_LAYER_DECOMPOSER_PROXY_TARGET ||
+  'http://127.0.0.1:8090';
+
+function createTuziDevProxy(): Record<string, ProxyOptions> | undefined {
+  if (!TUZI_DEV_PROXY_ENABLED) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Object.entries(TUZI_DEV_PROXY_TARGETS).map(([routeKey, routeSource]) => {
+      const routePrefix = `${TUZI_DEV_PROXY_PREFIX}/${routeKey}`;
+      return [
+        routePrefix,
+        {
+          target: routeSource,
+          changeOrigin: true,
+          secure: true,
+          rewrite: (requestPath: string) =>
+            requestPath.slice(routePrefix.length) || '/',
+        },
+      ];
+    })
+  );
+}
+
+function createLayerDecomposerProxy(): Record<string, ProxyOptions> {
+  return {
+    '/api/layer-decompositions': {
+      target: LAYER_DECOMPOSER_PROXY_TARGET,
+      changeOrigin: true,
+      secure: false,
+    },
+  };
+}
+
+function createTuziLocalGatewayProxy(): Record<string, ProxyOptions> {
+  const paths = [
+    '/api',
+    '/oauth',
+    '/v1',
+    '/v1beta',
+    '/v2',
+    '/pg',
+    '/async',
+    '/mj',
+    '/suno',
+    '/kling',
+    '/jimeng',
+    '/fapiao',
+    '/integration',
+    '/mrmgr',
+    '/fast',
+    '/relax',
+    '/turbo',
+    '/default',
+    '/async-results',
+    '/local-async-image-requests',
+    '/task-images',
+    '/image-cache',
+    '/log/get-request',
+    '/internal/image-origin/health',
+    '/get-async',
+    '/livez',
+    '/readyz',
+  ];
+
+  return Object.fromEntries(
+    paths.map((pathPrefix) => [
+      pathPrefix,
+      {
+        target: TUZI_LOCAL_GATEWAY_TARGET,
+        changeOrigin: false,
+        secure: false,
+        ws: true,
+      },
+    ])
+  );
+}
 
 function isFileDescriptorLimitError(error: unknown): boolean {
   return (
@@ -723,7 +843,7 @@ function isStartupRuntimeModule(id: string): boolean {
 }
 
 interface ManualChunkModuleInfo {
-  importers: string[];
+  importers: readonly string[];
 }
 
 interface ManualChunkContext {
@@ -966,7 +1086,7 @@ function deferEntryAssetsPlugin(): Plugin {
         const assetTagPattern =
           /^[ \t]*(<script\b[^>]*type="module"[^>]*src="\.\/assets\/[^"]+"[^>]*><\/script>|<link\b[^>]*rel="stylesheet"[^>]*href="\.\/assets\/[^"]+"[^>]*>)\s*$/gm;
 
-        const strippedHtml = html.replace(assetTagPattern, (match, tag) => {
+        const strippedHtml = html.replace(assetTagPattern, (_match, tag) => {
           deferredTags.push(tag.trim());
           return '';
         });
@@ -994,14 +1114,16 @@ const reactNodeEnv = isWatchMode || isServeMode ? 'development' : 'production';
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../node_modules/.vite/apps/web',
+  cacheDir: `../../node_modules/.vite/apps/web-${devCacheNamespace}`,
 
-  // 使用相对路径，源站始终可用，CDN 加速由 SW 层处理
-  // SW 的 handleStaticRequest: cache → CDN → 源站回退
+  // 使用相对路径，静态资源全部走自建服务器，SW 只负责缓存
   base: process.env.VITE_BASE_URL || './',
 
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
+    'import.meta.env.VITE_TUZI_DEV_PROXY': JSON.stringify(
+      TUZI_DEV_PROXY_ENABLED ? '1' : '0'
+    ),
     'process.env.NODE_ENV': JSON.stringify(reactNodeEnv),
     __APP_VERSION__: JSON.stringify(appVersion),
     // Vue feature flags - @milkdown/crepe 内部使用了 Vue，需要定义这些编译时标志
@@ -1015,8 +1137,20 @@ export default defineConfig({
   },
 
   server: {
-    port: 7200,
-    host: 'localhost',
+    port: DEV_SERVER_PORT,
+    host: process.env.OPENTU_HOST || 'localhost',
+    proxy: {
+      '/__opentu_tuzi_session__/': {
+        target: 'https://api.tu-zi.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (requestPath: string) =>
+          requestPath.replace(/^\/__opentu_tuzi_session__/, ''),
+      },
+      ...createLayerDecomposerProxy(),
+      ...createTuziLocalGatewayProxy(),
+      ...createTuziDevProxy(),
+    },
     headers: {
       'Content-Security-Policy':
         "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://xingtu.live; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' http: https: ws: wss: data:; frame-ancestors 'self' localhost:* 127.0.0.1:* https://xingtu.live;",
@@ -1025,7 +1159,7 @@ export default defineConfig({
 
   preview: {
     port: 4300,
-    host: 'localhost',
+    host: process.env.OPENTU_HOST || 'localhost',
     headers: {
       'Content-Security-Policy':
         "upgrade-insecure-requests; default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://xingtu.live; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss: data:; frame-ancestors 'self' localhost:* 127.0.0.1:* https://xingtu.live;",
@@ -1060,10 +1194,9 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
 
-  // Uncomment this if you are using workers.
-  // worker: {
-  //  plugins: [ nxViteTsPaths() ],
-  // },
+  worker: {
+    format: 'es',
+  },
 
   build: {
     outDir: '../../dist/apps/web',

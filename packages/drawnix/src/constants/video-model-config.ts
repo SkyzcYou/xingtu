@@ -13,6 +13,7 @@ import type {
   VideoModelConfig,
 } from '../types/video.types';
 import { getModelConfig, ModelVendor } from './model-config';
+import { SEEDANCE_25_MODEL_ID } from '../utils/seedance-model';
 
 const SEEDANCE_ASPECT_RATIO_OPTIONS = [
   { label: '横屏 16:9', aspectRatio: '16:9' },
@@ -29,6 +30,40 @@ const SEEDANCE_SIZE_OPTIONS: SizeOption[] = SEEDANCE_RESOLUTION_OPTIONS.flatMap(
       value: `${resolution}@${aspectRatio}`,
       aspectRatio,
     }))
+);
+
+const SEEDANCE_2_DURATION_OPTIONS: DurationOption[] = Array.from(
+  { length: 9 },
+  (_, index) => {
+    const value = String(index + 4);
+    return { label: `${value}秒`, value };
+  }
+);
+
+const SEEDANCE_25_DURATION_OPTIONS: DurationOption[] = Array.from(
+  { length: 27 },
+  (_, index) => {
+    const value = String(index + 4);
+    return { label: `${value}秒`, value };
+  }
+);
+
+const SEEDANCE_2_SIZE_OPTIONS: SizeOption[] = ['1080p', '720p', '480p'].map(
+  (resolution) => ({
+    label: resolution,
+    value: resolution,
+    aspectRatio: 'resolution',
+  })
+);
+
+const SEEDANCE_2_REFERENCE_LABELS = Array.from(
+  { length: 9 },
+  (_, index) => `参考图${index + 1}`
+);
+
+const SEEDANCE_25_REFERENCE_LABELS = Array.from(
+  { length: 30 },
+  (_, index) => `参考图${index + 1}`
 );
 
 const HAPPYHORSE_RESOLUTION_OPTIONS = ['1080P', '720P'] as const;
@@ -289,6 +324,66 @@ export const VIDEO_MODEL_CONFIGS: Record<string, VideoModelConfig> = {
   },
 
   // Seedance models
+  [SEEDANCE_25_MODEL_ID]: {
+    id: SEEDANCE_25_MODEL_ID,
+    label: 'Seedance 2.5',
+    provider: 'seedance',
+    description: '音视频联合生成，支持 4-30 秒与 7 种画面比例',
+    durationOptions: SEEDANCE_25_DURATION_OPTIONS,
+    defaultDuration: '8',
+    sizeOptions: [],
+    defaultSize: '',
+    imageUpload: {
+      maxCount: 30,
+      mode: 'reference',
+      labels: SEEDANCE_25_REFERENCE_LABELS,
+    },
+  },
+  'doubao-seedance-2-0-260128': {
+    id: 'doubao-seedance-2-0-260128',
+    label: 'Seedance 2.0',
+    provider: 'seedance',
+    description: '多模态视频生成，支持 4-12 秒与 480p/720p/1080p',
+    durationOptions: SEEDANCE_2_DURATION_OPTIONS,
+    defaultDuration: '5',
+    sizeOptions: SEEDANCE_2_SIZE_OPTIONS,
+    defaultSize: '720p',
+    imageUpload: {
+      maxCount: 9,
+      mode: 'reference',
+      labels: SEEDANCE_2_REFERENCE_LABELS,
+    },
+  },
+  'doubao-seedance-2-0-fast-260128': {
+    id: 'doubao-seedance-2-0-fast-260128',
+    label: 'Seedance 2.0 Fast',
+    provider: 'seedance',
+    description: '高速多模态视频生成，支持 4-12 秒与 480p/720p/1080p',
+    durationOptions: SEEDANCE_2_DURATION_OPTIONS,
+    defaultDuration: '5',
+    sizeOptions: SEEDANCE_2_SIZE_OPTIONS,
+    defaultSize: '720p',
+    imageUpload: {
+      maxCount: 9,
+      mode: 'reference',
+      labels: SEEDANCE_2_REFERENCE_LABELS,
+    },
+  },
+  'doubao-seedance-2-0-mini-260615': {
+    id: 'doubao-seedance-2-0-mini-260615',
+    label: 'Seedance 2.0 Mini',
+    provider: 'seedance',
+    description: '轻量多模态视频生成，支持 4-12 秒与 480p/720p/1080p',
+    durationOptions: SEEDANCE_2_DURATION_OPTIONS,
+    defaultDuration: '5',
+    sizeOptions: SEEDANCE_2_SIZE_OPTIONS,
+    defaultSize: '720p',
+    imageUpload: {
+      maxCount: 4,
+      mode: 'reference',
+      labels: ['参考图1', '参考图2', '参考图3', '参考图4'],
+    },
+  },
   'seedance-1.5-pro': {
     id: 'seedance-1.5-pro',
     label: 'Seedance 1.5 Pro',
@@ -424,7 +519,8 @@ export const VIDEO_MODEL_CONFIGS: Record<string, VideoModelConfig> = {
     id: 'happyhorse-1.0-video-edit',
     label: 'HappyHorse 1.0 Video Edit',
     provider: 'happyhorse',
-    description: 'HappyHorse 视频参考生成视频，时长跟随输入视频，支持保留原音频',
+    description:
+      'HappyHorse 视频参考生成视频，时长跟随输入视频，支持保留原音频',
     durationOptions: [{ label: '跟随原视频', value: '5' }],
     defaultDuration: '5',
     sizeOptions: HAPPYHORSE_SIZE_OPTIONS,
@@ -532,6 +628,20 @@ function isStandardKlingVideoModel(modelId: string): boolean {
   return lowerId === 'kling_video' || /^kling-v\d(?:[-.]\d+)?$/.test(lowerId);
 }
 
+function getPhysicalSeedanceFamily(
+  modelId: string
+): keyof typeof VIDEO_MODEL_CONFIGS | undefined {
+  const match = modelId.match(
+    /^doubao-seedance-(1-5-pro|1-0-pro(?:-fast)?|1-0-lite)_(?:480p|720p|1080p)$/i
+  );
+  if (!match) return undefined;
+  const family = match[1].toLowerCase();
+  if (family === '1-5-pro') return 'seedance-1.5-pro';
+  if (family === '1-0-pro-fast') return 'seedance-1.0-pro-fast';
+  if (family === '1-0-lite') return 'seedance-1.0-lite';
+  return 'seedance-1.0-pro';
+}
+
 function buildStandardKlingVideoConfig(
   modelId: string,
   runtimeConfig?: ReturnType<typeof getModelConfig>
@@ -561,6 +671,17 @@ function getConfigOrDefault(model?: string | null): VideoModelConfig {
   }
 
   const runtimeConfig = getModelConfig(normalized);
+  const physicalSeedanceFamily = getPhysicalSeedanceFamily(normalized);
+  if (physicalSeedanceFamily) {
+    const familyConfig = VIDEO_MODEL_CONFIGS[physicalSeedanceFamily];
+    return {
+      ...familyConfig,
+      id: normalized,
+      label:
+        runtimeConfig?.shortLabel || runtimeConfig?.label || familyConfig.label,
+      description: runtimeConfig?.description || familyConfig.description,
+    };
+  }
   if (isStandardKlingVideoModel(normalized)) {
     return buildStandardKlingVideoConfig(normalized, runtimeConfig);
   }

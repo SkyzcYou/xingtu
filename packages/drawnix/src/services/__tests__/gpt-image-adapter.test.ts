@@ -4,6 +4,7 @@ import {
   buildGPTImageGenerationBody,
   gptImageAdapter,
   parseGPTImageResponse,
+  resolveGeneratedImageDimensions,
 } from '../model-adapters/gpt-image-adapter';
 
 const tinyPngDataUrl =
@@ -36,6 +37,26 @@ describe('gpt-image-adapter', () => {
       n: 2,
     });
   });
+
+  it.each(['gpt-image2-vip', 'gpt-image2'])(
+    'maps the GPT Image 2 alias %s without rewriting the submitted model id',
+    (modelId) => {
+      const body = buildGPTImageGenerationBody({
+        model: modelId,
+        prompt: 'Draw a clean product photo',
+        size: '16x9',
+        params: {
+          resolution: '4k',
+        },
+      });
+
+      expect(body).toEqual({
+        model: modelId,
+        prompt: 'Draw a clean product photo',
+        size: '3840x2160',
+      });
+    }
+  );
 
   it('treats legacy 1K/2K/4K quality values as resolution compatibility hints', () => {
     const body = buildGPTImageGenerationBody({
@@ -303,7 +324,76 @@ describe('gpt-image-adapter', () => {
     expect(result.format).toBe('webp');
   });
 
+  it.each([
+    [{ width: 1024, height: 1536 }, 1024, 1536],
+    [{ width: '1536', height: '1024' }, 1536, 1024],
+    [{ size: '1024x1536' }, 1024, 1536],
+  ])(
+    'preserves provider image dimensions from %o',
+    (metadata, width, height) => {
+      const result = parseGPTImageResponse({
+        data: [{ url: 'https://example.com/image.png', ...metadata }],
+      });
+
+      expect(result).toMatchObject({ width, height });
+    }
+  );
+
+  it('preserves a provider size shared by the response', () => {
+    const result = parseGPTImageResponse({
+      size: '1024x1536',
+      data: [{ url: 'https://example.com/image.png' }],
+    });
+
+    expect(result).toMatchObject({ width: 1024, height: 1536 });
+  });
+
+  it('does not invent dimensions when provider metadata is invalid', () => {
+    const result = parseGPTImageResponse({
+      data: [
+        {
+          url: 'https://example.com/image.png',
+          width: 0,
+          height: 1536,
+          size: '2x3',
+        },
+      ],
+    });
+
+    expect(result.width).toBeUndefined();
+    expect(result.height).toBeUndefined();
+  });
+
+  it('reads the final upstream image pixel size when response metadata is absent', async () => {
+    class StubImage {
+      naturalWidth = 1024;
+      naturalHeight = 1536;
+      decoding = 'auto';
+      referrerPolicy = '';
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      set src(_value: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+    vi.stubGlobal('Image', StubImage);
+
+    try {
+      const result = await resolveGeneratedImageDimensions({
+        url: 'https://example.com/final.png',
+        format: 'png',
+        raw: { data: [{ url: 'https://example.com/final.png' }] },
+      });
+
+      expect(result).toMatchObject({ width: 1024, height: 1536 });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('sends official GPT Image requests through provider transport', async () => {
+    const controller = new AbortController();
     const fetcher = vi.fn(async () => {
       return new Response(
         JSON.stringify({
@@ -311,6 +401,8 @@ describe('gpt-image-adapter', () => {
             {
               b64_json:
                 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+              width: 1,
+              height: 1,
             },
           ],
         }),
@@ -326,6 +418,8 @@ describe('gpt-image-adapter', () => {
         baseUrl: 'https://api.openai.com/v1',
         apiKey: 'secret-key',
         authType: 'bearer',
+        requestId: 'task-gpt-image-1',
+        signal: controller.signal,
         fetcher,
         binding: {
           id: 'binding',
@@ -356,10 +450,124 @@ describe('gpt-image-adapter', () => {
       Authorization: 'Bearer secret-key',
       'Content-Type': 'application/json',
     });
+    expect(init?.headers).not.toHaveProperty('X-Request-Id');
+    expect(init?.signal).toBe(controller.signal);
     expect(JSON.parse(String(init?.body))).toEqual({
       model: 'gpt-image-2',
       prompt: 'Draw a clean product photo',
       size: '1024x1024',
+    });
+  });
+
+  it('uses the provider binding model id instead of a stale task model alias', async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: [{ url: 'https://example.com/out.png' }],
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        )
+    );
+
+    await gptImageAdapter.generateImage(
+      {
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'secret-key',
+        authType: 'bearer',
+        requestId: 'task-gpt-image-1',
+        signal: controller.signal,
+        fetcher,
+        binding: {
+          id: 'binding',
+          profileId: 'openai',
+          modelId: 'gpt-image-2',
+          operation: 'image',
+          protocol: 'openai.images.generations',
+          requestSchema: 'openai.image.gpt-generation-json',
+          responseSchema: 'openai.image.data',
+          submitPath: '/images/generations',
+          priority: 900,
+          confidence: 'high',
+          source: 'manual',
+        },
+      },
+      {
+        model: 'image2',
+        prompt: '兔子',
+        size: '1x1',
+      }
+    );
+
+    const [, init] = fetcher.mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      model: 'gpt-image-2',
+      prompt: '兔子',
+    });
+  });
+
+  it('retries a Tuzi image-2 custom binding with gpt-image-2 after model_not_found', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 'model_not_found',
+              message: '分组 default 下模型 dall-e 无可用渠道',
+            },
+          }),
+          { status: 503, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [{ url: 'https://example.com/out.png' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+
+    await gptImageAdapter.generateImage(
+      {
+        baseUrl: 'https://api.tu-zi.com/v1',
+        apiKey: 'secret-key',
+        authType: 'bearer',
+        fetcher,
+        binding: {
+          id: 'legacy-binding',
+          profileId: 'tuzi',
+          modelId: 'image-2',
+          operation: 'image',
+          protocol: 'openai.images.generations',
+          requestSchema: 'openai.image.gpt-generation-json',
+          responseSchema: 'openai.image.data',
+          submitPath: '/images/generations',
+          priority: 900,
+          confidence: 'high',
+          source: 'manual',
+        },
+      },
+      {
+        model: 'image-2',
+        prompt: '兔子',
+        size: '1x1',
+      }
+    );
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toMatchObject({
+      model: 'image-2',
+      prompt: '兔子',
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toMatchObject({
+      model: 'gpt-image-2',
+      prompt: '兔子',
     });
   });
 
@@ -372,6 +580,8 @@ describe('gpt-image-adapter', () => {
             {
               b64_json:
                 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+              width: 1,
+              height: 1,
             },
           ],
         }),
@@ -439,6 +649,8 @@ describe('gpt-image-adapter', () => {
           data: [
             {
               url: 'https://example.com/out.png',
+              width: 1024,
+              height: 1024,
             },
           ],
         }),

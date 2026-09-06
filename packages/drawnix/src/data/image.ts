@@ -5,23 +5,51 @@ import {
   Point,
   addSelectedElement,
   clearSelectedElement,
+  idCreator,
   Transforms,
 } from '@plait/core';
 import { DataURL } from '../types';
 import { MindElement, MindTransforms } from '@plait/mind';
 import { DrawTransforms } from '@plait/draw';
-import { getElementOfFocusedImage } from '@plait/common';
+import { getElementOfFocusedImage, type CommonImageItem } from '@plait/common';
 import {
   getInsertionPointForSelectedElements,
   getInsertionPointBelowBottommostElement,
   scrollToPointIfNeeded,
 } from '../utils/selection-utils';
 import { assetStorageService } from '../services/asset-storage-service';
-import { analytics } from '../utils/posthog-analytics';
+import { unifiedCacheService } from '../services/unified-cache-service';
+import { analytics } from '../utils/umami-analytics';
 import { cacheRemoteUrl } from '../services/media-executor/fallback-utils';
-import { normalizeImageDataUrl } from '@aitu/utils';
+import { generateUUID, normalizeImageDataUrl } from '@aitu/utils';
 import { AssetSource, AssetType } from '../types/asset.types';
-import { getInsertionPointFromSavedSelection, calculateImageDisplayDimensions } from '../utils/canvas-insertion-layout';
+import {
+  getInsertionPointFromSavedSelection,
+  calculateImageDisplayDimensions,
+} from '../utils/canvas-insertion-layout';
+import { getSupportedImageFileMimeType } from './blob';
+import { isVirtualMediaUrl } from '../utils/virtual-media-url';
+
+const createImageLoadError = () =>
+  new Error('图片加载失败，请检查图片地址或缓存');
+
+export const insertImageNodeAtPoint = (
+  board: PlaitBoard,
+  imageItem: CommonImageItem,
+  point: Point
+) => {
+  const imageElement = {
+    id: idCreator(),
+    type: 'image',
+    points: [
+      point,
+      [point[0] + imageItem.width, point[1] + imageItem.height] as Point,
+    ],
+    url: imageItem.url,
+  };
+  Transforms.insertNode(board, imageElement, [board.children.length]);
+  return imageElement;
+};
 
 export const loadHTMLImageElement = (dataURL: DataURL, crossOrigin = false) => {
   const normalizedURL = normalizeImageDataUrl(dataURL) as DataURL;
@@ -34,8 +62,8 @@ export const loadHTMLImageElement = (dataURL: DataURL, crossOrigin = false) => {
     image.onload = () => {
       resolve(image);
     };
-    image.onerror = (error) => {
-      reject(error);
+    image.onerror = () => {
+      reject(createImageLoadError());
     };
     image.src = normalizedURL;
   });
@@ -49,9 +77,9 @@ const loadHTMLImageElementFromBlob = (blob: Blob) => {
       URL.revokeObjectURL(objectUrl);
       resolve(image);
     };
-    image.onerror = (error) => {
+    image.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      reject(error);
+      reject(createImageLoadError());
     };
     image.src = objectUrl;
   });
@@ -99,6 +127,51 @@ export const loadHTMLImageElementWithRetry = (
 ): Promise<HTMLImageElement> => {
   // 存量数据可能存有原始 base64，先统一转为 data URL
   const normalizedURL = normalizeImageDataUrl(dataURL) as DataURL;
+
+  // 局域网 HTTP 不是安全上下文，浏览器不会提供 Service Worker。虚拟地址
+  // 此时无法被网络层拦截，直接复用统一缓存中的 Blob 完成插入前尺寸读取。
+  if (
+    isVirtualMediaUrl(normalizedURL) &&
+    (typeof navigator === 'undefined' ||
+      !('serviceWorker' in navigator) ||
+      !navigator.serviceWorker.controller)
+  ) {
+    return unifiedCacheService
+      .getCachedImageBlobWithThumbnailFallback(normalizedURL)
+      .then((blob) =>
+        blob && blob.size > 0
+          ? loadHTMLImageElementFromBlob(blob)
+          : loadHTMLImageElementWithRetryDirect(
+              normalizedURL,
+              crossOrigin,
+              maxRetries,
+              bypassSWAfterRetries
+            )
+      )
+      .catch(() =>
+        loadHTMLImageElementWithRetryDirect(
+          normalizedURL,
+          crossOrigin,
+          maxRetries,
+          bypassSWAfterRetries
+        )
+      );
+  }
+
+  return loadHTMLImageElementWithRetryDirect(
+    normalizedURL,
+    crossOrigin,
+    maxRetries,
+    bypassSWAfterRetries
+  );
+};
+
+const loadHTMLImageElementWithRetryDirect = (
+  normalizedURL: DataURL,
+  crossOrigin: boolean,
+  maxRetries: number,
+  bypassSWAfterRetries: number
+): Promise<HTMLImageElement> => {
   // 外部 URL 不设置 crossOrigin（避免 CORS），不追加参数（避免破坏签名）
   const isExternalUrl =
     normalizedURL.startsWith('http://') || normalizedURL.startsWith('https://');
@@ -119,7 +192,7 @@ export const loadHTMLImageElementWithRetry = (
         resolve(image);
       };
 
-      image.onerror = (error) => {
+      image.onerror = () => {
         retryCount++;
 
         if (retryCount <= maxRetries) {
@@ -147,7 +220,7 @@ export const loadHTMLImageElementWithRetry = (
             `[loadHTMLImageElement] 加载失败，已重试 ${maxRetries} 次:`,
             normalizedURL
           );
-          reject(error);
+          reject(createImageLoadError());
         }
       };
 
@@ -157,6 +230,27 @@ export const loadHTMLImageElementWithRetry = (
     tryLoad();
   });
 };
+
+export async function loadImageElementForCanvas(
+  imageUrl: DataURL
+): Promise<HTMLImageElement> {
+  const canUseServiceWorker =
+    typeof navigator !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    !!navigator.serviceWorker.controller;
+
+  if (isVirtualMediaUrl(imageUrl)) {
+    const cachedBlob = await unifiedCacheService.getCachedBlob(imageUrl);
+    if (cachedBlob && cachedBlob.size > 0) {
+      return loadHTMLImageElementFromBlob(cachedBlob);
+    }
+    if (!canUseServiceWorker) {
+      throw new Error('图片缓存不可用，请重新生成或上传');
+    }
+  }
+
+  return loadHTMLImageElementWithRetry(imageUrl, true);
+}
 
 export const buildImage = (
   image: HTMLImageElement,
@@ -239,8 +333,14 @@ export const insertImage = async (
     : getSelectedElements(board)[0] || getElementOfFocusedImage(board);
   const defaultImageWidth = selectedElement ? 240 : 400;
 
-  const image = await loadHTMLImageElementFromBlob(imageFile);
   const imageName = getImageFileName(imageFile);
+  const imageMimeType =
+    getSupportedImageFileMimeType(imageFile) || imageFile.type || 'image/png';
+  const imageBlob =
+    imageFile.type === imageMimeType
+      ? imageFile
+      : imageFile.slice(0, imageFile.size, imageMimeType);
+  const image = await loadHTMLImageElementFromBlob(imageBlob);
   let imageUrl: string;
 
   try {
@@ -249,8 +349,8 @@ export const insertImage = async (
       type: AssetType.IMAGE,
       source: AssetSource.LOCAL,
       name: imageName,
-      blob: imageFile,
-      mimeType: imageFile.type,
+      blob: imageBlob,
+      mimeType: imageMimeType,
     });
     imageUrl = asset.url;
   } catch {
@@ -258,7 +358,7 @@ export const insertImage = async (
       '../services/unified-cache-service'
     );
     const cached = await unifiedCacheService.cacheLocalMediaByContent(
-      imageFile,
+      imageBlob,
       'image',
       {
         source: 'clipboard',
@@ -285,14 +385,11 @@ export const insertImage = async (
   } else {
     let insertionPoint = startPoint;
     if (!startPoint && !isDrop) {
-      insertionPoint = getInsertionPointFromSavedSelection(
-        board,
-        {
-          align: 'center',
-          targetWidth: imageItem.width,
-          logPrefix: 'image',
-        }
-      );
+      insertionPoint = getInsertionPointFromSavedSelection(board, {
+        align: 'center',
+        targetWidth: imageItem.width,
+        logPrefix: 'image',
+      });
 
       if (!insertionPoint) {
         const calculatedPoint = getInsertionPointForSelectedElements(board);
@@ -336,23 +433,34 @@ export const insertImageFromUrl = async (
   // 如果为 true，图片加载后不再按真实比例改写尺寸
   lockReferenceDimensions?: boolean,
   // 如果为 true，插入图片后不自动选中（用于自动插入场景，避免覆盖用户当前选中状态）
-  skipSelect?: boolean
-) => {
-  // 外部 URL 和 data URL 先缓存到本地
+  skipSelect?: boolean,
+  boardGuard?: () => boolean,
+  // 暂存画板没有 DOM 宿主；已有明确坐标时直接构造图片节点
+  insertWithoutBoardHost?: boolean
+): Promise<string | undefined> => {
+  // 插入画布前把临时 Blob、远程签名 URL 和 data URL 固化为稳定本地地址。
   let resolvedUrl = normalizeImageDataUrl(imageUrl);
   if (
+    resolvedUrl.startsWith('/__aitu_cache__/') ||
+    resolvedUrl.startsWith('/asset-library/') ||
     resolvedUrl.startsWith('http://') ||
     resolvedUrl.startsWith('https://') ||
+    resolvedUrl.startsWith('blob:') ||
     resolvedUrl.startsWith('data:')
   ) {
     const cachedUrl = await cacheRemoteUrl(
       resolvedUrl,
-      `insert-${Date.now()}`,
+      `insert-${generateUUID()}`,
       'image',
-      'png'
+      'png',
+      undefined,
+      { forceRemoteCache: true, returnLocalCacheUrl: true }
     );
     if (cachedUrl !== resolvedUrl) {
       resolvedUrl = cachedUrl;
+    }
+    if (boardGuard && !boardGuard()) {
+      throw new Error('画板已切换，取消本次插入');
     }
   }
 
@@ -363,9 +471,11 @@ export const insertImageFromUrl = async (
     const inserted = await insertMediaIntoSelectedFrame(
       board,
       resolvedUrl,
-      'image'
+      'image',
+      undefined,
+      { boardGuard }
     );
-    if (inserted) return;
+    if (inserted) return inserted.elementId;
   }
   // console.log(`[insertImageFromUrl] Called with:`, {
   //   imageUrl: imageUrl?.substring(0, 80),
@@ -401,10 +511,10 @@ export const insertImageFromUrl = async (
   } else {
     // 使用带重试的图片加载函数，支持自动绕过 SW
     // console.log(`[insertImageFromUrl] Loading image with retry...`);
-    const image = await loadHTMLImageElementWithRetry(
-      resolvedUrl as DataURL,
-      true
-    ); // 使用 crossOrigin 以支持外部 URL
+    const image = await loadImageElementForCanvas(resolvedUrl as DataURL);
+    if (boardGuard && !boardGuard()) {
+      throw new Error('画板已切换，取消本次插入');
+    }
     imageItem = buildImage(
       image,
       resolvedUrl as DataURL,
@@ -419,7 +529,7 @@ export const insertImageFromUrl = async (
   if (isDrop && element && MindElement.isMindElement(board, element)) {
     MindTransforms.setImage(board, element as MindElement, imageItem);
     // console.log(`[insertImageFromUrl] Set image to MindElement`);
-    return;
+    return element.id;
   }
 
   // 处理插入点逻辑
@@ -428,14 +538,11 @@ export const insertImageFromUrl = async (
   // 只有在没有提供startPoint时才自动计算插入位置
   if (!startPoint && !isDrop) {
     // 优先使用保存的选中元素IDs计算插入位置
-    insertionPoint = getInsertionPointFromSavedSelection(
-      board,
-      {
-        align: 'center',
-        targetWidth: imageItem.width,
-        logPrefix: 'image',
-      }
-    );
+    insertionPoint = getInsertionPointFromSavedSelection(board, {
+      align: 'center',
+      targetWidth: imageItem.width,
+      logPrefix: 'image',
+    });
 
     // 如果没有保存的选中元素,回退到使用当前选中元素(向后兼容)
     if (!insertionPoint) {
@@ -457,10 +564,23 @@ export const insertImageFromUrl = async (
     }
   }
 
-  // 记录插入前的 children 数量，用于后续找到新插入的元素
-  const childrenCountBefore = board.children.length;
+  if (boardGuard && !boardGuard()) {
+    throw new Error('画板已切换，取消本次插入');
+  }
 
-  DrawTransforms.insertImage(board, imageItem, insertionPoint);
+  let newElement;
+  if (insertionPoint && insertWithoutBoardHost) {
+    newElement = insertImageNodeAtPoint(board, imageItem, insertionPoint);
+  } else {
+    const existingElementIds = new Set(
+      board.children.map((child) => child.id)
+    );
+    DrawTransforms.insertImage(board, imageItem, insertionPoint);
+    newElement = board.children.find(
+      (child) => !existingElementIds.has(child.id)
+    );
+  }
+  const insertedElementId = newElement?.id;
 
   // 埋点：图片插入画布
   analytics.track('asset_insert_canvas', {
@@ -476,7 +596,6 @@ export const insertImageFromUrl = async (
 
   // 选中新插入的图片元素（如果没有跳过选中）
   if (!skipSelect) {
-    const newElement = board.children[childrenCountBefore];
     if (newElement) {
       clearSelectedElement(board);
       addSelectedElement(board, newElement);
@@ -485,14 +604,11 @@ export const insertImageFromUrl = async (
 
   // 如果跳过了图片加载，异步加载图片并更新元素尺寸
   if (shouldUpdateSizeAfterLoad && referenceDimensions) {
-    // 同步捕获新插入元素的 ID，避免异步回调中索引失效
-    const newElement = board.children[childrenCountBefore] as any;
-    const elementId = newElement?.id as string | undefined;
-    if (elementId) {
+    if (insertedElementId) {
       updateImageSizeAfterLoad(
         board,
         resolvedUrl,
-        elementId,
+        insertedElementId,
         referenceDimensions
       );
     }
@@ -511,6 +627,7 @@ export const insertImageFromUrl = async (
       scrollToPointIfNeeded(board, centerPoint);
     });
   }
+  return insertedElementId;
 };
 
 /**
@@ -526,7 +643,7 @@ function updateImageSizeAfterLoad(
   referenceDimensions: { width: number; height: number }
 ): void {
   // 使用带重试的加载函数，提高虚拟 URL 场景的可靠性
-  loadHTMLImageElementWithRetry(imageUrl as DataURL, true)
+  loadImageElementForCanvas(imageUrl as DataURL)
     .then((img) => {
       const naturalWidth = img.naturalWidth;
       const naturalHeight = img.naturalHeight;
@@ -540,7 +657,7 @@ function updateImageSizeAfterLoad(
         naturalWidth,
         naturalHeight
       );
-      
+
       let newWidth = displayDimensions.width;
       let newHeight = displayDimensions.height;
 
@@ -583,7 +700,7 @@ const loadImageDirectly = (imageUrl: string): Promise<HTMLImageElement> => {
     // 不设置 crossOrigin，这样可以加载不支持 CORS 的图片
     image.referrerPolicy = 'no-referrer';
     image.onload = () => resolve(image);
-    image.onerror = (error) => reject(error);
+    image.onerror = () => reject(createImageLoadError());
     image.src = imageUrl;
   });
 };
@@ -599,8 +716,26 @@ export const insertImageFromUrlAndSelect = async (
   startPoint: Point,
   referenceDimensions?: { width: number; height: number }
 ): Promise<void> => {
-  const childrenCountBefore = board.children.length;
   const defaultImageWidth = 400;
+  let resolvedUrl = normalizeImageDataUrl(imageUrl);
+
+  if (
+    resolvedUrl.startsWith('/__aitu_cache__/') ||
+    resolvedUrl.startsWith('/asset-library/') ||
+    resolvedUrl.startsWith('http://') ||
+    resolvedUrl.startsWith('https://') ||
+    resolvedUrl.startsWith('blob:') ||
+    resolvedUrl.startsWith('data:')
+  ) {
+    resolvedUrl = await cacheRemoteUrl(
+      resolvedUrl,
+      `insert-select-${Date.now()}`,
+      'image',
+      'png',
+      undefined,
+      { materializeContentUrl: true }
+    );
+  }
 
   let image: HTMLImageElement;
 
@@ -608,7 +743,9 @@ export const insertImageFromUrlAndSelect = async (
     // 使用直接加载方式获取图片尺寸（不需要 CORS）
     // 图片会使用原始 URL 存储，浏览器渲染 <img> 标签时不需要 CORS
     // console.log('[insertImageFromUrlAndSelect] Loading image directly:', imageUrl);
-    image = await loadImageDirectly(imageUrl);
+    image = isVirtualMediaUrl(imageUrl)
+      ? await loadImageElementForCanvas(imageUrl as DataURL)
+      : await loadImageDirectly(imageUrl);
     // console.log('[insertImageFromUrlAndSelect] Load successful, dimensions:', image.width, 'x', image.height);
   } catch (error) {
     console.error('[insertImageFromUrlAndSelect] Failed to load image:', error);
@@ -617,7 +754,7 @@ export const insertImageFromUrlAndSelect = async (
 
   const imageItem = buildImage(
     image,
-    imageUrl as DataURL,
+    resolvedUrl as DataURL,
     defaultImageWidth,
     true,
     referenceDimensions
@@ -631,10 +768,13 @@ export const insertImageFromUrlAndSelect = async (
   }
 
   // 插入图片
+  const existingElementIds = new Set(board.children.map((child) => child.id));
   DrawTransforms.insertImage(board, imageItem, startPoint);
 
   // 选中新插入的图片元素
-  const newElement = board.children[childrenCountBefore];
+  const newElement = board.children.find(
+    (child) => !existingElementIds.has(child.id)
+  );
   if (newElement) {
     clearSelectedElement(board);
     addSelectedElement(board, newElement);

@@ -21,6 +21,7 @@ import { getEffectiveVideoDefaultParams } from '../services/video-binding-utils'
 import { buildMJPromptSuffix } from './mj-params';
 import type { ImageDimensions } from '../mcp/types';
 import type { KnowledgeContextRef } from '../types/task.types';
+import type { CanvasAssociationRef } from '../types/shared/core.types';
 
 // 重新导出 ImageDimensions 以便其他模块使用
 export type { ImageDimensions } from '../mcp/types';
@@ -88,6 +89,8 @@ export interface SelectionInfo {
   images: string[];
   /** 选中的视频 URL */
   videos: string[];
+  /** 选中的音频 URL 或素材引用 */
+  audios?: string[];
   /** 选中的图形转换为的图片 URL */
   graphics: string[];
   /** 图片尺寸信息（按顺序对应 images + graphics） */
@@ -135,7 +138,7 @@ export interface ParsedGenerationParams {
   /** 时长参数（视频） */
   duration?: string;
   /** 额外参数（如 seedream_quality, aspect_ratio 等，透传给 adapter） */
-  extraParams?: Record<string, string>;
+  extraParams?: Record<string, unknown>;
   /** 原始解析结果 */
   parseResult: ParseResult;
   /** 是否有额外内容（除模型/参数/数量外） */
@@ -144,6 +147,8 @@ export interface ParsedGenerationParams {
   selection: SelectionInfo;
   /** 本次生成使用的知识库笔记轻量引用 */
   knowledgeContextRefs?: KnowledgeContextRef[];
+  /** 本次生成显式提及的画布元素轻量引用 */
+  canvasAssociations?: CanvasAssociationRef[];
 }
 
 /**
@@ -212,7 +217,14 @@ export function generateDefaultPrompt(
  * 将 "16:9" 转换为 "16x9" 格式（API 使用 x 分隔符）
  */
 function normalizeSize(size: string): string {
-  return size.replace(':', 'x').toLowerCase();
+  const normalized = size.trim().toLowerCase();
+  const separatorIndex = normalized.indexOf('@');
+  if (separatorIndex >= 0) {
+    const resolution = normalized.slice(0, separatorIndex);
+    const ratio = normalized.slice(separatorIndex + 1).replace(/[xX]/g, ':');
+    return `${resolution}@${ratio}`;
+  }
+  return normalized.replace(':', 'x');
 }
 
 /**
@@ -243,6 +255,8 @@ export interface ParseAIInputOptions {
   params?: Record<string, string>;
   /** 本次生成使用的知识库笔记轻量引用 */
   knowledgeContextRefs?: KnowledgeContextRef[];
+  /** 本次生成显式提及的画布元素轻量引用 */
+  canvasAssociations?: CanvasAssociationRef[];
 }
 
 export function parseAIInput(
@@ -254,6 +268,7 @@ export function parseAIInput(
     selection.texts.length > 0 ||
     selection.images.length > 0 ||
     selection.videos.length > 0 ||
+    Boolean(selection.audios?.length) ||
     selection.graphics.length > 0;
   const selectedTexts = selection.texts;
   const imageCount = selection.images.length + selection.graphics.length;
@@ -498,6 +513,7 @@ export function parseAIInput(
     hasExtraContent,
     selection,
     knowledgeContextRefs: options?.knowledgeContextRefs,
+    canvasAssociations: options?.canvasAssociations,
   };
 }
 

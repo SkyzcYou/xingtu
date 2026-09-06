@@ -7,13 +7,14 @@ import {
   DEFAULT_AUDIO_MODEL_ID,
   DEFAULT_VIDEO_MODEL_ID,
   DEFAULT_TEXT_MODEL_ID,
-  getModelsByType,
   getStaticModelsByType,
   getStaticModelConfig,
+  isDefaultModelHidden,
   setRuntimeModelConfigs,
 } from '../constants/model-config';
 import { getFreshOidcAccessToken } from '../services/auth/oidc-session';
 import { normalizeApiBase } from '../services/media-api/utils';
+import { normalizeModelApiBaseUrl } from './provider-base-url';
 import {
   LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
   providerCatalogsSettings,
@@ -21,11 +22,17 @@ import {
   providerProfilesSettings,
   settingsManager,
   type ProviderCatalog,
+  type ProviderCatalogManualBinding,
   type ModelRef,
   type ProviderProfile,
 } from './settings-manager';
-import { applySunoAliasPresentation, isSunoLikeModelId } from './suno-model-aliases';
+import {
+  applySunoAliasPresentation,
+  isSunoLikeModelId,
+} from './suno-model-aliases';
 import { sortModelsByDisplayPriority } from './model-sort';
+import { isTuziEmbeddedMode } from '../services/tuzi-embedded-config';
+import { hasTuziSystemToken } from '../services/tuzi-token-auth';
 
 const LEGACY_CACHE_KEY = 'drawnix-runtime-model-discovery';
 
@@ -46,6 +53,7 @@ export interface RuntimeModelDiscoveryState {
   discoveredAt: number | null;
   discoveredModels: ModelConfig[];
   selectedModelIds: string[];
+  manualBindings: ProviderCatalogManualBinding[];
   models: ModelConfig[];
   error: string | null;
 }
@@ -54,6 +62,26 @@ export interface RuntimeModelSelectionChange {
   models: ModelConfig[];
   addedModelIds: string[];
   removedModelIds: string[];
+}
+
+export interface ManualRuntimeModelInvocationInput {
+  protocol: string;
+  requestSchema: string;
+  submitPath: string;
+  responseSchema?: string;
+  baseUrlStrategy?: ProviderCatalogManualBinding['baseUrlStrategy'];
+  pollPathTemplate?: string;
+  priority?: number;
+  confidence?: ProviderCatalogManualBinding['confidence'];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ManualRuntimeModelInput {
+  id: string;
+  type: ModelType;
+  label?: string;
+  description?: string;
+  invocation?: ManualRuntimeModelInvocationInput;
 }
 
 interface LegacyPersistedRuntimeModelDiscoveryState {
@@ -73,6 +101,7 @@ function createDefaultState(profileId: string): RuntimeModelDiscoveryState {
     discoveredAt: null,
     discoveredModels: [],
     selectedModelIds: [],
+    manualBindings: [],
     models: [],
     error: null,
   };
@@ -86,18 +115,7 @@ function hashString(input: string): string {
   return Math.abs(hash >>> 0).toString(16);
 }
 
-export function normalizeModelApiBaseUrl(baseUrl: string): string {
-  const trimmed = (baseUrl || '').trim();
-  const fallback = 'https://api.tu-zi.com/v1';
-  if (!trimmed) return fallback;
-
-  let normalized = trimmed.replace(/\/+$/, '');
-  normalized = normalized.replace(/\/models$/i, '');
-  if (!/\/v1$/i.test(normalized)) {
-    normalized = `${normalizeApiBase(normalized)}/v1`;
-  }
-  return normalized;
-}
+export { normalizeModelApiBaseUrl } from './provider-base-url';
 
 function buildDiscoverySignature(baseUrl: string, apiKey: string): string {
   return `${normalizeModelApiBaseUrl(baseUrl)}::${hashString(apiKey.trim())}`;
@@ -135,6 +153,88 @@ function extractDiscoveryErrorMessage(
   }
 }
 
+async function fetchRemoteModelList(
+  baseUrl: string,
+  apiKey: string,
+  signal?: AbortSignal,
+  refreshOidcOnUnauthorized = false
+): Promise<string> {
+  let response = await fetch(`${baseUrl}/models`, {
+    signal,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (response.status === 401 && refreshOidcOnUnauthorized) {
+    const token = await getFreshOidcAccessToken({ forceRefresh: true });
+    if (token?.trim()) {
+      response = await fetch(`${baseUrl}/models`, {
+        signal, headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+    }
+  }
+
+  const rawText = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      extractDiscoveryErrorMessage(
+        rawText,
+        `获取模型列表失败: HTTP ${response.status}`
+      )
+    );
+  }
+
+  return rawText;
+}
+
+function buildModelDiscoveryBaseUrls(
+  primaryBaseUrl: string,
+  fallbackBaseUrls: string[] = []
+): string[] {
+  const urls = new Map<string, string>();
+
+  [primaryBaseUrl, ...fallbackBaseUrls].forEach((url) => {
+    const normalized = normalizeModelApiBaseUrl(url);
+    if (normalized && !urls.has(normalized)) {
+      urls.set(normalized, normalized);
+    }
+  });
+
+  return Array.from(urls.values());
+}
+
+async function fetchRemoteModelListWithFallback(
+  primaryBaseUrl: string,
+  apiKey: string,
+  fallbackBaseUrls: string[] = [],
+  signal?: AbortSignal,
+  refreshOidcOnUnauthorized = false
+): Promise<string> {
+  const baseUrls = buildModelDiscoveryBaseUrls(
+    primaryBaseUrl,
+    fallbackBaseUrls
+  );
+  let lastFetchError: unknown = null;
+
+  for (let index = 0; index < baseUrls.length; index += 1) {
+    try {
+      return await fetchRemoteModelList(baseUrls[index], apiKey, signal, refreshOidcOnUnauthorized);
+    } catch (error) {
+      if (error instanceof Error && !/failed to fetch/i.test(error.message)) {
+        throw error;
+      }
+      lastFetchError = error;
+    }
+  }
+
+  const message =
+    lastFetchError instanceof Error
+      ? lastFetchError.message
+      : 'Failed to fetch';
+  throw new Error(`获取模型列表失败: ${message}`);
+}
+
 type InferencePattern = string | RegExp;
 
 function matchesPattern(value: string, pattern: InferencePattern): boolean {
@@ -158,7 +258,8 @@ function hasAnyEndpointHint(
 }
 
 function inferModelTypeFromCategory(category?: unknown): ModelType | null {
-  const normalized = typeof category === 'string' ? category.trim().toLowerCase() : '';
+  const normalized =
+    typeof category === 'string' ? category.trim().toLowerCase() : '';
   if (!normalized) return null;
 
   if (
@@ -786,6 +887,180 @@ function buildShortCode(modelId: string, type: ModelType): string {
   return 'img';
 }
 
+function isModelType(value: unknown): value is ModelType {
+  return (
+    value === 'image' ||
+    value === 'video' ||
+    value === 'text' ||
+    value === 'audio'
+  );
+}
+
+function getModelTypeLabel(type: ModelType): string {
+  if (type === 'image') return '图片模型';
+  if (type === 'video') return '视频模型';
+  if (type === 'audio') return '音频模型';
+  return '文本模型';
+}
+
+function buildManualBindingId(
+  profileId: string,
+  modelId: string,
+  type: ModelType,
+  requestSchema: string
+): string {
+  return [profileId, modelId, type, 'manual', requestSchema || 'custom'].join(
+    ':'
+  );
+}
+
+function createManualModelConfig(input: ManualRuntimeModelInput): ModelConfig {
+  const modelId = input.id.trim();
+  const label = input.label?.trim() || modelId;
+  const description = input.description?.trim();
+
+  return {
+    id: modelId,
+    label,
+    shortLabel: label,
+    shortCode: buildShortCode(modelId, input.type),
+    description:
+      description ||
+      `${
+        input.type === 'image'
+          ? '自定义图片模型'
+          : input.type === 'video'
+          ? '自定义视频模型'
+          : input.type === 'audio'
+          ? '自定义音频模型'
+          : '自定义文本模型'
+      } · ${modelId}`,
+    type: input.type,
+    vendor: inferVendorByKeywords(modelId),
+    supportsTools: input.type === 'text' ? true : undefined,
+    tags: ['runtime', 'manual'],
+    imageDefaults:
+      input.type === 'image'
+        ? { aspectRatio: 'auto', width: 1024, height: 1024 }
+        : undefined,
+    videoDefaults:
+      input.type === 'video'
+        ? { duration: '8', size: '1280x720', aspectRatio: '16:9' }
+        : undefined,
+  };
+}
+
+function createManualBinding(
+  profileId: string,
+  model: ModelConfig,
+  invocation?: ManualRuntimeModelInvocationInput
+): ProviderCatalogManualBinding | null {
+  if (!invocation) {
+    return null;
+  }
+
+  const protocol = invocation.protocol.trim();
+  const requestSchema = invocation.requestSchema.trim();
+  const submitPath = invocation.submitPath.trim();
+  const responseSchema =
+    invocation.responseSchema?.trim() ||
+    (model.type === 'text'
+      ? 'openai.chat.choices'
+      : model.type === 'video'
+      ? 'openai.async.task'
+      : model.type === 'audio'
+      ? 'tuzi.suno.music.task'
+      : 'openai.image.data');
+
+  if (!protocol || !requestSchema || !submitPath) {
+    throw new Error('请填写完整的接口协议、请求格式和提交路径');
+  }
+
+  const pollPathTemplate = invocation.pollPathTemplate?.trim();
+  const priority =
+    typeof invocation.priority === 'number' &&
+    Number.isFinite(invocation.priority)
+      ? invocation.priority
+      : 900;
+  const confidence =
+    invocation.confidence === 'medium' || invocation.confidence === 'low'
+      ? invocation.confidence
+      : 'high';
+
+  return {
+    id: buildManualBindingId(profileId, model.id, model.type, requestSchema),
+    modelId: model.id,
+    operation: model.type,
+    protocol,
+    requestSchema,
+    responseSchema,
+    submitPath,
+    baseUrlStrategy: invocation.baseUrlStrategy,
+    pollPathTemplate: pollPathTemplate || undefined,
+    priority,
+    confidence,
+    source: 'manual',
+    metadata: invocation.metadata,
+  };
+}
+
+function upsertModelByIdAndType(
+  models: ModelConfig[],
+  nextModel: ModelConfig
+): ModelConfig[] {
+  const nextModels = [...models];
+  const existingIndex = nextModels.findIndex(
+    (model) => model.id === nextModel.id && model.type === nextModel.type
+  );
+
+  if (existingIndex >= 0) {
+    nextModels[existingIndex] = {
+      ...nextModels[existingIndex],
+      ...nextModel,
+      tags: Array.from(
+        new Set([
+          ...(nextModels[existingIndex].tags || []),
+          ...(nextModel.tags || []),
+        ])
+      ),
+    };
+    return nextModels;
+  }
+
+  return [...nextModels, nextModel];
+}
+
+function removeManualBindingsForModel(
+  bindings: ProviderCatalogManualBinding[],
+  modelId: string
+): ProviderCatalogManualBinding[] {
+  return bindings.filter((binding) => binding.modelId !== modelId);
+}
+
+function mergeDiscoveredWithManualModels(
+  discoveredModels: ModelConfig[],
+  existingModels: ModelConfig[]
+): ModelConfig[] {
+  const merged = [...discoveredModels];
+
+  for (const model of existingModels) {
+    if (!(model.tags || []).includes('manual')) {
+      continue;
+    }
+    if (
+      merged.some(
+        (candidate) =>
+          candidate.id === model.id && candidate.type === model.type
+      )
+    ) {
+      continue;
+    }
+    merged.push(model);
+  }
+
+  return merged;
+}
+
 function buildFallbackConfig(model: RemoteModelListItem): ModelConfig {
   const type = inferModelType(model);
   const vendor = inferVendor(model);
@@ -953,7 +1228,7 @@ function getProfileById(profileId: string): ProviderProfile | null {
 
 function isProfileEnabled(profileId: string): boolean {
   if (profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID) {
-    return true;
+    return !isTuziEmbeddedMode() || hasTuziSystemToken();
   }
 
   return getProfileById(profileId)?.enabled !== false;
@@ -1054,6 +1329,9 @@ function createStateFromCatalog(
       : null,
     discoveredModels,
     selectedModelIds,
+    manualBindings: Array.isArray(catalog.manualBindings)
+      ? catalog.manualBindings
+      : [],
     models,
     error: catalog.error || null,
   };
@@ -1065,6 +1343,7 @@ function toCatalog(state: RuntimeModelDiscoveryState): ProviderCatalog {
     discoveredAt: state.discoveredAt,
     discoveredModels: state.discoveredModels,
     selectedModelIds: state.selectedModelIds,
+    manualBindings: state.manualBindings,
     sourceBaseUrl: state.sourceBaseUrl || undefined,
     signature: state.signature || undefined,
     error: state.error,
@@ -1098,6 +1377,7 @@ function loadLegacyPersistedState(): RuntimeModelDiscoveryState | null {
         : Date.now(),
       discoveredModels,
       selectedModelIds,
+      manualBindings: [],
       models: buildSelectedModels(discoveredModels, selectedModelIds),
       error: null,
     };
@@ -1118,6 +1398,7 @@ function removeLegacyPersistedState(): void {
 class RuntimeModelDiscoveryStore {
   private catalogStates = new Map<string, RuntimeModelDiscoveryState>();
   private listeners = new Set<() => void>();
+  private revision = 0;
 
   constructor() {
     this.catalogStates = this.loadCatalogStatesFromSettings();
@@ -1125,6 +1406,7 @@ class RuntimeModelDiscoveryStore {
     this.syncRuntimeModelConfigs();
 
     providerCatalogsSettings.addListener(this.handleCatalogSettingsChange);
+    providerProfilesSettings.addListener(this.handleProfileSettingsChange);
     invocationPresetsSettings.addListener(this.handlePresetSettingsChange);
     settingsManager.addListener(
       'activePresetId',
@@ -1174,6 +1456,7 @@ class RuntimeModelDiscoveryStore {
   }
 
   private emit(): void {
+    this.revision += 1;
     for (const listener of this.listeners) {
       listener();
     }
@@ -1200,6 +1483,11 @@ class RuntimeModelDiscoveryStore {
     this.emit();
   };
 
+  private handleProfileSettingsChange = (): void => {
+    this.syncRuntimeModelConfigs();
+    this.emit();
+  };
+
   private handleActivePresetIdChange = (): void => {
     this.syncRuntimeModelConfigs();
     this.emit();
@@ -1218,6 +1506,9 @@ class RuntimeModelDiscoveryStore {
     this.catalogStates.set(profileId, {
       ...state,
       profileId,
+      manualBindings: Array.isArray(state.manualBindings)
+        ? state.manualBindings
+        : [],
       selectedModelIds: normalizeSelectedModelIds(
         state.discoveredModels,
         state.selectedModelIds
@@ -1266,6 +1557,10 @@ class RuntimeModelDiscoveryStore {
     return () => this.listeners.delete(listener);
   }
 
+  getRevision(): number {
+    return this.revision;
+  }
+
   getState(
     profileId = LEGACY_DEFAULT_PROVIDER_PROFILE_ID
   ): RuntimeModelDiscoveryState {
@@ -1297,23 +1592,34 @@ class RuntimeModelDiscoveryStore {
   }
 
   getPreferredModels(type: ModelType): ModelConfig[] {
-    return getModelsByType(type);
+    return this.getSelectableModels(type);
   }
 
   getSelectableModels(type: ModelType): ModelConfig[] {
+    return sortModelsByDisplayPriority([
+      ...this.getConfiguredSelectableModels(type),
+      ...decorateStaticModels(getStaticModelsByType(type)),
+    ]);
+  }
+
+  getConfiguredSelectableModels(type: ModelType): ModelConfig[] {
     const runtimeModels: ModelConfig[] = [];
     for (const state of this.catalogStates.values()) {
       if (!isProfileEnabled(state.profileId)) {
         continue;
       }
       runtimeModels.push(
-        ...state.models.filter((model) => model.type === type)
+        ...state.models.filter(
+          (model) =>
+            model.type === type &&
+            !(
+              state.profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID &&
+              isDefaultModelHidden(model.id)
+            )
+        )
       );
     }
-    return sortModelsByDisplayPriority([
-      ...runtimeModels,
-      ...decorateStaticModels(getStaticModelsByType(type)),
-    ]);
+    return sortModelsByDisplayPriority(runtimeModels);
   }
 
   getPinnedSelectableModel(
@@ -1394,7 +1700,14 @@ class RuntimeModelDiscoveryStore {
     type: ModelType
   ): ModelConfig[] {
     const state = this.getCatalogState(profileId);
-    const runtimeModels = state.models.filter((model) => model.type === type);
+    const runtimeModels = state.models.filter(
+      (model) =>
+        model.type === type &&
+        !(
+          profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID &&
+          isDefaultModelHidden(model.id)
+        )
+    );
     return mergeModels(getStaticModelsByType(type), runtimeModels);
   }
 
@@ -1452,6 +1765,110 @@ class RuntimeModelDiscoveryStore {
     };
   }
 
+  removeModel(
+    profileId = LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+    modelId: string
+  ): RuntimeModelSelectionChange {
+    const state = this.getCatalogState(profileId);
+    const targetModel = state.discoveredModels.find(
+      (model) => model.id === modelId
+    );
+    const isManualModel = (targetModel?.tags || []).includes('manual');
+    const previousSelectedModelIds = normalizeSelectedModelIds(
+      state.discoveredModels,
+      state.selectedModelIds
+    );
+    const selectedModelIds = previousSelectedModelIds.filter(
+      (id) => id !== modelId
+    );
+    const discoveredModels = isManualModel
+      ? state.discoveredModels.filter((model) => model.id !== modelId)
+      : state.discoveredModels;
+    const models = buildSelectedModels(discoveredModels, selectedModelIds);
+    const wasSelected = previousSelectedModelIds.includes(modelId);
+
+    this.setCatalogState(profileId, {
+      ...state,
+      status: discoveredModels.length > 0 ? 'ready' : 'idle',
+      discoveredModels,
+      selectedModelIds,
+      manualBindings: removeManualBindingsForModel(
+        state.manualBindings,
+        modelId
+      ),
+      models,
+      error: null,
+    });
+
+    return {
+      models,
+      addedModelIds: [],
+      removedModelIds: wasSelected ? [modelId] : [],
+    };
+  }
+
+  addManualModel(
+    profileId = LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+    input: ManualRuntimeModelInput
+  ): ModelConfig {
+    const modelId = input.id.trim();
+    if (!modelId) {
+      throw new Error('请填写模型 ID');
+    }
+    if (!isModelType(input.type)) {
+      throw new Error('请选择模型类型');
+    }
+
+    const state = this.getCatalogState(profileId);
+    const conflictingModel = state.discoveredModels.find(
+      (model) => model.id === modelId && model.type !== input.type
+    );
+    if (conflictingModel) {
+      throw new Error(
+        `同一供应商下模型 ID 已作为${getModelTypeLabel(
+          conflictingModel.type
+        )}存在，请换一个模型 ID 或先移除原模型`
+      );
+    }
+
+    const manualModel = attachRuntimeSource(
+      profileId,
+      createManualModelConfig({ ...input, id: modelId })
+    );
+    const discoveredModels = upsertModelByIdAndType(
+      state.discoveredModels,
+      manualModel
+    );
+    const selectedModelIds = normalizeSelectedModelIds(discoveredModels, [
+      ...state.selectedModelIds,
+      modelId,
+    ]);
+    const manualBinding = createManualBinding(
+      profileId,
+      manualModel,
+      input.invocation
+    );
+    const manualBindings = manualBinding
+      ? [
+          ...removeManualBindingsForModel(state.manualBindings, modelId),
+          manualBinding,
+        ]
+      : state.manualBindings;
+
+    this.setCatalogState(profileId, {
+      ...state,
+      status: 'ready',
+      discoveredAt: state.discoveredAt || Date.now(),
+      discoveredModels,
+      selectedModelIds,
+      manualBindings,
+      models: buildSelectedModels(discoveredModels, selectedModelIds),
+      error: null,
+    });
+
+    return manualModel;
+  }
+
   clear(profileId = LEGACY_DEFAULT_PROVIDER_PROFILE_ID): void {
     this.setCatalogState(profileId, createDefaultState(profileId));
     if (profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID) {
@@ -1473,6 +1890,8 @@ class RuntimeModelDiscoveryStore {
       profile.id,
       profile.baseUrl,
       credential,
+      [],
+      undefined,
       profile.credentialSource === 'oidc-session'
     );
   }
@@ -1481,6 +1900,8 @@ class RuntimeModelDiscoveryStore {
     profileId = LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
     baseUrl: string,
     apiKey: string,
+    fallbackBaseUrls: string[] = [],
+    signal?: AbortSignal,
     refreshOidcOnUnauthorized = false
   ): Promise<ModelConfig[]> {
     const trimmedApiKey = apiKey.trim();
@@ -1504,31 +1925,13 @@ class RuntimeModelDiscoveryStore {
       false
     );
 
-    let response = await fetch(`${normalizedBaseUrl}/models`, {
-      headers: {
-        Authorization: `Bearer ${trimmedApiKey}`,
-      },
-    });
-    if (response.status === 401 && refreshOidcOnUnauthorized) {
-      const refreshedToken = await getFreshOidcAccessToken({ forceRefresh: true });
-      if (refreshedToken?.trim()) {
-        response = await fetch(`${normalizedBaseUrl}/models`, {
-          headers: {
-            Authorization: `Bearer ${refreshedToken.trim()}`,
-          },
-        });
-      }
-    }
-
-    const rawText = await response.text();
-    if (!response.ok) {
-      throw new Error(
-        extractDiscoveryErrorMessage(
-          rawText,
-          `获取模型列表失败: HTTP ${response.status}`
-        )
-      );
-    }
+    const rawText = await fetchRemoteModelListWithFallback(
+      normalizedBaseUrl,
+      trimmedApiKey,
+      fallbackBaseUrls,
+      signal,
+      refreshOidcOnUnauthorized
+    );
 
     let parsed: unknown;
     try {
@@ -1557,11 +1960,25 @@ class RuntimeModelDiscoveryStore {
       throw new Error('模型列表为空');
     }
 
+    const discoveredModels = mergeDiscoveredWithManualModels(
+      adaptedModels,
+      state.discoveredModels
+    );
+    const manualModelIds = new Set(
+      discoveredModels
+        .filter((model) => (model.tags || []).includes('manual'))
+        .map((model) => model.id)
+    );
     const selectedModelIds =
       state.signature === signature
-        ? normalizeSelectedModelIds(adaptedModels, state.selectedModelIds)
-        : [];
-    const models = buildSelectedModels(adaptedModels, selectedModelIds);
+        ? normalizeSelectedModelIds(discoveredModels, state.selectedModelIds)
+        : normalizeSelectedModelIds(
+            discoveredModels,
+            state.selectedModelIds.filter((modelId) =>
+              manualModelIds.has(modelId)
+            )
+          );
+    const models = buildSelectedModels(discoveredModels, selectedModelIds);
 
     this.setCatalogState(profileId, {
       profileId,
@@ -1569,8 +1986,9 @@ class RuntimeModelDiscoveryStore {
       sourceBaseUrl: normalizedBaseUrl,
       signature,
       discoveredAt: Date.now(),
-      discoveredModels: adaptedModels,
+      discoveredModels,
       selectedModelIds,
+      manualBindings: state.manualBindings,
       models,
       error: null,
     });
@@ -1601,6 +2019,10 @@ export function getSelectableModels(type: ModelType): ModelConfig[] {
   return runtimeModelDiscovery.getSelectableModels(type);
 }
 
+export function getConfiguredSelectableModels(type: ModelType): ModelConfig[] {
+  return runtimeModelDiscovery.getConfiguredSelectableModels(type);
+}
+
 export function getPinnedSelectableModel(
   type: ModelType,
   modelId?: string | null,
@@ -1618,6 +2040,13 @@ export function getProfilePreferredModels(
   type: ModelType
 ): ModelConfig[] {
   return runtimeModelDiscovery.getProfilePreferredModels(profileId, type);
+}
+
+export function addManualRuntimeModel(
+  profileId: string,
+  input: ManualRuntimeModelInput
+): ModelConfig {
+  return runtimeModelDiscovery.addManualModel(profileId, input);
 }
 
 export function getFallbackDefaultModelId(type: ModelType): string {

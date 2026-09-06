@@ -16,25 +16,36 @@ import {
   swChannelClient,
   safeReload,
 } from '@drawnix/drawnix/runtime';
-import {
-  getAnalyticsReleaseContext,
-  registerAnalyticsSuperProperties,
-} from '@drawnix/drawnix';
+import { analytics } from '@drawnix/drawnix';
 import { initSWConsoleCapture } from '../utils/sw-console-capture';
+
+function isLocalDevelopmentHost(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.endsWith('.localhost') ||
+    /^10(?:\.\d{1,3}){3}$/.test(hostname) ||
+    /^192\.168(?:\.\d{1,3}){2}$/.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2}$/.test(hostname)
+  );
+}
 
 const isLocalDev =
   typeof window !== 'undefined' &&
-  (window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1');
+  isLocalDevelopmentHost(window.location.hostname);
 const swQueryParam =
   typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('sw')
     : null;
 const isServiceWorkerExplicitlyDisabled = swQueryParam === '0';
+const isServiceWorkerExplicitlyEnabled = swQueryParam === '1';
 const hasServiceWorkerSupport =
   typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
 const shouldUseServiceWorker =
-  hasServiceWorkerSupport && !isServiceWorkerExplicitlyDisabled;
+  hasServiceWorkerSupport &&
+  !isServiceWorkerExplicitlyDisabled &&
+  (!isLocalDev || isServiceWorkerExplicitlyEnabled);
 
 // ===== 控制台日志捕获（尽早初始化，确保默认 console 被改写） =====
 // 必须在其他业务代码之前执行，否则后续工具（如 rrweb）可能先改写 console 导致捕获失效
@@ -51,25 +62,8 @@ crashRecoveryService.checkUrlSafeMode();
 // 必须尽早初始化，以捕获启动阶段的内存状态和错误
 initCrashLogger();
 
-const APP_VERSION =
-  import.meta.env.VITE_APP_VERSION ||
-  document.querySelector('meta[name="app-version"]')?.getAttribute('content') ||
-  '0.0.0';
-const RELEASE_CONTEXT = getAnalyticsReleaseContext();
 const LAZY_CHUNK_RETRY_PARAM = '_lazy_chunk_retry';
 const LAZY_CHUNK_RETRY_TS_PARAM = '_t';
-
-type CDNName = 'jsdelivr' | 'unpkg' | 'local';
-
-interface RuntimeCDNPreference {
-  cdn: CDNName;
-  latency: number;
-  timestamp: number;
-}
-
-interface RuntimeCDNApi {
-  selectBestCDN: () => Promise<RuntimeCDNPreference | null>;
-}
 
 interface BootProgressOptions {
   title?: string;
@@ -87,10 +81,6 @@ interface BootController {
 
 declare global {
   interface Window {
-    __OPENTU_CDN__?: RuntimeCDNPreference | null;
-    __AITU_CDN__?: RuntimeCDNPreference | null;
-    __OPENTU_CDN_API__?: RuntimeCDNApi;
-    __AITU_CDN_API__?: RuntimeCDNApi;
     __OPENTU_BOOT__?: BootController;
     __OPENTU_SW_REGISTRATION_PROMISE__?: Promise<ServiceWorkerRegistration | null>;
   }
@@ -118,10 +108,6 @@ function cleanupLazyChunkRecoveryParams(): void {
 
 cleanupLazyChunkRecoveryParams();
 
-function isValidCDNName(value: unknown): value is CDNName {
-  return value === 'jsdelivr' || value === 'unpkg' || value === 'local';
-}
-
 function getBootController(): BootController | null {
   return window.__OPENTU_BOOT__ || null;
 }
@@ -136,82 +122,6 @@ interface RuntimeSWVersionState {
   pendingReadyAt: number | null;
   upgradeState: 'idle' | 'prewarming' | 'ready' | 'committing';
   swVersion: string;
-}
-
-function getRuntimeCDNPreference(): RuntimeCDNPreference | null {
-  const preference = window.__OPENTU_CDN__ || window.__AITU_CDN__;
-  if (!preference || !isValidCDNName(preference.cdn)) {
-    return null;
-  }
-
-  return {
-    cdn: preference.cdn,
-    latency:
-      Number.isFinite(preference.latency) && preference.latency >= 0
-        ? preference.latency
-        : 0,
-    timestamp:
-      Number.isFinite(preference.timestamp) && preference.timestamp > 0
-        ? preference.timestamp
-        : Date.now(),
-  };
-}
-
-function postCDNPreferenceToServiceWorker(
-  registration: ServiceWorkerRegistration | null
-): void {
-  const preference = getRuntimeCDNPreference();
-  if (!preference) {
-    return;
-  }
-
-  const payload = {
-    type: 'SW_CDN_SET_PREFERENCE' as const,
-    ...preference,
-    version: APP_VERSION,
-  };
-
-  const targets = new Set<ServiceWorker>();
-  const maybeWorkers = [
-    navigator.serviceWorker.controller,
-    registration?.active,
-    registration?.waiting,
-    registration?.installing,
-  ];
-
-  for (const worker of maybeWorkers) {
-    if (worker) {
-      targets.add(worker);
-    }
-  }
-
-  targets.forEach((worker) => {
-    worker.postMessage(payload);
-  });
-}
-
-function scheduleCDNPreferenceSync(
-  registration: ServiceWorkerRegistration | null
-): void {
-  postCDNPreferenceToServiceWorker(registration);
-
-  const api = window.__OPENTU_CDN_API__ || window.__AITU_CDN_API__;
-  if (api?.selectBestCDN) {
-    api
-      .selectBestCDN()
-      .then((preference) => {
-        if (preference && isValidCDNName(preference.cdn)) {
-          window.__OPENTU_CDN__ = preference;
-        }
-        postCDNPreferenceToServiceWorker(registration);
-      })
-      .catch((error) => {
-        console.warn(
-          '[Main] Failed to sync CDN preference to Service Worker:',
-          error
-        );
-      });
-  }
 }
 
 function cleanupDisabledServiceWorker(): void {
@@ -274,17 +184,20 @@ updateBootStatus({
 if (typeof window !== 'undefined') {
   initPreventPinchZoom();
 
-  const initPostHogContext = () => {
-    if (window.posthog) {
-      registerAnalyticsSuperProperties(RELEASE_CONTEXT);
+  const initAnalyticsMonitoring = (attempt = 0) => {
+    if (analytics.isAnalyticsEnabled()) {
       initPageReport();
       return;
     }
 
-    setTimeout(initPostHogContext, 300);
+    // Do not keep polling forever when reporting is disabled or blocked.
+    if (attempt >= 10) {
+      return;
+    }
+    setTimeout(() => initAnalyticsMonitoring(attempt + 1), 300);
   };
 
-  scheduleAfterFirstFrameIdle(initPostHogContext, {
+  scheduleAfterFirstFrameIdle(() => initAnalyticsMonitoring(), {
     delay: 0,
     timeout: 1000,
   });
@@ -325,12 +238,17 @@ if (typeof window !== 'undefined') {
   );
 
   // 统计上报为旁路逻辑：page view 尽早初始化，性能指标继续延迟
-  const initMonitoring = () => {
-    if (window.posthog) {
+  const initMonitoring = (attempt = 0) => {
+    if (analytics.isAnalyticsEnabled()) {
       initWebVitals();
-    } else {
-      setTimeout(initMonitoring, 500);
+      return;
     }
+
+    // Give the deferred Umami script a bounded window to initialize.
+    if (attempt >= 10) {
+      return;
+    }
+    setTimeout(() => initMonitoring(attempt + 1), 300);
   };
 
   scheduleAfterFirstFrameIdle(initMonitoring, {
@@ -339,10 +257,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-if (
-  hasServiceWorkerSupport &&
-  isServiceWorkerExplicitlyDisabled
-) {
+if (hasServiceWorkerSupport && isServiceWorkerExplicitlyDisabled) {
   cleanupDisabledServiceWorker();
 }
 
@@ -505,7 +420,6 @@ if (shouldUseServiceWorker) {
         source: 'phase',
         progress: 72,
       });
-      scheduleCDNPreferenceSync(registration);
 
       // 在开发模式下，强制检查更新并处理等待中的Worker
       if (isDevelopment) {
@@ -695,7 +609,6 @@ if (shouldUseServiceWorker) {
   // 监听controller变化（新的Service Worker接管）
   // 只有用户主动确认升级后才刷新页面
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    scheduleCDNPreferenceSync(swRegistration);
     requestSWVersionState();
     scheduleConfirmedUpgradeReload('controllerchange');
   });
