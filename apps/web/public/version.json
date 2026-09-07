@@ -1,8 +1,9 @@
 {
-  "version": "6.7.20",
-  "buildTime": "2026-07-15T17:23:32.942Z",
-  "gitCommit": "unknown",
+  "version": "6.7.21",
+  "buildTime": "2026-09-07T02:31:36.663Z",
+  "gitCommit": "90b353af0058131cba3a20fcf3ad614d9ec32682",
   "changelog": [
-    "add async image jobs and playground history"
+    "合入上游 AI 语义分层、任务栏目标跟随、图片请求恢复与 PPT 讲解工作流",
+    "保留星图主题、帐号鉴权、积分支付与星流供应商定制"
   ]
 }

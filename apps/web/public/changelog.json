@@ -1,6 +1,21 @@
 {
   "versions": [
     {
+      "version": "6.7.21",
+      "date": "2026-09-07",
+      "changes": {
+        "features": [
+          "合入上游 AI 语义分层、任务栏目标跟随、图片请求恢复与 PPT 讲解工作流"
+        ],
+        "fixes": [
+          "保留星图主题、帐号鉴权、积分支付与星流供应商定制"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "合入上游 AI 语义分层、任务栏目标跟随、图片请求恢复与 PPT 讲解工作流"
+    },
+    {
       "version": "6.7.20",
       "date": "2026-07-15",
       "changes": {

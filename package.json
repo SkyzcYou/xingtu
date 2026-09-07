@@ -1,6 +1,6 @@
 {
   "name": "@aitu/source",
-  "version": "6.7.20",
+  "version": "6.7.21",
   "license": "MIT",
   "packageManager": "pnpm@10.21.0",
   "description": "Xingtu - AI image and video creation workspace with mind mapping, flowcharts, and freehand drawing",
