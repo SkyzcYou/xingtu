@@ -199,6 +199,7 @@ interface UseChatDrawerGenerationControlsOptions {
 export function useChatDrawerGenerationControls(
   options: UseChatDrawerGenerationControlsOptions = {}
 ) {
+  const { onSessionGenerationStateChange } = options;
   const imageModels = useSelectableModels('image');
   const videoModels = useSelectableModels('video');
   const audioModels = useSelectableModels('audio');
@@ -237,6 +238,10 @@ export function useChatDrawerGenerationControls(
     selectedCount,
   });
   const isRestoringGenerationStateRef = useRef(false);
+  const lastEmittedGenerationStateRef = useRef<{
+    sessionId: string | null | undefined;
+    state: ChatSessionGenerationState;
+  } | null>(null);
 
   useEffect(() => {
     selectedParamsRef.current = selectedParams;
@@ -261,6 +266,17 @@ export function useChatDrawerGenerationControls(
   useEffect(() => {
     const nextState =
       options.sessionGenerationState || toGenerationState(loadAIInputPreferences());
+
+    const lastEmittedState = lastEmittedGenerationStateRef.current;
+    if (
+      lastEmittedState &&
+      lastEmittedState.sessionId === options.sessionId &&
+      areGenerationStatesEqual(lastEmittedState.state, nextState)
+    ) {
+      // A parent echo can arrive after model/parameter normalization. It must
+      // not restore the older state over the newer local selection.
+      return;
+    }
 
     if (areGenerationStatesEqual(currentGenerationStateRef.current, nextState)) {
       return;
@@ -471,6 +487,15 @@ export function useChatDrawerGenerationControls(
       isRestoringGenerationStateRef.current = false;
     }
 
+    const lastEmittedState = lastEmittedGenerationStateRef.current;
+    if (
+      lastEmittedState &&
+      lastEmittedState.sessionId === options.sessionId &&
+      areGenerationStatesEqual(lastEmittedState.state, nextGenerationState)
+    ) {
+      return;
+    }
+
     saveAIInputPreferences({
       generationType,
       selectedModel,
@@ -486,10 +511,17 @@ export function useChatDrawerGenerationControls(
         getSelectionKey(selectedModel, selectedModelRef)
       );
     }
-    options.onSessionGenerationStateChange?.(nextGenerationState);
+    if (onSessionGenerationStateChange) {
+      lastEmittedGenerationStateRef.current = {
+        sessionId: options.sessionId,
+        state: nextGenerationState,
+      };
+      onSessionGenerationStateChange(nextGenerationState);
+    }
   }, [
     generationType,
-    options.onSessionGenerationStateChange,
+    onSessionGenerationStateChange,
+    options.sessionId,
     selectedCount,
     selectedModel,
     selectedModelRef,
