@@ -1,6 +1,21 @@
 {
   "versions": [
     {
+      "version": "6.7.23",
+      "date": "2026-09-08",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "在获取模型前检查 Base URL，避免地址留空时请求默认站点"
+        ],
+        "improvements": [
+          "移除供应商设置中的端点候选列表、自动加载和测速选址，改为手动填写 Base URL"
+        ]
+      },
+      "type": "patch",
+      "highlights": "移除供应商设置中的端点候选列表、自动加载和测速选址，改为手动填写 Base URL"
+    },
+    {
       "version": "6.7.22",
       "date": "2026-09-08",
       "changes": {
