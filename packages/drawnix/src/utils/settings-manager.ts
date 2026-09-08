@@ -84,9 +84,9 @@ export const TUZI_BUSINESS_PROVIDER_PROFILE_ID = 'tuzi-business';
 export const TUZI_PROVIDER_ICON_URL = '/logo-xingtu.png';
 export const XINGTU_LOGIN_PROVIDER_NAME = '星图账号';
 export const XINGTU_BACKEND_DEFAULT_BASE_URL = 'https://api.xingtu.live/v1';
-export const TUZI_PROVIDER_DEFAULT_BASE_URL = 'https://api.ourzhishi.top/v1';
+export const TUZI_PROVIDER_DEFAULT_BASE_URL = 'https://apius.tu-zi.com/v1';
 export const TUZI_BUSINESS_PROVIDER_DEFAULT_BASE_URL =
-  'https://api.ourzhishi.top/v1';
+  'https://apius.tu-zi.com/v1';
 export const TUZI_DEFAULT_PROVIDER_NAME = '星图ai-通用渠道';
 export const TUZI_ORIGINAL_PROVIDER_NAME = '星图ai-VIP高速渠道';
 export const TUZI_MIX_PROVIDER_NAME = '星图ai-Gemini渠道';

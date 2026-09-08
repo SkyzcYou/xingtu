@@ -1,6 +1,20 @@
 {
   "versions": [
     {
+      "version": "6.7.22",
+      "date": "2026-09-08",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "切换星图 API 默认节点至 apius.tu-zi.com，修复旧节点跨域异常导致的图片生成失败",
+          "修复聊天生成设置回传导致的 React 重复更新"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "切换星图 API 默认节点至 apius.tu-zi.com，修复旧节点跨域异常导致的图片生成失败"
+    },
+    {
       "version": "6.7.21",
       "date": "2026-09-07",
       "changes": {
