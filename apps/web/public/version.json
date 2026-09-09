@@ -1,7 +1,7 @@
 {
-  "version": "6.7.23",
-  "buildTime": "2026-09-08T09:59:05.144Z",
-  "gitCommit": "unknown",
+  "version": "6.7.24",
+  "buildTime": "2026-09-09T21:04:49.571Z",
+  "gitCommit": "86bbc752fbd108f515d71582ea149dfcd093ede6",
   "changelog": [
     "移除供应商设置中的端点候选列表、自动加载和测速选址，改为手动填写 Base URL",
     "在获取模型前检查 Base URL，避免地址留空时请求默认站点"
