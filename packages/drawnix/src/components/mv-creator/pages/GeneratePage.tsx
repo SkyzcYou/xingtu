@@ -1023,6 +1023,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
     const shotBatchId = `mv_${record.id}_shot${shot.id}_first`;
     const prefillId = `${shotBatchId}_${Date.now()}`;
     openDialog(DialogType.aiImageGeneration, {
+      prefillId: shotBatchId,
       initialPrompt: draft?.prompt || prompt,
       initialKnowledgeContextRefs: knowledgeContextRefs,
       batchId: shotBatchId,

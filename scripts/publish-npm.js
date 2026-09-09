@@ -103,6 +103,7 @@ function generateNpmPackageJson(version) {
     license: 'MIT',
     author: 'ljquan',
     files: [
+      'index.html',
       'assets/**',
       'version.json',
       'icons/**',
