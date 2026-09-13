@@ -1035,13 +1035,21 @@ export class FallbackMediaExecutor implements IMediaExecutor {
           options?.onProgress?.({ progress: 100 });
 
           // 缓存远程 URL 到本地
+          let cacheWarning: CacheWarning | undefined;
           const cachedVidUrl = await cacheRemoteUrl(
             result.url,
             taskId,
             'video',
             'mp4',
             undefined,
-            { resultVisibility: params.resultVisibility }
+            {
+              forceRemoteCache: true,
+              returnLocalCacheUrl: true,
+              resultVisibility: params.resultVisibility,
+              onCacheWarning: (warning) => {
+                cacheWarning ||= warning;
+              },
+            }
           );
           assertCurrentExecutionAttempt(options);
 
@@ -1053,6 +1061,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
               format: 'mp4',
               size: 0,
               duration: duration ? parseInt(duration, 10) : undefined,
+              ...(cacheWarning ? { cacheWarning } : {}),
             },
             undefined,
             createStorageWriteGuard(options)
@@ -1798,6 +1807,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       if (!isCurrentPollingAttempt()) return;
 
       // 缓存远程 URL
+      let cacheWarning: CacheWarning | undefined;
       const cachedVidUrl = await cacheRemoteUrl(
         result.url,
         task.id,
@@ -1805,12 +1815,17 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         'mp4',
         undefined,
         {
+          forceRemoteCache: true,
+          returnLocalCacheUrl: true,
           resultVisibility:
             task.params.resultVisibility === 'internal'
               ? 'internal'
               : task.params.resultVisibility === 'user'
               ? 'user'
               : undefined,
+          onCacheWarning: (warning) => {
+            cacheWarning ||= warning;
+          },
         }
       );
       if (!isCurrentPollingAttempt()) return;
@@ -1828,6 +1843,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
             : task.params.resultVisibility === 'user'
             ? 'user'
             : undefined,
+        ...(cacheWarning ? { cacheWarning } : {}),
       };
 
       if (onTaskUpdate) {

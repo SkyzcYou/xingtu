@@ -27,6 +27,7 @@ import {
   ErrorDisplay,
   ReferenceImageUpload,
   type ReferenceImage,
+  type ReferenceImageUploadHandle,
   PromptInput,
   getMergedPresetPrompts,
   savePromptToHistory as savePromptToHistoryUtil,
@@ -35,6 +36,7 @@ import {
   AutoInsertCheckbox,
   getAutoInsertValue,
 } from './shared';
+import { useLocalFileDrop } from '../shared/local-image-drag-drop';
 import {
   DEFAULT_ASPECT_RATIO,
   ASPECT_RATIO_OPTIONS,
@@ -71,6 +73,8 @@ import {
   getCompatibleParams,
   getSizeOptionsForModel,
 } from '../../constants/model-config';
+import { matchFrameSizeForModel } from '../../utils/frame-size-matcher';
+import { sizeToAspectRatio } from '../../services/media-api/utils';
 import { useSelectableModels } from '../../hooks/use-runtime-models';
 import { getPinnedSelectableModel } from '../../utils/runtime-model-discovery';
 import {
@@ -128,7 +132,7 @@ function getAspectRatioFromSizeParam(size?: string): string | undefined {
   if (!size) return undefined;
   if (size === 'auto') return DEFAULT_ASPECT_RATIO;
 
-  const aspectRatio = size.replace(/[xX]/g, ':');
+  const aspectRatio = sizeToAspectRatio(size.toLowerCase());
   return ASPECT_RATIO_OPTIONS.some((option) => option.value === aspectRatio)
     ? aspectRatio
     : undefined;
@@ -154,14 +158,19 @@ function applyAspectRatioToParams(
     return params;
   }
 
-  const nextSize =
+  let nextSize =
     nextAspectRatio === DEFAULT_ASPECT_RATIO
       ? 'auto'
       : convertAspectRatioToSize(nextAspectRatio);
+  const sizeOptions = getSizeOptionsForModel(modelId);
   if (
-    !nextSize ||
-    !getSizeOptionsForModel(modelId).some((option) => option.value === nextSize)
+    nextSize !== 'auto' &&
+    !sizeOptions.some((option) => option.value === nextSize)
   ) {
+    const [width, height] = nextAspectRatio.split(':').map(Number);
+    nextSize = matchFrameSizeForModel(width, height, modelId);
+  }
+  if (!nextSize || !sizeOptions.some((option) => option.value === nextSize)) {
     return params;
   }
 
@@ -352,6 +361,7 @@ const AIImageGeneration = ({
   const [mobilePanel, setMobilePanel] = useState<'config' | 'tasks'>('config');
   const containerRef = useRef<HTMLDivElement>(null);
   const promptPasteScopeRef = useRef<HTMLDivElement>(null);
+  const referenceImageUploadRef = useRef<ReferenceImageUploadHandle>(null);
   const { viewportWidth } = useDeviceType();
   const isCompactLayout = viewportWidth <= 768;
 
@@ -1116,8 +1126,29 @@ const AIImageGeneration = ({
 
   useKeyboardShortcuts(isGenerating, prompt, () => handleGenerate(1));
 
+  const handleDroppedReferenceFiles = useCallback((files: File[]) => {
+    return referenceImageUploadRef.current?.importFiles(files);
+  }, []);
+  const {
+    isDraggingFiles: isDraggingReferenceFiles,
+    dropTargetProps: referenceFileDropTargetProps,
+  } = useLocalFileDrop({
+    disabled: isGenerating,
+    onFiles: handleDroppedReferenceFiles,
+  });
+
   return (
-    <div className="ai-image-generation-container">
+    <div
+      className={`ai-image-generation-container ${
+        isDraggingReferenceFiles
+          ? 'ai-image-generation-container--image-drag-active'
+          : ''
+      }`}
+      onDragEnterCapture={referenceFileDropTargetProps.onDragEnter}
+      onDragOverCapture={referenceFileDropTargetProps.onDragOver}
+      onDragLeaveCapture={referenceFileDropTargetProps.onDragLeave}
+      onDropCapture={referenceFileDropTargetProps.onDrop}
+    >
       {isCompactLayout ? (
         <div className="ai-generation-mobile-switcher" role="tablist">
           <button
@@ -1207,6 +1238,7 @@ const AIImageGeneration = ({
 
             {/* 参考图片区域 */}
             <ReferenceImageUpload
+              ref={referenceImageUploadRef}
               images={uploadedImages}
               onImagesChange={setUploadedImages}
               language={language}

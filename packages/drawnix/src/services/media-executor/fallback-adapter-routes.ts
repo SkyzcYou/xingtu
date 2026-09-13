@@ -475,6 +475,7 @@ export async function executeVideoViaAdapter(
 
     // 缓存远程签名 URL 到本地
     const videoFmt = result.format || 'mp4';
+    let cacheWarning: CacheWarning | undefined;
     const cachedVideoUrl = await cacheRemoteUrl(
       result.url,
       taskId,
@@ -483,7 +484,12 @@ export async function executeVideoViaAdapter(
       undefined,
       {
         signal: options?.signal,
+        forceRemoteCache: true,
+        returnLocalCacheUrl: true,
         resultVisibility: params.resultVisibility,
+        onCacheWarning: (warning) => {
+          cacheWarning ||= warning;
+        },
       }
     );
     assertCurrentExecutionAttempt(options);
@@ -495,6 +501,7 @@ export async function executeVideoViaAdapter(
         format: videoFmt,
         size: 0,
         duration: result.duration,
+        ...(cacheWarning ? { cacheWarning } : {}),
       },
       undefined,
       createStorageWriteGuard(options)
