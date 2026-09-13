@@ -916,6 +916,8 @@ function precacheManifestPlugin(): Plugin {
       async handler() {
         const outDir = path.resolve(__dirname, '../../dist/apps/web');
         const indexHtmlPath = path.join(outDir, 'index.html');
+        // A failed build has no output shell; preserve its original error.
+        if (!fs.existsSync(indexHtmlPath)) return;
         const precacheUrls = await collectHtmlShellPrecacheUrls(indexHtmlPath);
         const manifest = await collectSelectedEntries(
           outDir,
