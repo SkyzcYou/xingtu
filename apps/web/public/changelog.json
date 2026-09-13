@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "6.7.25",
+      "date": "2026-09-13",
+      "type": "patch",
+      "highlights": "支持拖放参考图并接入 GPT Image 2.5 图片模型",
+      "changes": {
+        "features": [
+          "支持拖放参考图并接入 GPT Image 2.5 图片模型"
+        ],
+        "fixes": [
+          "优化兔子帐号同步与模型加载，修复图片同源代理与请求标识",
+          "保留星图主题、帐号系统、积分支付和本地供应商配置"
+        ],
+        "improvements": []
+      }
+    },
+    {
       "version": "6.7.24",
       "date": "2026-09-10",
       "changes": {
