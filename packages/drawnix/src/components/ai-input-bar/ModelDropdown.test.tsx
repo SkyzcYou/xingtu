@@ -41,7 +41,6 @@ vi.mock('../../hooks/use-provider-profiles', () => ({
   ],
 }));
 
-vi.mock('../../utils/runtime-model-discovery', () => ({ runtimeModelDiscovery: { getState: vi.fn(), discover: vi.fn(), applySelection: vi.fn() } }));
 
 vi.mock('../../utils/settings-manager', () => ({
   XINGTU_LOGIN_PROVIDER_PROFILE_ID: 'xingtu-login',

@@ -1966,7 +1966,8 @@ class RuntimeModelDiscoveryStore {
         trimmedApiKey,
         signature,
         fallbackBaseUrls,
-        options
+        options,
+        refreshOidcOnUnauthorized
       );
     }
 
@@ -1984,7 +1985,8 @@ class RuntimeModelDiscoveryStore {
       trimmedApiKey,
       signature,
       fallbackBaseUrls,
-      options
+      options,
+      refreshOidcOnUnauthorized
     );
     this.inFlightDiscoveries.set(discoveryKey, discovery);
     const clearInFlight = () => {
@@ -2002,7 +2004,8 @@ class RuntimeModelDiscoveryStore {
     trimmedApiKey: string,
     signature: string,
     fallbackBaseUrls: string[],
-    options: RuntimeModelDiscoveryOptions
+    options: RuntimeModelDiscoveryOptions,
+    refreshOidcOnUnauthorized = false
   ): Promise<ModelConfig[]> {
     const state = this.getCatalogState(profileId);
 
