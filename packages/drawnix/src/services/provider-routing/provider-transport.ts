@@ -13,6 +13,15 @@ import {
   isTuziRequestIdCorsBaseUrl,
 } from './tuzi-api-endpoints';
 
+function getBaseUrlPathSuffix(baseUrl: string): string {
+  try {
+    const parsed = new URL(trimTrailingSlashes(baseUrl));
+    return parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, '');
+  } catch {
+    return '';
+  }
+}
+
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, '');
 }
