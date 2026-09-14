@@ -17,138 +17,8 @@ function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, '');
 }
 
-/**
- * 固定代理目标，避免开放站点成为任意地址转发器。
- * 路由名需与 Vite、Vercel、Netlify 及 Nginx 配置保持一致。
- */
-const TUZI_SAME_ORIGIN_PROXY_ROUTES: Readonly<Record<string, string>> = {
-  'api.tu-zi.com': 'api',
-  'apius.tu-zi.com': 'apius',
-  'apicdn.tu-zi.com': 'apicdn',
-  'api.sydney-ai.com': 'sydney',
-  'api.ourzhishi.top': 'ourzhishi',
-  'apisz.ourzhishi.top': 'ourzhishi-sz',
-};
-const TUZI_SAME_ORIGIN_PROXY_PREFIX = '/__opentu_tuzi_proxy__';
-const LOCAL_DEV_HOSTS: readonly string[] = ['localhost', '127.0.0.1', '::1'];
 const TUZI_IMAGE_SUBMISSION_PATH_PATTERN =
   /^\/(?:v\d+(?:beta\d*)?\/)?images\/(?:generations|edits)\/?$/i;
-const TUZI_IMAGE_RECOVERY_PATH_PATTERN = /^\/images\/generations\/result\/?$/i;
-const OPENTU_IMAGE_RECOVERY_PROXY_HOSTS = new Set([
-  'opentu.ai',
-  'pr.opentu.ai',
-]);
-
-export function isLocalDevHostname(hostname?: string): boolean {
-  if (!hostname) return false;
-  return (
-    LOCAL_DEV_HOSTS.includes(hostname) ||
-    /^10\./.test(hostname) ||
-    /^192\.168\./.test(hostname) ||
-    /^172\.(?:1[6-9]|2\d|3[01])\./.test(hostname)
-  );
-}
-
-export function supportsTuziSameOriginProxyHostname(
-  hostname: string | undefined,
-  isDev: boolean,
-  explicitlyEnabled = false
-): boolean {
-  if (!hostname) return false;
-  if (explicitlyEnabled) return true;
-  return isDev && isLocalDevHostname(hostname);
-}
-
-export function rewriteTuziBaseUrlForSameOriginProxy(
-  baseUrl: string,
-  hostname: string | undefined,
-  isDev: boolean,
-  explicitlyEnabled = false
-): string {
-  try {
-    const enabled = supportsTuziSameOriginProxyHostname(
-      hostname,
-      isDev,
-      explicitlyEnabled
-    );
-    if (!enabled) return baseUrl;
-    if (!/^https?:\/\//i.test(baseUrl)) return baseUrl;
-
-    const parsed = new URL(baseUrl);
-    const route = TUZI_SAME_ORIGIN_PROXY_ROUTES[parsed.host];
-    if (!route) return baseUrl;
-    const pathname = parsed.pathname === '/' ? '' : parsed.pathname;
-    return `${TUZI_SAME_ORIGIN_PROXY_PREFIX}/${route}${pathname}`.replace(
-      /\/+$/,
-      ''
-    );
-  } catch {
-    return baseUrl;
-  }
-}
-
-function rewriteBaseUrlForSameOriginProxy(baseUrl: string): string {
-  return rewriteTuziBaseUrlForSameOriginProxy(
-    baseUrl,
-    globalThis.location?.hostname,
-    import.meta.env.DEV && import.meta.env.MODE !== 'test',
-    import.meta.env.VITE_TUZI_SAME_ORIGIN_PROXY === '1'
-  );
-}
-
-function canUseTuziImageRecoveryProxy(
-  context: ResolvedProviderContext,
-  path: string
-): boolean {
-  const hostname = globalThis.location?.hostname;
-  if (
-    !hostname ||
-    !isTrustedTuziApiBaseUrl(context.baseUrl) ||
-    /^https?:\/\//i.test(path) ||
-    !rewriteTuziBaseUrlForSameOriginProxy(
-      context.baseUrl,
-      hostname,
-      false,
-      true
-    ).startsWith(`${TUZI_SAME_ORIGIN_PROXY_PREFIX}/`)
-  ) {
-    return false;
-  }
-  return (
-    OPENTU_IMAGE_RECOVERY_PROXY_HOSTS.has(hostname) ||
-    hostname.endsWith('.vercel.app') ||
-    hostname.endsWith('.netlify.app')
-  );
-}
-
-function isTuziImageSubmissionProxyRequest(
-  context: ResolvedProviderContext,
-  request: Pick<
-    ProviderTransportRequest,
-    'path' | 'method' | 'allowImageSubmissionOutcomeRecovery'
-  >
-): boolean {
-  const requestPath = request.path.split(/[?#]/, 1)[0] || '';
-  return (
-    canUseTuziImageRecoveryProxy(context, request.path) &&
-    isPostRequestMethod(request.method) &&
-    request.allowImageSubmissionOutcomeRecovery !== false &&
-    TUZI_IMAGE_SUBMISSION_PATH_PATTERN.test(requestPath)
-  );
-}
-
-function isTuziImageRecoveryProxyRequest(
-  context: ResolvedProviderContext,
-  request: ProviderTransportRequest
-): boolean {
-  const requestPath = request.path.split(/[?#]/, 1)[0] || '';
-  return (
-    canUseTuziImageRecoveryProxy(context, request.path) &&
-    (request.method || 'GET').toUpperCase() === 'GET' &&
-    Boolean(request.query?.request_id) &&
-    TUZI_IMAGE_RECOVERY_PATH_PATTERN.test(requestPath)
-  );
-}
 
 function discardResponseBody(response: Response): void {
   if (!response.body || response.bodyUsed) {
@@ -162,30 +32,11 @@ function discardResponseBody(response: Response): void {
   }
 }
 
-function assertValidTuziSameOriginProxyResponse(
-  requestUrl: string,
-  response: Response
-): Response {
-  if (!requestUrl.startsWith(`${TUZI_SAME_ORIGIN_PROXY_PREFIX}/`)) {
-    return response;
-  }
-
-  const contentType = response.headers.get('content-type')?.toLowerCase() || '';
-  if (contentType.includes('text/html')) {
-    discardResponseBody(response);
-    throw new Error(
-      'Tuzi 同源代理未生效：接口返回了网页内容，请检查部署代理配置'
-    );
-  }
-  return response;
-}
-
 function applyBaseUrlStrategy(
   baseUrl: string,
   strategy: ProviderBaseUrlStrategy = 'preserve'
 ): string {
-  const rewritten = rewriteBaseUrlForSameOriginProxy(baseUrl);
-  const normalizedBaseUrl = trimTrailingSlashes(rewritten);
+  const normalizedBaseUrl = trimTrailingSlashes(baseUrl);
 
   switch (strategy) {
     case 'trim-v1':
@@ -225,15 +76,6 @@ function joinUrl(baseUrl: string, path: string): string {
   }
 
   return `${normalizedBase}${normalizedPath}`;
-}
-
-function getBaseUrlPathSuffix(baseUrl: string): string {
-  try {
-    const parsed = new URL(trimTrailingSlashes(baseUrl));
-    return parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, '');
-  } catch {
-    return '';
-  }
 }
 
 function isAmbiguousNetworkError(error: unknown): boolean {
@@ -508,13 +350,6 @@ export async function readProviderResponseText(
   return readProviderResponseBody(response);
 }
 
-function isTuziProxyHtmlResponseError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.message.includes('Tuzi 同源代理未生效：接口返回了网页内容')
-  );
-}
-
 async function shouldRetryTuziResponse(
   context: ResolvedProviderContext,
   request: ProviderTransportRequest,
@@ -766,19 +601,14 @@ function isTuziRequestIdSubmission(
   );
 }
 
-function isRecoverableTuziImageRequestIdSubmission(
+function isRecoverableTuziImageSubmission(
   context: ResolvedProviderContext,
-  request: ProviderTransportRequest,
-  prepared: PreparedProviderTransportRequest
+  request: ProviderTransportRequest
 ): boolean {
   const requestPath = request.path.split(/[?#]/, 1)[0] || '';
-  const attachedRequestId = Object.entries(prepared.headers).find(
-    ([name]) => name.toLowerCase() === 'x-request-id'
-  )?.[1];
   return (
     request.allowImageSubmissionOutcomeRecovery !== false &&
     isTuziRequestIdSubmission(context, request) &&
-    attachedRequestId === request.requestId &&
     isPostRequestMethod(request.method) &&
     TUZI_IMAGE_SUBMISSION_PATH_PATTERN.test(requestPath)
   );
@@ -788,59 +618,8 @@ function allowsNetworkFallback(request: ProviderTransportRequest): boolean {
   return isReadOnlyRequestMethod(request.method);
 }
 
-function routeTuziImageRecoveryRequest(
-  context: ResolvedProviderContext,
-  request: ProviderTransportRequest
-): ResolvedProviderContext {
-  if (
-    !(
-      isTuziImageSubmissionProxyRequest(context, request) ||
-      isTuziImageRecoveryProxyRequest(context, request)
-    )
-  ) {
-    return context;
-  }
-
-  const proxiedBaseUrl = rewriteTuziBaseUrlForSameOriginProxy(
-    context.baseUrl,
-    globalThis.location?.hostname,
-    false,
-    true
-  );
-  if (proxiedBaseUrl === context.baseUrl) {
-    return context;
-  }
-
-  return { ...context, baseUrl: proxiedBaseUrl };
-}
-
-function assertValidTuziImageSubmissionTransport(
-  context: ResolvedProviderContext,
-  request: ProviderTransportRequest,
-  url: string,
-  headers: Record<string, string>
-): void {
-  if (!isTuziImageSubmissionProxyRequest(context, request)) {
-    return;
-  }
-
-  if (!request.requestId) {
-    throw new Error('Tuzi 图片提交缺少 Request ID，已阻止无法恢复的正式请求');
-  }
-  if (!url.startsWith(`${TUZI_SAME_ORIGIN_PROXY_PREFIX}/`)) {
-    throw new Error('Tuzi 图片提交未进入同源代理，已阻止跨域正式请求');
-  }
-
-  const attachedRequestId = Object.entries(headers).find(
-    ([name]) => name.toLowerCase() === 'x-request-id'
-  )?.[1];
-  if (attachedRequestId !== request.requestId) {
-    throw new Error('Tuzi 图片提交的 Request ID 未正确附加');
-  }
-}
-
 /**
- * X-Request-Id 只在可信固定代理或明确放行该请求头的 Tuzi 节点上启用。
+ * X-Request-Id 只在明确放行该请求头的可信 Tuzi 节点上启用。
  */
 export function canAttachProviderRequestIdHeader(
   context: ResolvedProviderContext,
@@ -860,8 +639,7 @@ export function canAttachProviderRequestIdHeader(
   return (
     isPostRequestMethod(request.method) &&
     isTrustedTuziRequestTarget(context, request) &&
-    (isTuziImageSubmissionProxyRequest(context, request) ||
-      !/^https?:\/\//i.test(requestUrl) ||
+    (!/^https?:\/\//i.test(requestUrl) ||
       isTuziRequestIdCorsBaseUrl(requestUrl))
   );
 }
@@ -872,20 +650,19 @@ export class ProviderTransport {
     request: ProviderTransportRequest,
     credential: string
   ): PreparedProviderTransportRequest {
-    const routedContext = routeTuziImageRecoveryRequest(context, request);
     const resolvedBaseUrl = applyBaseUrlStrategy(
-      routedContext.baseUrl,
+      context.baseUrl,
       request.baseUrlStrategy
     );
     const requestUrl = joinUrl(resolvedBaseUrl, request.path);
     const credentialContext = shouldInheritProviderCredentials(
-      routedContext,
+      context,
       requestUrl
     )
-      ? routedContext
-      : { ...routedContext, apiKey: '', extraHeaders: undefined };
+      ? context
+      : { ...context, apiKey: '', extraHeaders: undefined };
     const url = `${requestUrl}${buildQueryString(
-      applyAuthQueryWithCredential(credentialContext, request.query || {}, shouldInheritProviderCredentials(routedContext, requestUrl) ? credential : '')
+      applyAuthQueryWithCredential(credentialContext, request.query || {}, shouldInheritProviderCredentials(context, requestUrl) ? credential : '')
     )}`;
     const mergedHeaders = mergeHeaders(
       credentialContext.extraHeaders,
@@ -894,7 +671,7 @@ export class ProviderTransport {
     const authenticatedHeaders = applyAuthHeadersWithCredential(
       credentialContext,
       mergedHeaders,
-      shouldInheritProviderCredentials(routedContext, requestUrl) ? credential : ''
+      shouldInheritProviderCredentials(context, requestUrl) ? credential : ''
     );
     const finalHeaders = applyRequestIdHeader(
       authenticatedHeaders,
@@ -902,13 +679,6 @@ export class ProviderTransport {
       canAttachProviderRequestIdHeader(context, request),
       Boolean(request.requestId) || isReadOnlyRequestMethod(request.method)
     );
-    assertValidTuziImageSubmissionTransport(
-      context,
-      request,
-      url,
-      finalHeaders
-    );
-
     return {
       url,
       headers: finalHeaders,
@@ -979,8 +749,7 @@ export class ProviderTransport {
       return response;
     };
     const shouldContinueFallback = (error: unknown): boolean =>
-      isTuziProxyHtmlResponseError(error) ||
-      (isAmbiguousNetworkError(error) && allowsNetworkFallback(request));
+      isAmbiguousNetworkError(error) && allowsNetworkFallback(request);
     const sendFallbackRequests = async (
       initialResponse?: Response
     ): Promise<Response | null> => {
@@ -995,9 +764,9 @@ export class ProviderTransport {
             { ...context, baseUrl: fallbackBaseUrl },
             { ...request, signal: timeoutControl.signal }
           );
-          const fallbackResponse = assertValidTuziSameOriginProxyResponse(
+          const fallbackResponse = await fetcher(
             fallbackPrepared.url,
-            await fetcher(fallbackPrepared.url, fallbackPrepared.init)
+            fallbackPrepared.init
           );
           if (
             !(await shouldRetryTuziResponse(context, request, fallbackResponse))
@@ -1033,10 +802,8 @@ export class ProviderTransport {
         signal: timeoutControl.signal,
       };
       const prepared = await this.prepareRequestAsync(context, requestWithSignal);
-      recoverableImageSubmission = isRecoverableTuziImageRequestIdSubmission(context, request, prepared);
-      let response = assertValidTuziSameOriginProxyResponse(
-        prepared.url, await fetcher(prepared.url, prepared.init)
-      );
+      recoverableImageSubmission = isRecoverableTuziImageSubmission(context, request);
+      let response = await fetcher(prepared.url, prepared.init);
       if (response.status === 401 && context.credentialSource === 'oidc-session') {
         const refreshedToken = await getFreshOidcAccessToken({ forceRefresh: true });
         if (refreshedToken) {
