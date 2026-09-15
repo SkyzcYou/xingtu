@@ -77,6 +77,7 @@ describe('settings-repository', () => {
   it('builds a routable legacy snapshot for a non-default selected image model', async () => {
     vi.doMock('../../utils/settings-manager', () => ({
       DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: 'openai-gpt-image',
+      DEFAULT_PROVIDER_VIDEO_API_COMPATIBILITY: 'auto',
       LEGACY_DEFAULT_PROVIDER_IMAGE_API_COMPATIBILITY: 'tuzi-gpt-image',
       LEGACY_DEFAULT_PROVIDER_PROFILE_ID: 'legacy-default',
       TUZI_DEFAULT_PROVIDER_NAME: '兔子 AI',

@@ -3,6 +3,7 @@ import {
   generateImageAsync,
   generateImageSync,
   resumeAsyncImagePolling,
+  queryVideoStatus,
   submitVideoGeneration,
 } from '../media-api';
 import type { ProviderModelBinding } from '../provider-routing/types';
