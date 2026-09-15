@@ -29,7 +29,11 @@ import {
   extractInlineVideoUrl,
   isXingliuVideoBinding,
   isXingliuVideoResultReady,
-  resolveVideoPollPath,
+  buildMiniMaxH3VideoRequest,
+  isMiniMaxH3Model,
+  normalizeMiniMaxH3VideoResponse,
+  resolveMiniMaxH3VideoSubmitPath,
+  resolveVideoPollPathForModel,
   resolveVideoSubmission,
   shouldDownloadVideoContent,
 } from './video-binding-utils';
@@ -105,7 +109,9 @@ interface PollingOptions {
   params?: Record<string, unknown>;
 }
 
-function inferAuthType(route: ReturnType<typeof resolveInvocationRoute>): ProviderAuthStrategy {
+function inferAuthType(
+  route: ReturnType<typeof resolveInvocationRoute>
+): ProviderAuthStrategy {
   return route.authType;
 }
 
@@ -131,9 +137,9 @@ function resolveProviderContext(
 
 function resolveVideoPlanContext(routeModel?: string | ModelRef | null): {
   providerContext: ResolvedProviderContext;
-  binding: NonNullable<
-    ReturnType<typeof resolveInvocationPlanFromRoute>
-  >['binding'] | null;
+  binding:
+    | NonNullable<ReturnType<typeof resolveInvocationPlanFromRoute>>['binding']
+    | null;
 } {
   const plan = resolveInvocationPlanFromRoute('video', routeModel);
   return {
@@ -166,7 +172,9 @@ function getFirstVideoReference(
   params: VideoGenerationParams
 ): UploadedVideoImage | null {
   if (params.inputReferences?.length) {
-    return [...params.inputReferences].sort((a, b) => a.slot - b.slot)[0] || null;
+    return (
+      [...params.inputReferences].sort((a, b) => a.slot - b.slot)[0] || null
+    );
   }
 
   return params.inputReference
@@ -201,7 +209,10 @@ class VideoAPIService {
     // 开始记录 LLM API 调用（降级模式直接调用）
     const referenceCount =
       params.inputReferences?.length || (params.inputReference ? 1 : 0);
-    const submitPath = binding?.submitPath || '/videos';
+    const isMiniMaxH3 = isMiniMaxH3Model(params.model);
+    const submitPath = isMiniMaxH3
+      ? resolveMiniMaxH3VideoSubmitPath(params.params)
+      : binding?.submitPath || '/videos';
     const logId = startLLMApiLog({
       endpoint: submitPath,
       model: params.model,
@@ -225,7 +236,31 @@ class VideoAPIService {
     let requestBody: BodyInit;
     let requestHeaders: Record<string, string> | undefined;
 
-    if (isXingliuVideo) {
+    if (isMiniMaxH3) {
+      const references = params.inputReferences?.length
+        ? [...params.inputReferences].sort((a, b) => a.slot - b.slot)
+        : params.inputReference
+        ? [{ slot: 0, url: params.inputReference }]
+        : [];
+      const referenceImages: string[] = [];
+      for (const reference of references) {
+        if (reference.url) {
+          referenceImages.push(
+            (await unifiedCacheService.getImageForAI(reference.url)).value
+          );
+        }
+      }
+      requestHeaders = { 'Content-Type': 'application/json' };
+      requestBody = JSON.stringify(
+        buildMiniMaxH3VideoRequest({
+          prompt: params.prompt,
+          duration: submission.duration,
+          size: params.size,
+          ratio: params.params?.ratio,
+          referenceImages,
+        })
+      );
+    } else if (isXingliuVideo) {
       const metadata = buildXingliuVideoMetadata(
         params.size,
         params.params,
@@ -242,7 +277,10 @@ class VideoAPIService {
         }
         formData.append('metadata', JSON.stringify(metadata));
 
-        const blob = await prepareReferenceImageBlob(reference.url, params.size);
+        const blob = await prepareReferenceImageBlob(
+          reference.url,
+          params.size
+        );
         if (!blob) {
           throw new Error('视频参考图处理失败');
         }
@@ -280,9 +318,16 @@ class VideoAPIService {
             continue;
           }
 
-          const blob = await prepareReferenceImageBlob(imageRef.url, params.size);
+          const blob = await prepareReferenceImageBlob(
+            imageRef.url,
+            params.size
+          );
           if (blob) {
-            formData.append('input_reference', blob, imageRef.name || 'image.png');
+            formData.append(
+              'input_reference',
+              blob,
+              imageRef.name || 'image.png'
+            );
           }
         }
       } else if (params.inputReference) {
@@ -300,7 +345,7 @@ class VideoAPIService {
 
     const response = await providerTransport.send(providerContext, {
       path: submitPath,
-      baseUrlStrategy: binding?.baseUrlStrategy,
+      baseUrlStrategy: isMiniMaxH3 ? 'trim-v1' : binding?.baseUrlStrategy,
       method: 'POST',
       headers: requestHeaders,
       body: requestBody,
@@ -323,7 +368,10 @@ class VideoAPIService {
       throw error;
     }
 
-    const result = await response.json();
+    const rawResult = await response.json();
+    const result = isMiniMaxH3
+      ? normalizeMiniMaxH3VideoResponse(rawResult)
+      : rawResult;
     const duration = Date.now() - startTime;
 
     // 记录视频提交成功（此时视频尚未生成完成，只是提交成功）
@@ -372,9 +420,17 @@ class VideoAPIService {
       throw new Error('API Key 未配置');
     }
 
+    const routeModelId =
+      typeof routeModel === 'string' ? routeModel : routeModel?.modelId;
+    const isMiniMaxH3 = isMiniMaxH3Model(routeModelId);
     const response = await providerTransport.send(providerContext, {
-      path: resolveVideoPollPath(videoId, binding, params),
-      baseUrlStrategy: binding?.baseUrlStrategy,
+      path: resolveVideoPollPathForModel(
+        videoId,
+        routeModelId,
+        binding,
+        params
+      ),
+      baseUrlStrategy: isMiniMaxH3 ? 'trim-v1' : binding?.baseUrlStrategy,
       method: 'GET',
     });
 
@@ -389,7 +445,10 @@ class VideoAPIService {
       throw error;
     }
 
-    const result = await response.json();
+    const rawResult = await response.json();
+    const result = isMiniMaxH3
+      ? normalizeMiniMaxH3VideoResponse(rawResult, videoId)
+      : rawResult;
     // console.log('[VideoAPI] Query response:', JSON.stringify(result, null, 2));
     return result;
   }
@@ -633,7 +692,13 @@ class VideoAPIService {
     );
     const inlineUrl = extractInlineVideoUrl(status as Record<string, any>);
 
-    if (!shouldDownloadVideoContent(status.model, binding, status as Record<string, any>)) {
+    if (
+      !shouldDownloadVideoContent(
+        status.model,
+        binding,
+        status as Record<string, any>
+      )
+    ) {
       return inlineUrl ? { ...status, url: inlineUrl } : status;
     }
 

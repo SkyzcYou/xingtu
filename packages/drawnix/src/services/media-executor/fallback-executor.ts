@@ -1005,7 +1005,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         try {
           const result = await pollVideoStatus(
             videoId,
-            config.videoConfig,
+            videoApiConfig,
             (progress) => {
               if (!isCurrentPollingAttempt()) return;
               // progress 是 0-1 范围（来自 pollVideoStatus 的 progress/100）
@@ -1958,6 +1958,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       },
       videoConfig: {
         apiKey: videoRoute.apiKey,
+        model: videoRoute.modelId,
         // 规范化 baseUrl，移除尾部 / 或 /v1，便于拼接 /v1/videos
         baseUrl: this.normalizeApiBase(
           videoRoute.baseUrl || 'https://api.tu-zi.com'

@@ -24,7 +24,11 @@ import {
   extractInlineVideoUrl,
   isXingliuVideoBinding,
   isXingliuVideoResultReady,
-  resolveVideoPollPath,
+  buildMiniMaxH3VideoRequest,
+  isMiniMaxH3Model,
+  normalizeMiniMaxH3VideoResponse,
+  resolveMiniMaxH3VideoSubmitPath,
+  resolveVideoPollPathForModel,
   resolveVideoSubmission,
   shouldDownloadVideoContent,
 } from '../video-binding-utils';
@@ -50,7 +54,10 @@ async function prepareFirstReferenceImageBlob(
     throw new Error(`Failed to fetch reference image: ${response.status}`);
   }
 
-  const blob = await prepareVideoReferenceImageBlob(await response.blob(), size);
+  const blob = await prepareVideoReferenceImageBlob(
+    await response.blob(),
+    size
+  );
   return createFormDataBlob(blob);
 }
 
@@ -212,7 +219,10 @@ export async function submitVideoGeneration(
     config.binding,
     params.params as Record<string, string> | undefined
   );
-  const submitPath = config.binding?.submitPath || '/v1/videos';
+  const isMiniMaxH3 = isMiniMaxH3Model(model);
+  const submitPath = isMiniMaxH3
+    ? resolveMiniMaxH3VideoSubmitPath(params.params)
+    : config.binding?.submitPath || '/v1/videos';
 
   const isXingliuVideo = isXingliuVideoBinding(
     config.binding,
@@ -221,7 +231,18 @@ export async function submitVideoGeneration(
   let requestBody: BodyInit;
   let requestHeaders: Record<string, string> | undefined;
 
-  if (isXingliuVideo) {
+  if (isMiniMaxH3) {
+    requestHeaders = { 'Content-Type': 'application/json' };
+    requestBody = JSON.stringify(
+      buildMiniMaxH3VideoRequest({
+        prompt: params.prompt,
+        duration: submission.duration,
+        size: params.size,
+        ratio: params.params?.ratio,
+        referenceImages: params.referenceImages,
+      })
+    );
+  } else if (isXingliuVideo) {
     const metadata = buildXingliuVideoMetadata(
       params.size,
       params.params,
@@ -251,7 +272,9 @@ export async function submitVideoGeneration(
       requestBody = JSON.stringify({
         model: submission.model,
         prompt: params.prompt,
-        ...(submission.duration ? { seconds: String(submission.duration) } : {}),
+        ...(submission.duration
+          ? { seconds: String(submission.duration) }
+          : {}),
         metadata,
       });
     }
@@ -291,7 +314,7 @@ export async function submitVideoGeneration(
 
   const response = await providerTransport.send(providerContext, {
     path: submitPath,
-    baseUrlStrategy: config.binding?.baseUrlStrategy,
+    baseUrlStrategy: isMiniMaxH3 ? 'trim-v1' : config.binding?.baseUrlStrategy,
     method: 'POST',
     headers: requestHeaders,
     body: requestBody,
@@ -304,7 +327,8 @@ export async function submitVideoGeneration(
     throw buildVideoSubmissionHttpError(response.status, errorText);
   }
 
-  const data = await response.json();
+  const rawData = await response.json();
+  const data = isMiniMaxH3 ? normalizeMiniMaxH3VideoResponse(rawData) : rawData;
 
   if (data.status === 'failed') {
     throw new VideoGenerationFailedError(
@@ -335,10 +359,16 @@ export async function queryVideoStatus(
   const fetchFn = config.fetchImpl || fetch;
   const baseUrl = normalizeApiBase(config.baseUrl);
   const providerContext = buildProviderContextFromApiConfig(config, baseUrl);
+  const isMiniMaxH3 = isMiniMaxH3Model(config.defaultModel);
 
   const response = await providerTransport.send(providerContext, {
-    path: resolveVideoPollPath(videoId, config.binding, config.params),
-    baseUrlStrategy: config.binding?.baseUrlStrategy,
+    path: resolveVideoPollPathForModel(
+      videoId,
+      config.defaultModel,
+      config.binding,
+      config.params
+    ),
+    baseUrlStrategy: isMiniMaxH3 ? 'trim-v1' : config.binding?.baseUrlStrategy,
     method: 'GET',
     signal,
     fetcher: fetchFn,
@@ -348,7 +378,10 @@ export async function queryVideoStatus(
     throw new Error(`Video status query failed: ${response.status}`);
   }
 
-  return response.json();
+  const data = await response.json();
+  return isMiniMaxH3
+    ? (normalizeMiniMaxH3VideoResponse(data, videoId) as VideoStatusResponse)
+    : data;
 }
 
 /**
@@ -368,6 +401,7 @@ export async function pollVideoUntilComplete(
   const fetchFn = config.fetchImpl || fetch;
   const baseUrl = normalizeApiBase(config.baseUrl);
   const providerContext = buildProviderContextFromApiConfig(config, baseUrl);
+  const isMiniMaxH3 = isMiniMaxH3Model(config.defaultModel);
 
   let attempts = 0;
   let consecutiveErrors = 0;
@@ -380,8 +414,15 @@ export async function pollVideoUntilComplete(
 
     try {
       const response = await providerTransport.send(providerContext, {
-        path: resolveVideoPollPath(videoId, config.binding, config.params),
-        baseUrlStrategy: config.binding?.baseUrlStrategy,
+        path: resolveVideoPollPathForModel(
+          videoId,
+          config.defaultModel,
+          config.binding,
+          config.params
+        ),
+        baseUrlStrategy: isMiniMaxH3
+          ? 'trim-v1'
+          : config.binding?.baseUrlStrategy,
         signal,
         fetcher: fetchFn,
       });
@@ -412,7 +453,13 @@ export async function pollVideoUntilComplete(
       // 请求成功，重置连续错误计数
       consecutiveErrors = 0;
 
-      const data: VideoStatusResponse = await response.json();
+      const rawData = await response.json();
+      const data: VideoStatusResponse = isMiniMaxH3
+        ? (normalizeMiniMaxH3VideoResponse(
+            rawData,
+            videoId
+          ) as VideoStatusResponse)
+        : rawData;
       const status =
         data.status?.toLowerCase() as VideoStatusResponse['status'];
 
@@ -495,7 +542,15 @@ export async function generateVideo(
   onRemoteId?.(remoteId);
 
   // 轮询等待完成
-  const result = await pollVideoUntilComplete(remoteId, config, options);
+  const result = await pollVideoUntilComplete(
+    remoteId,
+    {
+      ...config,
+      defaultModel: params.model || config.defaultModel,
+      params: { ...config.params, ...params.params },
+    },
+    options
+  );
   const videoUrl =
     extractInlineVideoUrl(result as Record<string, any>) ||
     (shouldDownloadVideoContent(

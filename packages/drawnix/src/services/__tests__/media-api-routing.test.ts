@@ -249,32 +249,113 @@ describe('media-api provider routing', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it('submits Xingliu text-to-video as JSON with minimum-cost metadata', async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe('https://video.example.com/v1/videos');
-      expect(init?.method).toBe('POST');
-      expect(init?.body).not.toBeInstanceOf(FormData);
-      const headers = init?.headers as Record<string, string>;
-      expect(headers['Content-Type']).toBe('application/json');
-
-      const body = JSON.parse(String(init?.body));
-      expect(body).toEqual({
-        model: 'doubao-seedance-2-0-fast-260128',
-        prompt: 'white ball rolling on a table',
-        seconds: '5',
-        metadata: {
-          resolution: '480p',
+  it('submits MiniMax-H3 through its official v2 JSON endpoint', async () => {
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe(
+          'https://video.example.com/v2/video_generation'
+        );
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer video-secret',
+          'Content-Type': 'application/json',
+        });
+        expect(JSON.parse(String(init?.body))).toEqual({
+          model: 'MiniMax-H3',
+          content: [{ type: 'text', text: 'make a video' }],
+          duration: 5,
+          resolution: '2K',
           ratio: '16:9',
-          generate_audio: false,
-          watermark: false,
-        },
-      });
-      expect(body.size).toBeUndefined();
+        });
+
+        return new Response(JSON.stringify({ task_id: 'minimax-task-1' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    );
+
+    const remoteId = await submitVideoGeneration(
+      {
+        prompt: 'make a video',
+        model: 'MiniMax-H3',
+        duration: '5',
+        size: '2k',
+        params: { ratio: '16:9', api_version: 'v2' },
+      },
+      {
+        apiKey: 'video-secret',
+        baseUrl: 'https://video.example.com/v1',
+        authType: 'bearer',
+        fetchImpl,
+      }
+    );
+
+    expect(remoteId).toBe('minimax-task-1');
+  });
+
+  it('submits MiniMax-H3 through the default v1 JSON endpoint', async () => {
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe('https://video.example.com/v1/videos');
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer video-secret',
+          'Content-Type': 'application/json',
+        });
+        expect(JSON.parse(String(init?.body))).toEqual({
+          model: 'MiniMax-H3',
+          content: [{ type: 'text', text: 'make a v1 video' }],
+          duration: 5,
+          resolution: '2K',
+          ratio: '16:9',
+        });
+
+        return new Response(
+          JSON.stringify({
+            id: 'minimax-v1-task-1',
+            model: 'MiniMax-H3',
+            status: 'queued',
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    );
+
+    const remoteId = await submitVideoGeneration(
+      {
+        prompt: 'make a v1 video',
+        model: 'MiniMax-H3',
+        duration: '5',
+        size: '2K',
+        params: { ratio: '16:9' },
+      },
+      {
+        apiKey: 'video-secret',
+        baseUrl: 'https://video.example.com/v1',
+        authType: 'bearer',
+        fetchImpl,
+      }
+    );
+
+    expect(remoteId).toBe('minimax-v1-task-1');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('polls MiniMax-H3 through its official v2 endpoint', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        'https://video.example.com/v2/query/video_generation/minimax-task-1'
+      );
 
       return new Response(
         JSON.stringify({
-          id: 'video-task-1',
-          status: 'unknown',
+          task: {
+            id: 'minimax-task-1',
+            model: 'MiniMax-H3',
+            status: 'running',
+          },
         }),
         {
           status: 200,
@@ -282,6 +363,145 @@ describe('media-api provider routing', () => {
         }
       );
     });
+
+    const status = await queryVideoStatus('minimax-task-1', {
+      apiKey: 'video-secret',
+      baseUrl: 'https://video.example.com/v1',
+      defaultModel: 'MiniMax-H3',
+      params: { api_version: 'v2' },
+      authType: 'bearer',
+      fetchImpl,
+    });
+
+    expect(status).toMatchObject({
+      id: 'minimax-task-1',
+      model: 'MiniMax-H3',
+      status: 'in_progress',
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('polls MiniMax-H3 through the default v1 endpoint', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        'https://video.example.com/v1/videos/minimax-v1-task-1'
+      );
+
+      return new Response(
+        JSON.stringify({
+          id: 'minimax-v1-task-1',
+          model: 'MiniMax-H3',
+          status: 'in_progress',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    });
+
+    const status = await queryVideoStatus('minimax-v1-task-1', {
+      apiKey: 'video-secret',
+      baseUrl: 'https://video.example.com/v1',
+      defaultModel: 'MiniMax-H3',
+      authType: 'bearer',
+      fetchImpl,
+    });
+
+    expect(status).toMatchObject({
+      id: 'minimax-v1-task-1',
+      model: 'MiniMax-H3',
+      status: 'in_progress',
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses manual binding submit path for shared video submission', async () => {
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe('https://video.example.com/custom/videos');
+        expect(init?.method).toBe('POST');
+        expect(init?.body).toBeInstanceOf(FormData);
+
+        return new Response(
+          JSON.stringify({
+            id: 'custom-video-task-1',
+            status: 'queued',
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    );
+
+    const remoteId = await submitVideoGeneration(
+      {
+        prompt: 'make a video',
+        model: 'custom-video-model',
+      },
+      {
+        apiKey: 'video-secret',
+        baseUrl: 'https://video.example.com/v1',
+        authType: 'bearer',
+        fetchImpl,
+        binding: {
+          id: 'provider-manual:custom-video-model:video:manual:openai.video.form-input-reference',
+          profileId: 'provider-manual',
+          modelId: 'custom-video-model',
+          operation: 'video',
+          protocol: 'openai.async.video',
+          requestSchema: 'openai.video.form-input-reference',
+          responseSchema: 'openai.async.task',
+          submitPath: '/custom/videos',
+          pollPathTemplate: '/custom/videos/{taskId}',
+          priority: 900,
+          confidence: 'high',
+          source: 'manual',
+        },
+      }
+    );
+
+    expect(remoteId).toBe('custom-video-task-1');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('submits Xingliu text-to-video as JSON with minimum-cost metadata', async () => {
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe('https://video.example.com/v1/videos');
+        expect(init?.method).toBe('POST');
+        expect(init?.body).not.toBeInstanceOf(FormData);
+        const headers = init?.headers as Record<string, string>;
+        expect(headers['Content-Type']).toBe('application/json');
+
+        const body = JSON.parse(String(init?.body));
+        expect(body).toEqual({
+          model: 'doubao-seedance-2-0-fast-260128',
+          prompt: 'white ball rolling on a table',
+          seconds: '5',
+          metadata: {
+            resolution: '480p',
+            ratio: '16:9',
+            generate_audio: false,
+            watermark: false,
+          },
+        });
+        expect(body.size).toBeUndefined();
+
+        return new Response(
+          JSON.stringify({
+            id: 'video-task-1',
+            status: 'unknown',
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    );
 
     const remoteId = await submitVideoGeneration(
       {
@@ -303,24 +523,26 @@ describe('media-api provider routing', () => {
   });
 
   it('filters unsupported Xingliu metadata in shared video API', async () => {
-    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body));
-      expect(body.metadata).toMatchObject({
-        resolution: '480p',
-        ratio: '16:9',
-      });
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        expect(body.metadata).toMatchObject({
+          resolution: '480p',
+          ratio: '16:9',
+        });
 
-      return new Response(
-        JSON.stringify({
-          id: 'video-task-1',
-          status: 'unknown',
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    });
+        return new Response(
+          JSON.stringify({
+            id: 'video-task-1',
+            status: 'unknown',
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    );
 
     await submitVideoGeneration(
       {
@@ -343,48 +565,50 @@ describe('media-api provider routing', () => {
   });
 
   it('submits Xingliu image-to-video as multipart image payload', async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === 'data:image/png;base64,abc123') {
-        return new Response(new Blob(['ref'], { type: 'image/png' }), {
-          status: 200,
-        });
-      }
-
-      expect(String(input)).toBe('https://video.example.com/v1/videos');
-      expect(init?.method).toBe('POST');
-      expect(init?.body).toBeInstanceOf(FormData);
-      const formData = init?.body as FormData;
-      expect([...formData.keys()].sort()).toEqual([
-        'image',
-        'metadata',
-        'model',
-        'prompt',
-        'seconds',
-      ]);
-      expect(formData.get('model')).toBe('doubao-seedance-2-0-fast-260128');
-      expect(formData.get('prompt')).toBe('animate reference image');
-      expect(formData.get('seconds')).toBe('5');
-      expect(JSON.parse(String(formData.get('metadata')))).toEqual({
-        resolution: '480p',
-        ratio: '16:9',
-        generate_audio: false,
-        watermark: false,
-      });
-      expect(formData.get('image')).toBeInstanceOf(Blob);
-      expect(formData.has('input_reference')).toBe(false);
-      expect(formData.has('size')).toBe(false);
-
-      return new Response(
-        JSON.stringify({
-          id: 'video-task-1',
-          status: 'unknown',
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === 'data:image/png;base64,abc123') {
+          return new Response(new Blob(['ref'], { type: 'image/png' }), {
+            status: 200,
+          });
         }
-      );
-    });
+
+        expect(String(input)).toBe('https://video.example.com/v1/videos');
+        expect(init?.method).toBe('POST');
+        expect(init?.body).toBeInstanceOf(FormData);
+        const formData = init?.body as FormData;
+        expect([...formData.keys()].sort()).toEqual([
+          'image',
+          'metadata',
+          'model',
+          'prompt',
+          'seconds',
+        ]);
+        expect(formData.get('model')).toBe('doubao-seedance-2-0-fast-260128');
+        expect(formData.get('prompt')).toBe('animate reference image');
+        expect(formData.get('seconds')).toBe('5');
+        expect(JSON.parse(String(formData.get('metadata')))).toEqual({
+          resolution: '480p',
+          ratio: '16:9',
+          generate_audio: false,
+          watermark: false,
+        });
+        expect(formData.get('image')).toBeInstanceOf(Blob);
+        expect(formData.has('input_reference')).toBe(false);
+        expect(formData.has('size')).toBe(false);
+
+        return new Response(
+          JSON.stringify({
+            id: 'video-task-1',
+            status: 'unknown',
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    );
 
     const remoteId = await submitVideoGeneration(
       {

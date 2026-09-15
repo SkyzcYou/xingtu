@@ -26,7 +26,9 @@ import {
   downloadVideoContentToLocalUrl,
   extractInlineVideoUrl,
   isXingliuVideoResultReady,
-  resolveVideoPollPath,
+  isMiniMaxH3Model,
+  normalizeMiniMaxH3VideoResponse,
+  resolveVideoPollPathForModel,
   shouldDownloadVideoContent,
 } from '../video-binding-utils';
 
@@ -137,6 +139,7 @@ export async function pollVideoStatus(
   const interval = 5000; // 5 秒轮询间隔
   const maxConsecutiveErrors = 3; // 连续 HTTP 错误超过此数才放弃
   let consecutiveErrors = 0;
+  const isMiniMaxH3 = isMiniMaxH3Model(config.model);
   const assertPollingActive = () => {
     signal?.throwIfAborted();
     if (!isCurrentAttempt()) {
@@ -150,8 +153,9 @@ export async function pollVideoStatus(
     assertPollingActive();
     let data: any;
     try {
-      const statusPath = resolveVideoPollPath(
+      const statusPath = resolveVideoPollPathForModel(
         videoId,
+        config.model,
         config.binding,
         config.params
       );
@@ -167,7 +171,9 @@ export async function pollVideoStatus(
         },
         {
           path: statusPath,
-          baseUrlStrategy: config.binding?.baseUrlStrategy,
+          baseUrlStrategy: isMiniMaxH3
+            ? 'trim-v1'
+            : config.binding?.baseUrlStrategy,
           method: 'GET',
           signal,
         }
@@ -189,7 +195,10 @@ export async function pollVideoStatus(
         continue;
       }
 
-      data = await response.json();
+      const rawData = await response.json();
+      data = isMiniMaxH3
+        ? normalizeMiniMaxH3VideoResponse(rawData, videoId)
+        : rawData;
       assertPollingActive();
     } catch (error: any) {
       // 网络错误（fetch 本身失败）也计入连续错误
@@ -384,6 +393,30 @@ function hasVideoSignature(bytes: Uint8Array): boolean {
   );
 }
 
+async function readBlobAsArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+  if (typeof blob.arrayBuffer === 'function') {
+    return blob.arrayBuffer();
+  }
+
+  if (typeof FileReader !== 'undefined') {
+    return new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () =>
+        reject(reader.error || new Error('failed to read media blob'));
+      reader.onload = () => {
+        if (reader.result instanceof ArrayBuffer) {
+          resolve(reader.result);
+          return;
+        }
+        reject(new Error('media blob did not produce an ArrayBuffer'));
+      };
+      reader.readAsArrayBuffer(blob);
+    });
+  }
+
+  return new Response(blob).arrayBuffer();
+}
+
 /**
  * Validate only a bounded prefix so a bad HTTP 200 body cannot be persisted as media.
  * The complete Blob is already produced by the Fetch API, but no additional full-size
@@ -415,14 +448,7 @@ async function assertCacheableMediaBlob(
   if (mediaType === 'audio') return;
 
   const prefixBlob = blob.slice(0, MEDIA_SIGNATURE_BYTES);
-  let prefixBuffer: ArrayBuffer;
-  if (typeof prefixBlob.arrayBuffer === 'function') {
-    prefixBuffer = await prefixBlob.arrayBuffer();
-  } else if (typeof blob.arrayBuffer === 'function') {
-    prefixBuffer = (await blob.arrayBuffer()).slice(0, MEDIA_SIGNATURE_BYTES);
-  } else {
-    prefixBuffer = await new Response(prefixBlob).arrayBuffer();
-  }
+  const prefixBuffer = await readBlobAsArrayBuffer(prefixBlob);
   const prefix = new Uint8Array(prefixBuffer);
   const validSignature =
     mediaType === 'image'
