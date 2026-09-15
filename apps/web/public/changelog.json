@@ -1,6 +1,23 @@
 {
   "versions": [
     {
+      "version": "6.7.27",
+      "date": "2026-09-16",
+      "type": "patch",
+      "highlights": "支持 MiniMax-H3 V1/V2 专用视频接口及首帧参考图",
+      "changes": {
+        "features": [
+          "支持 MiniMax-H3 V1/V2 专用视频接口及首帧参考图",
+          "完善兔子账户工作区、用量日志与图片预览"
+        ],
+        "fixes": [
+          "完善图片 Request ID 幂等恢复与安全节点切换",
+          "修复视频缓存响应处理，保留星图主题、帐号、积分支付及星流视频定制"
+        ],
+        "improvements": []
+      }
+    },
+    {
       "version": "6.7.26",
       "date": "2026-09-14",
       "type": "patch",
