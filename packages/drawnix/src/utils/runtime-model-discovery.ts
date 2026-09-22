@@ -174,7 +174,8 @@ async function fetchRemoteModelList(
   baseUrl: string,
   apiKey: string,
   signal?: AbortSignal,
-  refreshOidcOnUnauthorized = false
+  refreshOidcOnUnauthorized = false,
+  useTuziSessionProxy = true
 ): Promise<string> {
   const controller =
     typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -185,18 +186,30 @@ async function fetchRemoteModelList(
   if (signal?.aborted) abortFromCaller();
   signal?.addEventListener('abort', abortFromCaller, { once: true });
   try {
-    let response = await fetch(getModelListRequestUrl(baseUrl), {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-      ...(controller ? { signal: controller.signal } : {}),
-    });
+    let response = await fetch(
+      useTuziSessionProxy
+        ? getModelListRequestUrl(baseUrl)
+        : `${baseUrl}/models`,
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        ...(controller ? { signal: controller.signal } : {}),
+      }
+    );
 
     if (response.status === 401 && refreshOidcOnUnauthorized) {
       const token = await getFreshOidcAccessToken({ forceRefresh: true });
-      if (token?.trim()) response = await fetch(getModelListRequestUrl(baseUrl), {
-        signal: controller?.signal || signal, headers: { Authorization: `Bearer ${token.trim()}` },
-      });
+      if (token?.trim())
+        response = await fetch(
+          useTuziSessionProxy
+            ? getModelListRequestUrl(baseUrl)
+            : `${baseUrl}/models`,
+          {
+            signal: controller?.signal || signal,
+            headers: { Authorization: `Bearer ${token.trim()}` },
+          }
+        );
     }
     const rawText = await response.text();
     if (!response.ok) {
@@ -224,9 +237,15 @@ function getModelListRequestUrl(baseUrl: string): string {
   if (typeof window === 'undefined') return `${baseUrl}/models`;
   try {
     const parsed = new URL(baseUrl);
-    if (parsed.protocol === 'https:' && parsed.hostname.toLowerCase() === 'api.tu-zi.com') {
+    if (
+      parsed.protocol === 'https:' &&
+      parsed.hostname.toLowerCase() === 'api.tu-zi.com'
+    ) {
       const path = `${parsed.pathname.replace(/\/+$/, '')}/models`;
-      return new URL(`/__opentu_tuzi_session__${path.startsWith('/') ? path : `/${path}`}`, window.location.origin).toString();
+      return new URL(
+        `/__opentu_tuzi_session__${path.startsWith('/') ? path : `/${path}`}`,
+        window.location.origin
+      ).toString();
     }
   } catch {}
   return `${baseUrl}/models`;
@@ -263,7 +282,13 @@ async function fetchRemoteModelListWithFallback(
 
   for (let index = 0; index < baseUrls.length; index += 1) {
     try {
-      return await fetchRemoteModelList(baseUrls[index], apiKey, signal, refreshOidcOnUnauthorized);
+      return await fetchRemoteModelList(
+        baseUrls[index],
+        apiKey,
+        signal,
+        refreshOidcOnUnauthorized,
+        index === 0
+      );
     } catch (error) {
       if (error instanceof Error && !/failed to fetch/i.test(error.message)) {
         throw error;

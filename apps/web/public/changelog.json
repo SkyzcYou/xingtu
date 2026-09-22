@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "6.7.28",
+      "date": "2026-09-22",
+      "type": "patch",
+      "highlights": "完善 MiniMax-H3 V2 工作流与 GPT Image 2.5 参数",
+      "changes": {
+        "features": [
+          "补齐 GPT Image 2.5 尺寸与分辨率参数",
+          "完善 MiniMax-H3 V2 工作流与 2K 升级"
+        ],
+        "fixes": [
+          "保留星图主题、帐号系统、积分支付和本地供应商定制"
+        ],
+        "improvements": []
+      }
+    },
+    {
       "version": "6.7.27",
       "date": "2026-09-16",
       "type": "patch",

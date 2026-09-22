@@ -56,13 +56,29 @@ function hasRunnableProviderConfig(profile: ProviderProfile): boolean {
   const apiKey = typeof profile.apiKey === 'string' ? profile.apiKey : '';
 
   return (
-    profile.enabled && baseUrl.trim().length > 0 && (profile.credentialSource === 'oidc-session' || apiKey.trim().length > 0)
+    profile.enabled && baseUrl.trim().length > 0 && apiKey.trim().length > 0
   );
 }
 
-function normalizeProviderId(model: ModelConfig): string {
+function getManagedDefaultProviderId(
+  providerProfiles: ProviderProfile[]
+): string | null {
+  return (
+    providerProfiles.find(
+      (profile) =>
+        profile.id.startsWith('tuzi-managed-') &&
+        profile.pricingGroup === 'default' &&
+        hasRunnableProviderConfig(profile)
+    )?.id || null
+  );
+}
+
+function normalizeProviderId(
+  model: ModelConfig,
+  managedDefaultProviderId: string | null
+): string {
   if (!model.sourceProfileId) {
-    return DEFAULT_PROVIDER_ID;
+    return managedDefaultProviderId || DEFAULT_PROVIDER_ID;
   }
 
   return model.sourceProfileId;
@@ -76,12 +92,14 @@ export function groupModelsByProvider(
   providerProfiles: ProviderProfile[]
 ): ProviderGroup[] {
   const profileMap = new Map(providerProfiles.map((p) => [p.id, p]));
+  const managedDefaultProviderId =
+    getManagedDefaultProviderId(providerProfiles);
   const seen = new Set<string>();
 
   // 按 provider 分桶
   const buckets = new Map<string, ModelConfig[]>();
   for (const model of models) {
-    const pid = normalizeProviderId(model);
+    const pid = normalizeProviderId(model, managedDefaultProviderId);
     const dedupeKey = `${pid}::${model.type}::${model.id}`;
     if (seen.has(dedupeKey)) {
       continue;
@@ -144,7 +162,11 @@ export function groupModelsByProvider(
   }
 
   for (const profile of providerProfiles) {
-    if (!hasRunnableProviderConfig(profile) || buckets.has(profile.id)) {
+    if (
+      !hasRunnableProviderConfig(profile) ||
+      buckets.has(profile.id) ||
+      (managedDefaultProviderId && profile.id === DEFAULT_PROVIDER_ID)
+    ) {
       continue;
     }
 
@@ -163,18 +185,17 @@ export function groupModelsByProvider(
     });
   }
 
-  // default 置顶，其余按名称排序
-  const getProviderOrder = (providerId: string) => {
-    if (providerId === XINGTU_LOGIN_PROVIDER_PROFILE_ID) return 0;
-    if (providerId === DEFAULT_PROVIDER_ID) return 1;
-    return 2;
-  };
-
+  // 当前实际使用的 default 置顶，其余按名称排序
+  const defaultProviderId = managedDefaultProviderId || DEFAULT_PROVIDER_ID;
   groups.sort((a, b) => {
-    const priorityDiff =
-      getProviderOrder(a.providerId) - getProviderOrder(b.providerId);
-    if (priorityDiff !== 0) return priorityDiff;
-    return a.providerName.localeCompare(b.providerName);
+    const rank = (id: string) =>
+      id === XINGTU_LOGIN_PROVIDER_PROFILE_ID
+        ? 0
+        : id === defaultProviderId
+        ? 1
+        : 2;
+    const diff = rank(a.providerId) - rank(b.providerId);
+    return diff || a.providerName.localeCompare(b.providerName);
   });
 
   return groups;
