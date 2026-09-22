@@ -37,7 +37,11 @@ import {
   shouldDownloadVideoContent,
 } from './video-binding-utils';
 import { prepareVideoReferenceImageBlob } from './video-reference-image-utils';
-import { prepareMiniMaxH3Submission } from './minimax-h3-video-workflow';
+import {
+  prepareMiniMaxH3Submission,
+  isMiniMaxH3RegenerationRequest,
+  resolveMiniMaxH3InitialSubmitPath,
+} from './minimax-h3-video-workflow';
 
 // Re-export VideoModel for backward compatibility
 export type { VideoModel };
@@ -210,7 +214,9 @@ class VideoAPIService {
     const referenceCount =
       params.inputReferences?.length || (params.inputReference ? 1 : 0);
     const isMiniMaxH3 = isMiniMaxH3Model(params.model);
-    let submitPath = binding?.submitPath || '/videos';
+    let submitPath = isMiniMaxH3
+      ? resolveMiniMaxH3InitialSubmitPath(params.params)
+      : binding?.submitPath || '/videos';
     const logId = startLLMApiLog({
       endpoint: submitPath,
       model: params.model,
@@ -235,9 +241,30 @@ class VideoAPIService {
     let requestHeaders: Record<string, string> | undefined;
 
     if (isMiniMaxH3) {
+      const referenceImages: string[] = [];
+      if (!isMiniMaxH3RegenerationRequest(params.params)) {
+        const references = params.inputReferences?.length
+          ? [...params.inputReferences].sort((a, b) => a.slot - b.slot)
+          : params.inputReference
+          ? [{ slot: 0, url: params.inputReference }]
+          : [];
+        for (const reference of references) {
+          if (reference.url) {
+            referenceImages.push(
+              (await unifiedCacheService.getImageForAI(reference.url)).value
+            );
+          }
+        }
+      }
       const miniMaxSubmission = await prepareMiniMaxH3Submission(
-        { prompt: params.prompt, duration: submission.duration, size: params.size,
-          ratio: params.params?.ratio, referenceImages: params.inputReferences?.map((r) => r.url).filter(Boolean) as string[] || [], params: params.params },
+        {
+          prompt: params.prompt,
+          duration: submission.duration,
+          size: params.size,
+          ratio: params.params?.ratio,
+          referenceImages,
+          params: params.params,
+        },
         { provider: providerContext }
       );
       requestHeaders = { 'Content-Type': 'application/json' };
@@ -287,7 +314,12 @@ class VideoAPIService {
         formData.append(submission.durationField, submission.duration);
       }
 
-      appendVideoOutputParams(formData, params.model, params.size, params.params);
+      appendVideoOutputParams(
+        formData,
+        params.model,
+        params.size,
+        params.params
+      );
 
       if (params.inputReferences && params.inputReferences.length > 0) {
         const sortedImages = [...params.inputReferences].sort(
