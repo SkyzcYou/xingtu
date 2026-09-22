@@ -5,6 +5,7 @@
  */
 
 $accent-primary: var(--xingtu-theme-accent);
+$orange-primary: var(--xingtu-theme-accent);
 $accent-dark: var(--xingtu-theme-accent-hover);
 $gray-light: #f3f4f6;
 $gray-medium: var(--xingtu-glass-text-tertiary);
@@ -209,7 +210,8 @@ $green-health: #10b981;
     background: var(--xingtu-glass-control-bg);
     color: var(--xingtu-glass-text-primary);
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    transition: background 0.15s ease, border-color 0.15s ease,
+      transform 0.15s ease;
 
     &:hover {
       border-color: var(--xingtu-glass-border-hover);
@@ -778,7 +780,8 @@ $green-health: #10b981;
     max-width: none !important;
     max-height: min(72dvh, 560px) !important;
     overflow: hidden !important;
-    animation: model-dropdown-mobile-slide-up 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: model-dropdown-mobile-slide-up 0.18s
+      cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .model-dropdown__menu--portalled {
