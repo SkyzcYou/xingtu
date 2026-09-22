@@ -1009,6 +1009,7 @@ function idlePrefetchManifestPlugin(): Plugin {
         );
 
         const manifestPath = path.join(outDir, 'idle-prefetch-manifest.json');
+        fs.mkdirSync(outDir, { recursive: true });
         fs.writeFileSync(
           manifestPath,
           JSON.stringify(
