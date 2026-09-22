@@ -185,7 +185,7 @@ async function fetchRemoteModelList(
   if (signal?.aborted) abortFromCaller();
   signal?.addEventListener('abort', abortFromCaller, { once: true });
   try {
-    let response = await fetch(`${baseUrl}/models`, {
+    let response = await fetch(getModelListRequestUrl(baseUrl), {
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
@@ -194,7 +194,7 @@ async function fetchRemoteModelList(
 
     if (response.status === 401 && refreshOidcOnUnauthorized) {
       const token = await getFreshOidcAccessToken({ forceRefresh: true });
-      if (token?.trim()) response = await fetch(`${baseUrl}/models`, {
+      if (token?.trim()) response = await fetch(getModelListRequestUrl(baseUrl), {
         signal: controller?.signal || signal, headers: { Authorization: `Bearer ${token.trim()}` },
       });
     }
@@ -218,6 +218,18 @@ async function fetchRemoteModelList(
     if (timeoutId !== undefined) clearTimeout(timeoutId);
     signal?.removeEventListener('abort', abortFromCaller);
   }
+}
+
+function getModelListRequestUrl(baseUrl: string): string {
+  if (typeof window === 'undefined') return `${baseUrl}/models`;
+  try {
+    const parsed = new URL(baseUrl);
+    if (parsed.protocol === 'https:' && parsed.hostname.toLowerCase() === 'api.tu-zi.com') {
+      const path = `${parsed.pathname.replace(/\/+$/, '')}/models`;
+      return new URL(`/__opentu_tuzi_session__${path.startsWith('/') ? path : `/${path}`}`, window.location.origin).toString();
+    }
+  } catch {}
+  return `${baseUrl}/models`;
 }
 
 function buildModelDiscoveryBaseUrls(

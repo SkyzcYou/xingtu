@@ -20,19 +20,19 @@ import {
 import { providerTransport } from '../provider-routing/provider-transport';
 import {
   buildXingliuVideoMetadata,
+  appendVideoOutputParams,
   downloadVideoContentToLocalUrl,
   extractInlineVideoUrl,
   isXingliuVideoBinding,
   isXingliuVideoResultReady,
-  buildMiniMaxH3VideoRequest,
   isMiniMaxH3Model,
   normalizeMiniMaxH3VideoResponse,
-  resolveMiniMaxH3VideoSubmitPath,
   resolveVideoPollPathForModel,
   resolveVideoSubmission,
   shouldDownloadVideoContent,
 } from '../video-binding-utils';
 import { prepareVideoReferenceImageBlob } from '../video-reference-image-utils';
+import { prepareMiniMaxH3Submission } from '../minimax-h3-video-workflow';
 
 const DURATION_IN_MODEL_PREFIX = 'sora-2-';
 const PROVIDER_ERROR_PREVIEW_LIMIT = 1000;
@@ -220,9 +220,6 @@ export async function submitVideoGeneration(
     params.params as Record<string, string> | undefined
   );
   const isMiniMaxH3 = isMiniMaxH3Model(model);
-  const submitPath = isMiniMaxH3
-    ? resolveMiniMaxH3VideoSubmitPath(params.params)
-    : config.binding?.submitPath || '/v1/videos';
 
   const isXingliuVideo = isXingliuVideoBinding(
     config.binding,
@@ -232,16 +229,14 @@ export async function submitVideoGeneration(
   let requestHeaders: Record<string, string> | undefined;
 
   if (isMiniMaxH3) {
-    requestHeaders = { 'Content-Type': 'application/json' };
-    requestBody = JSON.stringify(
-      buildMiniMaxH3VideoRequest({
-        prompt: params.prompt,
-        duration: submission.duration,
-        size: params.size,
-        ratio: params.params?.ratio,
-        referenceImages: params.referenceImages,
-      })
+    const miniMaxSubmission = await prepareMiniMaxH3Submission(
+      { prompt: params.prompt, duration: submission.duration, size: params.size,
+        ratio: params.params?.ratio, referenceImages: params.referenceImages, params: params.params },
+      { provider: providerContext, fetcher: fetchFn, signal }
     );
+    requestHeaders = { 'Content-Type': 'application/json' };
+    requestBody = JSON.stringify(miniMaxSubmission.body);
+    var miniMaxSubmitPath = miniMaxSubmission.path;
   } else if (isXingliuVideo) {
     const metadata = buildXingliuVideoMetadata(
       params.size,
@@ -287,9 +282,7 @@ export async function submitVideoGeneration(
       formData.append(submission.durationField, String(submission.duration));
     }
 
-    if (params.size) {
-      formData.append('size', params.size);
-    }
+    appendVideoOutputParams(formData, model, params.size, params.params);
 
     if (params.referenceImages && params.referenceImages.length > 0) {
       for (let i = 0; i < params.referenceImages.length; i++) {
@@ -312,6 +305,7 @@ export async function submitVideoGeneration(
     requestBody = formData;
   }
 
+  const submitPath = isMiniMaxH3 ? miniMaxSubmitPath! : config.binding?.submitPath || '/v1/videos';
   const response = await providerTransport.send(providerContext, {
     path: submitPath,
     baseUrlStrategy: isMiniMaxH3 ? 'trim-v1' : config.binding?.baseUrlStrategy,

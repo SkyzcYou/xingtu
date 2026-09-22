@@ -25,19 +25,19 @@ import {
 } from './media-executor/llm-api-logger';
 import {
   buildXingliuVideoMetadata,
+  appendVideoOutputParams,
   downloadVideoContentToLocalUrl,
   extractInlineVideoUrl,
   isXingliuVideoBinding,
   isXingliuVideoResultReady,
-  buildMiniMaxH3VideoRequest,
   isMiniMaxH3Model,
   normalizeMiniMaxH3VideoResponse,
-  resolveMiniMaxH3VideoSubmitPath,
   resolveVideoPollPathForModel,
   resolveVideoSubmission,
   shouldDownloadVideoContent,
 } from './video-binding-utils';
 import { prepareVideoReferenceImageBlob } from './video-reference-image-utils';
+import { prepareMiniMaxH3Submission } from './minimax-h3-video-workflow';
 
 // Re-export VideoModel for backward compatibility
 export type { VideoModel };
@@ -210,9 +210,7 @@ class VideoAPIService {
     const referenceCount =
       params.inputReferences?.length || (params.inputReference ? 1 : 0);
     const isMiniMaxH3 = isMiniMaxH3Model(params.model);
-    const submitPath = isMiniMaxH3
-      ? resolveMiniMaxH3VideoSubmitPath(params.params)
-      : binding?.submitPath || '/videos';
+    let submitPath = binding?.submitPath || '/videos';
     const logId = startLLMApiLog({
       endpoint: submitPath,
       model: params.model,
@@ -237,29 +235,14 @@ class VideoAPIService {
     let requestHeaders: Record<string, string> | undefined;
 
     if (isMiniMaxH3) {
-      const references = params.inputReferences?.length
-        ? [...params.inputReferences].sort((a, b) => a.slot - b.slot)
-        : params.inputReference
-        ? [{ slot: 0, url: params.inputReference }]
-        : [];
-      const referenceImages: string[] = [];
-      for (const reference of references) {
-        if (reference.url) {
-          referenceImages.push(
-            (await unifiedCacheService.getImageForAI(reference.url)).value
-          );
-        }
-      }
-      requestHeaders = { 'Content-Type': 'application/json' };
-      requestBody = JSON.stringify(
-        buildMiniMaxH3VideoRequest({
-          prompt: params.prompt,
-          duration: submission.duration,
-          size: params.size,
-          ratio: params.params?.ratio,
-          referenceImages,
-        })
+      const miniMaxSubmission = await prepareMiniMaxH3Submission(
+        { prompt: params.prompt, duration: submission.duration, size: params.size,
+          ratio: params.params?.ratio, referenceImages: params.inputReferences?.map((r) => r.url).filter(Boolean) as string[] || [], params: params.params },
+        { provider: providerContext }
       );
+      requestHeaders = { 'Content-Type': 'application/json' };
+      requestBody = JSON.stringify(miniMaxSubmission.body);
+      submitPath = miniMaxSubmission.path;
     } else if (isXingliuVideo) {
       const metadata = buildXingliuVideoMetadata(
         params.size,
@@ -304,9 +287,7 @@ class VideoAPIService {
         formData.append(submission.durationField, submission.duration);
       }
 
-      if (params.size) {
-        formData.append('size', params.size);
-      }
+      appendVideoOutputParams(formData, params.model, params.size, params.params);
 
       if (params.inputReferences && params.inputReferences.length > 0) {
         const sortedImages = [...params.inputReferences].sort(
