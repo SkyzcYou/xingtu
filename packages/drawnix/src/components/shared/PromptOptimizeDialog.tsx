@@ -206,8 +206,11 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
       fallbackModelRef
     );
     const matchedModel =
-      findMatchingSelectableModel(textModels, stored.modelId, stored.modelRef) ||
-      getPinnedSelectableModel('text', stored.modelId, stored.modelRef);
+      findMatchingSelectableModel(
+        textModels,
+        stored.modelId,
+        stored.modelRef
+      ) || getPinnedSelectableModel('text', stored.modelId, stored.modelRef);
     const modelId = matchedModel?.id || stored.modelId || fallbackModelId;
     const modelRef =
       getModelRefFromConfig(matchedModel) ||
@@ -327,7 +330,9 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
       analytics.trackPromptAction({
         action: 'optimize',
         surface: 'prompt_optimize_dialog',
-        promptType: toPromptAnalyticsType(effectiveHistoryType || effectiveType),
+        promptType: toPromptAnalyticsType(
+          effectiveHistoryType || effectiveType
+        ),
         mode,
         status: 'success',
         model: optimizerModel || undefined,
@@ -360,7 +365,9 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
         analytics.trackPromptAction({
           action: 'optimize',
           surface: 'prompt_optimize_dialog',
-          promptType: toPromptAnalyticsType(effectiveHistoryType || effectiveType),
+          promptType: toPromptAnalyticsType(
+            effectiveHistoryType || effectiveType
+          ),
           mode,
           status: 'cancelled',
           model: optimizerModel || undefined,
@@ -374,7 +381,9 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
       analytics.trackPromptAction({
         action: 'optimize',
         surface: 'prompt_optimize_dialog',
-        promptType: toPromptAnalyticsType(effectiveHistoryType || effectiveType),
+        promptType: toPromptAnalyticsType(
+          effectiveHistoryType || effectiveType
+        ),
         mode,
         status: 'failed',
         model: optimizerModel || undefined,
@@ -382,8 +391,7 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
         requirements,
         durationMs: Date.now() - startTime,
         metadata: {
-          error:
-            error instanceof Error ? error.name || 'Error' : typeof error,
+          error: error instanceof Error ? error.name || 'Error' : typeof error,
         },
       });
       MessagePlugin.error(
@@ -436,9 +444,7 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
     const promptToApply = (optimizedDraft || currentPrompt).trim();
     if (!promptToApply) {
       MessagePlugin.warning(
-        language === 'zh'
-          ? '没有可回填的提示词'
-          : 'There is no prompt to apply'
+        language === 'zh' ? '没有可回填的提示词' : 'There is no prompt to apply'
       );
       return;
     }
@@ -473,7 +479,12 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
     setRequirementsHistory(readRequirementsHistory());
     setActiveHistoryPanel(null);
     setMode(effectiveDefaultMode);
-  }, [effectiveDefaultMode, open, originalPrompt, syncOptimizerModelFromStorage]);
+  }, [
+    effectiveDefaultMode,
+    open,
+    originalPrompt,
+    syncOptimizerModelFromStorage,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -544,10 +555,7 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
   );
   const windowId = useMemo(
     () =>
-      `prompt-optimize-dialog-${reactWindowId.replace(
-        /[^a-zA-Z0-9_-]/g,
-        ''
-      )}`,
+      `prompt-optimize-dialog-${reactWindowId.replace(/[^a-zA-Z0-9_-]/g, '')}`,
     [reactWindowId]
   );
   const title =
@@ -586,7 +594,9 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
         action: 'toggle_history',
         surface: 'prompt_optimize_dialog',
         promptType: toPromptAnalyticsType(
-          panel === 'current' ? effectiveHistoryType || effectiveType : undefined
+          panel === 'current'
+            ? effectiveHistoryType || effectiveType
+            : undefined
         ),
         mode,
         metadata: { panel },
@@ -613,7 +623,9 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
       analytics.trackPromptAction({
         action: 'mode_select',
         surface: 'prompt_optimize_dialog',
-        promptType: toPromptAnalyticsType(effectiveHistoryType || effectiveType),
+        promptType: toPromptAnalyticsType(
+          effectiveHistoryType || effectiveType
+        ),
         mode: nextMode,
       });
       setMode(nextMode);
@@ -643,7 +655,9 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
             language={language}
             analyticsSurface={`prompt_optimize_${panel}_history`}
             analyticsPromptType={toPromptAnalyticsType(
-              panel === 'current' ? effectiveHistoryType || effectiveType : undefined
+              panel === 'current'
+                ? effectiveHistoryType || effectiveType
+                : undefined
             )}
             showCount
           />
@@ -850,7 +864,9 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
                     analytics.trackPromptAction({
                       action: 'model_select',
                       surface: 'prompt_optimize_dialog',
-                      promptType: toPromptAnalyticsType(effectiveHistoryType || effectiveType),
+                      promptType: toPromptAnalyticsType(
+                        effectiveHistoryType || effectiveType
+                      ),
                       mode,
                       model: modelId,
                     });
@@ -862,13 +878,14 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
                       nextModelRef
                     );
                   }}
-                  onSelectModel={(model, modelRef) => {
-                    const nextModelRef =
-                      modelRef ?? getModelRefFromConfig(model);
+                  onSelectModel={(model) => {
+                    const nextModelRef = getModelRefFromConfig(model);
                     analytics.trackPromptAction({
                       action: 'model_select',
                       surface: 'prompt_optimize_dialog',
-                      promptType: toPromptAnalyticsType(effectiveHistoryType || effectiveType),
+                      promptType: toPromptAnalyticsType(
+                        effectiveHistoryType || effectiveType
+                      ),
                       mode,
                       model: model.id,
                     });
@@ -933,9 +950,7 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
                 onClick={handleUseDraftAsCurrent}
                 disabled={isOptimizing}
               >
-                {language === 'zh'
-                  ? '用结果继续优化'
-                  : 'Use Draft to Refine'}
+                {language === 'zh' ? '用结果继续优化' : 'Use Draft to Refine'}
               </button>
             </div>
           )}

@@ -1372,14 +1372,14 @@ const AIVideoGeneration = ({
                       onModelChange(value);
                       onModelRefChange?.(nextModelRef);
                     }}
-                    onSelectModel={(model: ModelConfig, modelRef) => {
+                    onSelectModel={(model: ModelConfig) => {
                       const nextModel = model.id as VideoModel;
                       initialModelAppliedRef.current = null; // 用户手动切换，解除保护
                       setCurrentModel(nextModel);
                       const nextModelRef = resolveVideoModelRef(
                         visibleVideoModels,
                         nextModel,
-                        modelRef ?? getModelRefFromConfig(model)
+                        getModelRefFromConfig(model)
                       );
                       setCurrentModelRef(nextModelRef);
                       setVideoSelectedParams(

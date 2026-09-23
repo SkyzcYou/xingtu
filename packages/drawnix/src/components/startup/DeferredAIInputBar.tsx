@@ -48,7 +48,6 @@ export function DeferredAIInputBar({
             currentBoardId={currentBoardId}
             onEnableToolWindows={onEnableToolWindows}
             onEnableRuntime={onEnableRuntime}
-            onOpenSettings={onOpenSettings}
           />
         </div>
       </ModelHealthProvider>
