@@ -1,10 +1,10 @@
 {
-  "version": "6.7.28",
-  "buildTime": "2026-09-22T01:43:25.809270+00:00",
-  "gitCommit": "9c81b2b93b580d8cb6c881a44554691b321aa0f7",
+  "version": "6.7.29",
+  "buildTime": "2026-09-23T05:59:46.794766+00:00",
+  "gitCommit": "6aaa962adffbfb73883fe64eb238b77692bd591b",
   "changelog": [
-    "补齐 GPT Image 2.5 尺寸与分辨率参数",
-    "完善 MiniMax-H3 V2 工作流与 2K 升级",
-    "保留星图主题、帐号系统、积分支付和本地供应商定制"
+    "支持 MiniMax-H3 视频输入",
+    "新增 Tuzi postMessage 引导与模型刷新",
+    "修复聊天等待、Seedance 参数及 GPT Image 尺寸问题"
   ]
 }

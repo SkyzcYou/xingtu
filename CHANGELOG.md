@@ -1,3 +1,14 @@
+## 6.7.29 (2026-09-23)
+
+### 🚀 Features
+
+- 支持 MiniMax-H3 视频输入
+- 新增 Tuzi postMessage 引导与模型刷新
+
+### 🩹 Fixes
+
+- 修复聊天等待、Seedance 参数及 GPT Image 尺寸问题
+
 ## 6.7.28 (2026-09-22)
 
 ### 🚀 Features
