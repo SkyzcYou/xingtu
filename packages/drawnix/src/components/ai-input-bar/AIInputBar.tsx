@@ -16,6 +16,7 @@
  * - Smart Suggestion Panel for #model
  */
 
+import { normalizeGPTImage25ResolutionParams } from '../../services/model-adapters/image-size-quality-resolver';
 import React, {
   useState,
   useEffect,
@@ -116,7 +117,6 @@ import {
   getDefaultTextModel,
   getCompatibleParams,
   type ModelConfig,
-  type ModelType,
 } from '../../constants/model-config';
 import {
   getEffectiveVideoCompatibleParams,
@@ -127,6 +127,7 @@ import { unifiedCacheService } from '../../services/unified-cache-service';
 import {
   enhanceMiniMaxH3Prompt,
   isMiniMaxH3PromptEnhancementEnabled,
+  MINIMAX_H3_MAX_LOCAL_VIDEO_BYTES,
   MINIMAX_H3_PROMPT_ENHANCEMENT_PARAM_ID,
 } from '../../services/minimax-h3-video-workflow';
 import { initializeMCP, mcpRegistry } from '../../mcp';
@@ -173,27 +174,14 @@ import {
 } from '../../services/provider-routing';
 import { useWorkflowControl } from '../../contexts/WorkflowContext';
 import {
-  getInvocationRouteCredentialStatusAsync,
+  hasInvocationRouteCredentials,
   resolveInvocationRoute,
-  updateActiveInvocationRouteModel,
   createModelRef,
-  LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
-  XINGTU_LOGIN_PROVIDER_PROFILE_ID,
-  providerProfilesSettings,
-  providerCatalogsSettings,
-  geminiSettings,
+  settingsManager,
   type ModelRef,
 } from '../../utils/settings-manager';
-import {
-  promptForAuthMethod,
-  type AuthMethodPromptOption,
-} from '../../utils/gemini-api/auth';
-import { buildOidcLoginUrl } from '../../services/auth/oidc-session';
-import {
-  consumePendingSubmitAfterAuthDraft,
-  savePendingSubmitAfterAuthDraft,
-  type PendingSubmitContent,
-} from '../../services/auth/pending-submit-after-auth';
+import { promptForApiKey } from '../../utils/gemini-api/auth';
+import { prepareTuziManagedRoute } from '../../services/tuzi-managed-route-gate';
 import type { WorkflowMessageData } from '../../types/chat.types';
 import type {
   CanvasAssociationRef,
@@ -203,7 +191,6 @@ import {
   analytics,
   type PromptAnalyticsType,
 } from '../../utils/umami-analytics';
-import { normalizeImageDataUrl } from '@aitu/utils';
 import classNames from 'classnames';
 import { InspirationBoard } from '../inspiration-board';
 import { AIInputComposerShell } from './AIInputComposerShell';
@@ -230,6 +217,8 @@ import { isFrameElement } from '../../types/frame.types';
 import { matchFrameSizeForModel } from '../../utils/frame-size-matcher';
 import { PlaitDrawElement } from '@plait/draw';
 import { isPlaitVideo } from '../../interfaces/video';
+import { getVideoDimensions } from '../../data/video';
+import { getSupportedVideoFileMimeType } from '../../data/blob';
 import { isCardElement } from '../../types/card.types';
 import { isAudioNodeElement } from '../../types/audio-node.types';
 import {
@@ -532,12 +521,6 @@ const KNOWLEDGE_CONTEXT_MCP_TOOLS = new Set([
   'generate_text',
 ]);
 
-const SETTINGS_PROVIDER_NAV_EVENT = 'aitu:settings:provider-nav';
-
-type ProviderSettingsIntent =
-  | { action: 'select'; profileId: string }
-  | { action: 'create' };
-
 function getPromptHistoryCategoryForStep(
   mcp: string,
   workflow: WorkflowDefinition
@@ -557,8 +540,32 @@ function getPromptHistoryCategoryForStep(
     : 'agent';
 }
 
+function normalizeAIInputImageDataUrl(value: string): string {
+  const trimmed = value.trim();
+
+  if (
+    !trimmed ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('./') ||
+    trimmed.startsWith('../')
+  ) {
+    return trimmed || value;
+  }
+
+  const normalized = trimmed.replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/=]+$/.test(normalized) || normalized.length < 32) {
+    return trimmed;
+  }
+
+  return `data:image/png;base64,${normalized}`;
+}
+
 function normalizeAIInputImageUrl(url: string): string {
-  const normalized = normalizeImageDataUrl(url);
+  const normalized = normalizeAIInputImageDataUrl(url);
   try {
     const parsed = new URL(normalized, window.location.origin);
     parsed.searchParams.delete('_retry');
@@ -715,32 +722,6 @@ interface GenerationRequestOverride {
   targetSessionId?: string | null;
 }
 
-function toPendingSubmitContent(content: SelectedContent[]): PendingSubmitContent[] {
-  return content
-    .filter((item) => item.url || item.text)
-    .map((item) => ({
-      type: item.type,
-      url: item.url,
-      maskImage: item.maskImage,
-      text: item.text,
-      name: item.name,
-      width: item.width,
-      height: item.height,
-    }));
-}
-
-function fromPendingSubmitContent(content: PendingSubmitContent[]): SelectedContent[] {
-  return content.map((item) => ({
-    type: item.type,
-    url: item.url,
-    maskImage: item.maskImage,
-    text: item.text,
-    name: item.name,
-    width: item.width,
-    height: item.height,
-  }));
-}
-
 function filterExecutablePptModels(
   type: 'image' | 'video',
   models: ModelConfig[]
@@ -749,33 +730,9 @@ function filterExecutablePptModels(
     const modelRef = getModelRefFromConfig(model);
     const plan = resolveInvocationPlanFromRoute(type, modelRef || model.id);
     return Boolean(
-      plan?.provider.baseUrl.trim() && (plan.provider.credentialSource === 'oidc-session' || plan.provider.apiKey.trim())
+      plan?.provider.baseUrl.trim() && plan.provider.apiKey.trim()
     );
   });
-}
-
-function resolveStoredModelRef(
-  type: PersistedGenerationType,
-  modelId?: string | null,
-  model?: ModelConfig | null,
-  route?: ReturnType<typeof resolveInvocationRoute>
-): ModelRef | null {
-  if (!modelId) {
-    return getModelRefFromConfig(model);
-  }
-
-  const persisted = getPersistedModelSelection(type);
-  if (persisted?.modelId === modelId) {
-    return createModelRef(persisted.profileId, modelId);
-  }
-
-  const resolvedRoute =
-    route || resolveInvocationRoute(getRouteTypeForGenerationType(type));
-  if (resolvedRoute.modelId === modelId) {
-    return createModelRef(resolvedRoute.profileId, modelId);
-  }
-
-  return getModelRefFromConfig(model);
 }
 
 function getPromptLengthBucket(length: number): string {
@@ -796,6 +753,8 @@ const AI_INPUT_LONG_TEXT_MAX_VIEWPORT_RATIO = 0.65;
 const AI_INPUT_LONG_TEXT_MIN_MAX_HEIGHT = 320;
 const AI_INPUT_LONG_TEXT_MAX_HEIGHT = 680;
 const AI_INPUT_LINE_HEIGHT = 1.5;
+const AI_INPUT_IMAGE_ASSET_TYPES = [AssetType.IMAGE] as const;
+const AI_INPUT_VIDEO_ASSET_TYPES = [AssetType.IMAGE, AssetType.VIDEO] as const;
 type AIInputResizeMode = 'collapsed' | 'expanded' | 'long-text';
 type AIInputSubmitTrigger = 'button' | 'keyboard';
 
@@ -822,7 +781,12 @@ function getTextareaHeightForRows(textarea: HTMLTextAreaElement, rows: number) {
 
 function getTextareaContentRows(textarea: HTMLTextAreaElement): number {
   const { lineHeight, verticalPadding } = getTextareaMetrics(textarea);
-  const explicitRows = textarea.value.split(/\r\n|\r|\n/).length;
+  let explicitRows = 1;
+  for (let i = 0; i < textarea.value.length; i += 1) {
+    if (textarea.value.charCodeAt(i) === 10) {
+      explicitRows += 1;
+    }
+  }
   const previousHeight = textarea.style.height;
   textarea.style.height = 'auto';
   const contentHeight = textarea.scrollHeight;
@@ -884,137 +848,6 @@ function resolveGenerationTypeForModelSelection(
   return modelType as GenerationType;
 }
 
-function getDefaultModelForRouteType(routeType: ModelType): string {
-  switch (routeType) {
-    case 'image':
-      return getDefaultImageModel();
-    case 'video':
-      return getDefaultVideoModel();
-    case 'audio':
-      return getDefaultAudioModel();
-    case 'text':
-    default:
-      return getDefaultTextModel();
-  }
-}
-
-function getRouteTypeForGenerationType(type: GenerationType): ModelType {
-  if (type === 'video') return 'video';
-  if (type === 'audio') return 'audio';
-  if (type === 'text' || type === 'agent') return 'text';
-  return 'image';
-}
-
-function hasUnscopedSelectableModel(
-  models: ModelConfig[],
-  modelId?: string | null
-): boolean {
-  return (
-    !!modelId &&
-    models.some((model) => model.id === modelId && !model.sourceProfileId)
-  );
-}
-
-function findSelectedProviderModel(
-  catalogs: ReturnType<typeof providerCatalogsSettings.get>,
-  profileId: string,
-  routeType: ModelType,
-  preferredModelId: string
-): ModelConfig | null {
-  const catalog = catalogs.find((item) => item.profileId === profileId);
-  if (!catalog) return null;
-
-  const selectedIds = new Set(catalog.selectedModelIds);
-  const models = catalog.discoveredModels.filter(
-    (model) => model.type === routeType && selectedIds.has(model.id)
-  );
-
-  return (
-    models.find((model) => model.id === preferredModelId) || models[0] || null
-  );
-}
-
-function getInactiveProviderDescription(modelRef: ModelRef | null): string {
-  const profiles = providerProfilesSettings.get();
-  const profileName = modelRef?.profileId
-    ? profiles.find((profile) => profile.id === modelRef.profileId)?.name
-    : null;
-  const channelName = profileName || '当前所选渠道';
-  return `${channelName}未激活。你可以登录账号、粘贴星图 API Key，或接入自己的供应商后继续。`;
-}
-
-async function buildAuthMethodOptions(
-  routeType: ModelType,
-  selectedModelId: string
-): Promise<AuthMethodPromptOption[]> {
-  const profiles = providerProfilesSettings.get();
-  const catalogs = providerCatalogsSettings.get();
-  const fallbackModelId = selectedModelId || getDefaultModelForRouteType(routeType);
-
-  const loginModel = findSelectedProviderModel(
-    catalogs,
-    XINGTU_LOGIN_PROVIDER_PROFILE_ID,
-    routeType,
-    fallbackModelId
-  );
-  const loginModelRef = createModelRef(
-    XINGTU_LOGIN_PROVIDER_PROFILE_ID,
-    loginModel?.id || fallbackModelId
-  );
-  const loginProfile = profiles.find(
-    (profile) => profile.id === XINGTU_LOGIN_PROVIDER_PROFILE_ID
-  );
-  const loginStatus =
-    loginProfile?.enabled === false
-      ? 'missing-api-key'
-      : await getInvocationRouteCredentialStatusAsync(routeType, loginModelRef);
-
-  const legacyModelRef = createModelRef(
-    LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
-    fallbackModelId
-  );
-  const legacyStatus = await getInvocationRouteCredentialStatusAsync(
-    routeType,
-    legacyModelRef
-  );
-
-  return [
-    {
-      id: 'xingtu-login',
-      title: '登录账号',
-      description: '使用星图账号登录，无需手动保存 API Key。',
-      descriptionItems: ['不想手动管理 API Key', '登录后直接使用账号权益'],
-      statusLabel: loginStatus === 'ready' ? '已登录' : '推荐',
-      buttonLabel: loginStatus === 'ready' ? '使用星图账号继续' : '登录星图账号',
-      action: loginStatus === 'ready' ? 'switch-model' : 'login',
-      modelRef: loginStatus === 'ready' ? loginModelRef : undefined,
-    },
-    {
-      id: 'xingtu-api-key',
-      title: '使用星图 API Key',
-      description: '已有星图 API Key，可直接粘贴使用。',
-      descriptionItems: ['已经有可用的星图 API Key', '想优先使用本地密钥配置'],
-      statusLabel: legacyStatus === 'ready' ? '已配置' : undefined,
-      buttonLabel: legacyStatus === 'ready' ? '使用星图 API Key 继续' : '保存并继续',
-      action: 'save-xingtu-api-key',
-      modelRef: legacyModelRef,
-      requiresApiKeyInput: true,
-      allowEmptyApiKey: legacyStatus === 'ready',
-      apiKeyMaskedValue: legacyStatus === 'ready' ? '********' : undefined,
-      apiKeyPlaceholder:
-        legacyStatus === 'ready' ? '可粘贴新的星图 API Key' : '粘贴星图 API Key',
-    },
-    {
-      id: 'provider-settings',
-      title: '自定义 API Key',
-      description: '接入 OpenAI 兼容、Gemini 兼容或其他供应商。',
-      descriptionItems: ['想接入自己的模型供应商', '需要管理 OpenAI / Gemini 兼容渠道'],
-      buttonLabel: '打开供应商设置',
-      action: 'open-provider-settings',
-    },
-  ];
-}
-
 /**
  * 检查 URL 是否为视频
  */
@@ -1051,8 +884,6 @@ interface AIInputBarProps {
   onEnableToolWindows?: () => void;
   /** 确保生成任务后台运行时已启用 */
   onEnableRuntime?: () => void;
-  /** 打开设置弹窗 */
-  onOpenSettings?: () => void;
 }
 
 interface BoundImageTarget {
@@ -1784,7 +1615,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     currentBoardId,
     onEnableToolWindows,
     onEnableRuntime,
-    onOpenSettings,
   }) => {
     // console.log('[AIInputBar] Component rendering');
 
@@ -1848,6 +1678,11 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     );
     registerGenerationSubmitterRef.current =
       chatDrawerControl.registerGenerationSubmitter;
+    const submitGenerationWithCredentialGateRef = useRef(
+      chatDrawerControl.submitGenerationWithCredentialGate
+    );
+    submitGenerationWithCredentialGateRef.current =
+      chatDrawerControl.submitGenerationWithCredentialGate;
 
     // 当前工作流的重试上下文（用于在更新时保持 retryContext）
     const currentRetryContextRef = useRef<WorkflowRetryContext | null>(null);
@@ -1988,21 +1823,9 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           persisted.modelId,
           createModelRef(persisted.profileId, persisted.modelId)
         );
+
         if (matchedModel) {
           return matchedModel;
-        }
-
-        if (
-          persisted.profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID &&
-          hasUnscopedSelectableModel(models, persisted.modelId)
-        ) {
-          return (
-            getPinnedSelectableModel(
-              getRouteTypeForGenerationType(type),
-              persisted.modelId,
-              createModelRef(persisted.profileId, persisted.modelId)
-            ) || undefined
-          );
         }
 
         clearPersistedModelSelection(type);
@@ -2021,29 +1844,22 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           return persistedModel;
         }
 
-        const routeType = getRouteTypeForGenerationType(type);
+        const routeType =
+          type === 'video'
+            ? 'video'
+            : type === 'audio'
+            ? 'audio'
+            : type === 'text' || type === 'agent'
+            ? 'text'
+            : 'image';
         const route = resolveInvocationRoute(routeType);
-        const routeModelRef = createModelRef(route.profileId, route.modelId);
         const routeModel = findMatchingSelectableModel(
           models,
           route.modelId,
-          routeModelRef
+          createModelRef(route.profileId, route.modelId)
         );
         if (routeModel) {
           return routeModel;
-        }
-        if (
-          route.profileId === LEGACY_DEFAULT_PROVIDER_PROFILE_ID &&
-          hasUnscopedSelectableModel(models, route.modelId)
-        ) {
-          const pinnedRouteModel = getPinnedSelectableModel(
-            routeType,
-            route.modelId,
-            routeModelRef
-          );
-          if (pinnedRouteModel) {
-            return pinnedRouteModel;
-          }
         }
 
         const fallbackModelId =
@@ -2098,64 +1914,24 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       resolvePreferredModelSelection('audio', audioModels) ||
       getModelConfig(getDefaultAudioModel());
     const initialImageRoute = resolveInvocationRoute('image');
-    const initialVideoRoute = resolveInvocationRoute('video');
-    const initialAudioRoute = resolveInvocationRoute('audio');
-    const initialSelectedRoute = resolveInvocationRoute(
-      getRouteTypeForGenerationType(initialGenerationType)
-    );
-    const initialImageModelId =
+    const initialSelectedModelId =
       initialImageModel?.id ||
       initialImageRoute.modelId ||
       getDefaultImageModel();
-    const initialVideoModelId =
-      initialVideoModel?.id ||
-      initialVideoRoute.modelId ||
-      getDefaultVideoModel();
-    const initialAudioModelId =
-      initialAudioModel?.id ||
-      initialAudioRoute.modelId ||
-      getDefaultAudioModel();
-    const initialSelectedModelId =
-      initialSelectedModelConfig?.id ||
-      initialPreferences.selectedModel ||
-      initialSelectedRoute.modelId ||
-      getDefaultModelForRouteType(
-        getRouteTypeForGenerationType(initialGenerationType)
-      );
-    const initialImageModelRef = resolveStoredModelRef(
-      'image',
-      initialImageModelId,
-      initialImageModel,
-      initialImageRoute
-    );
-    const initialVideoModelRef = resolveStoredModelRef(
-      'video',
-      initialVideoModelId,
-      initialVideoModel,
-      initialVideoRoute
-    );
-    const initialAudioModelRef = resolveStoredModelRef(
-      'audio',
-      initialAudioModelId,
-      initialAudioModel,
-      initialAudioRoute
-    );
-    const initialSelectedModelRef = resolveStoredModelRef(
-      initialGenerationType,
-      initialSelectedModelId,
-      initialSelectedModelConfig,
-      initialSelectedRoute
-    );
+    const initialSelectedModelRef =
+      getModelRefFromConfig(initialImageModel) ||
+      createModelRef(initialImageRoute.profileId, initialImageRoute.modelId);
     const initialSelectedModelKey = getSelectionKey(
-      initialSelectedModelId,
-      initialSelectedModelRef
+      initialSelectedModelConfig?.id || initialSelectedModelId,
+      getModelRefFromConfig(initialSelectedModelConfig) ||
+        initialSelectedModelRef
     );
     const initialScopedSelectedParams =
       initialGenerationType === 'agent'
         ? {}
         : loadScopedAIInputModelParams(
             initialGenerationType,
-            initialSelectedModelId,
+            initialSelectedModelConfig?.id || initialSelectedModelId,
             initialSelectedModelKey,
             initialPreferences.selectedParams
           );
@@ -2216,8 +1992,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const [canPromptManuallyExpand, setCanPromptManuallyExpand] =
       useState(false);
     const [isCanvasEmpty, setIsCanvasEmpty] = useState<boolean | null>(null); // null=加载中, true=空, false=有内容
-    const [isInspirationBoardVisible, setIsInspirationBoardVisible] =
-      useState(false);
     // 当前选中的生成类型（图片、视频、Agent）
     const [generationType, setGenerationType] = useState<GenerationType>(
       initialGenerationType
@@ -2228,26 +2002,27 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     );
     // 当前选中的图片/视频/文本模型
     const [selectedModel, setSelectedModel] = useState(
-      initialSelectedModelId
+      initialSelectedModelConfig?.id || initialSelectedModelId
     );
     const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
-      initialSelectedModelRef
+      getModelRefFromConfig(initialSelectedModelConfig) ||
+        initialSelectedModelRef
     );
     const [selectedAgentImageModel, setSelectedAgentImageModel] = useState(
-      initialImageModelId
+      initialImageModel?.id || getDefaultImageModel()
     );
     const [selectedAgentImageModelRef, setSelectedAgentImageModelRef] =
-      useState<ModelRef | null>(initialImageModelRef);
+      useState<ModelRef | null>(getModelRefFromConfig(initialImageModel));
     const [selectedAgentVideoModel, setSelectedAgentVideoModel] = useState(
-      initialVideoModelId
+      initialVideoModel?.id || getDefaultVideoModel()
     );
     const [selectedAgentVideoModelRef, setSelectedAgentVideoModelRef] =
-      useState<ModelRef | null>(initialVideoModelRef);
+      useState<ModelRef | null>(getModelRefFromConfig(initialVideoModel));
     const [selectedAgentAudioModel, setSelectedAgentAudioModel] = useState(
-      initialAudioModelId
+      initialAudioModel?.id || getDefaultAudioModel()
     );
     const [selectedAgentAudioModelRef, setSelectedAgentAudioModelRef] =
-      useState<ModelRef | null>(initialAudioModelRef);
+      useState<ModelRef | null>(getModelRefFromConfig(initialAudioModel));
     const [selectedSkillMediaTypes, setSelectedSkillMediaTypes] = useState<
       SkillMediaType[]
     >([]);
@@ -2735,12 +2510,23 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const localImageMessages = useMemo(
       () => ({
         invalidFile:
-          language === 'zh' ? '请上传图片文件' : 'Please upload image files',
-        fileTooLarge:
+          language === 'zh'
+            ? '请上传图片或视频文件'
+            : 'Please upload image or video files',
+        imageTooLarge:
           language === 'zh'
             ? '图片大小不能超过 25MB'
-            : 'Image size cannot exceed 25MB',
-        loadFailed: language === 'zh' ? '加载图片失败' : 'Failed to load image',
+            : 'Images cannot exceed 25MB',
+        videoTooLarge: (maxSizeMb: number, requiresPublicUrl: boolean) =>
+          language === 'zh'
+            ? requiresPublicUrl
+              ? `MiniMax-H3 本地视频不能超过 ${maxSizeMb}MB；更大视频请使用公网 URL`
+              : `视频大小不能超过 ${maxSizeMb}MB`
+            : requiresPublicUrl
+            ? `Local MiniMax-H3 videos cannot exceed ${maxSizeMb}MB; use a public URL for larger videos`
+            : `Videos cannot exceed ${maxSizeMb}MB`,
+        loadFailed:
+          language === 'zh' ? '加载图片或视频失败' : 'Failed to load media',
         compressionFailed:
           language === 'zh' ? '图片压缩失败' : 'Image compression failed',
         compressing: (sizeMb: number) =>
@@ -2754,26 +2540,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       }),
       [language]
     );
-
-    const openCustomProviderSettings = useCallback(() => {
-      const intent: ProviderSettingsIntent = { action: 'create' };
-      const targetWindow = window as typeof window & {
-        __aituPendingProviderNavigationIntent?: ProviderSettingsIntent;
-      };
-      targetWindow.__aituPendingProviderNavigationIntent = intent;
-      onOpenSettings?.();
-      window.setTimeout(() => {
-        if (targetWindow.__aituPendingProviderNavigationIntent !== intent) {
-          return;
-        }
-        targetWindow.__aituPendingProviderNavigationIntent = undefined;
-        window.dispatchEvent(
-          new CustomEvent<ProviderSettingsIntent>(SETTINGS_PROVIDER_NAV_EVENT, {
-            detail: intent,
-          })
-        );
-      }, 100);
-    }, [onOpenSettings]);
 
     // 监听生成类型变化，自动切换模型和尺寸
     useEffect(() => {
@@ -2795,25 +2561,14 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         resolvePreferredModelSelection(generationType, modelsForType);
 
       if (nextModelConfig) {
-        const nextModelRef =
-          selectedModelRef?.modelId === nextModelConfig.id
-            ? selectedModelRef
-            : resolveStoredModelRef(
-                generationType,
-                nextModelConfig.id,
-                nextModelConfig
-              );
         const currentSelectionKey = getSelectionKey(
           selectedModel,
           selectedModelRef
         );
-        const nextSelectionKey = getSelectionKey(
-          nextModelConfig.id,
-          nextModelRef
-        );
+        const nextSelectionKey = getSelectionKeyForModel(nextModelConfig);
         if (currentSelectionKey !== nextSelectionKey) {
           setSelectedModel(nextModelConfig.id);
-          setSelectedModelRef(nextModelRef);
+          setSelectedModelRef(getModelRefFromConfig(nextModelConfig));
         }
       }
 
@@ -2859,14 +2614,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
         const nextModelConfig = resolvePreferredModelSelection(type, models);
         if (nextModelConfig) {
-          const nextModelRef =
-            selectedRef?.modelId === nextModelConfig.id
-              ? selectedRef
-              : resolveStoredModelRef(
-                  type,
-                  nextModelConfig.id,
-                  nextModelConfig
-                );
           setModelId(nextModelConfig.id);
           setModelRef(getModelRefFromConfig(nextModelConfig));
         } else if (clearWhenUnavailable && (selectedModelId || selectedRef)) {
@@ -3740,11 +3487,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       });
     }, []);
 
-    const getCurrentPromptValue = useCallback(
-      () => inputRef.current?.value ?? promptRef.current,
-      []
-    );
-
     const confirmOverwriteInputIfNeeded = useCallback(
       async (source?: AIInputPrefillEventDetail['source']) => {
         const hasPrompt = promptRef.current.trim().length > 0;
@@ -3859,22 +3601,16 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             : nextGenerationType === 'text' || nextGenerationType === 'agent'
             ? textModels
             : imageModels;
-        const hasExplicitModelRef = detail.modelRef !== undefined;
         const nextModel =
           findMatchingSelectableModel(
             modelsForType,
             detail.model,
             detail.modelRef || null
           ) ||
-          (!hasExplicitModelRef
-            ? findMatchingSelectableModel(modelsForType, detail.model, null)
-            : undefined) ||
+          findMatchingSelectableModel(modelsForType, detail.model, null) ||
           resolvePreferredModelSelection(nextGenerationType, modelsForType);
+        const nextModelRef = getModelRefFromConfig(nextModel);
         const nextModelId = nextModel?.id || detail.model || selectedModel;
-        const nextModelRef =
-          detail.modelRef && detail.modelRef.modelId === nextModelId
-            ? detail.modelRef
-            : getModelRefFromConfig(nextModel);
         const nextScopeKey = getSelectionKey(nextModelId, nextModelRef);
         const nextParams =
           nextGenerationType === 'agent'
@@ -3908,6 +3644,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           );
         } else {
           suppressSelectionContentUrlsRef.current = new Set();
+          setSelectedContent([]);
+          selectedFrameRef.current = null;
         }
 
         const nextPrompt = detail.prompt || '';
@@ -3968,79 +3706,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       textModels,
       videoModels,
     ]);
-
-    useEffect(() => {
-      const restoreTimer = window.setTimeout(() => {
-        const draft = consumePendingSubmitAfterAuthDraft();
-        if (!draft) return;
-
-        const restoreDraft = async () => {
-          const shouldRestore = await confirm({
-            title:
-              language === 'zh'
-                ? '恢复登录前的输入？'
-                : 'Restore input from before login?',
-            description:
-              language === 'zh'
-                ? '登录前的提示词、参考图和知识库选择已暂存。是否恢复到底部输入框？恢复后请手动发送。'
-                : 'Your prompt, references, and knowledge context were saved before login. Restore them to the bottom input? Send manually after reviewing.',
-            confirmText: language === 'zh' ? '恢复' : 'Restore',
-            cancelText: language === 'zh' ? '丢弃' : 'Discard',
-          });
-          if (!shouldRestore) return;
-
-          const restoredSelectedModelRef = draft.selectedModelRef ?? null;
-          const restoredParams = draft.selectedParams || {};
-          const restoredScopeKey = getSelectionKey(
-            draft.selectedModel,
-            restoredSelectedModelRef
-          );
-
-          setGenerationType(draft.generationType);
-          promptRef.current = draft.prompt;
-          setPrompt(draft.prompt);
-          setUploadedContent(fromPendingSubmitContent(draft.uploadedContent));
-          setSelectedContent(fromPendingSubmitContent(draft.selectedContent));
-          setSelectedModel(draft.selectedModel);
-          setSelectedModelRef(restoredSelectedModelRef);
-          setSelectedParams(restoredParams);
-          selectedParamsRef.current = restoredParams;
-          selectedParamScopeRef.current =
-            draft.generationType === 'agent'
-              ? 'agent'
-              : `${draft.generationType}:${restoredScopeKey}`;
-          setSelectedCount(draft.selectedCount);
-          setKnowledgeContextRefs(
-            normalizeKnowledgeContextRefs(draft.knowledgeContextRefs)
-          );
-
-          if (draft.generationType === 'agent' && draft.selectedSkillId) {
-            setSelectedSkillId(draft.selectedSkillId);
-            const systemSkill = findSystemSkillById(draft.selectedSkillId);
-            const externalSkill = systemSkill
-              ? null
-              : findExternalSkillById(draft.selectedSkillId);
-            const skill = systemSkill || externalSkill;
-            if (skill) {
-              setSelectedSkillMediaTypes(inferSkillMediaTypes(skill));
-            }
-          }
-
-          MessagePlugin.success(
-            language === 'zh'
-              ? '已恢复登录前内容，请检查后手动发送'
-              : 'Restored your pre-login input. Review it and send manually.'
-          );
-          focusInput();
-        };
-
-        void restoreDraft();
-      }, 0);
-
-      return () => {
-        window.clearTimeout(restoreTimer);
-      };
-    }, [confirm, focusInput, language]);
 
     // 处理灵感模版选择：将提示词替换到输入框并切换到 Agent 模式
     const handleSelectInspirationPrompt = useCallback(
@@ -4189,6 +3854,17 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       (asset: Asset): Promise<SelectedContent> =>
         new Promise((resolve) => {
           try {
+            if (
+              asset.type === AssetType.VIDEO ||
+              asset.type === AssetType.AUDIO
+            ) {
+              resolve({
+                type: asset.type === AssetType.VIDEO ? 'video' : 'audio',
+                url: asset.url,
+                name: asset.name,
+              });
+              return;
+            }
             const img = new Image();
             img.onload = () => {
               resolve({
@@ -4312,17 +3988,59 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         const newContent: SelectedContent[] = [];
 
         for (const [index, file] of fileList.entries()) {
-          if (!file.type.startsWith('image/')) {
+          const isImage = file.type.startsWith('image/');
+          const videoMime = getSupportedVideoFileMimeType(file);
+          const isVideo = Boolean(videoMime);
+          if (!isImage && !isVideo) {
             MessagePlugin.error(localImageMessages.invalidFile);
             continue;
           }
 
-          if (file.size > 25 * 1024 * 1024) {
-            MessagePlugin.error(localImageMessages.fileTooLarge);
+          const isMiniMaxH3Video =
+            isVideo && isMiniMaxH3Model(selectedModel);
+          const videoSizeLimit = isMiniMaxH3Video
+            ? MINIMAX_H3_MAX_LOCAL_VIDEO_BYTES
+            : 50 * 1024 * 1024;
+          if (file.size > (isVideo ? videoSizeLimit : 25 * 1024 * 1024)) {
+            MessagePlugin.error(
+              isVideo
+                ? localImageMessages.videoTooLarge(
+                    videoSizeLimit / (1024 * 1024),
+                    isMiniMaxH3Video
+                  )
+                : localImageMessages.imageTooLarge
+            );
             continue;
           }
 
           try {
+            if (videoMime) {
+              const normalizedVideo = new File([file], file.name, {
+                type: videoMime,
+              });
+              const asset = await addAsset(
+                normalizedVideo,
+                AssetType.VIDEO,
+                AssetSource.LOCAL,
+                file.name
+              );
+              const objectUrl = URL.createObjectURL(normalizedVideo);
+              let dimensions;
+              try {
+                dimensions = await getVideoDimensions(objectUrl);
+              } finally {
+                URL.revokeObjectURL(objectUrl);
+              }
+              newContent.push({
+                type: 'video',
+                url: asset.url,
+                name: file.name || `上传视频 ${index + 1}`,
+                width: dimensions.width,
+                height: dimensions.height,
+              });
+              continue;
+            }
+
             let processedBlob: Blob = file;
 
             if (file.size > 10 * 1024 * 1024) {
@@ -4408,7 +4126,12 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           setUploadedContent(nextUploadedContent);
         }
       },
-      [addAsset, fileToBase64WithDimensions, localImageMessages]
+      [
+        addAsset,
+        fileToBase64WithDimensions,
+        localImageMessages,
+        selectedModel,
+      ]
     );
 
     const handleDroppedInputFiles = useCallback(
@@ -4820,7 +4543,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     }, [applyCanvasAssociationRefs, saveActiveCanvasAssociationDraft]);
 
     const applyModelSelection = useCallback(
-      (model: ModelConfig, modelRef?: ModelRef | null) => {
+      (model: ModelConfig) => {
         const nextGenerationType = resolveGenerationTypeForModelSelection(
           generationType,
           model.type
@@ -4829,7 +4552,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         analytics.track('ai_input_change_model', {
           model: model.id,
           type: model.type,
-          profileId: modelRef?.profileId || model.sourceProfileId || null,
+          profileId: model.sourceProfileId || null,
         });
 
         // 清除触发符号
@@ -4838,7 +4561,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         // 更新状态（反显到下方下拉框）
         setGenerationType(nextGenerationType);
         setSelectedModel(model.id);
-        const nextModelRef = modelRef ?? getModelRefFromConfig(model);
+        const nextModelRef = getModelRefFromConfig(model);
         setSelectedModelRef(nextModelRef);
         setPersistedModelSelection(
           nextGenerationType as PersistedGenerationType,
@@ -4868,39 +4591,31 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
     // 处理模型选择（从下拉菜单）
     const handleModelSelect = useCallback(
-      (modelId: string, modelRef?: ModelRef | null) => {
-        const hasExplicitModelRef = modelRef !== undefined;
+      (modelId: string) => {
         const model =
           findMatchingSelectableModel(
             currentModels,
             modelId,
-            modelRef || null
+            selectedModelRef
           ) ||
-          (!hasExplicitModelRef
-            ? findMatchingSelectableModel(currentModels, modelId, null)
-            : undefined) ||
+          findMatchingSelectableModel(currentModels, modelId, null) ||
           getModelConfig(modelId);
         if (!model) return;
-        applyModelSelection(model, modelRef);
+        applyModelSelection(model);
       },
-      [applyModelSelection, currentModels]
+      [applyModelSelection, currentModels, selectedModelRef]
     );
 
     const handleModelConfigSelect = useCallback(
-      (model: ModelConfig, modelRef?: ModelRef | null) => {
-        applyModelSelection(model, modelRef);
+      (model: ModelConfig) => {
+        applyModelSelection(model);
       },
       [applyModelSelection]
     );
 
     const applyAgentMediaModelSelection = useCallback(
-      (
-        type: SkillMediaType,
-        model: ModelConfig,
-        selectedModelRef?: ModelRef | null
-      ) => {
-        const modelRef =
-          selectedModelRef ?? getModelRefFromConfig(model);
+      (type: SkillMediaType, model: ModelConfig) => {
+        const modelRef = getModelRefFromConfig(model);
         if (type === 'image') {
           setSelectedAgentImageModel(model.id);
           setSelectedAgentImageModelRef(modelRef);
@@ -4922,7 +4637,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         analytics.track('ai_input_change_agent_media_model', {
           model: model.id,
           type,
-          profileId: modelRef?.profileId || model.sourceProfileId || null,
+          profileId: model.sourceProfileId || null,
         });
       },
       []
@@ -4930,7 +4645,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
     const handleAgentMediaModelSelect = useCallback(
       (type: SkillMediaType, modelId: string, modelRef?: ModelRef | null) => {
-        const hasExplicitModelRef = modelRef !== undefined;
         const models =
           type === 'image'
             ? visibleAgentImageModels
@@ -4939,12 +4653,10 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             : visibleAgentAudioModels;
         const model =
           findMatchingSelectableModel(models, modelId, modelRef || null) ||
-          (!hasExplicitModelRef
-            ? findMatchingSelectableModel(models, modelId, null)
-            : undefined) ||
+          findMatchingSelectableModel(models, modelId, null) ||
           getModelConfig(modelId);
         if (!model) return;
-        applyAgentMediaModelSelection(type, model, modelRef);
+        applyAgentMediaModelSelection(type, model);
       },
       [
         applyAgentMediaModelSelection,
@@ -4955,12 +4667,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     );
 
     const handleAgentMediaModelConfigSelect = useCallback(
-      (
-        type: SkillMediaType,
-        model: ModelConfig,
-        modelRef?: ModelRef | null
-      ) => {
-        applyAgentMediaModelSelection(type, model, modelRef);
+      (type: SkillMediaType, model: ModelConfig) => {
+        applyAgentMediaModelSelection(type, model);
       },
       [applyAgentMediaModelSelection]
     );
@@ -5159,7 +4867,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           } else {
             next[paramId] = value;
           }
-          return next;
+          return normalizeGPTImage25ResolutionParams(selectedModel, next);
         });
 
         // 关闭下拉菜单并保持焦点
@@ -5168,7 +4876,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           setTimeout(() => inputRef.current?.focus(), 0);
         }
       },
-      [clearTriggerSymbol]
+      [clearTriggerSymbol, selectedModel]
     );
 
     // 处理个数选择
@@ -5205,7 +4913,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           typeof triggerOrOverride === 'string' ? undefined : triggerOrOverride;
         const trigger =
           typeof triggerOrOverride === 'string' ? triggerOrOverride : 'button';
-        const effectivePrompt = override?.prompt ?? getCurrentPromptValue();
+        const effectivePrompt = override?.prompt ?? prompt;
         const submittedBoard =
           (SelectionWatcherBoardRef.current as
             | (PlaitBoard & { host?: HTMLElement })
@@ -5281,8 +4989,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         const effectiveGenerationType = activeBoundImageTarget
           ? activeBoundImageTarget.type
           : override?.generationType ?? generationType;
-        let effectiveSelectedModel = override?.selectedModel ?? selectedModel;
-        let effectiveSelectedModelRef =
+        const effectiveSelectedModel = override?.selectedModel ?? selectedModel;
+        const effectiveSelectedModelRef =
           override?.selectedModelRef ?? selectedModelRef;
         const effectiveSelectedParams =
           override?.selectedParams ?? selectedParams;
@@ -5649,7 +5357,28 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           }
 
           // 引用预检通过后再请求凭据，避免无效引用触发无意义的 API Key 弹窗。
-          const currentRouteType: ModelType =
+          if (effectiveContent.some((item) => item.type === 'video')) {
+            const errors = validateCanvasAssociationCapability({
+              generationType: effectiveGenerationType,
+              modelId: effectiveSelectedModel,
+              content: effectiveContent,
+            });
+            if (errors.length > 0) {
+              MessagePlugin.error(errors.join('；'));
+              trackSubmitStatus('failed', {
+                submitMode: 'preflight',
+                submit_mode: 'preflight',
+                failureReason: 'input_capability_mismatch',
+                failure_reason: 'input_capability_mismatch',
+                errorCount: errors.length,
+                error_count: errors.length,
+              });
+              submitLockRef.current = false;
+              setIsSubmitting(false);
+              return;
+            }
+          }
+          const currentRouteType =
             effectiveGenerationType === 'video'
               ? 'video'
               : effectiveGenerationType === 'audio'
@@ -5658,92 +5387,41 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                 effectiveGenerationType === 'agent'
               ? 'text'
               : 'image';
-          const credentialStatus = await getInvocationRouteCredentialStatusAsync(
+          await settingsManager.waitForInitialization();
+          if (abortIfSubmittedBoardChanged('settings_initialization')) return;
+          const initialRoute = resolveInvocationRoute(
             currentRouteType,
             effectiveSelectedModelRef || effectiveSelectedModel
           );
-          if (credentialStatus !== 'ready') {
-            const authResult = await promptForAuthMethod({
-              description: getInactiveProviderDescription(
-                effectiveSelectedModelRef
-              ),
-              options: await buildAuthMethodOptions(
+          let hasRouteCredentials = Boolean(
+            initialRoute.baseUrl && initialRoute.apiKey
+          );
+          const routePreparation = await prepareTuziManagedRoute(initialRoute);
+          if (!hasRouteCredentials || routePreparation.managedRoute) {
+            if (abortIfSubmittedBoardChanged('tuzi_context')) return;
+            hasRouteCredentials =
+              hasInvocationRouteCredentials(
                 currentRouteType,
-                effectiveSelectedModel
-              ),
-            });
-            if (abortIfSubmittedBoardChanged('auth_method_prompt')) return;
-            if (authResult?.action === 'login') {
-              trackSubmitStatus('cancelled', {
-                reason: 'login_required',
-                submitMode: 'preflight',
-                submit_mode: 'preflight',
-              });
-              if (!override) {
-                const savedPendingSubmit = savePendingSubmitAfterAuthDraft({
+                effectiveSelectedModelRef || effectiveSelectedModel
+              ) &&
+              (!routePreparation.managedRoute ||
+                routePreparation.context?.status === 'ready');
+            if (!hasRouteCredentials && routePreparation.context && !override) {
+              const delegated =
+                await submitGenerationWithCredentialGateRef.current({
                   prompt: effectivePrompt,
+                  selectedContent: effectiveContent,
                   generationType: effectiveGenerationType,
-                  uploadedContent: toPendingSubmitContent(
-                    uploadedContentRef.current
-                  ),
-                  selectedContent: toPendingSubmitContent(
-                    selectedContentRef.current
-                  ),
                   selectedModel: effectiveSelectedModel,
-                  selectedModelRef: effectiveSelectedModelRef ?? null,
+                  selectedModelRef: effectiveSelectedModelRef,
                   selectedParams: effectiveSelectedParams,
                   selectedCount: effectiveSelectedCount,
-                  selectedSkillId,
-                  knowledgeContextRefs: effectiveKnowledgeContextRefs,
+                  targetSessionId: targetChatSessionId,
                 });
-                if (!savedPendingSubmit) {
-                  console.warn('[AIInputBar] 保存登录前草稿失败');
-                }
-              }
-              submitLockRef.current = false;
-              setIsSubmitting(false);
-              window.location.assign(buildOidcLoginUrl());
-              return;
-            }
-
-            if (authResult?.action === 'open-provider-settings') {
-              openCustomProviderSettings();
-              trackSubmitStatus('cancelled', {
-                reason:
-                  credentialStatus === 'login-required'
-                    ? 'login_required'
-                    : 'missing_api_key',
-                submitMode: 'preflight',
-                submit_mode: 'preflight',
-              });
-              submitLockRef.current = false;
-              setIsSubmitting(false);
-              return;
-            }
-
-            if (
-              authResult?.action === 'switch-model' ||
-              authResult?.action === 'save-xingtu-api-key'
-            ) {
-              if (authResult.action === 'save-xingtu-api-key' && authResult.apiKey) {
-                await geminiSettings.update({ apiKey: authResult.apiKey });
-              }
-              const nextModelRef = authResult.modelRef;
-              const nextModelId = nextModelRef.modelId || effectiveSelectedModel;
-              effectiveSelectedModel = nextModelId;
-              effectiveSelectedModelRef = nextModelRef;
-
-              const switchedStatus =
-                await getInvocationRouteCredentialStatusAsync(
-                  currentRouteType,
-                  nextModelRef
-                );
-              if (switchedStatus !== 'ready') {
+              if (delegated) {
+                clearSubmittedLocalInput();
                 trackSubmitStatus('cancelled', {
-                  reason:
-                    switchedStatus === 'login-required'
-                      ? 'login_required'
-                      : 'missing_api_key',
+                  reason: 'credential_setup_pending',
                   submitMode: 'preflight',
                   submit_mode: 'preflight',
                 });
@@ -5751,37 +5429,20 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                 setIsSubmitting(false);
                 return;
               }
-
-              if (!override) {
-                setSelectedModel(nextModelId);
-                setSelectedModelRef(nextModelRef);
-                setPersistedModelSelection(
-                  effectiveGenerationType as PersistedGenerationType,
-                  {
-                    modelId: nextModelId,
-                    modelRef: nextModelRef,
-                    providerIdHint: nextModelRef.profileId,
-                  }
-                );
-                if (authResult.action === 'save-xingtu-api-key') {
-                  await updateActiveInvocationRouteModel(
-                    currentRouteType,
-                    nextModelRef
-                  );
-                }
+            }
+            if (!hasRouteCredentials && !routePreparation.context) {
+              const newApiKey = await promptForApiKey();
+              if (abortIfSubmittedBoardChanged('api_key_prompt')) return;
+              if (!newApiKey) {
+                trackSubmitStatus('cancelled', {
+                  reason: 'missing_api_key',
+                  submitMode: 'preflight',
+                  submit_mode: 'preflight',
+                });
+                submitLockRef.current = false;
+                setIsSubmitting(false);
+                return;
               }
-            } else {
-              trackSubmitStatus('cancelled', {
-                reason:
-                  credentialStatus === 'login-required'
-                    ? 'login_required'
-                    : 'missing_api_key',
-                submitMode: 'preflight',
-                submit_mode: 'preflight',
-              });
-              submitLockRef.current = false;
-              setIsSubmitting(false);
-              return;
             }
           }
           if (abortIfSubmittedBoardChanged('credentials_ready')) return;
@@ -5955,6 +5616,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                   size: parsedParams.size,
                   ratio: parsedParams.extraParams?.ratio,
                   referenceImages: miniMaxReferenceImages,
+                  referenceVideos: selection.videos,
                   params: parsedParams.extraParams,
                 },
                 { provider: plan.provider }
@@ -6530,10 +6192,10 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
               return;
             }
           } catch (swError) {
-            console.warn(
-              '[AIInputBar] SW execution failed, falling back to main thread:',
-              swError
-            );
+            // Submission now runs on the main thread; a failed preparation
+            // must reach the outer cleanup instead of starting generation.
+            console.warn('[AIInputBar] Workflow preparation failed:', swError);
+            throw swError;
           }
           if (abortIfSubmittedBoardChanged('service_worker_fallback')) return;
           if (board && publishedTaskTargetElementId) {
@@ -7020,8 +6682,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         }
       },
       [
-        getCurrentPromptValue,
-        allContent,
         prompt,
         boundImageTarget,
         boundImageTargetMode,
@@ -7045,7 +6705,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         applyCurrentImageAnchorPresentationState,
         removeCurrentImageAnchor,
         onEnableRuntime,
-        openCustomProviderSettings,
         applyCanvasAssociationRefs,
         applyTaskbarDraft,
         language,
@@ -8055,37 +7714,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       }
     }, [inputResizeMode, isPromptManuallyExpanded, prompt, shouldKeepExpanded]);
 
-    useLayoutEffect(() => {
-      const element = containerRef.current;
-      if (!element) return;
-
-      const root = document.documentElement;
-      const updateHeight = () => {
-        root.style.setProperty(
-          '--aitu-ai-input-bar-height',
-          `${Math.ceil(element.getBoundingClientRect().height)}px`
-        );
-      };
-
-      updateHeight();
-      window.addEventListener('resize', updateHeight);
-
-      if (typeof ResizeObserver === 'undefined') {
-        return () => {
-          window.removeEventListener('resize', updateHeight);
-          root.style.removeProperty('--aitu-ai-input-bar-height');
-        };
-      }
-
-      const observer = new ResizeObserver(updateHeight);
-      observer.observe(element);
-
-      return () => {
-        observer.disconnect();
-        window.removeEventListener('resize', updateHeight);
-        root.style.removeProperty('--aitu-ai-input-bar-height');
-      };
-    }, []);
     const positionedBoundImageTarget = resolveBoundTargetForPosition(
       followedBoundImageTarget,
       boundTargetFollowEnabled
@@ -8437,7 +8065,6 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             isCanvasEmpty={showInspirationBoard}
             onSelectPrompt={handleSelectInspirationPrompt}
             onOpenPromptTool={handleOpenPromptToolFromInspiration}
-            onVisibleChange={setIsInspirationBoardVisible}
           />
 
           <AIInputComposerShell
@@ -8455,18 +8082,28 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   multiple
                   onChange={handleFileChange}
                   style={{ display: 'none' }}
                 />
 
                 <HoverTip
-                  content={language === 'zh' ? '上传图片' : 'Upload images'}
+                  content={
+                    language === 'zh'
+                      ? '上传图片或视频'
+                      : 'Upload images or videos'
+                  }
                   showArrow={false}
                 >
                   <button
                     className="ai-input-bar__upload-btn"
+                    aria-label={
+                      language === 'zh'
+                        ? '上传图片或视频'
+                        : 'Upload images or videos'
+                    }
+                    disabled={isSubmitting}
                     onMouseDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -8609,12 +8246,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                       onSelect={(modelId, modelRef) =>
                         handleAgentMediaModelSelect('image', modelId, modelRef)
                       }
-                      onSelectModel={(model, modelRef) =>
-                        handleAgentMediaModelConfigSelect(
-                          'image',
-                          model,
-                          modelRef
-                        )
+                      onSelectModel={(model) =>
+                        handleAgentMediaModelConfigSelect('image', model)
                       }
                       language={language}
                       models={visibleAgentImageModels}
@@ -8654,12 +8287,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                       onSelect={(modelId, modelRef) =>
                         handleAgentMediaModelSelect('video', modelId, modelRef)
                       }
-                      onSelectModel={(model, modelRef) =>
-                        handleAgentMediaModelConfigSelect(
-                          'video',
-                          model,
-                          modelRef
-                        )
+                      onSelectModel={(model) =>
+                        handleAgentMediaModelConfigSelect('video', model)
                       }
                       language={language}
                       models={visibleAgentVideoModels}
@@ -8699,12 +8328,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                       onSelect={(modelId, modelRef) =>
                         handleAgentMediaModelSelect('audio', modelId, modelRef)
                       }
-                      onSelectModel={(model, modelRef) =>
-                        handleAgentMediaModelConfigSelect(
-                          'audio',
-                          model,
-                          modelRef
-                        )
+                      onSelectModel={(model) =>
+                        handleAgentMediaModelConfigSelect('audio', model)
                       }
                       language={language}
                       models={visibleAgentAudioModels}
@@ -8931,7 +8556,11 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
               isOpen={showMediaLibrary}
               onClose={() => setShowMediaLibrary(false)}
               mode={SelectionMode.SELECT}
-              filterType={AssetType.IMAGE}
+              allowedTypes={
+                generationType === 'video'
+                  ? AI_INPUT_VIDEO_ASSET_TYPES
+                  : AI_INPUT_IMAGE_ASSET_TYPES
+              }
               onSelect={handleMediaLibrarySelect}
               onSelectMultiple={handleMediaLibrarySelectMultiple}
               batchSelectButtonText="批量插入对话框"

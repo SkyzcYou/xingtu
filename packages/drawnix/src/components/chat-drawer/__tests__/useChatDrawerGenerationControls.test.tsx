@@ -1,406 +1,292 @@
-// @vitest-environment jsdom
-
 import React, { useCallback, useState } from 'react';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  getModelConfig,
+  type ModelConfig,
+} from '../../../constants/model-config';
 import type { ChatSessionGenerationState } from '../../../types/chat.types';
-import type { ModelRef } from '../../../utils/settings-manager';
 import { useChatDrawerGenerationControls } from '../useChatDrawerGenerationControls';
 
-const fixtures = vi.hoisted(() => {
-  const makeModel = (id: string, type: string) => ({
-    id,
-    type,
-    label: id,
-    vendor: 'OTHER',
-    sourceProfileId: 'provider-1',
-    selectionKey: `provider-1::${id}`,
-  });
-  const models = {
-    image: [makeModel('image-model', 'image'), makeModel('image-alt', 'image')],
-    video: [makeModel('video-model', 'video')],
-    audio: [makeModel('audio-model', 'audio')],
-    text: [makeModel('text-model', 'text')],
-  };
-  const params = [
-    {
-      id: 'size',
-      valueType: 'enum',
-      defaultValue: 'auto',
-      options: [{ value: 'auto' }, { value: '1x1' }],
-    },
-    {
-      id: 'quality',
-      valueType: 'enum',
-      defaultValue: 'high',
-      options: [{ value: 'high' }, { value: 'low' }],
-    },
-  ];
-  return {
-    models,
-    params,
-    emptyParams: [],
-    preferences: {
-      generationType: 'image',
-      selectedModel: 'image-model',
-      selectedParams: { size: 'auto', quality: 'high' },
-      selectedCount: 1,
-      selectedSkillId: 'auto',
-    },
-    savePreferences: vi.fn(),
-    saveScopedParams: vi.fn(),
-    setPersistedModelSelection: vi.fn(),
-  };
-});
+const store = vi.hoisted(() => ({
+  models: [] as ModelConfig[],
+  savePreferences: vi.fn(),
+  saveParams: vi.fn(),
+}));
 
 vi.mock('../../../hooks/use-runtime-models', () => ({
-  // Keep model snapshots stable so the tests exercise session feedback only.
-  useSelectableModels: (type: keyof typeof fixtures.models) =>
-    fixtures.models[type],
+  useSelectableModels: (type: string) =>
+    store.models.filter((model) => model.type === type),
 }));
-
-vi.mock('../../../constants/model-config', () => ({
-  getCompatibleParams: (modelId: string) =>
-    modelId === 'text-model' ? fixtures.emptyParams : fixtures.params,
-  getDefaultImageModel: () => 'image-model',
-  getDefaultVideoModel: () => 'video-model',
-  getDefaultAudioModel: () => 'audio-model',
-  getDefaultTextModel: () => 'text-model',
-  getDefaultSizeForModel: () => 'auto',
-  getModelConfig: (modelId: string) =>
-    Object.values(fixtures.models)
-      .flat()
-      .find((model) => model.id === modelId),
-}));
-
-vi.mock('../../../services/ai-generation-preferences-service', () => ({
-  loadAIInputPreferences: () => fixtures.preferences,
-  loadScopedAIInputModelParams: (
-    _type: string,
-    _modelId: string,
-    _selectionKey?: string,
-    fallbackParams?: Record<string, string>
-  ) => ({ ...fallbackParams }),
-  saveAIInputPreferences: fixtures.savePreferences,
-  saveScopedAIInputModelParams: fixtures.saveScopedParams,
-}));
-
-vi.mock('../../../services/video-binding-utils', () => ({
-  getEffectiveVideoCompatibleParams: () => fixtures.params,
-}));
-
-vi.mock('../../../utils/ai-model-selection-storage', () => ({
-  getPersistedModelSelection: () => null,
-  setPersistedModelSelection: fixtures.setPersistedModelSelection,
-}));
-
-vi.mock('../../../utils/suno-model-aliases', () => ({
-  applyForcedSunoParams: (_modelId: string, params: Record<string, string>) =>
-    params,
-}));
-
 vi.mock('../../../utils/settings-manager', () => ({
-  LEGACY_DEFAULT_PROVIDER_PROFILE_ID: 'legacy-default',
-  createModelRef: (profileId?: string | null, modelId?: string | null) =>
-    !profileId && !modelId
-      ? null
-      : { profileId: profileId || null, modelId: modelId || null },
-  resolveInvocationRoute: (type: keyof typeof fixtures.models) => ({
-    modelId: fixtures.models[type][0].id,
-    profileId: 'provider-1',
+  createModelRef: (profileId: string | null, modelId: string) =>
+    modelId ? { profileId, modelId } : null,
+  resolveInvocationRoute: () => ({
+    profileId: 'legacy-default',
+    modelId: 'gpt-image-2.5',
   }),
 }));
+vi.mock('../../../services/ai-generation-preferences-service', () => ({
+  loadAIInputPreferences: () => ({
+    generationType: 'image',
+    selectedModel: 'gpt-image-2.5',
+    selectedParams: {},
+    selectedCount: 1,
+    selectedSkillId: 'auto',
+  }),
+  loadScopedAIInputModelParams: (
+    _type: string,
+    _model: string,
+    _key: string,
+    fallback = {}
+  ) => fallback,
+  saveAIInputPreferences: store.savePreferences,
+  saveScopedAIInputModelParams: store.saveParams,
+}));
+vi.mock('../../../services/video-binding-utils', () => ({
+  getEffectiveVideoCompatibleParams: () => [],
+}));
 
-type Controls = ReturnType<typeof useChatDrawerGenerationControls>;
-interface TestSession {
-  id: string;
-  generationState: ChatSessionGenerationState;
+function runtimeModel(
+  id = 'gpt-image-2.5',
+  profileId = 'legacy-default'
+): ModelConfig {
+  const config = getModelConfig(id);
+  if (!config) throw new Error(`Missing model fixture: ${id}`);
+  return {
+    ...config,
+    sourceProfileId: profileId,
+    selectionKey: `${profileId}::${id}`,
+  };
 }
 
-function makeState(
-  overrides: Partial<ChatSessionGenerationState> = {}
-): ChatSessionGenerationState {
+function legacyState(): ChatSessionGenerationState {
   return {
     generationType: 'image',
-    selectedModel: 'image-model',
-    selectedModelRef: { profileId: 'provider-1', modelId: 'image-model' },
-    selectedParams: { size: 'auto', quality: 'high' },
+    selectedModel: 'gpt-image-2.5',
+    selectedModelRef: null,
+    selectedParams: {},
     selectedCount: 1,
-    ...overrides,
   };
 }
 
-function readState(controls: Controls): ChatSessionGenerationState {
-  return {
-    generationType: controls.generationType,
-    selectedModel: controls.selectedModel,
-    selectedModelRef: controls.selectedModelRef,
-    selectedParams: controls.selectedParams,
-    selectedCount: controls.selectedCount,
-  };
-}
-
-function renderParentEcho(
-  initialState: ChatSessionGenerationState,
-  options: { recreateCallback?: boolean; cloneEcho?: boolean } = {}
+function renderWithSession(
+  initial: ChatSessionGenerationState | null = legacyState()
 ) {
-  const notifications = vi.fn();
-  let controls!: Controls;
-  let session!: TestSession;
-  let replaceSession!: React.Dispatch<React.SetStateAction<TestSession>>;
-
-  function Parent() {
-    const [currentSession, setCurrentSession] = useState<TestSession>({
-      id: 'session-1',
-      generationState: initialState,
-    });
-    const onGenerationStateChange = useCallback(
-      (state: ChatSessionGenerationState) => {
-        // A broken hook should fail promptly, before React can loop forever.
-        if (notifications.mock.calls.length >= 25) {
-          throw new Error(
-            'Generation state did not settle after 25 parent echoes'
-          );
-        }
-        notifications(currentSession.id, state);
-        const echoedState = options.cloneEcho
-          ? {
+  const persist = vi.fn();
+  const hook = renderHook(
+    () => {
+      const [session, setSession] = useState({
+        id: 'session-1',
+        generationState: initial,
+      });
+      const onSessionGenerationStateChange = useCallback(
+        (state: ChatSessionGenerationState) => {
+          persist(session.id, state);
+          // Bound the reproduction so a regression fails instead of hanging the runner.
+          if (persist.mock.calls.length > 20)
+            throw new Error('Generation state persistence loop');
+          setSession((previous) => ({
+            ...previous,
+            generationState: {
               ...state,
-              selectedModelRef: state.selectedModelRef
-                ? { ...state.selectedModelRef }
-                : null,
               selectedParams: { ...state.selectedParams },
-            }
-          : state;
-        setCurrentSession((previous) => ({
-          ...previous,
-          generationState: echoedState,
-        }));
-      },
-      [currentSession.id]
-    );
-
-    controls = useChatDrawerGenerationControls({
-      sessionId: currentSession.id,
-      sessionGenerationState: currentSession.generationState,
-      onSessionGenerationStateChange: options.recreateCallback
-        ? (state) => onGenerationStateChange(state)
-        : onGenerationStateChange,
-    });
-    session = currentSession;
-    replaceSession = setCurrentSession;
-    return null;
-  }
-
-  render(<Parent />);
-  return {
-    notifications,
-    get controls() {
-      return controls;
-    },
-    get session() {
-      return session;
-    },
-    replaceSession(next: TestSession) {
-      act(() => replaceSession(next));
-    },
-    updateExternalState(state: ChatSessionGenerationState) {
-      act(() =>
-        replaceSession((previous) => ({ ...previous, generationState: state }))
+            },
+          }));
+        },
+        [session.id]
       );
+      const controls = useChatDrawerGenerationControls({
+        sessionId: session.id,
+        sessionGenerationState: session.generationState,
+        onSessionGenerationStateChange,
+      });
+      return { controls, session, setSession };
     },
-    rerenderParent() {
-      act(() => replaceSession((previous) => ({ ...previous })));
-    },
-  };
+    {
+      wrapper: ({ children }) => (
+        <React.StrictMode>{children}</React.StrictMode>
+      ),
+    }
+  );
+  return { ...hook, persist };
 }
 
 beforeEach(() => {
+  store.models = [runtimeModel()];
   vi.clearAllMocks();
 });
+afterEach(cleanup);
 
-afterEach(() => {
-  cleanup();
-  vi.restoreAllMocks();
-});
+describe('chat drawer generation state synchronization', () => {
+  it('settles a legacy session against runtime-only models before persisting', () => {
+    const { result, persist, rerender } = renderWithSession();
+    expect(result.current.controls.selectedModelRef).toEqual({
+      profileId: 'legacy-default',
+      modelId: 'gpt-image-2.5',
+    });
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(store.savePreferences).toHaveBeenCalledTimes(1);
+    expect(store.saveParams).toHaveBeenCalledTimes(1);
+    expect(persist.mock.calls[0][1]).toEqual(
+      result.current.session.generationState
+    );
+    rerender();
+    expect(persist).toHaveBeenCalledTimes(1);
+  });
 
-describe('useChatDrawerGenerationControls session synchronization', () => {
-  it.each([false, true])(
-    'settles on a fallback when the persisted model is unavailable (cloned echo: %s)',
-    (cloneEcho) => {
-      const harness = renderParentEcho(
-        makeState({
-          selectedModel: 'removed-model',
-          selectedModelRef: {
-            profileId: 'removed-provider',
-            modelId: 'removed-model',
-          },
-          selectedParams: {},
-        }),
-        { cloneEcho }
-      );
+  it('persists user parameters and count once without restoring the previous values', () => {
+    const { result, persist } = renderWithSession();
+    persist.mockClear();
+    act(() => {
+      result.current.controls.handleParamSelect('resolution', '2k');
+      result.current.controls.setSelectedCount(3);
+    });
+    expect(
+      result.current.session.generationState?.selectedParams.resolution
+    ).toBe('2k');
+    expect(result.current.session.generationState?.selectedCount).toBe(3);
+    expect(persist).toHaveBeenCalledTimes(1);
+  });
 
-      expect(harness.controls.selectedModel).toBe('image-model');
-      expect(harness.controls.selectedModelRef).toEqual({
-        profileId: 'provider-1',
-        modelId: 'image-model',
+  it('restores a different session without writing the previous session into it', () => {
+    const { result, persist } = renderWithSession();
+    persist.mockClear();
+    act(() =>
+      result.current.setSession({
+        id: 'session-2',
+        generationState: {
+          ...legacyState(),
+          selectedCount: 4,
+          selectedParams: { resolution: '2k' },
+        },
+      })
+    );
+    expect(result.current.controls.selectedCount).toBe(4);
+    expect(result.current.controls.selectedParams.resolution).toBe('2k');
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(persist.mock.calls[0]).toEqual([
+      'session-2',
+      result.current.session.generationState,
+    ]);
+  });
+
+  it('initializes a new session once and does not skip another identical new session', () => {
+    const { result, persist } = renderWithSession(null);
+    expect(persist).toHaveBeenCalledTimes(1);
+    persist.mockClear();
+    act(() =>
+      result.current.setSession({ id: 'session-2', generationState: null })
+    );
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(persist.mock.calls[0][0]).toBe('session-2');
+    expect(result.current.controls.selectedSelectionKey).toBe(
+      'legacy-default::gpt-image-2.5'
+    );
+  });
+
+  it('does not rewrite an unchanged normalized session or cloned incoming state', () => {
+    const { result, persist } = renderWithSession();
+    const stableState = result.current.session.generationState;
+    if (!stableState) throw new Error('Missing saved generation state');
+    persist.mockClear();
+    store.savePreferences.mockClear();
+    act(() =>
+      result.current.setSession({
+        id: 'session-1',
+        generationState: {
+          ...stableState,
+          selectedParams: { ...stableState.selectedParams },
+        },
+      })
+    );
+    expect(persist).not.toHaveBeenCalled();
+    expect(store.savePreferences).not.toHaveBeenCalled();
+    act(() =>
+      result.current.setSession({
+        id: 'session-2',
+        generationState: stableState,
+      })
+    );
+    expect(persist).not.toHaveBeenCalled();
+    expect(result.current.controls.selectedParams).toEqual(
+      stableState.selectedParams
+    );
+  });
+
+  it('accepts external parameter changes in the same session without echoing them', () => {
+    const { result, persist } = renderWithSession();
+    const stableState = result.current.session.generationState;
+    if (!stableState) throw new Error('Missing saved generation state');
+    persist.mockClear();
+    act(() =>
+      result.current.setSession({
+        ...result.current.session,
+        generationState: {
+          ...stableState,
+          selectedCount: 5,
+        },
+      })
+    );
+    expect(result.current.controls.selectedCount).toBe(5);
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  it('normalizes once when runtime models arrive after session restoration', () => {
+    store.models = [];
+    const { result, persist, rerender } = renderWithSession();
+    persist.mockClear();
+    store.models = [runtimeModel()];
+    rerender();
+    expect(result.current.controls.selectedSelectionKey).toBe(
+      'legacy-default::gpt-image-2.5'
+    );
+    expect(persist).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves provider identity when selecting the same model from another provider', () => {
+    store.models = [
+      runtimeModel(),
+      runtimeModel('gpt-image-2.5', 'second-provider'),
+    ];
+    const { result, persist } = renderWithSession();
+    persist.mockClear();
+    act(() => result.current.controls.handleModelConfigSelect(store.models[1]));
+    expect(result.current.controls.selectedSelectionKey).toBe(
+      'second-provider::gpt-image-2.5'
+    );
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(persist.mock.calls[0][1].selectedModelRef.profileId).toBe(
+      'second-provider'
+    );
+  });
+
+  it('recovers a removed model without repeatedly restoring the stale selection', () => {
+    const { result, persist } = renderWithSession({
+      ...legacyState(),
+      selectedModel: 'removed-model',
+    });
+    expect(result.current.controls.selectedSelectionKey).toBe(
+      'legacy-default::gpt-image-2.5'
+    );
+    expect(persist).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['text', 'agent', 'audio'] as const)(
+    'normalizes %s counts before persisting',
+    (generationType) => {
+      const model = generationType === 'audio' ? 'suno_music' : 'gpt-5.4';
+      store.models = [runtimeModel(model)];
+      const { result, persist } = renderWithSession({
+        ...legacyState(),
+        generationType,
+        selectedModel: model,
+        selectedCount: 4,
       });
-      expect(harness.session.generationState).toEqual(
-        readState(harness.controls)
-      );
-      expect(harness.notifications.mock.calls.length).toBeLessThan(6);
+      expect(result.current.controls.generationType).toBe(generationType);
+      expect(result.current.controls.selectedCount).toBe(1);
+      expect(persist).toHaveBeenCalledTimes(1);
+      expect(persist.mock.calls[0][1].selectedCount).toBe(1);
     }
   );
-
-  it('keeps agent model, count, and parameter normalization after parent echoes', () => {
-    const harness = renderParentEcho(
-      makeState({
-        generationType: 'agent',
-        selectedParams: { quality: 'low' },
-        selectedCount: 5,
-      })
-    );
-
-    expect(harness.controls.selectedModel).toBe('text-model');
-    expect(harness.controls.selectedCount).toBe(1);
-    expect(harness.controls.selectedParams).toEqual({});
-    expect(harness.session.generationState).toEqual(
-      readState(harness.controls)
-    );
-    expect(harness.notifications.mock.calls.length).toBeLessThan(6);
-  });
-
-  it('normalizes unsupported parameters without restoring the old values', () => {
-    const harness = renderParentEcho(
-      makeState({
-        selectedParams: { size: 'invalid', quality: 'invalid', removed: 'old' },
-      })
-    );
-
-    expect(harness.controls.selectedParams).toEqual({
-      size: 'auto',
-      quality: 'high',
-    });
-    expect(harness.session.generationState.selectedParams).toEqual({
-      size: 'auto',
-      quality: 'high',
-    });
-  });
-
-  it('persists user model, parameter, count, and generation type changes', () => {
-    const harness = renderParentEcho(makeState());
-    const nextModelRef: ModelRef = {
-      profileId: 'provider-1',
-      modelId: 'image-alt',
-    };
-
-    act(() => harness.controls.handleModelSelect('image-alt', nextModelRef));
-    act(() => {
-      harness.controls.handleParamSelect('quality', 'low');
-      harness.controls.setSelectedCount(3);
-    });
-
-    expect(harness.session.generationState).toEqual(
-      makeState({
-        selectedModel: 'image-alt',
-        selectedModelRef: nextModelRef,
-        selectedParams: { size: 'auto', quality: 'low' },
-        selectedCount: 3,
-      })
-    );
-    expect(fixtures.savePreferences).toHaveBeenLastCalledWith(
-      expect.objectContaining({ selectedModel: 'image-alt', selectedCount: 3 })
-    );
-    expect(fixtures.saveScopedParams).toHaveBeenLastCalledWith(
-      'image',
-      'image-alt',
-      { size: 'auto', quality: 'low' },
-      'provider-1::image-alt'
-    );
-
-    act(() => harness.controls.setGenerationType('video'));
-
-    expect(harness.controls.selectedModel).toBe('video-model');
-    expect(harness.session.generationState).toEqual(
-      readState(harness.controls)
-    );
-    expect(harness.session.generationState.generationType).toBe('video');
-  });
-
-  it('restores a different session and its previous settings when switching back', () => {
-    const initialState = makeState({ selectedCount: 3 });
-    const harness = renderParentEcho(initialState);
-    const firstSessionState = harness.session.generationState;
-    const secondSessionState = makeState({
-      generationType: 'video',
-      selectedModel: 'video-model',
-      selectedModelRef: { profileId: 'provider-1', modelId: 'video-model' },
-      selectedParams: { size: '1x1', quality: 'low' },
-      selectedCount: 5,
-    });
-
-    harness.replaceSession({
-      id: 'session-2',
-      generationState: secondSessionState,
-    });
-    expect(readState(harness.controls)).toEqual(secondSessionState);
-    expect(harness.session.generationState).toEqual(secondSessionState);
-    expect(harness.notifications).toHaveBeenLastCalledWith(
-      'session-2',
-      secondSessionState
-    );
-
-    harness.replaceSession({
-      id: 'session-1',
-      generationState: firstSessionState,
-    });
-    expect(readState(harness.controls)).toEqual(firstSessionState);
-    expect(harness.notifications).toHaveBeenLastCalledWith(
-      'session-1',
-      firstSessionState
-    );
-  });
-
-  it('notifies a new session even when its settings match the previous session', () => {
-    const harness = renderParentEcho(makeState());
-    const state = harness.session.generationState;
-
-    harness.replaceSession({ id: 'session-2', generationState: state });
-
-    expect(readState(harness.controls)).toEqual(state);
-    expect(harness.notifications).toHaveBeenLastCalledWith('session-2', state);
-  });
-
-  it('restores genuine external changes within the same session', () => {
-    const harness = renderParentEcho(makeState());
-    const externalState = makeState({
-      selectedModel: 'image-alt',
-      selectedModelRef: { profileId: 'provider-1', modelId: 'image-alt' },
-      selectedParams: { size: '1x1', quality: 'low' },
-      selectedCount: 2,
-    });
-
-    harness.updateExternalState(externalState);
-
-    expect(readState(harness.controls)).toEqual(externalState);
-    expect(harness.session.generationState).toEqual(externalState);
-    expect(harness.notifications).toHaveBeenLastCalledWith(
-      'session-1',
-      externalState
-    );
-  });
-
-  it('does not re-emit unchanged settings when a parent recreates the callback', () => {
-    const harness = renderParentEcho(makeState(), { recreateCallback: true });
-    const notificationsAfterMount = harness.notifications.mock.calls.length;
-
-    harness.rerenderParent();
-
-    expect(harness.notifications.mock.calls.length).toBe(
-      notificationsAfterMount
-    );
-    expect(harness.session.generationState).toEqual(
-      readState(harness.controls)
-    );
-  });
 });

@@ -73,6 +73,13 @@ import {
 } from '../../utils/settings-manager';
 import { runtimeModelDiscovery } from '../../utils/runtime-model-discovery';
 import { queueProviderSettingsNavigation } from '../settings-dialog/provider-settings-navigation';
+import { isTuziEmbeddedMode } from '../../services/tuzi-embedded-config';
+import {
+  requestTuziParentContext,
+  TUZI_BRIDGE_EVENT,
+} from '../../services/tuzi-postmessage-bridge';
+import { getTuziSystemUserId } from '../../services/tuzi-token-auth';
+import { saveTuziActiveProviderGroup } from '../../services/tuzi-provider-selection';
 
 const lazyProviderModelLoads = new Map<string, Promise<void>>();
 const subscribeToModelDiscovery = (listener: () => void) =>
@@ -229,7 +236,7 @@ export interface ModelDropdownProps {
   /** 选择模型回调 */
   onSelect: (modelId: string, modelRef?: ModelRef | null) => void;
   /** 选择完整模型配置回调 */
-  onSelectModel?: (model: ModelConfig, modelRef?: ModelRef | null) => void;
+  onSelectModel?: (model: ModelConfig) => void;
   /** 语言 */
   language?: 'zh' | 'en';
   /** 模型列表（可选，默认为图片模型） */
@@ -303,6 +310,7 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
   const [loadingProviderId, setLoadingProviderId] = useState<string | null>(
     null
   );
+  const [tuziMode, setTuziMode] = useState(() => isTuziEmbeddedMode());
   const loadingRequestRef = useRef(0);
   const {
     contextMenu,
@@ -315,6 +323,30 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
   const providerProfiles = useProviderProfiles();
   const effectiveProviderProfiles =
     providerProfilesOverride || providerProfiles;
+
+  useEffect(() => {
+    let active = true;
+    const syncTuziMode = (event: Event) => {
+      const mode = (event as CustomEvent<{ mode?: string }>).detail?.mode;
+      setTuziMode(
+        mode === 'tuzi'
+          ? true
+          : mode === 'standalone'
+          ? false
+          : isTuziEmbeddedMode()
+      );
+    };
+    window.addEventListener(TUZI_BRIDGE_EVENT, syncTuziMode);
+    if (window.parent !== window) {
+      void requestTuziParentContext().then((nextContext) => {
+        if (active) setTuziMode(Boolean(nextContext));
+      });
+    }
+    return () => {
+      active = false;
+      window.removeEventListener(TUZI_BRIDGE_EVENT, syncTuziMode);
+    };
+  }, []);
   const providerProfileMap = useMemo(
     () =>
       new Map(
@@ -661,14 +693,22 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
     [openContextMenuAt]
   );
 
-  const handleOpenProviderSettings = useCallback(() => {
-    queueProviderSettingsNavigation({
-      action: 'select',
-      profileId: LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
-    });
+  const handleOpenProviderSettings = useCallback(async () => {
+    let openTuziGroups = tuziMode;
+    if (!openTuziGroups && window.parent !== window) {
+      openTuziGroups = Boolean(await requestTuziParentContext());
+    }
+    queueProviderSettingsNavigation(
+      openTuziGroups
+        ? { action: 'tuzi-groups' }
+        : {
+            action: 'select',
+            profileId: LEGACY_DEFAULT_PROVIDER_PROFILE_ID,
+          }
+    );
     setIsOpen(false);
     setAppState((prev) => ({ ...prev, openSettings: true }));
-  }, [setAppState, setIsOpen]);
+  }, [setAppState, setIsOpen, tuziMode]);
 
   // 当过滤结果变化时，高亮选中模型或重置到第一项
   useEffect(() => {
@@ -783,34 +823,24 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
     ]
   );
 
-  const handleClose = useCallback(
-    (event?: React.MouseEvent<HTMLButtonElement>) => {
-      event?.preventDefault();
-      event?.stopPropagation();
-      closeContextMenu();
-      if (variant === 'form') {
-        setSearchQuery(currentModel?.label || selectedModel);
-      } else {
-        setSearchQuery('');
-      }
-      setIsOpen(false);
-    },
-    [closeContextMenu, currentModel, selectedModel, setIsOpen, variant]
-  );
-
   // 选择模型
   const handleSelect = useCallback(
     (model: ModelConfig) => {
       closeContextMenu();
-      // Static models are displayed in the legacy API-key provider group.
-      // Keep that provider identity when the model is selected so callers do
-      // not resolve the request against the active Xingtu login preset.
-      const modelRef = createModelRef(
-        model.sourceProfileId || DEFAULT_PROVIDER_ID,
-        model.id
+      const profile = model.sourceProfileId
+        ? providerProfileMap.get(model.sourceProfileId)
+        : null;
+      if (profile?.id.startsWith('tuzi-managed-') && profile.pricingGroup) {
+        saveTuziActiveProviderGroup(
+          getTuziSystemUserId(),
+          profile.pricingGroup
+        );
+      }
+      onSelect(
+        model.id,
+        createModelRef(model.sourceProfileId || null, model.id)
       );
-      onSelect(model.id, modelRef);
-      onSelectModel?.(model, modelRef);
+      onSelectModel?.(model);
       setIsOpen(false);
       if (variant === 'form') {
         setSearchQuery(model.label || model.id);
@@ -818,7 +848,14 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
         setSearchQuery('');
       }
     },
-    [closeContextMenu, onSelect, onSelectModel, setIsOpen, variant]
+    [
+      closeContextMenu,
+      onSelect,
+      onSelectModel,
+      providerProfileMap,
+      setIsOpen,
+      variant,
+    ]
   );
 
   const handleCopyModelId = useCallback(
@@ -946,16 +983,7 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
         }
         if (variant === 'form' && allowCustomValue && searchQuery.trim()) {
           // 如果是表单变体且有输入，但没有匹配的模型，则使用输入的内容
-          const customModelId = searchQuery.trim();
-          const selectedProviderId =
-            providerGroups.some((group) => group.providerId === activeProviderId)
-              ? activeProviderId
-              : selectedProviderHint;
-          // `legacy-default` is an explicit API-key provider in the selector.
-          // Keep it on custom model input so route resolution cannot inherit
-          // the active preset's Xingtu login provider.
-          const customModelRef = createModelRef(selectedProviderId, customModelId);
-          onSelect(customModelId, customModelRef);
+          onSelect(searchQuery.trim());
           setIsOpen(false);
           return true;
         }
@@ -971,11 +999,8 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
       allowCustomValue,
       currentModel,
       onSelect,
-      activeProviderId,
       searchQuery,
       selectedModel,
-      selectedProviderHint,
-      providerGroups,
       setIsOpen,
     ]
   );
@@ -1202,20 +1227,6 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
                   }
             }
           >
-            <div className="model-dropdown__mobile-header">
-              <div className="model-dropdown__mobile-title">
-                {language === 'zh' ? '选择模型' : 'Select Model'}
-              </div>
-              <button
-                type="button"
-                className="model-dropdown__mobile-close"
-                onClick={handleClose}
-                aria-label={language === 'zh' ? '关闭模型选择器' : 'Close model picker'}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
             {variant === 'minimal' ? (
               <div className="model-dropdown__toolbar">
                 {header ? (
@@ -1267,8 +1278,6 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
               onMiddleTabChange={handleVendorChange}
               searchQuery={searchQuery}
               compact
-              showTabTooltip
-              tabTooltipZIndex={Z_INDEX.DROPDOWN_PORTAL + 1}
               tabsFooter={
                 showProviderAction ? (
                   <button
@@ -1276,12 +1285,25 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
                     className="model-dropdown__provider-action"
                     onClick={handleOpenProviderSettings}
                     aria-label={
-                      language === 'zh'
+                      tuziMode
+                        ? language === 'zh'
+                          ? '添加分组'
+                          : 'Add group'
+                        : language === 'zh'
                         ? '新增供应商或打开供应商设置'
                         : 'Add provider or open provider settings'
                     }
                   >
                     <Plus size={16} />
+                    <span>
+                      {tuziMode
+                        ? language === 'zh'
+                          ? '添加分组'
+                          : 'Add group'
+                        : language === 'zh'
+                        ? '新增供应商'
+                        : 'Add provider'}
+                    </span>
                   </button>
                 ) : null
               }

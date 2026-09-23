@@ -21,17 +21,17 @@ import { ChatDrawerTrigger } from './ChatDrawerTrigger';
 import { ModelSelector } from './ModelSelector';
 import { EnhancedChatInput } from './EnhancedChatInput';
 import { chatStorageService } from '../../services/chat-storage-service';
-import { CHAT_CONSTANTS } from '../../constants/CHAT_CONSTANTS';
-import { LS_KEYS } from '../../constants/storage-keys';
 import { useChatHandler } from '../../hooks/useChatHandler';
 import {
   createModelRef,
-  geminiSettings,
+  providerProfilesSettings,
   resolveInvocationRoute,
+  settingsManager,
   type ModelRef,
 } from '../../utils/settings-manager';
 import { useDrawnix } from '../../hooks/use-drawnix';
 import { useChatDrawer } from '../../contexts/ChatDrawerContext';
+import type { DrawerGenerationSubmitParams } from '../../contexts/ChatDrawerContext';
 import type {
   ChatDrawerProps,
   ChatDrawerRef,
@@ -55,6 +55,8 @@ import {
 } from './workflow-media-results';
 
 import { analytics } from '../../utils/umami-analytics';
+import { prepareTuziManagedRoute } from '../../services/tuzi-managed-route-gate';
+import { resolveDrawerGenerationRoute } from './drawer-generation-route';
 import { HoverTip } from '../shared';
 import './chat-drawer.scss';
 
@@ -107,19 +109,12 @@ function getToolDescription(
   }
 }
 
-const getDrawerMaxWidth = () =>
-  Math.max(CHAT_CONSTANTS.DRAWER_MIN_WIDTH, window.innerWidth - 60);
-
-const clampDrawerWidth = (width: number) =>
-  Math.max(
-    CHAT_CONSTANTS.DRAWER_MIN_WIDTH,
-    Math.min(width, getDrawerMaxWidth())
-  );
-
-const getDefaultDrawerWidth = () =>
-  clampDrawerWidth(
-    Math.floor(window.innerWidth * CHAT_CONSTANTS.DRAWER_DEFAULT_WIDTH_RATIO)
-  );
+// 抽屉宽度缓存 key
+const DRAWER_WIDTH_CACHE_KEY = 'chat-drawer-width';
+// 默认宽度（与 SCSS 中的 50vw 对应）
+const DEFAULT_DRAWER_WIDTH = Math.max(375, window.innerWidth * 0.5);
+// 最小宽度
+const MIN_DRAWER_WIDTH = 375;
 const MAX_DRAFT_CONTENT_ITEMS = 8;
 const MAX_DRAFT_INLINE_URL_LENGTH = 2048;
 
@@ -230,21 +225,14 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
 
     // 抽屉宽度状态（从缓存初始化）
     const [drawerWidth, setDrawerWidth] = useState(() => {
-      const cached = localStorage.getItem(LS_KEYS.CHAT_DRAWER_WIDTH);
+      const cached = localStorage.getItem(DRAWER_WIDTH_CACHE_KEY);
       if (cached) {
         const width = parseInt(cached, 10);
-        if (!isNaN(width) && width >= CHAT_CONSTANTS.DRAWER_MIN_WIDTH) {
-          const clampedWidth = clampDrawerWidth(width);
-          if (clampedWidth !== width) {
-            localStorage.setItem(
-              LS_KEYS.CHAT_DRAWER_WIDTH,
-              String(clampedWidth)
-            );
-          }
-          return clampedWidth;
+        if (!isNaN(width) && width >= MIN_DRAWER_WIDTH) {
+          return Math.min(width, window.innerWidth - 60);
         }
       }
-      return getDefaultDrawerWidth();
+      return DEFAULT_DRAWER_WIDTH;
     });
     // 是否正在拖动
     const [isDragging, setIsDragging] = useState(false);
@@ -290,6 +278,9 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
     const {
       executeRetry,
       selectedContent,
+      submitGenerationFromDrawer,
+      generationSubmitterReady,
+      registerGenerationCredentialGate,
       setIsDrawerOpen: setContextIsOpen,
       setDrawerWidth: setContextDrawerWidth,
     } = useChatDrawer();
@@ -317,13 +308,17 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
 
       const handleMouseMove = (e: MouseEvent) => {
         const newWidth = window.innerWidth - e.clientX;
-        setDrawerWidth(clampDrawerWidth(newWidth));
+        const clampedWidth = Math.max(
+          MIN_DRAWER_WIDTH,
+          Math.min(newWidth, window.innerWidth - 60)
+        );
+        setDrawerWidth(clampedWidth);
       };
 
       const handleMouseUp = () => {
         setIsDragging(false);
         // 保存到缓存
-        localStorage.setItem(LS_KEYS.CHAT_DRAWER_WIDTH, String(drawerWidth));
+        localStorage.setItem(DRAWER_WIDTH_CACHE_KEY, String(drawerWidth));
       };
 
       document.addEventListener('mousemove', handleMouseMove);
@@ -343,12 +338,15 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
     // 窗口大小变化时调整宽度
     useEffect(() => {
       const handleResize = () => {
-        setDrawerWidth((width) => clampDrawerWidth(width));
+        const maxWidth = window.innerWidth - 60;
+        if (drawerWidth > maxWidth) {
+          setDrawerWidth(maxWidth);
+        }
       };
 
       window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
-    }, []);
+    }, [drawerWidth]);
 
     // 开始拖动
     const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -598,8 +596,8 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
     useEffect(() => {
       // When settings dialog closes, check if we have a pending message and API key
       if (!appState.openSettings && pendingMessageRef.current) {
-        const settings = geminiSettings.get();
-        if (settings?.apiKey) {
+        const route = resolveInvocationRoute('text');
+        if (route.apiKey) {
           const msg = pendingMessageRef.current;
           pendingMessageRef.current = null;
           // If there's no active session, create one first
@@ -946,65 +944,111 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
       []
     );
 
-    const withImplicitWorkflowReferences = useCallback((msg: Message): Message => {
-      const hasAttachedFile = msg.parts.some((part) => part.type === 'data-file');
-      if (hasAttachedFile) {
-        return msg;
-      }
-
-      const prompt = msg.parts
-        .filter((part) => part.type === 'text')
-        .map((part) => String((part as { text?: unknown }).text || ''))
-        .join('\n');
-
-      if (!shouldUseImplicitWorkflowReferences(prompt)) {
-        return msg;
-      }
-
-      const references = getLatestWorkflowImageReferences(
-        workflowMessagesRef.current.values()
-      );
-      if (references.length === 0) {
-        return msg;
-      }
-
-      return {
-        ...msg,
-        parts: [
-          ...msg.parts,
-          ...references.map(
-            (item, index) =>
-              ({
-                type: 'data-file',
-                data: {
-                  filename: `${item.type}-${index + 1}.png`,
-                  mediaType: 'image/png',
-                  url: item.url || '',
-                },
-              } as Message['parts'][number])
-          ),
-        ],
-      };
-    }, []);
-
     // Store pending message for retry after session creation or API key config
     const pendingMessageRef = React.useRef<Message | null>(null);
+    const pendingGenerationRef =
+      React.useRef<DrawerGenerationSubmitParams | null>(null);
+    const isResumingGenerationRef = React.useRef(false);
+    const isPreparingGenerationCredentialsRef = React.useRef(false);
+    const [providerProfilesRevision, setProviderProfilesRevision] = useState(0);
+
+    useEffect(() => {
+      const handleProviderProfilesChange = () => {
+        setProviderProfilesRevision((current) => current + 1);
+      };
+      providerProfilesSettings.addListener(handleProviderProfilesChange);
+      return () =>
+        providerProfilesSettings.removeListener(handleProviderProfilesChange);
+    }, []);
+
+    const handleGenerationSubmit = useCallback(
+      async (params: DrawerGenerationSubmitParams): Promise<boolean> => {
+        await settingsManager.waitForInitialization();
+        const route = resolveDrawerGenerationRoute(params);
+        const preparation = await prepareTuziManagedRoute(route);
+        if (!route.apiKey || preparation.managedRoute) {
+          pendingGenerationRef.current = params;
+          isPreparingGenerationCredentialsRef.current = true;
+          const preparedRoute = resolveDrawerGenerationRoute(params);
+          if (
+            preparedRoute.apiKey &&
+            (!preparation.managedRoute ||
+              preparation.context?.status === 'ready')
+          ) {
+            window.setTimeout(() => {
+              isPreparingGenerationCredentialsRef.current = false;
+              setProviderProfilesRevision((current) => current + 1);
+            }, 0);
+            return true;
+          }
+          isPreparingGenerationCredentialsRef.current = false;
+          setAppState((current) => ({ ...current, openSettings: true }));
+          return true;
+        }
+
+        pendingGenerationRef.current = null;
+        return submitGenerationFromDrawer(params);
+      },
+      [setAppState, submitGenerationFromDrawer]
+    );
+
+    useEffect(() => {
+      registerGenerationCredentialGate(handleGenerationSubmit);
+      return () => registerGenerationCredentialGate(null);
+    }, [handleGenerationSubmit, registerGenerationCredentialGate]);
+
+    useEffect(() => {
+      const pending = pendingGenerationRef.current;
+      if (
+        appState.openSettings ||
+        !pending ||
+        !generationSubmitterReady ||
+        isPreparingGenerationCredentialsRef.current ||
+        isResumingGenerationRef.current ||
+        !resolveDrawerGenerationRoute(pending).apiKey
+      ) {
+        return;
+      }
+
+      pendingGenerationRef.current = null;
+      isResumingGenerationRef.current = true;
+      void submitGenerationFromDrawer(pending)
+        .then((submitted) => {
+          if (!submitted) {
+            pendingGenerationRef.current = pending;
+          }
+        })
+        .catch((error) => {
+          pendingGenerationRef.current = pending;
+          console.error(
+            '[ChatDrawer] pending generation resume failed:',
+            error
+          );
+        })
+        .finally(() => {
+          isResumingGenerationRef.current = false;
+        });
+    }, [
+      appState.openSettings,
+      generationSubmitterReady,
+      providerProfilesRevision,
+      submitGenerationFromDrawer,
+    ]);
 
     // Handle send with auto-create session
     const handleSendWrapper = useCallback(
       async (msg: Message) => {
-        const outgoingMsg = withImplicitWorkflowReferences(msg);
         try {
           analytics.track('chat_message_send', {
-            hasImages: outgoingMsg.parts.some((p) => p.type === 'data-file'),
+            hasImages: msg.parts.some((p) => p.type === 'image_url'), // Message parts uses image_url usually
           });
           analytics.track('ai_modality_used', {
             modality: 'agent',
             action: 'message_send',
             source: 'chat_drawer',
-            hasImages: outgoingMsg.parts.some((p) => p.type === 'data-file'),
-            partCount: outgoingMsg.parts.length,
-            textLength: outgoingMsg.parts
+            hasImages: msg.parts.some((p) => p.type === 'image_url'),
+            partCount: msg.parts.length,
+            textLength: msg.parts
               .filter((part) => part.type === 'text')
               .reduce(
                 (total, part) =>
@@ -1013,12 +1057,17 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
               ),
           });
           // Check if API key is configured
-          const settings = geminiSettings.get();
-          if (!settings?.apiKey) {
+          const route = resolveInvocationRoute('text');
+          const preparation = await prepareTuziManagedRoute(route);
+          const preparedRoute = resolveInvocationRoute('text');
+          if (
+            !preparedRoute.apiKey ||
+            (preparation.managedRoute &&
+              preparation.context?.status !== 'ready')
+          ) {
             // Store message for sending after API key is configured
-            pendingMessageRef.current = outgoingMsg;
-            // Open settings dialog to configure API key
-            setAppState({ ...appState, openSettings: true });
+            pendingMessageRef.current = msg;
+            setAppState((current) => ({ ...current, openSettings: true }));
             return;
           }
 
@@ -1030,24 +1079,17 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
             setSessions((prev) => [newSession, ...prev]);
             updateActiveSessionId(newSession.id);
             // Store message to send after session is created
-            pendingMessageRef.current = outgoingMsg;
+            pendingMessageRef.current = msg;
             return;
           }
 
-          await chatHandler.sendMessage(outgoingMsg);
+          await chatHandler.sendMessage(msg);
         } catch (error) {
           console.error('[ChatDrawer] send message failed:', error);
-          pendingMessageRef.current = outgoingMsg;
+          pendingMessageRef.current = msg;
         }
       },
-      [
-        activeSessionId,
-        chatHandler,
-        appState,
-        setAppState,
-        updateActiveSessionId,
-        withImplicitWorkflowReferences,
-      ]
+      [activeSessionId, chatHandler, setAppState, updateActiveSessionId]
     );
 
     // 发送工作流消息
@@ -2020,6 +2062,7 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
                 onGenerationStateChange={handleGenerationStateChange}
                 onDraftChange={handleDraftChange}
                 onSend={handleSubmitDrawerGeneration}
+                onGenerationSubmit={handleGenerationSubmit}
                 placeholder="继续描述要修改的内容..."
               />
             </div>

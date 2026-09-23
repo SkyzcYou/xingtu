@@ -24,12 +24,9 @@ import {
   updateLLMApiLogMetadata,
 } from './media-executor/llm-api-logger';
 import {
-  buildXingliuVideoMetadata,
   appendVideoOutputParams,
   downloadVideoContentToLocalUrl,
   extractInlineVideoUrl,
-  isXingliuVideoBinding,
-  isXingliuVideoResultReady,
   isMiniMaxH3Model,
   normalizeMiniMaxH3VideoResponse,
   resolveVideoPollPathForModel,
@@ -38,8 +35,8 @@ import {
 } from './video-binding-utils';
 import { prepareVideoReferenceImageBlob } from './video-reference-image-utils';
 import {
-  prepareMiniMaxH3Submission,
   isMiniMaxH3RegenerationRequest,
+  prepareMiniMaxH3Submission,
   resolveMiniMaxH3InitialSubmitPath,
 } from './minimax-h3-video-workflow';
 
@@ -71,8 +68,7 @@ export interface VideoSubmitResponse {
     | 'completed'
     | 'failed'
     | 'succeeded'
-    | 'error'
-    | 'unknown';
+    | 'error';
   progress: number;
   created_at: number;
   seconds: string;
@@ -92,13 +88,11 @@ export interface VideoQueryResponse {
     | 'completed'
     | 'failed'
     | 'succeeded'
-    | 'error'
-    | 'unknown';
+    | 'error';
   seconds: string;
   progress?: number; // Optional - API may not return progress when status is 'queued'
   video_url?: string;
   url?: string;
-  metadata?: { url?: string };
   created_at: number;
   error?: string | { code: string; message: string };
 }
@@ -116,7 +110,7 @@ interface PollingOptions {
 function inferAuthType(
   route: ReturnType<typeof resolveInvocationRoute>
 ): ProviderAuthStrategy {
-  return route.authType;
+  return 'bearer';
 }
 
 function resolveProviderContext(
@@ -135,7 +129,6 @@ function resolveProviderContext(
     baseUrl: route.baseUrl,
     apiKey: route.apiKey,
     authType: inferAuthType(route),
-    credentialSource: route.credentialSource,
   };
 }
 
@@ -150,44 +143,6 @@ function resolveVideoPlanContext(routeModel?: string | ModelRef | null): {
     providerContext: plan?.provider || resolveProviderContext(routeModel),
     binding: plan?.binding || null,
   };
-}
-
-async function prepareReferenceImageBlob(
-  url: string,
-  size?: string,
-  signal?: AbortSignal
-): Promise<Blob | null> {
-  const imageData = await unifiedCacheService.getImageForAI(url);
-  const processedUrl = imageData.value;
-
-  if (!processedUrl.startsWith('data:') && !processedUrl.startsWith('http')) {
-    console.warn(
-      '[VideoAPI] Unknown URL format after processing, skipping:',
-      processedUrl?.substring(0, 50)
-    );
-    return null;
-  }
-
-  const response = await fetch(processedUrl, signal ? { signal } : undefined);
-  return prepareVideoReferenceImageBlob(await response.blob(), size);
-}
-
-function getFirstVideoReference(
-  params: VideoGenerationParams
-): UploadedVideoImage | null {
-  if (params.inputReferences?.length) {
-    return (
-      [...params.inputReferences].sort((a, b) => a.slot - b.slot)[0] || null
-    );
-  }
-
-  return params.inputReference
-    ? {
-        slot: 0,
-        url: params.inputReference,
-        name: 'reference.png',
-      }
-    : null;
 }
 
 /**
@@ -214,7 +169,7 @@ class VideoAPIService {
     const referenceCount =
       params.inputReferences?.length || (params.inputReference ? 1 : 0);
     const isMiniMaxH3 = isMiniMaxH3Model(params.model);
-    let submitPath = isMiniMaxH3
+    const submitPath = isMiniMaxH3
       ? resolveMiniMaxH3InitialSubmitPath(params.params)
       : binding?.submitPath || '/videos';
     const logId = startLLMApiLog({
@@ -233,135 +188,163 @@ class VideoAPIService {
       params.params as Record<string, string> | undefined
     );
 
-    const isXingliuVideo = isXingliuVideoBinding(
-      binding,
-      submission.bindingMetadata
-    );
-    let requestBody: BodyInit;
-    let requestHeaders: Record<string, string> | undefined;
+    const formData = new FormData();
+    formData.append('model', submission.model);
+    formData.append('prompt', params.prompt);
 
-    if (isMiniMaxH3) {
-      const referenceImages: string[] = [];
-      if (!isMiniMaxH3RegenerationRequest(params.params)) {
-        const references = params.inputReferences?.length
-          ? [...params.inputReferences].sort((a, b) => a.slot - b.slot)
-          : params.inputReference
-          ? [{ slot: 0, url: params.inputReference }]
-          : [];
-        for (const reference of references) {
-          if (reference.url) {
-            referenceImages.push(
-              (await unifiedCacheService.getImageForAI(reference.url)).value
-            );
-          }
-        }
-      }
-      const miniMaxSubmission = await prepareMiniMaxH3Submission(
-        {
-          prompt: params.prompt,
-          duration: submission.duration,
-          size: params.size,
-          ratio: params.params?.ratio,
-          referenceImages,
-          params: params.params,
-        },
-        { provider: providerContext }
-      );
-      requestHeaders = { 'Content-Type': 'application/json' };
-      requestBody = JSON.stringify(miniMaxSubmission.body);
-      submitPath = miniMaxSubmission.path;
-    } else if (isXingliuVideo) {
-      const metadata = buildXingliuVideoMetadata(
-        params.size,
-        params.params,
-        params.model
-      );
-      const reference = getFirstVideoReference(params);
-
-      if (reference?.url) {
-        const formData = new FormData();
-        formData.append('model', submission.model);
-        formData.append('prompt', params.prompt);
-        if (submission.duration) {
-          formData.append('seconds', submission.duration);
-        }
-        formData.append('metadata', JSON.stringify(metadata));
-
-        const blob = await prepareReferenceImageBlob(
-          reference.url,
-          params.size
-        );
-        if (!blob) {
-          throw new Error('视频参考图处理失败');
-        }
-        formData.append('image', blob, reference.name || 'reference.png');
-        requestBody = formData;
-      } else {
-        requestHeaders = { 'Content-Type': 'application/json' };
-        requestBody = JSON.stringify({
-          model: submission.model,
-          prompt: params.prompt,
-          ...(submission.duration ? { seconds: submission.duration } : {}),
-          metadata,
-        });
-      }
-    } else {
-      const formData = new FormData();
-      formData.append('model', submission.model);
-      formData.append('prompt', params.prompt);
-
-      if (submission.duration) {
-        formData.append(submission.durationField, submission.duration);
-      }
-
-      appendVideoOutputParams(
-        formData,
-        params.model,
-        params.size,
-        params.params
-      );
-
-      if (params.inputReferences && params.inputReferences.length > 0) {
-        const sortedImages = [...params.inputReferences].sort(
-          (a, b) => a.slot - b.slot
-        );
-
-        for (const imageRef of sortedImages) {
-          if (!imageRef.url) {
-            continue;
-          }
-
-          const blob = await prepareReferenceImageBlob(
-            imageRef.url,
-            params.size
-          );
-          if (blob) {
-            formData.append(
-              'input_reference',
-              blob,
-              imageRef.name || 'image.png'
-            );
-          }
-        }
-      } else if (params.inputReference) {
-        const blob = await prepareReferenceImageBlob(
-          params.inputReference,
-          params.size
-        );
-        if (blob) {
-          formData.append('input_reference', blob, 'reference.png');
-        }
-      }
-
-      requestBody = formData;
+    if (submission.duration) {
+      formData.append(submission.durationField, submission.duration);
     }
 
+    appendVideoOutputParams(formData, params.model, params.size, params.params);
+
+    // Handle multiple images - all models use input_reference
+    // For veo3.1, multiple images can be passed with same field name (first frame, last frame)
+    // console.log('[VideoAPI] Processing inputReferences:', params.inputReferences);
+    if (
+      !isMiniMaxH3 &&
+      params.inputReferences &&
+      params.inputReferences.length > 0
+    ) {
+      // Sort by slot to ensure correct order (slot 0 = first frame, slot 1 = last frame)
+      const sortedImages = [...params.inputReferences].sort(
+        (a, b) => a.slot - b.slot
+      );
+
+      for (const imageRef of sortedImages) {
+        // console.log('[VideoAPI] Processing image:', { slot: imageRef.slot, url: imageRef.url?.substring(0, 50), name: imageRef.name });
+
+        if (!imageRef.url) {
+          // console.log('[VideoAPI] Skipping image - no URL');
+          continue;
+        }
+
+        const fieldName = 'input_reference';
+        // console.log('[VideoAPI] Using field name:', fieldName, 'for model:', params.model, 'slot:', imageRef.slot);
+
+        // 处理图片：虚拟路径和远程 URL 都需要转换为 base64/blob
+        // 使用 getImageForAI 统一处理，它会自动处理虚拟路径和远程 URL
+        const imageData = await unifiedCacheService.getImageForAI(imageRef.url);
+        const processedUrl = imageData.value;
+        // console.log(`[VideoAPI] Image processed: ${imageData.type === 'base64' ? 'converted to base64' : 'using URL'}`);
+
+        // Convert to blob and append
+        if (processedUrl.startsWith('data:')) {
+          // console.log('[VideoAPI] Converting data URL to blob...');
+          const response = await fetch(processedUrl);
+          const blob = await prepareVideoReferenceImageBlob(
+            await response.blob(),
+            params.size
+          );
+          // console.log('[VideoAPI] Appending blob:', { fieldName, blobSize: blob.size, fileName: imageRef.name || 'image.png' });
+          formData.append(fieldName, blob, imageRef.name || 'image.png');
+        } else if (processedUrl.startsWith('http')) {
+          // console.log('[VideoAPI] Fetching remote URL...');
+          const response = await fetch(processedUrl);
+          const blob = await prepareVideoReferenceImageBlob(
+            await response.blob(),
+            params.size
+          );
+          // console.log('[VideoAPI] Appending blob:', { fieldName, blobSize: blob.size, fileName: imageRef.name || 'image.png' });
+          formData.append(fieldName, blob, imageRef.name || 'image.png');
+        } else {
+          console.warn(
+            '[VideoAPI] Unknown URL format after processing, skipping:',
+            processedUrl?.substring(0, 50)
+          );
+        }
+      }
+    }
+    // Legacy single image support
+    else if (!isMiniMaxH3 && params.inputReference) {
+      // 处理图片：虚拟路径和远程 URL 都需要转换为 base64/blob
+      // 使用 getImageForAI 统一处理，它会自动处理虚拟路径和远程 URL
+      const imageData = await unifiedCacheService.getImageForAI(
+        params.inputReference
+      );
+      const processedUrl = imageData.value;
+      // console.log(`[VideoAPI] Legacy image processed: ${imageData.type === 'base64' ? 'converted to base64' : 'using URL'}`);
+
+      if (processedUrl.startsWith('data:')) {
+        const response = await fetch(processedUrl);
+        const blob = await prepareVideoReferenceImageBlob(
+          await response.blob(),
+          params.size
+        );
+        formData.append('input_reference', blob, 'reference.png');
+      } else if (processedUrl.startsWith('http')) {
+        const response = await fetch(processedUrl);
+        const blob = await prepareVideoReferenceImageBlob(
+          await response.blob(),
+          params.size
+        );
+        formData.append('input_reference', blob, 'reference.png');
+      } else {
+        console.warn(
+          '[VideoAPI] Unknown URL format after processing, skipping:',
+          processedUrl?.substring(0, 50)
+        );
+      }
+    }
+
+    // Log FormData summary before sending
+    // console.log('[VideoAPI] FormData summary:');
+    const formDataEntries: Record<string, string> = {};
+    formData.forEach((value, key) => {
+      if (value instanceof Blob) {
+        formDataEntries[
+          key
+        ] = `[Blob: ${value.size} bytes, type: ${value.type}]`;
+      } else {
+        formDataEntries[key] = String(value);
+      }
+    });
+    // console.log('[VideoAPI] FormData entries:', formDataEntries);
+    // console.log('[VideoAPI] Sending request to:', `${this.baseUrl}/v1/videos`);
+
+    const miniMaxReferenceImages: string[] = [];
+    if (isMiniMaxH3 && !isMiniMaxH3RegenerationRequest(params.params)) {
+      const sortedReferences = params.inputReferences?.length
+        ? [...params.inputReferences].sort((a, b) => a.slot - b.slot)
+        : params.inputReference
+        ? [{ slot: 0, url: params.inputReference, name: 'reference.png' }]
+        : [];
+      for (const imageRef of sortedReferences) {
+        if (!imageRef.url) continue;
+        const imageData = await unifiedCacheService.getImageForAI(imageRef.url);
+        miniMaxReferenceImages.push(imageData.value);
+      }
+    }
+
+    const miniMaxSubmission = isMiniMaxH3
+      ? await prepareMiniMaxH3Submission(
+          {
+            prompt: params.prompt,
+            duration: submission.duration,
+            size: params.size,
+            ratio: params.params?.ratio,
+            referenceImages: miniMaxReferenceImages,
+            referenceVideos: Array.isArray(params.params?.input_videos)
+              ? params.params.input_videos.filter(
+                  (value): value is string => typeof value === 'string'
+                )
+              : typeof params.params?.input_video === 'string'
+              ? [params.params.input_video]
+              : [],
+            params: params.params,
+          },
+          { provider: providerContext }
+        )
+      : null;
+
     const response = await providerTransport.send(providerContext, {
-      path: submitPath,
+      path: miniMaxSubmission?.path || submitPath,
       baseUrlStrategy: isMiniMaxH3 ? 'trim-v1' : binding?.baseUrlStrategy,
       method: 'POST',
-      headers: requestHeaders,
-      body: requestBody,
+      headers: isMiniMaxH3 ? { 'Content-Type': 'application/json' } : undefined,
+      body: isMiniMaxH3
+        ? JSON.stringify(miniMaxSubmission!.body)
+        : formData,
     });
 
     if (!response.ok) {
@@ -532,7 +515,6 @@ class VideoAPIService {
     // console.log('[VideoAPI] Resuming polling for video:', videoId);
 
     const { onProgress } = options;
-    const { binding } = resolveVideoPlanContext(options.routeModel);
 
     // For resumed tasks, check status immediately first (video may already be completed)
     // console.log('[VideoAPI] Checking status immediately for resumed task...');
@@ -556,10 +538,7 @@ class VideoAPIService {
     }
 
     // If already completed, return immediately
-    if (
-      immediateStatus.status === 'completed' ||
-      isXingliuVideoResultReady(immediateStatus as Record<string, any>, binding)
-    ) {
+    if (immediateStatus.status === 'completed') {
       return this.resolveCompletedVideoStatus(
         videoId,
         immediateStatus,
@@ -595,7 +574,6 @@ class VideoAPIService {
     options: PollingOptions = {}
   ): Promise<VideoQueryResponse> {
     const { interval = 5000, maxAttempts = 1080, onProgress } = options;
-    const { binding } = resolveVideoPlanContext(options.routeModel);
 
     let attempts = 0;
     let consecutiveErrors = 0;
@@ -632,10 +610,7 @@ class VideoAPIService {
           onProgress(progress, status.status);
         }
 
-        if (
-          status.status === 'completed' ||
-          isXingliuVideoResultReady(status as Record<string, any>, binding)
-        ) {
+        if (status.status === 'completed') {
           return this.resolveCompletedVideoStatus(
             videoId,
             status,
