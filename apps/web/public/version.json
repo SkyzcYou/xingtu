@@ -1,10 +1,10 @@
 {
-  "version": "6.7.29",
-  "buildTime": "2026-09-23T05:59:46.794766+00:00",
-  "gitCommit": "6aaa962adffbfb73883fe64eb238b77692bd591b",
+  "version": "6.7.30",
+  "buildTime": "2026-09-28T11:33:17.928619+00:00",
+  "gitCommit": "e5fa9af59245bd69bde5f9847e6508409f49850f",
   "changelog": [
-    "支持 MiniMax-H3 视频输入",
-    "新增 Tuzi postMessage 引导与模型刷新",
-    "修复聊天等待、Seedance 参数及 GPT Image 尺寸问题"
+    "同步上游新增的 Tuzi 文本模型配置",
+    "对齐 MiniMax-H3 首尾帧与参考图数量限制",
+    "修复下载完成后加载提示持续转圈"
   ]
 }

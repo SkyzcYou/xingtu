@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "6.7.30",
+      "date": "2026-09-28",
+      "type": "patch",
+      "highlights": "同步上游新增的 Tuzi 文本模型配置",
+      "changes": {
+        "features": [
+          "同步上游新增的 Tuzi 文本模型配置"
+        ],
+        "fixes": [
+          "对齐 MiniMax-H3 首尾帧与参考图数量限制",
+          "修复下载完成后加载提示持续转圈"
+        ],
+        "improvements": []
+      }
+    },
+    {
       "version": "6.7.29",
       "date": "2026-09-23",
       "type": "patch",
