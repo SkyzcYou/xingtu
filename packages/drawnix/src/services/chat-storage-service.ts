@@ -1,3 +1,4 @@
+import { autoUpdateSafety } from './auto-update-safety';
 /**
  * Chat Storage Service
  *
@@ -22,6 +23,46 @@ const sessionsStore = localforage.createInstance({
 const messagesStore = localforage.createInstance({
   name: CHAT_STORAGE_KEYS.DATABASE_NAME,
   storeName: CHAT_STORAGE_KEYS.MESSAGES_STORE,
+});
+
+// Retain exact failed writes so an update can retry persistence without
+// replaying a chat request or incrementing session counters a second time.
+const pendingChatWrites = new Map<string, Promise<unknown>>();
+const failedChatWrites = new Map<string, () => Promise<unknown>>();
+
+async function persistChatWrite(
+  key: string,
+  write: () => Promise<unknown>
+): Promise<void> {
+  const previous = pendingChatWrites.get(key) || Promise.resolve();
+  const pending = previous
+    .catch(() => undefined)
+    .then(write)
+    .then(
+      () => {
+        failedChatWrites.delete(key);
+      },
+      (error) => {
+        failedChatWrites.set(key, write);
+        throw error;
+      }
+    );
+  pendingChatWrites.set(key, pending);
+  try {
+    await pending;
+  } finally {
+    if (pendingChatWrites.get(key) === pending) pendingChatWrites.delete(key);
+  }
+}
+
+autoUpdateSafety.registerParticipant('chat-storage', {
+  getBlockReason: () =>
+    pendingChatWrites.size > 0 ? '正在保存聊天记录' : null,
+  flush: async () => {
+    await Promise.all(pendingChatWrites.values());
+    for (const [key, write] of [...failedChatWrites])
+      await persistChatWrite(key, write);
+  },
 });
 
 /** Generate UUID v4 */
@@ -52,7 +93,9 @@ export async function createSession(): Promise<ChatSession> {
     messageCount: 0,
   };
 
-  await sessionsStore.setItem(session.id, session);
+  await persistChatWrite(`session:${session.id}`, () =>
+    sessionsStore.setItem(session.id, session)
+  );
   return session;
 }
 
@@ -82,27 +125,35 @@ export async function updateSession(
   updates: Partial<ChatSession>,
   options?: { preserveUpdatedAt?: boolean }
 ): Promise<void> {
-  const session = await getSession(id);
-  if (session) {
-    const updated = {
-      ...session,
-      ...updates,
-      updatedAt: options?.preserveUpdatedAt
-        ? session.updatedAt
-        : updates.updatedAt || Date.now(),
-    };
-    await sessionsStore.setItem(id, updated);
-  }
+  let snapshot: ChatSession | null = null;
+  await persistChatWrite(`session:${id}`, async () => {
+    if (!snapshot) {
+      // Read and merge inside the same per-session queue. Concurrent draft and
+      // workflow writes must not each replace a stale pre-queue snapshot.
+      const session = await getSession(id);
+      if (!session) return;
+      snapshot = {
+        ...session,
+        ...updates,
+        updatedAt: options?.preserveUpdatedAt
+          ? session.updatedAt
+          : updates.updatedAt || Date.now(),
+      };
+    }
+    await sessionsStore.setItem(id, snapshot);
+  });
 }
 
 export async function deleteSession(id: string): Promise<void> {
   // Delete all messages in the session first
   const messages = await getMessages(id);
   for (const message of messages) {
-    await messagesStore.removeItem(message.id);
+    await persistChatWrite(`message:${message.id}`, () =>
+      messagesStore.removeItem(message.id)
+    );
   }
   // Then delete the session
-  await sessionsStore.removeItem(id);
+  await persistChatWrite(`session:${id}`, () => sessionsStore.removeItem(id));
 }
 
 // ============================================================================
@@ -110,7 +161,9 @@ export async function deleteSession(id: string): Promise<void> {
 // ============================================================================
 
 export async function addMessage(message: ChatMessage): Promise<void> {
-  await messagesStore.setItem(message.id, message);
+  await persistChatWrite(`message:${message.id}`, () =>
+    messagesStore.setItem(message.id, message)
+  );
 
   // Update session message count and title if this is the first user message
   const session = await getSession(message.sessionId);
@@ -167,17 +220,21 @@ export async function updateMessage(
   id: string,
   updates: Partial<ChatMessage>
 ): Promise<void> {
-  const message = await messagesStore.getItem<ChatMessage>(id);
-  if (message) {
-    const updated = { ...message, ...updates };
-    await messagesStore.setItem(id, updated);
-  }
+  let snapshot: ChatMessage | null = null;
+  await persistChatWrite(`message:${id}`, async () => {
+    if (!snapshot) {
+      const message = await messagesStore.getItem<ChatMessage>(id);
+      if (!message) return;
+      snapshot = { ...message, ...updates };
+    }
+    await messagesStore.setItem(id, snapshot);
+  });
 }
 
 export async function deleteMessage(id: string): Promise<void> {
   const message = await messagesStore.getItem<ChatMessage>(id);
   if (message) {
-    await messagesStore.removeItem(id);
+    await persistChatWrite(`message:${id}`, () => messagesStore.removeItem(id));
     // Update session message count
     const session = await getSession(message.sessionId);
     if (session) {
@@ -234,14 +291,18 @@ export function setDrawerState(state: Partial<DrawerState>): void {
 // ============================================================================
 
 export async function clearAllData(): Promise<void> {
-  await sessionsStore.clear();
-  await messagesStore.clear();
+  await Promise.allSettled(pendingChatWrites.values());
+  await persistChatWrite('clear-sessions', () => sessionsStore.clear());
+  await persistChatWrite('clear-messages', () => messagesStore.clear());
+  failedChatWrites.clear();
   localStorage.removeItem(CHAT_STORAGE_KEYS.DRAWER_STATE);
 }
 
 export async function clearConversationHistory(): Promise<void> {
-  await sessionsStore.clear();
-  await messagesStore.clear();
+  await Promise.allSettled(pendingChatWrites.values());
+  await persistChatWrite('clear-sessions', () => sessionsStore.clear());
+  await persistChatWrite('clear-messages', () => messagesStore.clear());
+  failedChatWrites.clear();
   setDrawerState({ activeSessionId: null });
 }
 

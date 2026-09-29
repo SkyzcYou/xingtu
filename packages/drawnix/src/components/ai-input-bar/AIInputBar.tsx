@@ -16,6 +16,14 @@
  * - Smart Suggestion Panel for #model
  */
 
+import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
+import { autoUpdateSafety } from '../../services/auto-update-safety';
+import {
+  clearAutoUpdateDraft,
+  getNonDurableDraftReason,
+  readAutoUpdateDraft,
+  saveAutoUpdateDraft,
+} from '../../services/auto-update-draft-storage';
 import { normalizeGPTImage25ResolutionParams } from '../../services/model-adapters/image-size-quality-resolver';
 import React, {
   useState,
@@ -906,6 +914,51 @@ type BoundImageInputDraft = BoundTargetTaskbarDraft<
   KnowledgeContextRef
 >;
 
+interface TaskbarReloadSnapshot {
+  currentDraft: BoundImageInputDraft;
+  unboundDraft: BoundImageInputDraft;
+  boundDrafts: Array<[string, BoundTargetTaskbarDraftEntry<BoundImageInputDraft>]>;
+  canvasAssociations: CanvasAssociationRef[];
+  canvasAssociationRegistry: CanvasAssociationRef[];
+  unboundCanvasAssociations: CanvasAssociationRef[];
+  boundCanvasAssociations: Array<[string, CanvasAssociationRef[]]>;
+  activeElementId: string | null;
+  activeBaseline: BoundImageInputDraft | null;
+  target: BoundImageTarget | null;
+  targetMode: BoundImageTargetMode;
+  selectedContent: SelectedContent[];
+  generationType: GenerationType;
+  selectedModel: string;
+  selectedModelRef: ModelRef | null;
+  selectedParams: Record<string, string>;
+  selectedCount: number;
+  selectedSkillId: string;
+}
+
+function isTaskbarReloadSnapshot(value: unknown): value is TaskbarReloadSnapshot {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<TaskbarReloadSnapshot>;
+  const isDraft = (draft: unknown): draft is BoundImageInputDraft => {
+    if (!draft || typeof draft !== 'object') return false;
+    const item = draft as Partial<BoundImageInputDraft>;
+    return typeof item.prompt === 'string' && Array.isArray(item.uploadedContent) && Array.isArray(item.knowledgeContextRefs);
+  };
+  return isDraft(record.currentDraft) && isDraft(record.unboundDraft) &&
+    Array.isArray(record.boundDrafts) && record.boundDrafts.every(entry => Array.isArray(entry) && typeof entry[0] === 'string' && isDraft(entry[1]?.draft) && isDraft(entry[1]?.baseline)) &&
+    Array.isArray(record.canvasAssociations) && Array.isArray(record.canvasAssociationRegistry) &&
+    Array.isArray(record.unboundCanvasAssociations) && Array.isArray(record.boundCanvasAssociations) &&
+    record.boundCanvasAssociations.every(entry => Array.isArray(entry) && typeof entry[0] === 'string' && Array.isArray(entry[1])) &&
+    Array.isArray(record.selectedContent) &&
+    (record.activeElementId === null || typeof record.activeElementId === 'string') &&
+    (record.activeBaseline === null || isDraft(record.activeBaseline)) &&
+    (record.target === null || (typeof record.target === 'object' && typeof record.target.elementId === 'string')) &&
+    (record.targetMode === 'follow' || record.targetMode === 'reference') &&
+    ['image', 'video', 'audio', 'text', 'agent'].includes(record.generationType || '') &&
+    typeof record.selectedModel === 'string' && typeof record.selectedSkillId === 'string' &&
+    Boolean(record.selectedParams && typeof record.selectedParams === 'object') &&
+    typeof record.selectedCount === 'number' && Number.isFinite(record.selectedCount);
+}
+
 function createBoundImageInputDraft(prompt = ''): BoundImageInputDraft {
   return {
     prompt,
@@ -1705,6 +1758,9 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const activeDraftElementIdRef = useRef<string | null>(null);
     const activeDraftBaselineRef = useRef<BoundImageInputDraft | null>(null);
     const activeTaskbarBoardIdRef = useRef(currentBoardId ?? null);
+    const restoredReloadDraftBoardsRef = useRef(new Set<string>());
+    const reloadDraftErrorRef = useRef<string | null>(null);
+    const importingInputCountRef = useRef(0);
     const lastPrunedBoardChildrenRef = useRef<readonly unknown[] | null>(null);
     const initialPreferences = loadAIInputPreferences();
 
@@ -3983,8 +4039,10 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const importLocalImages = useCallback(
       async (files: File[] | FileList) => {
         const fileList = Array.from(files);
-        if (fileList.length === 0) return;
-
+        if (fileList.length === 0 || autoUpdateSafety.isLocked()) return;
+        const finishImport = autoUpdateSafety.beginOperation('正在导入输入附件', { allowDuringDrain: true });
+        importingInputCountRef.current += 1;
+        try {
         const newContent: SelectedContent[] = [];
 
         for (const [index, file] of fileList.entries()) {
@@ -4092,7 +4150,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                     }
                   );
 
-            addAsset(
+            await addAsset(
               normalizedFile,
               AssetType.IMAGE,
               AssetSource.LOCAL,
@@ -4124,6 +4182,10 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           ];
           uploadedContentRef.current = nextUploadedContent;
           setUploadedContent(nextUploadedContent);
+        }
+        } finally {
+          importingInputCountRef.current -= 1;
+          finishImport();
         }
       },
       [
@@ -4426,6 +4488,107 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       },
       [boundImageTarget, detachTaskbarDraft, dismissPromptSuggestion, language]
     );
+
+    const readTaskbarReloadSnapshot = useCallback((): TaskbarReloadSnapshot => {
+      const currentDraft = readCurrentTaskbarDraft();
+      const boundDrafts = new Map(boundTargetDraftsRef.current);
+      const boundAssociations = new Map(boundCanvasAssociationDraftsRef.current);
+      const activeElementId = activeDraftElementIdRef.current;
+      if (activeElementId && activeDraftBaselineRef.current) {
+        storeBoundTargetTaskbarDraft(boundDrafts, activeElementId, currentDraft, activeDraftBaselineRef.current);
+        boundAssociations.set(activeElementId, snapshotCanvasAssociationRefs(canvasAssociationRefsRef.current));
+      }
+      return {
+        currentDraft,
+        unboundDraft: activeElementId ? unboundTaskbarDraftRef.current : currentDraft,
+        boundDrafts: [...boundDrafts],
+        canvasAssociations: snapshotCanvasAssociationRefs(canvasAssociationRefsRef.current),
+        canvasAssociationRegistry: snapshotCanvasAssociationRefs(canvasAssociationRegistryRef.current),
+        unboundCanvasAssociations: activeElementId ? unboundCanvasAssociationDraftRef.current : snapshotCanvasAssociationRefs(canvasAssociationRefsRef.current),
+        boundCanvasAssociations: [...boundAssociations],
+        activeElementId,
+        activeBaseline: activeDraftBaselineRef.current,
+        target: boundImageTargetRef.current,
+        targetMode: boundImageTargetMode,
+        selectedContent: selectedContentRef.current,
+        generationType, selectedModel, selectedModelRef,
+        selectedParams: selectedParamsRef.current,
+        selectedCount, selectedSkillId,
+      };
+    }, [readCurrentTaskbarDraft, boundImageTargetMode, generationType, selectedModel, selectedModelRef, selectedCount, selectedSkillId]);
+
+    useEffect(() => {
+      if (!isDataReady || !currentBoardId || !SelectionWatcherBoardRef.current || restoredReloadDraftBoardsRef.current.has(currentBoardId)) return;
+      restoredReloadDraftBoardsRef.current.add(currentBoardId);
+      const scope = `taskbar:${currentBoardId}`;
+      try {
+        const snapshot = readAutoUpdateDraft(scope, isTaskbarReloadSnapshot);
+        if (!snapshot) return;
+        resetBoundTaskbarDraftsForBoard(currentBoardId);
+        boundTargetDraftsRef.current = new Map(snapshot.boundDrafts);
+        boundCanvasAssociationDraftsRef.current = new Map(snapshot.boundCanvasAssociations);
+        unboundTaskbarDraftRef.current = snapshot.unboundDraft;
+        unboundCanvasAssociationDraftRef.current = snapshot.unboundCanvasAssociations;
+        const board = SelectionWatcherBoardRef.current as PlaitBoard | null;
+        const targetElement = snapshot.target && board
+          ? findBoundTargetElement(board.children, snapshot.target.elementId)
+          : null;
+        // Keep the visible draft even if its target was removed in another tab.
+        activeDraftElementIdRef.current = targetElement ? snapshot.activeElementId : null;
+        activeDraftBaselineRef.current = targetElement ? snapshot.activeBaseline : null;
+        boundImageTargetRef.current = targetElement ? snapshot.target : null;
+        if (!targetElement) unboundTaskbarDraftRef.current = snapshot.currentDraft;
+        setBoundImageTarget(boundImageTargetRef.current);
+        setBoundImageTargetMode(snapshot.targetMode);
+        lastBoundImageTargetKeyRef.current = boundImageTargetRef.current
+          ? createBoundImageTargetStateKey(boundImageTargetRef.current, snapshot.targetMode)
+          : null;
+        applyTaskbarDraft(snapshot.currentDraft);
+        applyCanvasAssociationRefs(snapshot.canvasAssociations);
+        canvasAssociationRegistryRef.current = snapshot.canvasAssociationRegistry;
+        selectedContentRef.current = snapshot.selectedContent;
+        setSelectedContent(snapshot.selectedContent);
+        setGenerationType(snapshot.generationType);
+        setSelectedModel(snapshot.selectedModel);
+        setSelectedModelRef(snapshot.selectedModelRef);
+        setSelectedParams(snapshot.selectedParams);
+        selectedParamsRef.current = snapshot.selectedParams;
+        selectedParamScopeRef.current = snapshot.generationType === 'agent'
+          ? 'agent' : `${snapshot.generationType}:${getSelectionKey(snapshot.selectedModel, snapshot.selectedModelRef)}`;
+        setSelectedCount(snapshot.selectedCount);
+        setSelectedSkillId(snapshot.selectedSkillId);
+        if (targetElement && board) addSelectedElement(board, targetElement as unknown as PlaitElement);
+        clearAutoUpdateDraft(scope);
+      } catch (error) {
+        reloadDraftErrorRef.current = '输入草稿尚未恢复，暂缓更新';
+        console.warn('[AIInputBar] Failed to restore upgrade draft:', error);
+      }
+    }, [isDataReady, currentBoardId, resetBoundTaskbarDraftsForBoard, applyTaskbarDraft, applyCanvasAssociationRefs]);
+
+    useAutoUpdateGuard(
+      'ai-input-bar',
+      isSubmitting || submitLockRef.current ? '正在提交生成任务' :
+      importingInputCountRef.current > 0 ? '正在导入输入附件' :
+      pptExplainerDialogOpen || isPromptOptimizeOpen || showMediaLibrary ? '生成配置窗口正在编辑' :
+      isInputComposingRef.current || canvasAssociationTrigger ? '正在编辑提示词' :
+      !currentBoardId || !isDataReady ? '输入草稿尚未就绪' :
+      reloadDraftErrorRef.current || getNonDurableDraftReason(readTaskbarReloadSnapshot()),
+      async () => {
+        if (!currentBoardId || isSubmitting || submitLockRef.current || importingInputCountRef.current > 0 || isInputComposingRef.current) {
+          throw new Error('输入状态发生变化，稍后更新');
+        }
+        saveAutoUpdateDraft(`taskbar:${currentBoardId}`, readTaskbarReloadSnapshot());
+      },
+      () => {
+        if (currentBoardId) clearAutoUpdateDraft(`taskbar:${currentBoardId}`);
+      }
+    );
+
+    // An abandoned upgrade snapshot must not replace later edits on a normal reload.
+    useEffect(() => {
+      if (!isDataReady || !currentBoardId || !restoredReloadDraftBoardsRef.current.has(currentBoardId) || autoUpdateSafety.isLocked()) return;
+      try { clearAutoUpdateDraft(`taskbar:${currentBoardId}`); } catch { /* The guard fails closed on the next save. */ }
+    }, [isDataReady, currentBoardId, prompt, uploadedContent, knowledgeContextRefs, canvasAssociationRefs, selectedContent, generationType, selectedModel, selectedModelRef, selectedParams, selectedCount, selectedSkillId, boundImageTarget]);
 
     const handleBoundTargetFollowChange = useCallback((enabled: boolean) => {
       setBoundTargetFollowEnabled(persistBoundTargetFollowEnabled(enabled));
@@ -5161,9 +5324,10 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         ) {
           return;
         }
-        if (submitLockRef.current || isSubmitting) {
+        if (autoUpdateSafety.isLocked() || autoUpdateSafety.isDraining() || submitLockRef.current || isSubmitting) {
           return; // 仅防止快速重复点击
         }
+        const finishSubmission = autoUpdateSafety.beginOperation('正在提交生成任务');
         submitLockRef.current = true;
         setIsInspirationSendGuideActive(false);
         onEnableRuntime?.();
@@ -6679,6 +6843,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           workflowControl.abortWorkflow();
           submitLockRef.current = false;
           setIsSubmitting(false);
+        } finally {
+          finishSubmission();
         }
       },
       [

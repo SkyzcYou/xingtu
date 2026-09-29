@@ -15,6 +15,9 @@ import React, {
   forwardRef,
   useImperativeHandle,
 } from 'react';
+import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
+import { autoUpdateSafety } from '../../services/auto-update-safety';
+import { clearAutoUpdateDraft, getNonDurableDraftReason, readAutoUpdateDraft, saveAutoUpdateDraft } from '../../services/auto-update-draft-storage';
 import { Send } from 'lucide-react';
 import { MessagePlugin } from 'tdesign-react';
 import { SelectedContentPreview } from '../shared/SelectedContentPreview';
@@ -46,6 +49,18 @@ import { useChatDrawerGenerationControls } from './useChatDrawerGenerationContro
 import { shouldUseImplicitWorkflowReferences } from './workflow-media-results';
 import '../ai-input-bar/ai-input-bar.scss';
 
+interface ChatReloadDraft {
+  draftInput: string;
+  draftUploadedContent: SelectedContentItem[];
+}
+
+function isChatReloadDraft(value: unknown): value is ChatReloadDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<ChatReloadDraft>;
+  return typeof draft.draftInput === 'string' && Array.isArray(draft.draftUploadedContent) &&
+    draft.draftUploadedContent.every(item => item && typeof item.name === 'string' && typeof item.type === 'string');
+}
+
 interface EnhancedChatInputProps {
   activeSessionId?: string | null;
   selectedContent: SelectedContentItem[];
@@ -63,8 +78,9 @@ interface EnhancedChatInputProps {
     draft: {
       draftInput: string;
       draftUploadedContent: SelectedContentItem[];
-    }
-  ) => void;
+    },
+    options?: { flush?: boolean }
+  ) => void | Promise<void>;
   onSend: (message: Message) => void | Promise<void>;
   onGenerationSubmit?: (
     params: DrawerGenerationSubmitParams
@@ -122,6 +138,64 @@ export const EnhancedChatInput = forwardRef<
     const [uploadedContent, setUploadedContent] =
       useState<SelectedContentItem[]>(draftUploadedContent);
     const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+    const latestDraftRef = useRef({ activeSessionId, input, uploadedContent, onDraftChange });
+    latestDraftRef.current = { activeSessionId, input, uploadedContent, onDraftChange };
+    const importingCountRef = useRef(0);
+    const draftSaveErrorRef = useRef<unknown>(null);
+    const pendingDraftWritesRef = useRef(new Set<Promise<void>>());
+    const restoredSessionDraftsRef = useRef(new Set<string>());
+    const writeDraft = useCallback((sessionId: string, draft: { draftInput: string; draftUploadedContent: SelectedContentItem[] }, flush = false) => {
+      const operation = Promise.resolve(latestDraftRef.current.onDraftChange?.(sessionId, draft, { flush }));
+      pendingDraftWritesRef.current.add(operation);
+      void operation.then(() => {
+        pendingDraftWritesRef.current.delete(operation);
+        draftSaveErrorRef.current = null;
+      }, (error) => {
+        pendingDraftWritesRef.current.delete(operation);
+        draftSaveErrorRef.current = error;
+        console.warn('[EnhancedChatInput] Failed to persist draft:', error);
+      });
+      return operation;
+    }, []);
+
+    useAutoUpdateGuard(
+      `chat-input:${activeSessionId || 'new'}`,
+      importingCountRef.current > 0 ? '正在导入聊天附件' :
+      !activeSessionId && (input.length > 0 || uploadedContent.length > 0) ? '新会话草稿尚未保存' :
+      showMediaLibrary ? '正在选择聊天附件' :
+      getNonDurableDraftReason(uploadedContent),
+      async () => {
+        if (importingCountRef.current > 0) throw new Error('聊天附件尚未导入完成');
+        if (draftSaveTimeoutRef.current) {
+          clearTimeout(draftSaveTimeoutRef.current);
+          draftSaveTimeoutRef.current = null;
+        }
+        const latest = latestDraftRef.current;
+        const reason = getNonDurableDraftReason(latest.uploadedContent);
+        if (reason) throw new Error(reason);
+        await Promise.allSettled([...pendingDraftWritesRef.current]);
+        if (!latest.activeSessionId) {
+          if (latest.input || latest.uploadedContent.length) throw new Error('新会话草稿尚未保存');
+          return;
+        }
+        if (!latest.onDraftChange && (latest.input || latest.uploadedContent.length)) throw new Error('聊天草稿没有可用的保存器');
+        // The final write is full fidelity and awaited; do not truncate attachments.
+        await writeDraft(latest.activeSessionId, {
+          draftInput: latest.input,
+          draftUploadedContent: latest.uploadedContent,
+        }, true);
+        if (draftSaveErrorRef.current) throw draftSaveErrorRef.current;
+        // IndexedDB is shared by tabs; keep each tab's active draft isolated too.
+        saveAutoUpdateDraft(`chat:${latest.activeSessionId}`, {
+          draftInput: latest.input,
+          draftUploadedContent: latest.uploadedContent,
+        });
+      },
+      () => {
+        const sessionId = latestDraftRef.current.activeSessionId;
+        if (sessionId) clearAutoUpdateDraft(`chat:${sessionId}`);
+      }
+    );
     const allContent = useMemo(
       () => [...uploadedContent, ...selectedContent],
       [selectedContent, uploadedContent]
@@ -149,10 +223,10 @@ export const EnhancedChatInput = forwardRef<
           clearTimeout(draftSaveTimeoutRef.current);
           draftSaveTimeoutRef.current = null;
         }
-        onDraftChange?.(previousSessionId, {
+        void writeDraft(previousSessionId, {
           draftInput: input,
           draftUploadedContent: uploadedContent,
-        });
+        }).catch(() => undefined);
       }
 
       activeSessionIdRef.current = activeSessionId;
@@ -166,6 +240,7 @@ export const EnhancedChatInput = forwardRef<
       input,
       onDraftChange,
       uploadedContent,
+      writeDraft,
     ]);
 
     useEffect(() => {
@@ -181,10 +256,10 @@ export const EnhancedChatInput = forwardRef<
         clearTimeout(draftSaveTimeoutRef.current);
       }
       draftSaveTimeoutRef.current = setTimeout(() => {
-        onDraftChange?.(activeSessionId, {
+        void writeDraft(activeSessionId, {
           draftInput: input,
           draftUploadedContent: uploadedContent,
-        });
+        }).catch(() => undefined);
       }, 300);
 
       return () => {
@@ -193,7 +268,27 @@ export const EnhancedChatInput = forwardRef<
           draftSaveTimeoutRef.current = null;
         }
       };
-    }, [activeSessionId, input, onDraftChange, uploadedContent]);
+    }, [activeSessionId, input, onDraftChange, uploadedContent, writeDraft]);
+
+    useEffect(() => {
+      if (!activeSessionId || restoredSessionDraftsRef.current.has(activeSessionId)) return;
+      restoredSessionDraftsRef.current.add(activeSessionId);
+      try {
+        const snapshot = readAutoUpdateDraft(`chat:${activeSessionId}`, isChatReloadDraft);
+        if (snapshot) {
+          setInput(snapshot.draftInput);
+          setUploadedContent(snapshot.draftUploadedContent);
+          clearAutoUpdateDraft(`chat:${activeSessionId}`);
+        }
+      } catch (error) {
+        console.warn('[EnhancedChatInput] Failed to restore upgrade draft:', error);
+      }
+    }, [activeSessionId]);
+
+    useEffect(() => {
+      if (!activeSessionId || !restoredSessionDraftsRef.current.has(activeSessionId) || autoUpdateSafety.isLocked()) return;
+      try { clearAutoUpdateDraft(`chat:${activeSessionId}`); } catch { /* Fail closed if saving is unavailable later. */ }
+    }, [activeSessionId, input, uploadedContent]);
 
     const appendUploadedContent = useCallback(
       (items: SelectedContentItem[]) => {
@@ -231,8 +326,10 @@ export const EnhancedChatInput = forwardRef<
     const importLocalImages = useCallback(
       async (files: File[] | FileList) => {
         const fileList = Array.from(files);
-        if (fileList.length === 0) return;
-
+        if (fileList.length === 0 || autoUpdateSafety.isLocked()) return;
+        const finishImport = autoUpdateSafety.beginOperation('正在导入聊天附件', { allowDuringDrain: true });
+        importingCountRef.current += 1;
+        try {
         const newContent: SelectedContentItem[] = [];
 
         for (const [index, file] of fileList.entries()) {
@@ -247,7 +344,7 @@ export const EnhancedChatInput = forwardRef<
           }
 
           try {
-            addAsset(file, AssetType.IMAGE, AssetSource.LOCAL, file.name).catch(
+            await addAsset(file, AssetType.IMAGE, AssetSource.LOCAL, file.name).catch(
               (error) => {
                 console.warn(
                   '[EnhancedChatInput] Failed to add asset to library:',
@@ -273,6 +370,10 @@ export const EnhancedChatInput = forwardRef<
         }
 
         appendUploadedContent(newContent);
+        } finally {
+          importingCountRef.current -= 1;
+          finishImport();
+        }
       },
       [addAsset, appendUploadedContent, fileToBase64WithDimensions]
     );
@@ -398,6 +499,7 @@ export const EnhancedChatInput = forwardRef<
     );
 
     const handleSend = useCallback(() => {
+      if (autoUpdateSafety.isLocked() || autoUpdateSafety.isDraining()) return;
       const trimmedInput = input.trim();
       if (!trimmedInput && allContent.length === 0) return;
 

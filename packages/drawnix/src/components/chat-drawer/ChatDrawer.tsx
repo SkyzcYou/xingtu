@@ -14,6 +14,9 @@ import React, {
   useRef,
   Suspense,
 } from 'react';
+import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
+import { autoUpdateSafety } from '../../services/auto-update-safety';
+import { getNonDurableDraftReason } from '../../services/auto-update-draft-storage';
 import { CloseIcon, AddIcon, ViewListIcon } from 'tdesign-icons-react';
 import { ATTACHED_ELEMENT_CLASS_NAME } from '@plait/core';
 import { SessionList } from './SessionList';
@@ -215,6 +218,8 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
       return cached.isOpen ?? defaultOpen;
     });
     const [sessions, setSessions] = useState<ChatSession[]>([]);
+    const draftWriteTailsRef = useRef(new Map<string, Promise<void>>());
+    const scheduledChatSendsRef = useRef(0);
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
     const activeSessionIdRef = useRef<string | null>(null);
     const updateActiveSessionId = useCallback((sessionId: string | null) => {
@@ -585,9 +590,12 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
       if (activeSessionId && pendingMessageRef.current) {
         const msg = pendingMessageRef.current;
         pendingMessageRef.current = null;
-        // Use setTimeout to ensure handler is updated
+        // Count the deferred handoff too: no update may lose the queued message.
+        scheduledChatSendsRef.current += 1;
         setTimeout(() => {
-          sendMessageRef.current(msg);
+          void Promise.resolve(sendMessageRef.current(msg))
+            .catch((error) => { pendingMessageRef.current = msg; console.warn('[ChatDrawer] Deferred send failed:', error); })
+            .finally(() => { scheduledChatSendsRef.current -= 1; });
         }, 100);
       }
     }, [activeSessionId]);
@@ -602,17 +610,27 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
           pendingMessageRef.current = null;
           // If there's no active session, create one first
           if (!activeSessionId) {
-            (async () => {
-              const newSession = await chatStorageService.createSession();
-              setSessions((prev) => [newSession, ...prev]);
-              updateActiveSessionId(newSession.id);
-              // Store message again for the session effect to pick up
-              pendingMessageRef.current = msg;
+            scheduledChatSendsRef.current += 1;
+            void (async () => {
+              try {
+                const newSession = await chatStorageService.createSession();
+                setSessions((prev) => [newSession, ...prev]);
+                updateActiveSessionId(newSession.id);
+                pendingMessageRef.current = msg;
+              } catch (error) {
+                pendingMessageRef.current = msg;
+                console.warn('[ChatDrawer] Failed to prepare pending message:', error);
+              } finally {
+                scheduledChatSendsRef.current -= 1;
+              }
             })();
           } else {
-            // Send immediately if session exists
+            // Send immediately if session exists.
+            scheduledChatSendsRef.current += 1;
             setTimeout(() => {
-              sendMessageRef.current(msg);
+              void Promise.resolve(sendMessageRef.current(msg))
+                .catch((error) => { pendingMessageRef.current = msg; console.warn('[ChatDrawer] Deferred send failed:', error); })
+                .finally(() => { scheduledChatSendsRef.current -= 1; });
             }, 100);
           }
         }
@@ -963,6 +981,9 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
 
     const handleGenerationSubmit = useCallback(
       async (params: DrawerGenerationSubmitParams): Promise<boolean> => {
+        if (autoUpdateSafety.isLocked() || autoUpdateSafety.isDraining()) return false;
+        const finishPreparation = autoUpdateSafety.beginOperation('正在准备聊天生成任务');
+        try {
         await settingsManager.waitForInitialization();
         const route = resolveDrawerGenerationRoute(params);
         const preparation = await prepareTuziManagedRoute(route);
@@ -987,7 +1008,10 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
         }
 
         pendingGenerationRef.current = null;
-        return submitGenerationFromDrawer(params);
+        return await submitGenerationFromDrawer(params);
+        } finally {
+          finishPreparation();
+        }
       },
       [setAppState, submitGenerationFromDrawer]
     );
@@ -1038,6 +1062,8 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
     // Handle send with auto-create session
     const handleSendWrapper = useCallback(
       async (msg: Message) => {
+        if (autoUpdateSafety.isLocked() || autoUpdateSafety.isDraining()) return;
+        const finishSend = autoUpdateSafety.beginOperation('聊天正在提交或接收回复');
         try {
           analytics.track('chat_message_send', {
             hasImages: msg.parts.some((p) => p.type === 'image_url'), // Message parts uses image_url usually
@@ -1087,6 +1113,8 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
         } catch (error) {
           console.error('[ChatDrawer] send message failed:', error);
           pendingMessageRef.current = msg;
+        } finally {
+          finishSend();
         }
       },
       [activeSessionId, chatHandler, setAppState, updateActiveSessionId]
@@ -1845,18 +1873,32 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
         draft: {
           draftInput: string;
           draftUploadedContent: SelectedContentItem[];
+        },
+        options?: { flush?: boolean }
+      ): Promise<void> => {
+        if (options?.flush) {
+          const reason = getNonDurableDraftReason(draft.draftUploadedContent);
+          if (reason) return Promise.reject(new Error(reason));
         }
-      ) => {
         const updates: Partial<ChatSession> = {
           draftInput: draft.draftInput,
-          draftUploadedContent: sanitizeDraftUploadedContent(
-            draft.draftUploadedContent
-          ),
+          draftUploadedContent: options?.flush
+            ? draft.draftUploadedContent
+            : sanitizeDraftUploadedContent(draft.draftUploadedContent),
         };
         updateSessionInMemory(sessionId, updates);
-        void chatStorageService.updateSession(sessionId, updates, {
-          preserveUpdatedAt: true,
+        const previous = draftWriteTailsRef.current.get(sessionId) || Promise.resolve();
+        const write = previous.catch(() => undefined).then(async () => {
+          if (options?.flush && !(await chatStorageService.getSession(sessionId))) {
+            throw new Error('聊天会话尚未保存，暂缓更新');
+          }
+          await chatStorageService.updateSession(sessionId, updates, { preserveUpdatedAt: true });
         });
+        draftWriteTailsRef.current.set(sessionId, write);
+        void write.then(() => {
+          if (draftWriteTailsRef.current.get(sessionId) === write) draftWriteTailsRef.current.delete(sessionId);
+        }, () => undefined);
+        return write;
       },
       [updateSessionInMemory]
     );
@@ -1865,6 +1907,21 @@ export const ChatDrawer = forwardRef<ChatDrawerRef, ChatDrawerProps>(
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editingTitleValue, setEditingTitleValue] = useState('');
     const titleInputRef = useRef<HTMLInputElement>(null);
+
+    useAutoUpdateGuard(
+      'chat-drawer',
+      chatHandler.status === 'submitted' || chatHandler.status === 'streaming' ? '聊天正在接收回复' :
+      isDragging || isEditingTitle ? '正在编辑聊天窗口' :
+      retryingWorkflowId ? '正在重试工作流' :
+      replyTarget ? '聊天中有尚未提交的回复目标' : null,
+      async () => {
+        await Promise.all([...draftWriteTailsRef.current.values()]);
+      }
+    );
+    useEffect(() => autoUpdateSafety.registerParticipant('chat-pending-message', {
+      getBlockReason: () => pendingMessageRef.current || pendingGenerationRef.current || scheduledChatSendsRef.current > 0 || isPreparingGenerationCredentialsRef.current || isResumingGenerationRef.current
+        ? '聊天中有等待发送的消息或生成任务' : null,
+    }), []);
 
     // 开始编辑标题
     const handleStartEditTitle = useCallback(() => {

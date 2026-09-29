@@ -1,3 +1,5 @@
+import { useAutoUpdateGuard } from './hooks/useAutoUpdateGuard';
+import { getOpenEditorBlockReason } from './services/auto-update-open-editors';
 import { Board, BoardChangeData, Wrapper } from '@plait-board/react-board';
 import {
   PlaitBoard,
@@ -386,6 +388,14 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     });
   const [backupRestoreOpen, setBackupRestoreOpen] = useState(false);
   const [cloudSyncOpen, setCloudSyncOpen] = useState(false);
+  useAutoUpdateGuard('workspace-edit-dialogs', getOpenEditorBlockReason({
+    standaloneDialog: appState.openDialogTypes.size > 0,
+    backupRestore: backupRestoreOpen,
+    cloudSync: cloudSyncOpen,
+    mediaLibrary: mediaLibraryOpen,
+    profilePanel: profilePanelExpanded,
+    linkEditor: appState.linkState?.isEditing,
+  }));
   const [deferredRuntimeEnabled, setDeferredRuntimeEnabled] = useState(false);
   const [performancePanelEnabled, setPerformancePanelEnabled] = useState(false);
   const [toolWindowManagerEnabled, setToolWindowManagerEnabled] =
@@ -1277,6 +1287,10 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
   >([]);
   const [mediaPreviewInitialIndex, setMediaPreviewInitialIndex] = useState(0);
   const mediaPreviewRequestIdRef = useRef(0);
+  useAutoUpdateGuard('canvas-inline-editors', getOpenEditorBlockReason({
+    inlineText: inlineTextInput !== null,
+    mediaPreview: mediaPreviewVisible,
+  }));
 
   useEffect(() => {
     if (!playbackError) {

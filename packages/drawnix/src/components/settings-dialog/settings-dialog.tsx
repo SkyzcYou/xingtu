@@ -1,3 +1,4 @@
+import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
 import { useDrawnix } from '../../hooks/use-drawnix';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import './settings-dialog.scss';
@@ -1224,6 +1225,14 @@ export const SettingsDialog = ({
   });
   const hasPendingChanges =
     appState.openSettings && currentDraftSignature !== initialDraftSignature;
+
+  useAutoUpdateGuard(
+    'settings-dialog',
+    isPersisting ? '设置正在保存' :
+    appState.openSettings && (hasPendingChanges || discoveryDialogOpen || customModelId.trim() || customModelLabel.trim() || customModelDescription.trim() || JSON.stringify(customHttpDraft) !== JSON.stringify(CUSTOM_HTTP_DEFAULTS[customModelType]))
+      ? '设置中还有未保存的编辑，请完成编辑后自动更新'
+      : null
+  );
 
   useEffect(() => {
     setIsApiKeyVisible(false);

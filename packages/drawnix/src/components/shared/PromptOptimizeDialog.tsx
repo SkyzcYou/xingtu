@@ -1,3 +1,4 @@
+import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
 import React, {
   useCallback,
   useEffect,
@@ -158,6 +159,7 @@ export const PromptOptimizeDialog: React.FC<PromptOptimizeDialogProps> = (
   } = props;
   const scenarioId = props.scenarioId;
   const reactWindowId = useId();
+  useAutoUpdateGuard(`prompt-optimizer:${reactWindowId}`, open ? '提示词优化草稿尚未应用或关闭' : null);
   const currentPromptId = useId();
   const requirementsId = useId();
   const draftPromptId = useId();

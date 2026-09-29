@@ -1,3 +1,4 @@
+import { runWithUpdateProtection } from '../services/auto-update-operation';
 import { PlaitBoard } from '@plait/core';
 import { MIME_TYPES, VERSIONS } from '../constants';
 import { fileOpen, fileSave, isFileSystemAbortError } from './filesystem';
@@ -12,7 +13,7 @@ export const getDefaultName = () => {
   return time.toString();
 };
 
-export const saveAsJSON = async (
+const saveAsJSONInternal = async (
   board: PlaitBoard,
   name: string = getDefaultName()
 ) => {
@@ -36,7 +37,7 @@ export const saveAsJSON = async (
   }
 };
 
-export const loadFromJSON = async (board: PlaitBoard) => {
+const loadFromJSONInternal = async (board: PlaitBoard) => {
   try {
     const file = await fileOpen({
       description: 'Drawnix files',
@@ -86,3 +87,9 @@ export const serializeAsJSONAsync = async (board: PlaitBoard): Promise<string> =
 
   return JSON.stringify(data, null, 2);
 };
+
+export const saveAsJSON = (...args: Parameters<typeof saveAsJSONInternal>) =>
+  runWithUpdateProtection('正在导入或导出画板', () => saveAsJSONInternal(...args));
+
+export const loadFromJSON = (...args: Parameters<typeof loadFromJSONInternal>) =>
+  runWithUpdateProtection('正在导入或导出画板', () => loadFromJSONInternal(...args));

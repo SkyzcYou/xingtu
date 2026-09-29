@@ -12,6 +12,8 @@ import {
   useRef,
   type SetStateAction,
 } from 'react';
+import { MessagePlugin } from 'tdesign-react';
+import { autoUpdateSafety } from '../services/auto-update-safety';
 import { chatStorageService } from '../services/chat-storage-service';
 import { chatService } from '../services/chat-service';
 import { MessageStatus, MessageRole } from '../types/chat.types';
@@ -134,15 +136,13 @@ export function useChatHandler(options: UseChatHandlerOptions): ChatHandler & {
   }, [sessionId]);
 
   // Send message implementation
-  const sendMessage = useCallback(
+  const sendMessageInternal = useCallback(
     async (msg: Message) => {
       if (!sessionId) return;
       const targetSessionId = sessionId;
       const isTargetSessionCurrent = () =>
         sessionIdRef.current === targetSessionId;
-      const setMessagesForTarget = (
-        updater: SetStateAction<Message[]>
-      ) => {
+      const setMessagesForTarget = (updater: SetStateAction<Message[]>) => {
         if (isTargetSessionCurrent()) {
           setMessages(updater);
         }
@@ -303,7 +303,15 @@ export function useChatHandler(options: UseChatHandlerOptions): ChatHandler & {
                     ? MessageStatus.STREAMING
                     : MessageStatus.SUCCESS,
               };
-              chatStorageService.addMessage(assistantChatMsg);
+              void chatStorageService
+                .addMessage(assistantChatMsg)
+                .catch((error) => {
+                  MessagePlugin.error(
+                    `回复保存失败，自动更新已暂停：${
+                      error instanceof Error ? error.message : '存储不可用'
+                    }`
+                  );
+                });
               // Update rawMessagesRef with the assistant message
               if (isTargetSessionCurrent()) {
                 rawMessagesRef.current = [
@@ -311,10 +319,17 @@ export function useChatHandler(options: UseChatHandlerOptions): ChatHandler & {
                   assistantChatMsg,
                 ];
               }
-              chatStorageService.updateSession(targetSessionId, {
-                updatedAt: Date.now(),
-                messageCount: (session?.messageCount || 0) + 2,
-              });
+              void chatStorageService
+                .updateSession(targetSessionId, {
+                  updatedAt: Date.now(),
+                  messageCount: (session?.messageCount || 0) + 2,
+                })
+                .catch((error) =>
+                  console.error(
+                    '[useChatHandler] Failed to save session:',
+                    error
+                  )
+                );
 
               currentAssistantMsgRef.current = null;
               // 重置发送锁
@@ -343,7 +358,15 @@ export function useChatHandler(options: UseChatHandlerOptions): ChatHandler & {
                 status: MessageStatus.FAILED,
                 error: event.error,
               };
-              chatStorageService.addMessage(errorChatMsg);
+              void chatStorageService
+                .addMessage(errorChatMsg)
+                .catch((error) => {
+                  MessagePlugin.error('聊天记录保存失败，自动更新已暂停');
+                  console.error(
+                    '[useChatHandler] Failed to save response:',
+                    error
+                  );
+                });
               // Update rawMessagesRef with the error message
               if (isTargetSessionCurrent()) {
                 rawMessagesRef.current = [
@@ -386,7 +409,10 @@ export function useChatHandler(options: UseChatHandlerOptions): ChatHandler & {
               status: MessageStatus.FAILED,
               error: error.message || '未知错误',
             };
-            chatStorageService.addMessage(errorChatMsg);
+            void chatStorageService.addMessage(errorChatMsg).catch((error) => {
+              MessagePlugin.error('聊天记录保存失败，自动更新已暂停');
+              console.error('[useChatHandler] Failed to save response:', error);
+            });
             // Update rawMessagesRef with the error message
             if (isTargetSessionCurrent()) {
               rawMessagesRef.current = [
@@ -402,6 +428,31 @@ export function useChatHandler(options: UseChatHandlerOptions): ChatHandler & {
       }
     },
     [sessionId]
+  );
+
+  // Streaming is independent of the task queue. Hold a safety operation across
+  // the entire send (including session writes before the request starts).
+  const sendMessage = useCallback(
+    async (msg: Message) => {
+      if (!sessionId || isSendingRef.current) return;
+      let finish: (() => void) | undefined;
+      try {
+        finish = autoUpdateSafety.beginOperation('正在接收聊天回复');
+        await sendMessageInternal(msg);
+      } catch (error) {
+        setStatus('error');
+        MessagePlugin.error(
+          error instanceof Error ? error.message : '聊天请求失败'
+        );
+        // Let the drawer retain this unsent message for retry; reporting the
+        // error as success would clear its pending input.
+        throw error;
+      } finally {
+        isSendingRef.current = false;
+        finish?.();
+      }
+    },
+    [sendMessageInternal, sessionId]
   );
 
   // Stop generation
@@ -449,7 +500,7 @@ export function useChatHandler(options: UseChatHandlerOptions): ChatHandler & {
       setMessages(newMessages);
 
       // Re-send the user message
-      sendMessage(lastUserMsg);
+      void sendMessage(lastUserMsg).catch(() => undefined);
     },
     [messages, sendMessage]
   );
@@ -469,7 +520,10 @@ export function useChatHandler(options: UseChatHandlerOptions): ChatHandler & {
     (newMessages: Message[], rawChatMessages?: ChatMessage[]) => {
       setMessages((prev) => [...prev, ...newMessages]);
       if (rawChatMessages) {
-        rawMessagesRef.current = [...rawMessagesRef.current, ...rawChatMessages];
+        rawMessagesRef.current = [
+          ...rawMessagesRef.current,
+          ...rawChatMessages,
+        ];
       }
     },
     []

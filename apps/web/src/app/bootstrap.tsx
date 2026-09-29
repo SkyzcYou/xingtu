@@ -15,9 +15,13 @@ import {
   crashRecoveryService,
   swChannelClient,
   safeReload,
+  autoUpdateSafety,
+  setAutoUpdateStatus,
+  hasActiveLLMTasks,
 } from '@drawnix/drawnix/runtime';
 import { analytics } from '@drawnix/drawnix';
 import { initSWConsoleCapture } from '../utils/sw-console-capture';
+import { AutoUpdateCoordinator } from '../utils/auto-update-coordinator';
 
 function isLocalDevelopmentHost(hostname: string): boolean {
   return (
@@ -120,6 +124,8 @@ interface RuntimeSWVersionState {
   committedVersion: string;
   pendingVersion: string | null;
   pendingReadyAt: number | null;
+  firstPendingReadyAt?: number | null;
+  autoUpdateProtocol?: number;
   upgradeState: 'idle' | 'prewarming' | 'ready' | 'committing';
   swVersion: string;
 }
@@ -315,7 +321,13 @@ if (shouldUseServiceWorker) {
       return;
     }
 
-    worker.postMessage({ type: 'GET_VERSION_STATE' });
+    const request = {
+      type: 'GET_VERSION_STATE',
+      clientVersion: document.querySelector('meta[name="app-version"]')?.getAttribute('content'),
+    };
+    worker.postMessage(request);
+    const controller = navigator.serviceWorker.controller;
+    if (controller && controller !== worker) controller.postMessage(request);
   };
 
   const claimCurrentClientIfNeeded = (
@@ -387,6 +399,25 @@ if (shouldUseServiceWorker) {
 
       return null;
     };
+
+  autoUpdateSafety.registerParticipant('active-generation-tasks', {
+    getBlockReason: async () =>
+      (await hasActiveLLMTasks()) ? '任务运行中，完成后自动更新' : null,
+  });
+  const automaticUpdate = new AutoUpdateCoordinator({
+    currentVersion:
+      document.querySelector('meta[name="app-version"]')?.getAttribute('content') || '',
+    safety: autoUpdateSafety,
+    getWaitingWorker: resolvePendingUpgradeWorker,
+    getController: () => navigator.serviceWorker.controller,
+    publish: setAutoUpdateStatus,
+    reload: () => window.location.reload(),
+    online: () => navigator.onLine,
+    storage: (() => {
+      try { return window.sessionStorage; } catch { return undefined; }
+    })(),
+  });
+  automaticUpdate.start();
 
   const swRegistrationPromise =
     window.__OPENTU_SW_REGISTRATION_PROMISE__ ||
@@ -473,18 +504,21 @@ if (shouldUseServiceWorker) {
 
       requestSWVersionState();
 
-      // 定期检查更新（每 5 分钟检查一次）
-      setInterval(() => {
+      // Revalidate on startup/reconnect/return, not just the periodic timer.
+      let lastCheckAt = 0;
+      const checkForUpdate = () => {
+        requestSWVersionState();
+        if (!navigator.onLine || Date.now() - lastCheckAt < 15_000) return;
+        lastCheckAt = Date.now();
         registration.update().catch((error) => {
           console.warn('Update check failed:', error);
         });
-      }, 5 * 60 * 1000);
-
-      // 页面重新可见时检查版本状态，捕获 tab 切走期间错过的升级通知
+      };
+      checkForUpdate();
+      setInterval(checkForUpdate, 5 * 60 * 1000);
+      window.addEventListener('online', checkForUpdate);
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          requestSWVersionState();
-        }
+        if (document.visibilityState === 'visible') checkForUpdate();
       });
     })
     .catch((error) => {
@@ -615,6 +649,11 @@ if (shouldUseServiceWorker) {
 
   // 监听用户确认升级事件
   window.addEventListener('user-confirmed-upgrade', () => {
+    if (automaticUpdate.policy.version) {
+      automaticUpdate.requestNow();
+      return;
+    }
+    // One-time bridge: old installed workers still use the previous manual protocol.
     void (async () => {
       const worker = await resolvePendingUpgradeWorker();
       if (!worker) {
@@ -637,21 +676,7 @@ if (shouldUseServiceWorker) {
     })();
   });
 
-  // 页面卸载前，不再自动触发升级，必须用户手动确认
-  // window.addEventListener('beforeunload', () => {
-  //   if (newVersionReady && pendingWorker) {
-  //     console.log('Main: Page unloading, triggering pending upgrade');
-  //     pendingWorker.postMessage({ type: 'SKIP_WAITING' });
-  //   }
-  // });
 
-  // 页面隐藏时，不再自动触发升级
-  // document.addEventListener('visibilitychange', () => {
-  //   if (document.visibilityState === 'hidden' && newVersionReady && pendingWorker) {
-  //     console.log('Main: Page hidden, triggering pending upgrade');
-  //     pendingWorker.postMessage({ type: 'SKIP_WAITING' });
-  //   }
-  // });
 }
 
 updateBootStatus({

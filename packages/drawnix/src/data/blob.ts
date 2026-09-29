@@ -1,3 +1,4 @@
+import { runWithUpdateProtection } from '../services/auto-update-operation';
 import { PlaitBoard } from '@plait/core';
 import { isValidDrawnixData } from './drawnix-data-validation';
 import { IMAGE_MIME_TYPES, MIME_TYPES } from '../constants';
@@ -45,7 +46,7 @@ export const getSupportedImageFileMimeType = (
   return getImageMimeTypeFromFileName(file.name);
 };
 
-export const loadFromBlob = async (board: PlaitBoard, blob: Blob | File) => {
+const loadFromBlobInternal = async (board: PlaitBoard, blob: Blob | File) => {
   const contents = await parseFileContents(blob);
   let data: DrawnixExportedData;
   try {
@@ -178,3 +179,6 @@ export const getSupportedVideoFileMimeType = (
     : undefined;
   return isSupportedVideoFileType(fallbackMimeType) ? fallbackMimeType! : null;
 };
+
+export const loadFromBlob = (...args: Parameters<typeof loadFromBlobInternal>) =>
+  runWithUpdateProtection('正在导入画板', () => loadFromBlobInternal(...args), { allowDuringDrain: true });

@@ -590,7 +590,7 @@ export class WorkflowEngine {
 
         const toolResult = await this.options.executeMainThreadTool(
           step.mcp,
-          step.args
+          { ...step.args, workflowId: workflow.id }
         );
 
         if (!toolResult.success) {

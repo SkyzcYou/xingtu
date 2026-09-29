@@ -1,3 +1,5 @@
+import { MessagePlugin } from 'tdesign-react';
+import { UpdateInProgressError, autoUpdateSafety } from '../services/auto-update-safety';
 /**
  * useTaskQueue Hook
  * 
@@ -101,7 +103,15 @@ const cancelTaskAtom = atom(null, (_get, set, taskId: string) => {
   set(isLoadingAtom, false);
 });
 const retryTaskAtom = atom(null, (_get, set, taskId: string) => {
-  taskQueueService.retryTask(taskId);
+  try {
+    taskQueueService.retryTask(taskId);
+  } catch (error) {
+    if (error instanceof UpdateInProgressError) {
+      MessagePlugin.warning(error.message);
+      return;
+    }
+    throw error;
+  }
   set(tasksAtom, taskQueueService.getAllTasks());
   set(isLoadingAtom, false);
 });
@@ -165,6 +175,20 @@ function syncTasksToAtomStore() {
 }
 
 async function loadTasksFromStorageFallback() {
+  const finish = autoUpdateSafety.beginOperation('正在读取任务记录', { allowDuringDrain: true });
+  try {
+    await loadTasksFromStorageFallbackInternal();
+  } catch (error) {
+    autoUpdateSafety.registerParticipant('task-state-recovery-error', {
+      getBlockReason: () => '任务记录读取失败，暂不自动更新',
+    });
+    throw error;
+  } finally {
+    finish();
+  }
+}
+
+async function loadTasksFromStorageFallbackInternal() {
   await new Promise((resolve) => setTimeout(resolve, 500));
 
   const memoryTasks = taskQueueService.getAllTasks();
@@ -175,8 +199,7 @@ async function loadTasksFromStorageFallback() {
 
   const isAvailable = await taskStorageReader.isAvailable();
   if (!isAvailable) {
-    taskStateStore.set(isLoadingAtom, false);
-    return;
+    throw new Error('任务存储不可用');
   }
 
   // 限制恢复数量，避免内存溢出
@@ -184,7 +207,7 @@ async function loadTasksFromStorageFallback() {
     limit: STORAGE_LIMITS.MAX_RETAINED_TASKS,
   });
   if (storedTasks.length > 0) {
-    taskQueueService.restoreTasks(storedTasks);
+    await taskQueueService.restoreTasks(storedTasks);
   }
   syncTasksToAtomStore();
 }

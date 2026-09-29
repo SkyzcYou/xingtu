@@ -1,3 +1,4 @@
+import { runWithUpdateProtection } from '../services/auto-update-operation';
 import {
   getHitElementByPoint,
   getSelectedElements,
@@ -319,7 +320,7 @@ export const buildImage = (
   };
 };
 
-export const insertImage = async (
+const insertImageInternal = async (
   board: PlaitBoard,
   imageFile: File,
   startPoint?: Point,
@@ -421,7 +422,7 @@ export const insertImage = async (
   }
 };
 
-export const insertImageFromUrl = async (
+const insertImageFromUrlInternal = async (
   board: PlaitBoard,
   imageUrl: string,
   startPoint?: Point,
@@ -780,3 +781,9 @@ export const insertImageFromUrlAndSelect = async (
     addSelectedElement(board, newElement);
   }
 };
+
+export const insertImage = (...args: Parameters<typeof insertImageInternal>) =>
+  runWithUpdateProtection('正在插入图片', () => insertImageInternal(...args), { allowDuringDrain: true });
+
+export const insertImageFromUrl = (...args: Parameters<typeof insertImageFromUrlInternal>) =>
+  runWithUpdateProtection('正在插入图片', () => insertImageFromUrlInternal(...args), { allowDuringDrain: true });

@@ -1,3 +1,4 @@
+import { runWithUpdateProtection } from '../services/auto-update-operation';
 import { PlaitBoard, Point } from '@plait/core';
 import {
   getInsertionPointForSelectedElements,
@@ -202,7 +203,7 @@ const calculateDisplayDimensions = (
  * @param boardGuard 画板有效性校验
  * @param insertWithoutBoardHost 暂存画板无 DOM 宿主时直接构造图片节点
  */
-export const insertVideoFromUrl = async (
+const insertVideoFromUrlInternal = async (
   board: PlaitBoard | null,
   videoUrl: string,
   startPoint?: Point,
@@ -379,3 +380,6 @@ export const insertVideoFromUrl = async (
     );
   }
 };
+
+export const insertVideoFromUrl = (...args: Parameters<typeof insertVideoFromUrlInternal>) =>
+  runWithUpdateProtection('正在插入视频', () => insertVideoFromUrlInternal(...args), { allowDuringDrain: true });

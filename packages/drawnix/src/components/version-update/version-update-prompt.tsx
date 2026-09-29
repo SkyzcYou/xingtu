@@ -1,8 +1,18 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { Button, Dialog } from 'tdesign-react';
 import { RefreshIcon } from 'tdesign-icons-react';
 import { useTaskQueue } from '../../hooks/useTaskQueue';
 import { hasActiveLLMTasksSync } from '../../utils/active-tasks';
+import {
+  getAutoUpdateStatus,
+  subscribeAutoUpdateStatus,
+  type AutoUpdateStatus,
+} from '../../services/auto-update-state';
 import './version-update-prompt.scss';
 
 interface UpdateAvailableState {
@@ -10,7 +20,9 @@ interface UpdateAvailableState {
   changelog?: string[];
 }
 
-function parseUpdateAvailableState(value: unknown): UpdateAvailableState | null {
+function parseUpdateAvailableState(
+  value: unknown
+): UpdateAvailableState | null {
   if (typeof value !== 'object' || value === null) {
     return null;
   }
@@ -49,8 +61,10 @@ function getPendingUpdateReadyState(): UpdateAvailableState | null {
 
 function VersionUpdatePromptContent({
   updateAvailable,
+  automaticUpdate,
 }: {
   updateAvailable: UpdateAvailableState;
+  automaticUpdate: AutoUpdateStatus | null;
 }) {
   const [showChangelog, setShowChangelog] = useState(false);
   const [hasActiveTasks, setHasActiveTasks] = useState(() =>
@@ -75,9 +89,8 @@ function VersionUpdatePromptContent({
           return;
         }
         syncActiveTasks();
-        subscription = workflowSubmissionService.subscribeToAllEvents(
-          syncActiveTasks
-        );
+        subscription =
+          workflowSubmissionService.subscribeToAllEvents(syncActiveTasks);
       })
       .catch((error) => {
         console.warn('[VersionUpdatePrompt] Failed to watch workflows:', error);
@@ -90,13 +103,21 @@ function VersionUpdatePromptContent({
   }, []);
 
   const handleUpdate = useCallback(() => {
-    if (hasActiveTasks) {
+    if (
+      hasActiveTasks ||
+      automaticUpdate?.phase === 'preparing' ||
+      automaticUpdate?.phase === 'updating'
+    ) {
       return;
     }
 
     setShowChangelog(false);
-    window.dispatchEvent(new CustomEvent('user-confirmed-upgrade'));
-  }, [hasActiveTasks]);
+    window.dispatchEvent(
+      new CustomEvent(
+        automaticUpdate ? 'auto-update-now' : 'user-confirmed-upgrade'
+      )
+    );
+  }, [automaticUpdate, hasActiveTasks]);
 
   const handleShowChangelog = useCallback(() => {
     setShowChangelog(true);
@@ -106,53 +127,109 @@ function VersionUpdatePromptContent({
     setShowChangelog(false);
   }, []);
 
+  const switching =
+    automaticUpdate?.phase === 'preparing' ||
+    automaticUpdate?.phase === 'updating';
+  const updateDisabled = hasActiveTasks || switching;
+  const updateLabel = switching
+    ? '正在更新'
+    : hasActiveTasks
+    ? '任务运行中'
+    : '立即更新';
+  const statusText = automaticUpdate
+    ? automaticUpdate.phase === 'countdown'
+      ? `将在 ${automaticUpdate.remainingSeconds ?? 10} 秒后更新至 v${
+          automaticUpdate.version
+        }，并恢复当前画板`
+      : automaticUpdate.phase === 'preparing'
+      ? `正在保存当前工作，准备更新至 v${automaticUpdate.version}`
+      : automaticUpdate.phase === 'updating'
+      ? `正在更新至 v${automaticUpdate.version}，完成后将恢复当前画板`
+      : automaticUpdate.phase === 'blocked'
+      ? `新版本 v${automaticUpdate.version} 等待安全更新`
+      : `新版本 v${automaticUpdate.version} 已就绪，将在空闲时自动更新`
+    : hasActiveTasks
+    ? `新版本 v${updateAvailable.version} 已就绪，任务完成后可更新`
+    : `新版本 v${updateAvailable.version} 已就绪`;
+
   return (
     <>
-      <div className="version-update-prompt">
+      <div className="version-update-prompt" data-auto-update-ui>
         <div className="version-update-prompt__content">
-          <span className="version-update-prompt__text">
-            {hasActiveTasks
-              ? `新版本 v${updateAvailable.version} 已就绪，任务完成后可更新`
-              : `新版本 v${updateAvailable.version} 已就绪`}
-          </span>
-          {updateAvailable.changelog && updateAvailable.changelog.length > 0 && (
-            <Button
-              theme="default"
-              variant="text"
-              size="small"
-              onClick={handleShowChangelog}
-            >
-              查看更新内容
-            </Button>
-          )}
+          <div
+            className="version-update-prompt__message"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="version-update-prompt__text">{statusText}</span>
+            {automaticUpdate?.reason && (
+              <span className="version-update-prompt__detail">
+                {automaticUpdate.reason}
+              </span>
+            )}
+            {automaticUpdate?.overdue && automaticUpdate.draining !== false && !switching && (
+              <span className="version-update-prompt__detail">
+                已进入更新窗口，暂不接受新任务；当前任务结束并保存后自动更新
+              </span>
+            )}
+          </div>
+          {updateAvailable.changelog &&
+            updateAvailable.changelog.length > 0 && (
+              <Button
+                theme="default"
+                variant="text"
+                size="small"
+                onClick={handleShowChangelog}
+              >
+                查看更新内容
+              </Button>
+            )}
+          {automaticUpdate?.canPostpone &&
+            !automaticUpdate.overdue &&
+            !switching && (
+              <Button
+                theme="default"
+                variant="text"
+                size="small"
+                onClick={() =>
+                  window.dispatchEvent(new CustomEvent('auto-update-postpone'))
+                }
+              >
+                稍后
+              </Button>
+            )}
           <Button
             theme="primary"
             size="small"
             onClick={handleUpdate}
             icon={<RefreshIcon />}
-            disabled={hasActiveTasks}
+            disabled={updateDisabled}
           >
-            {hasActiveTasks ? '任务运行中' : '立即更新'}
+            {updateLabel}
           </Button>
         </div>
       </div>
 
       <Dialog
+        className="version-update-prompt__dialog"
         header={`新版本 v${updateAvailable.version} 更新内容`}
         visible={showChangelog}
         onClose={handleCloseChangelog}
         width={600}
         footer={
-          <Button
-            theme="primary"
-            onClick={handleUpdate}
-            disabled={hasActiveTasks}
-          >
-            {hasActiveTasks ? '任务运行中' : '立即更新'}
-          </Button>
+          <div data-auto-update-ui>
+            <Button
+              theme="primary"
+              onClick={handleUpdate}
+              disabled={updateDisabled}
+            >
+              {updateLabel}
+            </Button>
+          </div>
         }
       >
         <div
+          data-auto-update-ui
           style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}
         >
           <ul style={{ paddingLeft: '20px', margin: 0 }}>
@@ -172,6 +249,11 @@ function VersionUpdatePromptContent({
 }
 
 export const VersionUpdatePrompt: React.FC = () => {
+  const automaticUpdate = useSyncExternalStore(
+    subscribeAutoUpdateStatus,
+    getAutoUpdateStatus,
+    () => null
+  );
   const [updateAvailable, setUpdateAvailable] =
     useState<UpdateAvailableState | null>(null);
 
@@ -217,9 +299,11 @@ export const VersionUpdatePrompt: React.FC = () => {
     }
 
     if (process.env.NODE_ENV === 'development') {
-      (window as Window & {
-        __debugTriggerUpdate?: (version?: string) => void;
-      }).__debugTriggerUpdate = (version = '9.9.9') => {
+      (
+        window as Window & {
+          __debugTriggerUpdate?: (version?: string) => void;
+        }
+      ).__debugTriggerUpdate = (version = '9.9.9') => {
         window.dispatchEvent(
           new CustomEvent('sw-update-available', {
             detail: { version },
@@ -233,9 +317,23 @@ export const VersionUpdatePrompt: React.FC = () => {
     };
   }, []);
 
-  if (!updateAvailable) {
+  const available = automaticUpdate
+    ? {
+        version: automaticUpdate.version,
+        changelog:
+          updateAvailable?.version === automaticUpdate.version
+            ? updateAvailable.changelog
+            : undefined,
+      }
+    : updateAvailable;
+  if (!available) {
     return null;
   }
 
-  return <VersionUpdatePromptContent updateAvailable={updateAvailable} />;
+  return (
+    <VersionUpdatePromptContent
+      updateAvailable={available}
+      automaticUpdate={automaticUpdate}
+    />
+  );
 };

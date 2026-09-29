@@ -104,3 +104,40 @@ describe('tool-window-service default window behavior', () => {
     ]);
   });
 });
+
+describe('tool window automatic update safety', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    localStorage.clear();
+    vi.stubGlobal('crypto', { randomUUID: () => 'update-tool-window-test' });
+  });
+
+  it('vetoes minimized instances but permits pinned launchers after the editor is closed', async () => {
+    const [{ toolWindowService }, { autoUpdateSafety }] = await Promise.all([
+      import('../tool-window-service'), import('../auto-update-safety'),
+    ]);
+    autoUpdateSafety.setAppReady(true);
+    expect(await autoUpdateSafety.getBlockReason()).toBeNull();
+    const id = toolWindowService.openTool(DEFAULT_AUTO_PIN_TOOL)!;
+    expect(await autoUpdateSafety.getBlockReason()).toContain('爆款视频生成');
+    toolWindowService.minimizeTool(id);
+    expect(await autoUpdateSafety.getBlockReason()).toContain('最小化');
+    toolWindowService.closeTool(id);
+    expect(toolWindowService.getToolbarTools().some((state) => state.isLauncher)).toBe(true);
+    expect(await autoUpdateSafety.getBlockReason()).toBeNull();
+  });
+
+  it('blocks every new or restored window entry point while update preparation is locked', async () => {
+    const [{ toolWindowService }, { autoUpdateSafety }] = await Promise.all([
+      import('../tool-window-service'), import('../auto-update-safety'),
+    ]);
+    autoUpdateSafety.setAppReady(true);
+    expect(await autoUpdateSafety.prepare('tool-window-lock')).toEqual({ ready: true });
+    expect(() => toolWindowService.openTool(DEFAULT_AUTO_PIN_TOOL)).toThrow('新版本');
+    expect(() => toolWindowService.openNewToolInstance(DEFAULT_AUTO_PIN_TOOL)).toThrow('新版本');
+    expect(() => toolWindowService.restoreTool('unknown')).toThrow('新版本');
+    expect(toolWindowService.getToolStates()).toEqual([]);
+    autoUpdateSafety.release('tool-window-lock');
+    expect(toolWindowService.openTool(DEFAULT_AUTO_PIN_TOOL)).toBeTruthy();
+  });
+});

@@ -19,6 +19,7 @@ import { getPreferredModels } from '../../utils/runtime-model-discovery';
  * 灵感图参数
  */
 export interface InspirationBoardParams {
+  workflowId?: string;
   /** 主题描述 */
   theme: string;
   /** 图片数量（1-16，默认 9） */
@@ -110,6 +111,7 @@ export function createInspirationBoardTask(
       task = taskQueueService.createTask(
         {
           prompt,
+          workflowId: params.workflowId,
           size: imageSize,
           model: actualModel,
           uploadedImages:

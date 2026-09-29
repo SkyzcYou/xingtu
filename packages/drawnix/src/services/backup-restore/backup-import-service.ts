@@ -1,3 +1,4 @@
+import { runWithUpdateProtection } from '../auto-update-operation';
 /**
  * Backup Import Service
  * 从 ZIP 文件导入数据，兼容 v2/v3/v4 manifest
@@ -57,7 +58,11 @@ import {
 import { PROMPT_TYPES, type PromptHistoryOverride, type PromptType } from '../prompt-storage-service';
 
 class BackupImportService {
-  async importFromZip(
+  async importFromZip(file: File, onProgress?: ProgressCallback, options: ImportOptions = {}): Promise<ImportResult> {
+    return runWithUpdateProtection('正在恢复备份', () => this.importFromZipInternal(file, onProgress, options));
+  }
+
+  private async importFromZipInternal(
     file: File,
     onProgress?: ProgressCallback,
     options: ImportOptions = {}

@@ -40,3 +40,11 @@ export {
   requestServiceWorkerIdlePrefetch,
   type IdlePrefetchGroup,
 } from './utils/startup-prefetch';
+
+export { autoUpdateSafety } from './services/auto-update-safety';
+export {
+  getAutoUpdateStatus,
+  setAutoUpdateStatus,
+} from './services/auto-update-state';
+export type { AutoUpdateStatus } from './services/auto-update-state';
+export { hasActiveLLMTasks } from './utils/active-tasks';

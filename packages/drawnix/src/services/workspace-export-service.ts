@@ -1,3 +1,4 @@
+import { runWithUpdateProtection } from './auto-update-operation';
 /**
  * Workspace Export/Import Service
  *
@@ -63,6 +64,10 @@ class WorkspaceExportService {
    * Board metadata is embedded in .drawnix files.
    */
   async exportToZip(options?: { onProgress?: (progress: number, message: string) => void }): Promise<Blob> {
+    return runWithUpdateProtection('正在导出工作区', () => this.exportToZipInternal(options));
+  }
+
+  private async exportToZipInternal(options?: { onProgress?: (progress: number, message: string) => void }): Promise<Blob> {
     const { onProgress } = options || {};
     const { default: JSZip } = await import('jszip');
     const zip = new JSZip();
@@ -223,7 +228,11 @@ class WorkspaceExportService {
    * Import workspace from ZIP file
    * Infers structure from ZIP directory and .drawnix file metadata.
    */
-  async importFromZip(
+  async importFromZip(file: File, options: { merge?: boolean; onProgress?: (progress: number, message: string) => void } = {}) {
+    return runWithUpdateProtection('正在导入工作区', () => this.importFromZipInternal(file, options));
+  }
+
+  private async importFromZipInternal(
     file: File,
     options: {
       merge?: boolean;

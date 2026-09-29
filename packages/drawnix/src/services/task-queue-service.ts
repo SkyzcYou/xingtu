@@ -9,6 +9,8 @@
  */
 
 import { Subject, Observable } from 'rxjs';
+import { autoUpdateSafety } from './auto-update-safety';
+import { assertGenerationAdmission } from './generation-admission';
 import {
   Task,
   TaskStatus,
@@ -510,6 +512,7 @@ class TaskQueueService {
   private executingTasks = new Map<string, AbortController>();
   private taskAbortControllers = new Map<string, AbortController>();
   private taskStorageOperations = new Map<string, Promise<void>>();
+  private failedStorageOperations = new Map<string, () => Promise<void>>();
   private pendingTaskDeletions = new Map<string, Promise<void>>();
   private recentlyDeletedTaskIds = new Set<string>();
   private blockedTaskIds = new Set<string>();
@@ -519,6 +522,22 @@ class TaskQueueService {
   private constructor() {
     this.tasks = new Map();
     this.taskUpdates$ = new Subject();
+    autoUpdateSafety.registerParticipant('task-queue', {
+      getBlockReason: () =>
+        this.getActiveTasks().length > 0 || this.executingTasks.size > 0
+          ? '正在完成生成任务'
+          : this.taskStorageOperations.size > 0
+          ? '正在保存任务结果'
+          : null,
+      flush: async () => {
+        await Promise.all(this.taskStorageOperations.values());
+        // Retry the exact latest failed operation (including deletions). A failed
+        // retry must veto the update; never silently drop in-memory task results.
+        for (const [taskId, operation] of [...this.failedStorageOperations]) {
+          await this.enqueueTaskStorageOperation(taskId, operation);
+        }
+      },
+    });
   }
 
   /**
@@ -563,7 +582,13 @@ class TaskQueueService {
   ): Promise<void> {
     const previous =
       this.taskStorageOperations.get(taskId) || Promise.resolve();
-    const next = previous.catch(() => undefined).then(operation);
+    const next = previous.catch(() => undefined).then(operation).then(
+      () => { this.failedStorageOperations.delete(taskId); },
+      (error) => {
+        this.failedStorageOperations.set(taskId, operation);
+        throw error;
+      }
+    );
     this.taskStorageOperations.set(taskId, next);
     void next
       .finally(() => {
@@ -2361,6 +2386,19 @@ class TaskQueueService {
    * @throws Error if validation fails
    */
   createTask(params: GenerationParams, type: TaskType): Task {
+    // A workflow admitted before the deadline must be able to finish its next
+    // step. Only a currently running workflow may bypass the drain gate.
+    const workflowId = params.workflowId || params.longVideoMeta?.workflowId;
+    const continuation = params.longVideoMeta;
+    const isExistingVideoChain = type === TaskType.VIDEO && continuation?.batchId && Array.from(this.tasks.values()).some(
+      (existing) => existing.status === TaskStatus.COMPLETED && existing.params.longVideoMeta?.batchId === continuation.batchId &&
+        Number(existing.params.longVideoMeta?.segmentIndex) < Number(continuation.segmentIndex)
+    );
+    if (isExistingVideoChain) {
+      autoUpdateSafety.assertCanStartWork({ allowDuringDrain: true });
+    } else {
+      assertGenerationAdmission(workflowId);
+    }
     // Validate parameters
     const validation = validateGenerationParams(params, type);
     if (!validation.valid) {
@@ -2801,6 +2839,7 @@ class TaskQueueService {
    * @param taskId - The task ID to retry
    */
   retryTask(taskId: string, options: { allowCompleted?: boolean } = {}): void {
+    autoUpdateSafety.assertCanStartWork();
     const task = this.tasks.get(taskId);
     if (!task) {
       console.warn(`[TaskQueueService] Task ${taskId} not found`);
@@ -3105,6 +3144,7 @@ class TaskQueueService {
     this.blockedTaskIds.clear();
 
     await taskStorageWriter.clearAllTasks();
+    this.failedStorageOperations.clear();
     taskStorageReader.invalidateCache();
 
     for (const task of tasks) {
@@ -3503,6 +3543,19 @@ class TaskQueueService {
    * recently deleted tasks.
    */
   restoreTasks(
+    tasks: Task[],
+    options: { allowDeletedTaskRestore?: boolean; deletedTasksOnly?: boolean } = {}
+  ): Promise<void> {
+    const finish = autoUpdateSafety.beginOperation('正在恢复任务记录', { allowDuringDrain: true });
+    try {
+      return this.restoreTasksInternal(tasks, options).finally(finish);
+    } catch (error) {
+      finish();
+      return Promise.reject(error);
+    }
+  }
+
+  private restoreTasksInternal(
     tasks: Task[],
     options: {
       allowDeletedTaskRestore?: boolean;

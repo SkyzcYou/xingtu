@@ -1,3 +1,4 @@
+import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Copy, CreditCard, ExternalLink, RefreshCw } from 'lucide-react';
@@ -52,6 +53,7 @@ export function CreditRechargeDialog({
   const [actionError, setActionError] = useState<string | null>(null);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [queryingOrderNo, setQueryingOrderNo] = useState<string | null>(null);
+  useAutoUpdateGuard('credit-recharge-dialog', visible || creatingOrder || queryingOrderNo ? '充值订单窗口仍在使用中' : null);
   const successNotifiedOrderNoRef = useRef<string | null>(null);
 
   const latestPaymentAction = useMemo(

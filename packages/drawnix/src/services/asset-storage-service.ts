@@ -1,3 +1,4 @@
+import { runWithUpdateProtection } from './auto-update-operation';
 /**
  * Asset Storage Service
  * 素材存储服务
@@ -278,6 +279,13 @@ class AssetStorageService {
    * 添加新素材到存储
    */
   async addAsset(data: AddAssetData): Promise<Asset> {
+    return runWithUpdateProtection('正在保存素材', () => this.addAssetInternal(data), {
+      // Saving the result of an admitted generation/import must finish during drain.
+      allowDuringDrain: true,
+    });
+  }
+
+  private async addAssetInternal(data: AddAssetData): Promise<Asset> {
     // console.log('[AssetStorageService] addAsset called with:', {
     //   type: data.type,
     //   source: data.source,

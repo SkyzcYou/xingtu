@@ -1,3 +1,4 @@
+import { runWithUpdateProtection } from '../services/auto-update-operation';
 import { PlaitBoard, Point } from '@plait/core';
 import { getFileExtension } from '@aitu/utils';
 import type { DataURL } from '../types';
@@ -451,7 +452,7 @@ export async function buildAudioImageElement(
   };
 }
 
-export async function insertAudioFromUrl(
+async function insertAudioFromUrlInternal(
   board: PlaitBoard | null,
   audioUrl: string,
   metadata: AudioCardMetadata = {},
@@ -676,3 +677,6 @@ export async function extractAudioCoverArt(file: File): Promise<Blob | null> {
     return null;
   }
 }
+
+export const insertAudioFromUrl = (...args: Parameters<typeof insertAudioFromUrlInternal>) =>
+  runWithUpdateProtection('正在插入音频', () => insertAudioFromUrlInternal(...args), { allowDuringDrain: true });

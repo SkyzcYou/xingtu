@@ -11,12 +11,31 @@
   border-radius: var(--td-radius-medium);
   box-shadow: var(--td-shadow-2);
   padding: 8px 12px;
+  max-width: min(
+    760px,
+    calc(100vw - var(--aitu-toolbar-right-edge, #{$toolbar-width}) - 24px)
+  );
   animation: slideIn 0.3s ease-out;
 
   &__content {
     display: flex;
     align-items: center;
     gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  &__message {
+    display: flex;
+    flex: 1 1 240px;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  &__detail {
+    font-size: 12px;
+    color: var(--td-text-color-secondary);
+    overflow-wrap: anywhere;
   }
 
   &__text {

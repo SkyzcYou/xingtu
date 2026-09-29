@@ -4,6 +4,7 @@
  */
 
 import React, { useRef, useEffect } from 'react';
+import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
 import { createPortal } from 'react-dom';
 import { Z_INDEX } from '../../constants/z-index';
 import { ImageEditorProps } from './types';
@@ -19,6 +20,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   onInsert,
   showOverwrite = false,
 }) => {
+  const updateGuardId = React.useId();
+  useAutoUpdateGuard(`image-editor:${updateGuardId}`, visible ? '图片编辑窗口尚未关闭' : null);
   const editorRef = useRef<ImageEditorCoreRef>(null);
 
   // 重置状态当编辑器关闭时

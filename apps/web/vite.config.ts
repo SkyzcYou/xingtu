@@ -7,6 +7,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { createRequire } from 'module';
 import { visualizer } from 'rollup-plugin-visualizer';
+import { collectCriticalPrecacheUrls } from './build/critical-precache';
 
 const require = createRequire(import.meta.url);
 const workspaceRoot = path.resolve(__dirname, '../..');
@@ -872,9 +873,13 @@ function resolveManualChunk(
  * 在构建完成后扫描输出目录，生成需要预缓存的静态资源清单
  */
 function precacheManifestPlugin(): Plugin {
+  let criticalBundleUrls: Set<string> | null = null;
   return {
     name: 'precache-manifest',
     apply: 'build',
+    generateBundle(_options, bundle) {
+      criticalBundleUrls = collectCriticalPrecacheUrls(bundle);
+    },
     closeBundle: {
       sequential: true,
       order: 'post',
@@ -882,13 +887,25 @@ function precacheManifestPlugin(): Plugin {
         const outDir = path.resolve(__dirname, '../../dist/apps/web');
         const indexHtmlPath = path.join(outDir, 'index.html');
         // A failed build has no output shell; preserve its original error.
-        if (!fs.existsSync(indexHtmlPath)) return;
+        if (!criticalBundleUrls || !fs.existsSync(indexHtmlPath)) return;
+        if (criticalBundleUrls.size === 0) {
+          throw new Error('Critical startup dependency graph is empty');
+        }
         const precacheUrls = await collectHtmlShellPrecacheUrls(indexHtmlPath);
+        for (const url of criticalBundleUrls) {
+          const filePath = path.join(outDir, url.replace(/^\//, ''));
+          if (!fs.existsSync(filePath)) {
+            throw new Error(`Critical startup asset was not emitted: ${url}`);
+          }
+          precacheUrls.add(url);
+        }
+        const criticalUrls = criticalBundleUrls;
         const manifest = await collectSelectedEntries(
           outDir,
           precacheUrls,
           (url, ext) =>
             PRECACHE_ALWAYS_INCLUDE.has(url) ||
+            criticalUrls.has(url) ||
             (ext !== '.html' && PRECACHE_EXTENSIONS.has(ext))
         );
 

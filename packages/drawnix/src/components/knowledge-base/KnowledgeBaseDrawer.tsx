@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect } from 'react';
+import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import KnowledgeBaseContent from './KnowledgeBaseContent';
@@ -22,6 +23,8 @@ export const KnowledgeBaseDrawer: React.FC<KnowledgeBaseDrawerProps> = ({
   onOpenChange,
   initialNoteId,
 }) => {
+  const updateGuardId = React.useId();
+  useAutoUpdateGuard(`knowledge-base-editor:${updateGuardId}`, isOpen ? '请先完成并关闭知识库编辑窗口' : null);
   // ESC 键关闭
   useEffect(() => {
     if (!isOpen) return;

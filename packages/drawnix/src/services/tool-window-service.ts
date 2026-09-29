@@ -5,6 +5,7 @@
  * 支持多实例窗口、最小化、常驻工具栏、位置记忆等能力。
  */
 import { generateUUID } from '../utils/runtime-helpers';
+import { autoUpdateSafety } from './auto-update-safety';
 
 import { BehaviorSubject, Observable } from 'rxjs';
 import {
@@ -120,6 +121,16 @@ class ToolWindowService {
     this.loadPinPreferences();
     this.loadPinnedTools();
     this.reconcilePinnedToolsWithPreferences();
+    autoUpdateSafety.registerParticipant('tool-window-editors', {
+      getBlockReason: () => {
+        const window = this.getToolStates().find(
+          (state) => state.status === 'open' || state.status === 'minimized'
+        );
+        return window
+          ? `请先完成并关闭「${window.tool.name}」工具窗口（最小化仍会保留编辑）`
+          : null;
+      },
+    });
     setTimeout(() => this.notify(), 0);
   }
 
@@ -326,6 +337,7 @@ class ToolWindowService {
     tool: ToolDefinition,
     options?: OpenToolOptions
   ): string | undefined {
+    autoUpdateSafety.assertCanStartWork({ allowDuringDrain: true });
     const launchMode = this.resolveLaunchMode(tool, options?.launchMode);
     if (tool.id === PROMPT_HISTORY_TOOL_ID) {
       logPromptHistoryWindowDebug('openTool:start', {
@@ -401,6 +413,7 @@ class ToolWindowService {
     tool: ToolDefinition,
     options?: Omit<OpenToolOptions, 'launchMode'>
   ): string {
+    autoUpdateSafety.assertCanStartWork({ allowDuringDrain: true });
     this.applyAutoPinBehavior(tool, options);
 
     const instanceId = this.generateInstanceId(tool.id);
@@ -491,6 +504,7 @@ class ToolWindowService {
   }
 
   restoreTool(target: string): void {
+    autoUpdateSafety.assertCanStartWork({ allowDuringDrain: true });
     const state = this.resolveState(target);
     if (!state) {
       return;

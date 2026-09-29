@@ -1,3 +1,4 @@
+import { runWithUpdateProtection } from './auto-update-operation';
 /**
  * Knowledge Base Import & Export Service
  *
@@ -45,7 +46,7 @@ export interface KBExportData {
 /**
  * 导出所有知识库数据为 JSON
  */
-export async function exportAllData(): Promise<KBExportData> {
+async function exportAllDataInternal(): Promise<KBExportData> {
   const { notesStore, noteContentsStore, noteImagesStore, tagsStore, noteTagsStore } = _getStoreInstances();
   return exportKnowledgeBaseData({
     getAllDirectories,
@@ -89,7 +90,7 @@ export async function exportAllData(): Promise<KBExportData> {
 /**
  * 导出所有知识库数据为 ZIP 压缩包 (Markdown 格式)
  */
-export async function exportAsZip(): Promise<Blob> {
+async function exportAsZipInternal(): Promise<Blob> {
   const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   const directories = await getAllDirectories();
@@ -120,7 +121,7 @@ export async function exportAsZip(): Promise<Blob> {
  * 从 ZIP 压缩包导入知识库数据
  * 结构：目录名/笔记.md
  */
-export async function importFromZip(file: File): Promise<{
+async function importFromZipInternal(file: File): Promise<{
   dirCount: number;
   noteCount: number;
 }> {
@@ -186,7 +187,7 @@ export async function importFromZip(file: File): Promise<{
  * 导入知识库数据（合并模式，不覆盖已有数据）
  * 支持向下兼容：自动拆分旧格式数据（正文在 note 对象中）
  */
-export async function importAllData(data: KBExportData): Promise<{
+async function importAllDataInternal(data: KBExportData): Promise<{
   dirCount: number;
   noteCount: number;
   tagCount: number;
@@ -312,3 +313,15 @@ export async function importNoteFromMarkdown(
 
   return note;
 }
+
+export const exportAllData = (...args: Parameters<typeof exportAllDataInternal>) =>
+  runWithUpdateProtection('正在导入或导出知识库', () => exportAllDataInternal(...args), { allowDuringDrain: true });
+
+export const exportAsZip = (...args: Parameters<typeof exportAsZipInternal>) =>
+  runWithUpdateProtection('正在导入或导出知识库', () => exportAsZipInternal(...args), { allowDuringDrain: true });
+
+export const importFromZip = (...args: Parameters<typeof importFromZipInternal>) =>
+  runWithUpdateProtection('正在导入或导出知识库', () => importFromZipInternal(...args), { allowDuringDrain: true });
+
+export const importAllData = (...args: Parameters<typeof importAllDataInternal>) =>
+  runWithUpdateProtection('正在导入或导出知识库', () => importAllDataInternal(...args), { allowDuringDrain: true });

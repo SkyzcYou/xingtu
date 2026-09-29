@@ -1,3 +1,4 @@
+import { autoUpdateSafety } from '../services/auto-update-safety';
 /**
  * useTaskStorage Hook
  *
@@ -31,6 +32,10 @@ import {
 // Global flag to prevent multiple initializations (persists across HMR)
 let initializationStarted = false;
 let initializationPromise: Promise<void> | null = null;
+let storageRecoveryFailed = false;
+autoUpdateSafety.registerParticipant('task-storage-recovery', {
+  getBlockReason: () => storageRecoveryFailed ? '任务记录尚未成功恢复，暂不自动更新' : null,
+});
 
 /**
  * Wait for browser idle time to execute heavy operations
@@ -470,6 +475,7 @@ export function useTaskStorage(): boolean {
           );
         }
       } catch (error) {
+        storageRecoveryFailed = true;
         console.error('[useTaskStorage] Failed to initialize storage:', error);
       }
     };
@@ -478,7 +484,12 @@ export function useTaskStorage(): boolean {
       initializationPromise = (async () => {
         if (initializationStarted) return;
         initializationStarted = true;
-        await initializeStorage();
+        const finish = autoUpdateSafety.beginOperation('正在恢复任务记录', { allowDuringDrain: true });
+        try {
+          await initializeStorage();
+        } finally {
+          finish();
+        }
       })();
     }
 

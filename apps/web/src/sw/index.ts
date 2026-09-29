@@ -47,6 +47,18 @@ import {
   fetchOriginalVideoRequest,
   fetchVideoForCache,
 } from './video-fetch-response';
+import {
+  AutoUpgradeCoordinator,
+  appShellMatchesVersion,
+  activatedVersionPatch,
+  hasExpiredAutoCommit,
+  earliestPendingReadyAt,
+  isAutoUpgradeMessage,
+  obsoleteVersionCaches,
+  isInUpgradeScope,
+  validateCriticalPrecacheManifest,
+} from './auto-upgrade-coordinator';
+import { AUTO_UPDATE_PROTOCOL } from '../../../../packages/drawnix/src/utils/auto-update-protocol';
 
 // fix: self redeclaration error and type casting
 const sw = self as unknown as ServiceWorkerGlobalScope;
@@ -330,6 +342,8 @@ interface SWVersionState {
   committedVersion: string;
   pendingVersion: string | null;
   pendingReadyAt: number | null;
+  firstPendingReadyAt: number | null;
+  pendingCommitId: string | null;
   upgradeState: SWUpgradeState;
   updatedAt: number;
 }
@@ -986,6 +1000,8 @@ function createDefaultVersionState(): SWVersionState {
     committedVersion: APP_VERSION,
     pendingVersion: null,
     pendingReadyAt: null,
+    firstPendingReadyAt: null,
+    pendingCommitId: null,
     upgradeState: 'idle',
     updatedAt: Date.now(),
   };
@@ -1017,6 +1033,14 @@ function normalizeVersionState(value: unknown): SWVersionState {
     committedVersion,
     pendingVersion,
     pendingReadyAt,
+    firstPendingReadyAt:
+      typeof raw.firstPendingReadyAt === 'number' &&
+      Number.isFinite(raw.firstPendingReadyAt) &&
+      raw.firstPendingReadyAt > 0
+        ? raw.firstPendingReadyAt
+        : pendingReadyAt,
+    pendingCommitId:
+      typeof raw.pendingCommitId === 'string' ? raw.pendingCommitId : null,
     upgradeState,
     updatedAt:
       typeof raw.updatedAt === 'number' && Number.isFinite(raw.updatedAt)
@@ -1046,7 +1070,7 @@ function openServiceWorkerDB(): Promise<IDBDatabase> {
   });
 }
 
-async function readVersionState(): Promise<SWVersionState> {
+async function readVersionState(strict = false): Promise<SWVersionState> {
   try {
     const db = await openServiceWorkerDB();
     return await new Promise((resolve, reject) => {
@@ -1064,55 +1088,81 @@ async function readVersionState(): Promise<SWVersionState> {
     });
   } catch (error) {
     console.warn('Service Worker: 无法读取版本状态:', error);
+    if (strict) throw error;
     return createDefaultVersionState();
   }
 }
 
-async function writeVersionState(
-  state: SWVersionState
-): Promise<SWVersionState> {
-  const normalized = normalizeVersionState(state);
-  try {
-    const db = await openServiceWorkerDB();
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction([VERSION_STATE_STORE], 'readwrite');
-      const store = transaction.objectStore(VERSION_STATE_STORE);
-      store.put({
-        key: VERSION_STATE_KEY,
-        state: normalized,
-      });
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-    });
-  } catch (error) {
-    console.warn('Service Worker: 无法写入版本状态:', error);
-  }
-
-  return normalized;
-}
-
+/** Critical lifecycle writes are transactional and must succeed before activation. */
 async function updateVersionState(
   patch:
     | Partial<SWVersionState>
     | ((current: SWVersionState) => Partial<SWVersionState>)
 ): Promise<SWVersionState> {
-  const current = await readVersionState();
-  const nextPatch = typeof patch === 'function' ? patch(current) : patch;
-  return writeVersionState({
-    ...current,
-    ...nextPatch,
-    updatedAt: Date.now(),
-  });
+  const db = await openServiceWorkerDB();
+  try {
+    return await new Promise<SWVersionState>((resolve, reject) => {
+      const transaction = db.transaction([VERSION_STATE_STORE], 'readwrite');
+      const store = transaction.objectStore(VERSION_STATE_STORE);
+      const request = store.get(VERSION_STATE_KEY);
+      let next: SWVersionState;
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () =>
+        reject(transaction.error || new Error('Version state transaction aborted'));
+      transaction.oncomplete = () => resolve(next);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        try {
+          const current = normalizeVersionState(
+            request.result?.state || createDefaultVersionState()
+          );
+          const nextPatch = typeof patch === 'function' ? patch(current) : patch;
+          if (Object.keys(nextPatch).length === 0) {
+            next = current;
+            return;
+          }
+          next = normalizeVersionState({
+            ...current,
+            ...nextPatch,
+            updatedAt: Date.now(),
+          });
+          store.put({ key: VERSION_STATE_KEY, state: next });
+        } catch (error) {
+          transaction.abort();
+          reject(error);
+        }
+      };
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function readUpgradeVersionState(): Promise<SWVersionState> {
+  const state = await readVersionState(true);
+  const expiredIntent = (current: SWVersionState) =>
+    hasExpiredAutoCommit(current, APP_VERSION, Date.now());
+  // A worker killed between intent persistence and skipWaiting must be retryable
+  // after the pages' preparation locks expire. Never resume its old votes.
+  if (expiredIntent(state)) {
+    return updateVersionState((current) =>
+      expiredIntent(current)
+        ? { upgradeState: 'ready', pendingCommitId: null }
+        : {}
+    );
+  }
+  return state;
 }
 
 async function postVersionState(
   target?: Client | ServiceWorker | null
 ): Promise<SWVersionState> {
-  const state = await readVersionState();
+  const state = await readUpgradeVersionState();
   const payload = {
     type: 'SW_VERSION_STATE' as const,
     ...state,
     swVersion: APP_VERSION,
+    autoUpdateProtocol: AUTO_UPDATE_PROTOCOL,
   };
 
   if (target) {
@@ -1172,7 +1222,7 @@ async function saveFailedDomain(domain: string): Promise<void> {
 
 // ==================== 智能升级相关函数 ====================
 
-// 标记新版本已准备好，等待用户确认
+// 标记关键资源已就绪，等待所有页面安全提交；保留旧客户端的手动入口
 // isUpdate: 是否是版本更新（有旧版本存在）
 async function markNewVersionReady(isUpdate: boolean): Promise<void> {
   if (!isUpdate) {
@@ -1180,18 +1230,27 @@ async function markNewVersionReady(isUpdate: boolean): Promise<void> {
       committedVersion: APP_VERSION,
       pendingVersion: null,
       pendingReadyAt: null,
+      firstPendingReadyAt: null,
+      pendingCommitId: null,
       upgradeState: 'idle',
     });
     await postVersionState();
     return;
   }
 
-  await updateVersionState((current) => ({
-    committedVersion: current.committedVersion || APP_VERSION,
-    pendingVersion: APP_VERSION,
-    pendingReadyAt: Date.now(),
-    upgradeState: 'ready',
-  }));
+  await updateVersionState((current) => {
+    if (current.pendingVersion !== APP_VERSION) {
+      throw new Error('A newer worker superseded this precache attempt');
+    }
+    return {
+      committedVersion: current.committedVersion || APP_VERSION,
+      pendingVersion: APP_VERSION,
+      pendingReadyAt: Date.now(),
+      firstPendingReadyAt: earliestPendingReadyAt(current, Date.now()),
+      pendingCommitId: null,
+      upgradeState: 'ready',
+    };
+  });
 
   const cm = getChannelManager();
   if (cm) {
@@ -1200,11 +1259,88 @@ async function markNewVersionReady(isUpdate: boolean): Promise<void> {
   await postVersionState();
 }
 
-// Precache manifest 类型定义
-interface PrecacheManifest {
-  version: string;
-  timestamp: string;
-  files: Array<{ url: string; revision: string }>;
+const autoUpgradeCoordinator = new AutoUpgradeCoordinator({
+  version: APP_VERSION,
+  scopeUrl: SW_SCOPE_BASE_URL.href,
+  getClients: async () =>
+    sw.clients.matchAll({ type: 'window', includeUncontrolled: true }),
+  getVersionState: readUpgradeVersionState,
+  stageCommit: async (requestId) => {
+    await updateVersionState((current) => {
+      if (
+        current.pendingVersion !== APP_VERSION ||
+        current.upgradeState !== 'ready'
+      ) {
+        throw new Error('Pending version changed before automatic commit');
+      }
+      return { upgradeState: 'committing', pendingCommitId: requestId };
+    });
+  },
+  abortCommit: async (requestId) => {
+    await updateVersionState((current) =>
+      current.pendingVersion === APP_VERSION &&
+      current.pendingCommitId === requestId
+        ? { upgradeState: 'ready', pendingCommitId: null }
+        : {}
+    );
+  },
+  activate: async () => {
+    shouldClaimClientsOnActivate = true;
+    await sw.skipWaiting();
+  },
+});
+
+// This flag is set only by our own successful activate event. A waiting worker
+// shares the active script URL, so URL comparisons cannot prove it is active.
+// After a process restart we retain caches conservatively until the next upgrade.
+let hasCompletedActivation = false;
+const reportedClientVersions = new Map<string, string>();
+let versionCacheCleanup: Promise<void> | null = null;
+
+function pruneReportedVersionCaches(): Promise<void> {
+  if (!hasCompletedActivation) return Promise.resolve();
+  if (versionCacheCleanup) return versionCacheCleanup;
+  versionCacheCleanup = (async () => {
+    const state = await readVersionState(true);
+    if (state.committedVersion !== APP_VERSION) return;
+    const windows = await sw.clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true,
+    });
+    // Version cache names are origin-wide; an unrelated release-scope page is
+    // unknown to this coordinator and may still depend on an older cache.
+    if (windows.some((client) =>
+      !isInUpgradeScope(client, SW_SCOPE_BASE_URL.href))) return;
+    const liveIds = new Set(windows.map((client) => client.id));
+    for (const id of reportedClientVersions.keys()) {
+      if (!liveIds.has(id)) reportedClientVersions.delete(id);
+    }
+    const cacheNames = await caches.keys();
+    const candidates = obsoleteVersionCaches(
+      cacheNames, APP_VERSION, [...liveIds],
+      reportedClientVersions, state.pendingVersion
+    );
+    if (!candidates.length) return;
+    // A new tab or another installing worker may appear during the cache read.
+    const latestState = await readVersionState(true);
+    if (latestState.committedVersion !== APP_VERSION) return;
+    const latestClients = await sw.clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true,
+    });
+    if (latestClients.some((client) =>
+      !isInUpgradeScope(client, SW_SCOPE_BASE_URL.href))) return;
+    const stillObsolete = obsoleteVersionCaches(
+      candidates, APP_VERSION, latestClients.map((client) => client.id),
+      reportedClientVersions, latestState.pendingVersion
+    );
+    for (const cacheName of stillObsolete) await caches.delete(cacheName);
+  })().catch((error) => {
+    console.warn('Service Worker: retaining old version caches:', error);
+  }).finally(() => {
+    versionCacheCleanup = null;
+  });
+  return versionCacheCleanup;
 }
 
 interface IdlePrefetchManifest {
@@ -1328,49 +1464,26 @@ function setSWBootProgress(
   void broadcastSWBootProgress(target);
 }
 
-/**
- * 从 precache-manifest.json 加载预缓存文件列表
- * 如果加载失败（开发模式没有此文件），返回 null 表示不需要预缓存
- */
+/** A production worker must never announce ready without a matching boot manifest. */
 async function loadPrecacheManifest(): Promise<
   { url: string; revision: string }[] | null
 > {
-  try {
-    const response = await fetch(
-      createScopeUrl('precache-manifest.json').href,
-      {
-        cache: 'reload',
-      }
-    );
-    if (!response.ok) {
-      logSWDebug('loadPrecacheManifest: response not ok', {
-        status: response.status,
-        statusText: response.statusText,
-      });
-      // 没有 manifest 文件，说明是开发模式，不需要预缓存
-      return null;
-    }
-
-    const manifest: PrecacheManifest = await response.json();
-    logSWDebug('loadPrecacheManifest: loaded', {
-      version: manifest.version,
-      fileCount: manifest.files.length,
-    });
-    if (manifest.version && manifest.version !== APP_VERSION) {
-      logSWDebug('loadPrecacheManifest: version mismatch', {
-        manifestVersion: manifest.version,
-        workerVersion: APP_VERSION,
-      });
-      return null;
-    }
-    return manifest.files;
-  } catch (error) {
-    logSWDebug('loadPrecacheManifest: failed', {
-      error: getSafeErrorMessage(error),
-    });
-    // 加载失败，不预缓存
-    return null;
+  if (isDevelopment) return null;
+  const response = await fetch(createScopeUrl('precache-manifest.json').href, {
+    cache: 'reload',
+  });
+  if (!response.ok) {
+    throw new Error(`Critical precache manifest returned ${response.status}`);
   }
+  const files = validateCriticalPrecacheManifest(
+    await response.json(),
+    APP_VERSION
+  );
+  logSWDebug('loadPrecacheManifest: loaded', {
+    version: APP_VERSION,
+    fileCount: files.length,
+  });
+  return files;
 }
 
 let idlePrefetchManifestPromise: Promise<IdlePrefetchManifest | null> | null =
@@ -2123,6 +2236,9 @@ async function cacheFile(
 }> {
   try {
     const targets = resolveStaticResourceFetchTargets(url);
+    const resourcePathname = targets.resourcePath.split(/[?#]/, 1)[0];
+    const isAppShell =
+      resourcePathname === '/' || resourcePathname === '/index.html';
 
     // 检查缓存中是否已有相同 revision 的文件
     const cachedResponse = await cache.match(targets.cacheKey);
@@ -2133,8 +2249,17 @@ async function cacheFile(
         STATIC_APP_VERSION_HEADER
       );
       if (cachedRevision === revision && cachedVersion === APP_VERSION) {
-        // 文件未变化，跳过
-        return { url, success: true, skipped: true };
+        // Cache headers are assigned locally; they do not prove which HTML was fetched.
+        if (
+          !isAppShell ||
+          appShellMatchesVersion(await cachedResponse.clone().text(), APP_VERSION)
+        ) {
+          return { url, success: true, skipped: true };
+        }
+        await cache.delete(targets.cacheKey);
+        if (resourcePathname === '/index.html') {
+          await cache.delete(createScopeUrl('/').href);
+        }
       }
     }
 
@@ -2159,6 +2284,17 @@ async function cacheFile(
     }
 
     if (response.ok) {
+      // The root release may switch after the matching manifest was fetched.
+      // Reject that shell instead of stamping this worker's version onto newer HTML.
+      if (
+        isAppShell &&
+        !appShellMatchesVersion(await response.clone().text(), APP_VERSION)
+      ) {
+        return {
+          url, success: false, status: response.status,
+          error: 'app-shell-version-mismatch',
+        };
+      }
       await cacheStaticResponse(cache, targets.cacheKey, response, {
         source,
         revision,
@@ -2774,6 +2910,10 @@ sw.addEventListener('install', (event: ExtendableEvent) => {
         committedVersion: current.committedVersion || APP_VERSION,
         pendingVersion: installingVersionIsUpdate ? APP_VERSION : null,
         pendingReadyAt: null,
+        firstPendingReadyAt: installingVersionIsUpdate
+          ? current.firstPendingReadyAt ?? current.pendingReadyAt
+          : null,
+        pendingCommitId: null,
         upgradeState: installingVersionIsUpdate ? 'prewarming' : 'idle',
       }));
       await postVersionState();
@@ -2782,7 +2922,7 @@ sw.addEventListener('install', (event: ExtendableEvent) => {
         if (files && files.length > 0) {
           const cache = await caches.open(STATIC_CACHE_NAME);
           const precacheSummary = await precacheStaticFiles(cache, files);
-          if (installingVersionIsUpdate && precacheSummary.failCount > 0) {
+          if (precacheSummary.failCount > 0) {
             throw new Error(
               `precache incomplete: ${precacheSummary.failCount}/${precacheSummary.total} files failed`
             );
@@ -2808,18 +2948,24 @@ sw.addEventListener('install', (event: ExtendableEvent) => {
 
         await markNewVersionReady(installingVersionIsUpdate);
       } catch (err) {
-        await updateVersionState((current) => ({
-          committedVersion: current.committedVersion || APP_VERSION,
-          pendingVersion: null,
-          pendingReadyAt: null,
-          upgradeState: 'idle',
-        }));
+        await updateVersionState((current) =>
+          current.pendingVersion === APP_VERSION
+            ? {
+                pendingVersion: null,
+                pendingReadyAt: null,
+                pendingCommitId: null,
+                upgradeState: 'idle',
+              }
+            : {}
+        );
         await postVersionState();
         setSWBootProgress({
           phase: 'error',
           message: `启动资源预热失败：${getSafeErrorMessage(err)}`,
         });
         console.warn('Service Worker: Precache failed:', err);
+        // Reject installation: an unready worker must not activate naturally later.
+        if (!isDevelopment) throw err;
       }
     })()
   );
@@ -2836,25 +2982,29 @@ sw.addEventListener('activate', (event: ExtendableEvent) => {
 
   event.waitUntil(
     (async () => {
-      const versionStateBeforeActivate = await readVersionState();
+      const versionStateBeforeActivate = await readVersionState(true);
       // SW 一旦激活，committedVersion 就应该是当前版本。
       // 无论是首次安装、用户确认升级、还是所有旧 tab 关闭后自然激活，
       // 都需要更新，否则新 tab 会用旧版本号请求新 hash 资源导致 404。
-      await updateVersionState({
-        committedVersion: APP_VERSION,
-        pendingVersion: null,
-        pendingReadyAt: null,
-        upgradeState: 'idle',
-      });
+      await updateVersionState((current) =>
+        activatedVersionPatch(current, APP_VERSION)
+      );
       await postVersionState();
 
-      if (shouldClaimClientsOnActivate) {
+      // A worker can restart between voting and activation; commit intent survives it.
+      if (
+        shouldClaimClientsOnActivate ||
+        (versionStateBeforeActivate.pendingVersion === APP_VERSION &&
+          versionStateBeforeActivate.upgradeState === 'committing')
+      ) {
         logSWDebug('activate: before clients.claim');
         await sw.clients.claim();
         logSWDebug('activate: after clients.claim');
       } else {
         logSWDebug('activate: skip clients.claim for staged update');
       }
+
+      hasCompletedActivation = true;
 
       // 激活后自动消费 idle-prefetch manifest 的默认分组。
       // prefetchIdleGroups 会在最近有客户端请求时自动延后，避免抢占首屏。
@@ -2921,51 +3071,15 @@ sw.addEventListener('activate', (event: ExtendableEvent) => {
         // console.log('Image cache migration completed');
       }
 
-      // 找出旧版本的静态资源缓存（但不立即删除）
-      const currentVersionState = await readVersionState();
-      const committedStaticCacheName = getStaticCacheName(
-        currentVersionState.committedVersion || APP_VERSION
-      );
-      const oldStaticCaches = cacheNames.filter(
-        (name) =>
-          name.startsWith('drawnix-static-v') &&
-          name !== STATIC_CACHE_NAME &&
-          name !== committedStaticCacheName
-      );
-
-      const oldAppCaches = cacheNames.filter(
-        (name) =>
-          name.startsWith('drawnix-v') &&
-          name !== CACHE_NAME &&
-          name !== IMAGE_CACHE_NAME &&
-          !name.startsWith('drawnix-static-v')
-      );
-
+      // A controlled or legacy tab may still need its old lazy chunks. Never
+      // guess that every tab reloaded after a fixed timeout, or touch media caches.
       try {
         const currentStaticCache = await caches.open(STATIC_CACHE_NAME);
         await purgeSuspiciousStaticCacheEntries(currentStaticCache);
       } catch (error) {
         console.warn('Failed to purge suspicious static cache entries:', error);
       }
-
-      if (oldStaticCaches.length > 0 || oldAppCaches.length > 0) {
-        // console.log('Found old version caches, will keep them temporarily:', [...oldStaticCaches, ...oldAppCaches]);
-        // console.log('Old caches will be cleaned up after clients are updated');
-
-        // 延迟 30 秒后清理旧缓存，给所有客户端足够时间刷新
-        setTimeout(async () => {
-          // console.log('Cleaning up old version caches now...');
-          for (const cacheName of [...oldStaticCaches, ...oldAppCaches]) {
-            try {
-              await caches.delete(cacheName);
-              // console.log('Deleted old cache:', cacheName);
-            } catch (error) {
-              console.warn('Failed to delete old cache:', cacheName, error);
-            }
-          }
-          // console.log('Old version caches cleanup completed');
-        }, 30000); // 30秒延迟
-      }
+      await pruneReportedVersionCaches();
 
       // console.log(`Service Worker v${APP_VERSION} activated`);
 
@@ -3255,10 +3369,37 @@ sw.addEventListener('message', (event: ExtendableMessageEvent) => {
     return;
   }
 
+  if (isAutoUpgradeMessage(event.data)) {
+    const client = event.source as Client | null;
+    if (
+      !client ||
+      !('id' in client) ||
+      !isInUpgradeScope(client, SW_SCOPE_BASE_URL.href)
+    ) return;
+    if (event.data.type === 'AUTO_UPGRADE_REQUEST') {
+      // Keep the waiting worker alive until every page votes or the transaction aborts.
+      event.waitUntil(autoUpgradeCoordinator.request(event.data, client));
+    } else {
+      autoUpgradeCoordinator.receive(event.data, client.id);
+    }
+    return;
+  }
+
   if (event.data && event.data.type === 'GET_VERSION_STATE') {
     const client = event.source as Client | null;
     logSWDebug('message: GET_VERSION_STATE', { clientId: client?.id ?? null });
-    event.waitUntil(postVersionState(client));
+    if (
+      client && 'id' in client &&
+      isInUpgradeScope(client, SW_SCOPE_BASE_URL.href) &&
+      typeof event.data.clientVersion === 'string' &&
+      event.data.clientVersion.trim()
+    ) {
+      reportedClientVersions.set(client.id, event.data.clientVersion);
+    }
+    event.waitUntil((async () => {
+      await postVersionState(client);
+      await pruneReportedVersionCaches();
+    })());
     return;
   }
 
@@ -3305,11 +3446,11 @@ sw.addEventListener('message', (event: ExtendableMessageEvent) => {
     logSWDebug('message: COMMIT_UPGRADE', { clientId: client?.id ?? null });
     event.waitUntil(
       (async () => {
+        await autoUpgradeCoordinator.cancel('manual-upgrade');
         shouldClaimClientsOnActivate = true;
         await updateVersionState({
-          committedVersion: APP_VERSION,
-          pendingVersion: null,
-          pendingReadyAt: null,
+          pendingVersion: APP_VERSION,
+          pendingCommitId: 'legacy-manual',
           upgradeState: 'committing',
         });
         await postVersionState(client);
@@ -3325,11 +3466,11 @@ sw.addEventListener('message', (event: ExtendableMessageEvent) => {
     // 主线程强制升级
     event.waitUntil(
       (async () => {
+        await autoUpgradeCoordinator.cancel('manual-upgrade');
         shouldClaimClientsOnActivate = true;
         await updateVersionState({
-          committedVersion: APP_VERSION,
-          pendingVersion: null,
-          pendingReadyAt: null,
+          pendingVersion: APP_VERSION,
+          pendingCommitId: 'legacy-manual',
           upgradeState: 'committing',
         });
         await postVersionState(event.source as Client | null);

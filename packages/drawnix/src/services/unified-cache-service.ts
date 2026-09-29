@@ -1,3 +1,4 @@
+import { autoUpdateSafety } from './auto-update-safety';
 /**
  * Unified Cache Service
  *
@@ -291,6 +292,10 @@ class UnifiedCacheService {
   private mediaWriteQueues = new Map<string, Promise<void>>();
 
   constructor() {
+    autoUpdateSafety.registerParticipant('media-cache', {
+      getBlockReason: () => this.activeCacheWrites > 0 ? '正在保存媒体文件' : null,
+      flush: () => this.waitForActiveCacheWrites(),
+    });
     if (typeof indexedDB !== 'undefined') {
       // 初始化数据库
       this.initDB()
@@ -312,6 +317,7 @@ class UnifiedCacheService {
   // ==================== IndexedDB 操作 ====================
 
   private beginCacheWrite(): boolean {
+    autoUpdateSafety.assertCanStartWork({ allowDuringDrain: true });
     if (this.cacheWritesPaused) {
       return false;
     }
@@ -647,6 +653,9 @@ class UnifiedCacheService {
    * 更新最后使用时间
    */
   private async touch(url: string): Promise<void> {
+    // Reading an already cached attachment remains safe during the final save.
+    // Its optional access timestamp must not attempt to open a new write then.
+    if (autoUpdateSafety.isLocked()) return;
     if (!this.beginCacheWrite()) {
       return;
     }

@@ -3,6 +3,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -10,6 +11,11 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { EnhancedChatInput } from '../EnhancedChatInput';
+import { autoUpdateSafety } from '../../../services/auto-update-safety';
+import {
+  readAutoUpdateDraft,
+  saveAutoUpdateDraft,
+} from '../../../services/auto-update-draft-storage';
 
 const chatDrawerControlMock = vi.hoisted(() => ({
   submitGenerationFromDrawer: vi.fn(async () => true),
@@ -94,11 +100,17 @@ vi.mock('../../icons', () => ({
 }));
 
 beforeEach(() => {
+  autoUpdateSafety.release('chat-draft-test');
+  autoUpdateSafety.setDraining(false);
+  autoUpdateSafety.setAppReady(true);
+  sessionStorage.clear();
   generationControlsMock.controls.generationType = 'agent';
   submitGenerationFromDrawerMock.mockClear();
 });
 
 afterEach(() => {
+  autoUpdateSafety.release('chat-draft-test');
+  autoUpdateSafety.setAppReady(false);
   chatDrawerControlMock.submitGenerationFromDrawer.mockClear();
   chatDrawerControlMock.getActiveSessionId.mockClear();
   generationControlsMock.controls.generationType = 'agent';
@@ -303,5 +315,165 @@ describe('EnhancedChatInput implicit workflow references', () => {
     await waitFor(() => {
       expect(onImplicitReferenceConsumed).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('EnhancedChatInput automatic update persistence', () => {
+  it('restores this tab’s complete draft instead of another tab’s shared session value', async () => {
+    const draft = {
+      draftInput: '本标签页尚未发送的内容',
+      draftUploadedContent: [
+        { type: 'image', name: '图', url: '/asset-library/image' },
+      ],
+    };
+    saveAutoUpdateDraft('chat:session-1', draft);
+    render(
+      <EnhancedChatInput
+        activeSessionId="session-1"
+        selectedContent={[]}
+        draftInput="另一标签页的草稿"
+        onDraftChange={async () => undefined}
+        onSend={() => undefined}
+      />
+    );
+    await waitFor(() =>
+      expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+        draft.draftInput
+      )
+    );
+    expect(
+      readAutoUpdateDraft('chat:session-1', (value): value is typeof draft =>
+        Boolean(value)
+      )
+    ).toBeNull();
+  });
+
+  it('flushes the latest input before the debounce and waits for full attachment persistence', async () => {
+    let finishWrite!: () => void;
+    const persisted = new Promise<void>((resolve) => {
+      finishWrite = resolve;
+    });
+    const attachment = {
+      type: 'image' as const,
+      name: '参考图',
+      url: `data:image/png;base64,${'a'.repeat(4096)}`,
+      maskImage: '/asset-library/mask',
+    };
+    const onDraftChange = vi.fn((_session, _draft, options) =>
+      options?.flush ? persisted : Promise.resolve()
+    );
+    const { rerender } = render(
+      <EnhancedChatInput
+        activeSessionId="session-1"
+        selectedContent={[]}
+        draftInput="原始草稿"
+        draftUploadedContent={[attachment]}
+        onDraftChange={onDraftChange}
+        onSend={() => undefined}
+      />
+    );
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: '最后输入，尚未触发 debounce' },
+    });
+    let result: unknown;
+    const preparing = autoUpdateSafety
+      .prepare('chat-draft-test')
+      .then((value) => {
+        result = value;
+      });
+    await waitFor(() =>
+      expect(onDraftChange).toHaveBeenCalledWith(
+        'session-1',
+        {
+          draftInput: '最后输入，尚未触发 debounce',
+          draftUploadedContent: [attachment],
+        },
+        { flush: true }
+      )
+    );
+    expect(result).toBeUndefined();
+    await act(async () => {
+      finishWrite();
+      await preparing;
+    });
+    expect(result).toEqual({ ready: true });
+    expect(
+      readAutoUpdateDraft('chat:session-1', (value): value is object =>
+        Boolean(value)
+      )
+    ).toBeTruthy();
+    autoUpdateSafety.release('chat-draft-test');
+    expect(
+      readAutoUpdateDraft('chat:session-1', (value): value is object =>
+        Boolean(value)
+      )
+    ).toBeNull();
+    rerender(
+      <EnhancedChatInput
+        activeSessionId="session-1"
+        selectedContent={[]}
+        draftInput="较旧的持久化值"
+        draftUploadedContent={[]}
+        onDraftChange={onDraftChange}
+        onSend={() => undefined}
+      />
+    );
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+      '最后输入，尚未触发 debounce'
+    );
+  });
+
+  it('defers refresh when the draft save fails', async () => {
+    const onDraftChange = vi.fn(async () => {
+      throw new Error('storage full');
+    });
+    render(
+      <EnhancedChatInput
+        activeSessionId="session-1"
+        selectedContent={[]}
+        draftInput="不能丢失"
+        onDraftChange={onDraftChange}
+        onSend={() => undefined}
+      />
+    );
+    const result = await autoUpdateSafety.prepare('chat-draft-test');
+    expect(result).toEqual({ ready: false, reason: 'storage full' });
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+      '不能丢失'
+    );
+  });
+
+  it('vetoes dead blob attachments and unsaved new-session drafts', async () => {
+    const onDraftChange = vi.fn(async () => undefined);
+    const { unmount } = render(
+      <EnhancedChatInput
+        activeSessionId="session-1"
+        selectedContent={[]}
+        draftUploadedContent={[
+          {
+            type: 'image',
+            name: '待保存附件',
+            url: 'blob:https://example.test/photo',
+          },
+        ]}
+        onDraftChange={onDraftChange}
+        onSend={() => undefined}
+      />
+    );
+    expect((await autoUpdateSafety.prepare('chat-draft-test')).ready).toBe(
+      false
+    );
+    expect(onDraftChange).not.toHaveBeenCalled();
+    unmount();
+    render(
+      <EnhancedChatInput
+        selectedContent={[]}
+        draftInput="未关联会话"
+        onSend={() => undefined}
+      />
+    );
+    expect((await autoUpdateSafety.prepare('chat-draft-test')).ready).toBe(
+      false
+    );
   });
 });

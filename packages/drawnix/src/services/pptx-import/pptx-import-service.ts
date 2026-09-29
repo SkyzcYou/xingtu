@@ -1,3 +1,4 @@
+import { autoUpdateSafety } from '../auto-update-safety';
 import {
   PPTX_IMPORT_RENDERER,
   PPTX_IMPORT_RENDERER_VERSION,
@@ -175,15 +176,22 @@ function raceWithAbort<T>(
   });
 }
 
-function enqueueImport<T>(
+async function enqueueImport<T>(
   run: () => Promise<T>,
   options: Pick<PptxImportOptions, 'signal' | 'onProgress'>
 ): Promise<T> {
+  const finishUpdateOperation = autoUpdateSafety.beginOperation('正在导入 PPTX');
   queuedImports += 1;
-  reportProgress(options.onProgress, {
-    phase: 'queued',
-    queuePosition: queuedImports,
-  });
+  try {
+    reportProgress(options.onProgress, {
+      phase: 'queued',
+      queuePosition: queuedImports,
+    });
+  } catch (error) {
+    queuedImports = Math.max(0, queuedImports - 1);
+    finishUpdateOperation();
+    throw error;
+  }
 
   const execution = queueTail.then(async () => {
     queuedImports = Math.max(0, queuedImports - 1);
@@ -199,6 +207,9 @@ function enqueueImport<T>(
     () => undefined,
     () => undefined
   );
+  // Cancellation may reject the caller before its queued worker exits. Keep
+  // the update fence until the actual queued operation has finished cleaning up.
+  void execution.then(finishUpdateOperation, finishUpdateOperation);
   return raceWithAbort(execution, options.signal);
 }
 

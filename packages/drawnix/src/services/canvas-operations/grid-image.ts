@@ -20,6 +20,7 @@ import { getPreferredModels } from '../../utils/runtime-model-discovery';
  * 宫格图参数
  */
 export interface GridImageParams {
+  workflowId?: string;
   /** 主题描述 */
   theme: string;
   /** 网格行数（默认 3） */
@@ -117,6 +118,7 @@ export function createGridImageTask(
       task = taskQueueService.createTask(
         {
           prompt,
+          workflowId: params.workflowId,
           size: imageSize,
           model: actualModel,
           uploadedImages:

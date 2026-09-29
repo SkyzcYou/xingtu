@@ -1,3 +1,4 @@
+import { runWithUpdateProtection } from '../auto-update-operation';
 /**
  * Backup Export Service
  * 导出数据到 ZIP 文件，支持自动分片
@@ -85,7 +86,11 @@ class BackupExportService {
   /**
    * 导出数据到 ZIP 文件（内部自动下载分片）
    */
-  async exportToZip(
+  async exportToZip(options: BackupOptions, onProgress?: ProgressCallback): Promise<ExportResult> {
+    return runWithUpdateProtection('正在导出备份', () => this.exportToZipInternal(options, onProgress));
+  }
+
+  private async exportToZipInternal(
     options: BackupOptions,
     onProgress?: ProgressCallback
   ): Promise<ExportResult> {

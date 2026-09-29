@@ -542,6 +542,43 @@ describe('task-queue-service image edit retry persistence', () => {
     vi.unstubAllGlobals();
   });
 
+  it('blocks new submissions and retries while admitted workflows may finish', async () => {
+    const { taskQueueService, mocks } = await setupTaskQueueServiceHarness([TaskStatus.COMPLETED]);
+    const { autoUpdateSafety } = await import('../auto-update-safety');
+    const { setWorkflowAdmissionResolver } = await import('../generation-admission');
+    autoUpdateSafety.setDraining(true);
+    setWorkflowAdmissionResolver((id) => id === 'already-running');
+    const params = { prompt: 'Finish work', model: 'gpt-image-2', size: '1x1' };
+    try {
+      expect(() => taskQueueService.createTask(params, TaskType.IMAGE)).toThrow('自动更新');
+      expect(() => taskQueueService.retryTask('old-task')).toThrow('自动更新');
+      expect(mocks.generateImage).not.toHaveBeenCalled();
+      expect(() => taskQueueService.createTask({ ...params, workflowId: 'already-running' }, TaskType.IMAGE)).not.toThrow();
+      await flushAsyncWork();
+      expect(mocks.generateImage).toHaveBeenCalledTimes(1);
+    } finally {
+      autoUpdateSafety.setDraining(false);
+      setWorkflowAdmissionResolver(() => false);
+    }
+  });
+
+  it('retries a failed result save before agreeing to an automatic update', async () => {
+    const { taskQueueService, mocks, storedTasks } = await setupTaskQueueServiceHarness([TaskStatus.COMPLETED]);
+    const { autoUpdateSafety } = await import('../auto-update-safety');
+    autoUpdateSafety.setAppReady(true);
+    mocks.saveTask.mockRejectedValueOnce(new Error('temporary storage failure'));
+    const finished: Task = { id: 'finished-before-update', type: TaskType.IMAGE, status: TaskStatus.COMPLETED, params: { prompt: 'Already finished', model: 'gpt-image-2' }, createdAt: 1, updatedAt: 2 };
+    taskQueueService.trackExternalTask(finished);
+    await flushAsyncWork();
+    try {
+      expect(await autoUpdateSafety.prepare('saved-task-update')).toEqual({ ready: true });
+      expect(mocks.saveTask).toHaveBeenCalledTimes(2);
+      expect(storedTasks.get(finished.id)?.status).toBe(TaskStatus.COMPLETED);
+    } finally {
+      autoUpdateSafety.release('saved-task-update');
+    }
+  });
+
   it('reports only a live in-page execution as active', async () => {
     const { taskQueueService, mocks } = await setupTaskQueueServiceHarness([
       TaskStatus.COMPLETED,

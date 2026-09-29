@@ -12,6 +12,8 @@
  */
 
 import { Subject, Observable, Subscription } from 'rxjs';
+import { autoUpdateSafety } from './auto-update-safety';
+import { setWorkflowAdmissionResolver } from './generation-admission';
 import { filter } from 'rxjs/operators';
 import type { ParsedGenerationParams } from '../utils/ai-input-parser';
 import { swCapabilitiesHandler } from './sw-capabilities';
@@ -188,6 +190,23 @@ class WorkflowSubmissionService {
   private events$ = new Subject<WorkflowEvent>();
   private workflows: Map<string, WorkflowDefinition> = new Map();
   private initialized = false;
+  private workflowRecoveryFailed = false;
+
+  constructor() {
+    setWorkflowAdmissionResolver((workflowId) => {
+      const workflow = this.workflows.get(workflowId);
+      return workflow?.status === 'pending' || workflow?.status === 'running';
+    });
+    autoUpdateSafety.registerParticipant('workflows', {
+      getBlockReason: () =>
+        this.workflowRecoveryFailed
+          ? '工作流记录尚未成功恢复，暂不自动更新'
+          : this.getRunningWorkflows().length > 0
+          ? '正在完成工作流'
+          : null,
+      flush: () => workflowStorageWriter.flushForUpdate(),
+    });
+  }
 
   /**
    * Initialize the service (call once on app startup)
@@ -212,12 +231,19 @@ class WorkflowSubmissionService {
    * This includes failed workflows (e.g., interrupted by SW restart during ai_analyze)
    */
   async recoverWorkflows(): Promise<WorkflowDefinition[]> {
+    const finishRecovery = autoUpdateSafety.beginOperation(
+      '正在恢复工作流记录',
+      { allowDuringDrain: true }
+    );
     try {
       // 优先直接从 IndexedDB 读取，避免 postMessage 通信
       let workflows: WorkflowDefinition[] = [];
 
       if (await workflowStorageReader.isAvailable()) {
         workflows = await workflowStorageReader.getAllWorkflows();
+        this.workflowRecoveryFailed = false;
+      } else {
+        throw new Error('工作流存储不可用');
       }
 
       if (workflows.length === 0) {
@@ -255,11 +281,14 @@ class WorkflowSubmissionService {
         (w) => w.status === 'running' || w.status === 'pending'
       );
     } catch (error) {
+      this.workflowRecoveryFailed = true;
       console.warn(
         '[WorkflowSubmissionService] Failed to recover workflows:',
         error
       );
       return [];
+    } finally {
+      finishRecovery();
     }
   }
 
@@ -390,6 +419,19 @@ class WorkflowSubmissionService {
    * 用于页面刷新后恢复有 pending 步骤的工作流
    */
   async resumeWorkflowWithFallback(workflowId: string): Promise<boolean> {
+    const finishRecovery = autoUpdateSafety.beginOperation('正在恢复工作流', {
+      allowDuringDrain: true,
+    });
+    try {
+      return await this.resumeWorkflowWithFallbackInternal(workflowId);
+    } finally {
+      finishRecovery();
+    }
+  }
+
+  private async resumeWorkflowWithFallbackInternal(
+    workflowId: string
+  ): Promise<boolean> {
     // 确保降级引擎已初始化
     if (!this.fallbackEngine) {
       this.fallbackEngine = new MainThreadWorkflowEngine({
@@ -418,8 +460,11 @@ class WorkflowSubmissionService {
     // 从 IndexedDB 恢复
     await this.fallbackEngine.resumeWorkflow(workflowId);
 
-    // 检查是否成功恢复
-    return this.fallbackEngine.getWorkflow(workflowId) !== undefined;
+    // Hydrate the safety cache too: analysis-only steps do not create task rows.
+    const resumed = this.fallbackEngine.getWorkflow(workflowId);
+    if (resumed)
+      this.workflows.set(workflowId, resumed as unknown as WorkflowDefinition);
+    return resumed !== undefined;
   }
 
   /**
@@ -513,6 +558,7 @@ class WorkflowSubmissionService {
    * 始终使用主线程工作流引擎（不再依赖 SW）
    */
   async submit(workflow: WorkflowDefinition): Promise<void> {
+    autoUpdateSafety.assertCanStartWork();
     // Store locally
     this.workflows.set(workflow.id, workflow);
 
@@ -625,13 +671,20 @@ class WorkflowSubmissionService {
   private handleFallbackEngineEvent(event: EngineWorkflowEvent): void {
     // 转换引擎事件为服务事件格式并广播
     switch (event.type) {
-      case 'status':
+      case 'status': {
+        // The safety boundary relies on this cache, including cancellation.
+        const current = this.workflows.get(event.workflowId);
+        if (current) {
+          current.status = event.status;
+          current.updatedAt = Date.now();
+        }
         this.events$.next({
           type: 'status',
           workflowId: event.workflowId,
           status: event.status,
         });
         break;
+      }
       case 'step':
         this.events$.next({
           type: 'step',
@@ -718,6 +771,7 @@ class WorkflowSubmissionService {
     this.workflows.clear();
     workflowStorageReader.invalidateCache();
     await workflowStorageWriter.clearAllWorkflows();
+    this.workflowRecoveryFailed = false;
   }
 
   /**

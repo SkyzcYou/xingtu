@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
 import {
   Dialog,
   Form,
@@ -67,6 +68,8 @@ export const CustomToolDialog: React.FC<CustomToolDialogProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const updateGuardId = React.useId();
+  useAutoUpdateGuard(`custom-tool-dialog:${updateGuardId}`, visible ? '自定义工具配置尚未关闭' : null);
   // 表单状态
   const [formData, setFormData] = useState<Partial<ToolDefinition>>(DEFAULT_FORM_DATA);
   const [loading, setLoading] = useState(false);
