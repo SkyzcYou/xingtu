@@ -1,6 +1,19 @@
 {
   "versions": [
     {
+      "version": "6.7.34",
+      "date": "2026-09-30",
+      "type": "patch",
+      "highlights": "暂时隐藏左侧工具栏的工作流入口，保留路径访问",
+      "changes": {
+        "features": [],
+        "fixes": [],
+        "improvements": [
+          "工作流模式仍可通过 /workflow 路径进入"
+        ]
+      }
+    },
+    {
       "version": "6.7.33",
       "date": "2026-09-30",
       "type": "patch",

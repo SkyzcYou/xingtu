@@ -1,9 +1,8 @@
 {
-  "version": "6.7.33",
-  "buildTime": "2026-09-30T07:52:49Z",
+  "version": "6.7.34",
+  "buildTime": "2026-09-30T09:14:08Z",
   "gitCommit": "unknown",
   "changelog": [
-    "集成嵌入式工作流与生成任务恢复",
-    "修复 Tuzi 分组持久化、供应商可见性、Suno 结果及 Seedance 播放"
+    "暂时隐藏左侧工具栏的工作流入口，保留 /workflow 路径访问"
   ]
 }

@@ -13,7 +13,6 @@ import { Island } from '../../island';
 import { Popover, PopoverContent, PopoverTrigger } from '../../popover/popover';
 import { useState } from 'react';
 import { CleanBoard, OpenFile, SaveAsImage, SaveToFile, Settings, BackupRestore, CloudSync, QuickCommands, VersionInfo, CleanInvalidLinks, CheckUpdate } from './app-menu-items';
-import { Workflow as WorkflowIcon } from 'lucide-react';
 import { LanguageSwitcherMenu } from './language-switcher-menu';
 import Menu from '../../menu/menu';
 import MenuSeparator from '../../menu/menu-separator';
@@ -34,7 +33,6 @@ export const AppToolbar: React.FC<AppToolbarProps> = ({
   iconMode = false,
   onOpenBackupRestore,
   onOpenCloudSync,
-  onOpenWorkflowMode,
 }) => {
   const board = useBoard();
   const { t } = useI18n();
@@ -54,22 +52,6 @@ export const AppToolbar: React.FC<AppToolbarProps> = ({
 
   const content = (
     <Stack.Row gap={1}>
-      {onOpenWorkflowMode && (
-        <ToolButton
-          type="icon"
-          visible={true}
-          icon={<WorkflowIcon size={18} />}
-          tooltip={t('menu.workflowMode')}
-          tooltipPlacement={embedded ? 'right' : 'bottom'}
-          aria-label={t('menu.workflowMode')}
-          data-testid="workflow-mode-button"
-          data-track="toolbar_click_workflow_mode"
-          onClick={() => {
-            setAppMenuOpen(false);
-            onOpenWorkflowMode();
-          }}
-        />
-      )}
       <Popover
         key={0}
         sideOffset={12}
