@@ -639,7 +639,7 @@ export const gptImageAdapter: ImageModelAdapter = {
     }
 
     if (!response.ok) {
-      throw new Error(await readErrorMessage(response));
+      throw Object.assign(new Error(await readErrorMessage(response)), { httpStatus: response.status });
     }
 
     const result = await readProviderResponseJson(response);
