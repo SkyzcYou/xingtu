@@ -1,6 +1,21 @@
 {
   "versions": [
     {
+      "version": "6.7.33",
+      "date": "2026-09-30",
+      "type": "patch",
+      "highlights": "同步上游更新并保留本地特色实现",
+      "changes": {
+        "features": [
+          "同步上游工作流运行时与 Tuzi 分组持久化更新"
+        ],
+        "fixes": [
+          "修复 Suno 结果轮询及视频播放相关问题"
+        ],
+        "improvements": []
+      }
+    },
+    {
       "version": "6.7.32",
       "date": "2026-09-30",
       "type": "patch",
