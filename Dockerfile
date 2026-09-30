@@ -37,6 +37,9 @@ FROM nginx:1.27-alpine AS runner
 
 COPY --from=builder /app/dist/apps/web /usr/share/nginx/html
 
+# Serve embedded workflow deep links through the main application shell.
+RUN printf 'server { listen 80; server_name _; root /usr/share/nginx/html; index index.html; location / { try_files $uri $uri/ =404; } location /workflow { try_files $uri /index.html; } }\n' > /etc/nginx/conf.d/default.conf
+
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]

@@ -752,33 +752,34 @@ export function getEffectiveVideoDefaultParams(
 export function getEffectiveVideoCompatibleParams(
   modelId: string,
   modelRef?: ModelRef | string | null,
-  params?: Record<string, unknown> | null
+  params?: Record<string, unknown> | null,
+  localBinding?: ProviderModelBinding | null
 ): ParamConfig[] {
   let compatibleParams = getCompatibleParams(modelId);
-  const plan = resolveInvocationPlanFromRoute('video', modelRef || modelId);
+  const binding = localBinding !== undefined ? localBinding : resolveInvocationPlanFromRoute('video', modelRef || modelId)?.binding || null;
   const metadata = getResolvedVideoBindingMetadata(
     modelId,
-    plan?.binding || null,
+    binding,
     params
   );
   const selectedKlingAction = resolveSelectedKlingAction(params);
-  const isXingliuVideo = isXingliuVideoBinding(plan?.binding || null, metadata);
+  const isXingliuVideo = isXingliuVideoBinding(binding, metadata);
   if (isXingliuVideo && /seedance/i.test(modelId)) {
     compatibleParams = ALL_PARAMS.filter((param) =>
       param.compatibleTags?.includes('seedance')
     );
   }
   const xingliuSeedanceCapability = resolveXingliuSeedanceCapability(modelId);
-  const effectiveConfig = getEffectiveVideoModelConfigForSelection(
+  const effectiveConfig = getEffectiveVideoModelConfig(
     modelId,
-    modelRef,
+    binding,
     params
   );
 
   return compatibleParams
     .filter((param) => {
       if (
-        plan?.binding?.protocol === 'kling.video' &&
+        binding?.protocol === 'kling.video' &&
         selectedKlingAction === 'image2video' &&
         KLING_CAMERA_PARAM_IDS.has(param.id)
       ) {
@@ -798,7 +799,7 @@ export function getEffectiveVideoCompatibleParams(
     })
     .map((param) => {
       if (
-        plan?.binding?.protocol === 'kling.video' &&
+        binding?.protocol === 'kling.video' &&
         metadata?.versionField === param.id &&
         param.valueType === 'enum'
       ) {
@@ -1076,6 +1077,13 @@ export function resolveVideoDownloadPath(
   return resolveTemplatePath(template, videoId);
 }
 
+export class VideoContentHttpError extends Error {
+  constructor(public readonly status: number, detail: string) {
+    super(`视频内容下载失败: ${status}${detail ? ` - ${detail}` : ''}`);
+    this.name = 'VideoContentHttpError';
+  }
+}
+
 export async function downloadVideoContentToLocalUrl(params: {
   videoId: string;
   provider: ResolvedProviderContext;
@@ -1084,6 +1092,7 @@ export async function downloadVideoContentToLocalUrl(params: {
   cacheKey?: string;
   resultVisibility?: 'user' | 'internal';
   signal?: AbortSignal;
+  fetcher?: typeof fetch;
   fallbackToObjectUrl?: boolean;
 }): Promise<string> {
   const response = await providerTransport.send(params.provider, {
@@ -1098,15 +1107,12 @@ export async function downloadVideoContentToLocalUrl(params: {
       Accept: 'video/*,application/octet-stream',
     },
     signal: params.signal,
+    fetcher: params.fetcher,
   });
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
-    throw new Error(
-      `视频内容下载失败: ${response.status}${
-        errorText ? ` - ${errorText}` : ''
-      }`
-    );
+    throw new VideoContentHttpError(response.status, errorText);
   }
 
   const blob = await response.blob();

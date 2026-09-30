@@ -1,9 +1,9 @@
 {
   "version": "6.7.33",
-  "buildTime": "2026-09-30T03:16:30Z",
+  "buildTime": "2026-09-30T07:52:49Z",
   "gitCommit": "unknown",
   "changelog": [
-    "通过星图同源 Cloudflare Worker 访问 Tuzi 模型发现、图片提交与结果恢复",
-    "限制固定 Tuzi 上游并完善流式响应、CORS 与敏感请求头处理"
+    "集成嵌入式工作流与生成任务恢复",
+    "修复 Tuzi 分组持久化、供应商可见性、Suno 结果及 Seedance 播放"
   ]
 }

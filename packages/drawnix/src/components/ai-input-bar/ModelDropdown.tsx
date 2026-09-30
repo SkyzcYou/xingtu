@@ -244,7 +244,7 @@ export interface ModelDropdownProps {
   /** 选择模型回调 */
   onSelect: (modelId: string, modelRef?: ModelRef | null) => void;
   /** 选择完整模型配置回调 */
-  onSelectModel?: (model: ModelConfig) => void;
+  onSelectModel?: (model: ModelConfig, modelRef?: ModelRef | null) => void;
   /** 语言 */
   language?: 'zh' | 'en';
   /** 模型列表（可选，默认为图片模型） */
@@ -861,11 +861,11 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
           reusedGroup || profile.pricingGroup || ''
         );
       }
-      onSelect(
-        model.id,
-        createModelRef(model.sourceProfileId || null, model.id)
+      const selectedRef = createModelRef(
+        model.sourceProfileId || LEGACY_DEFAULT_PROVIDER_PROFILE_ID, model.id
       );
-      onSelectModel?.(model);
+      onSelect(model.id, selectedRef);
+      onSelectModel?.(model, selectedRef);
       setIsOpen(false);
       if (variant === 'form') {
         setSearchQuery(model.label || model.id);
@@ -1008,7 +1008,9 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
         }
         if (variant === 'form' && allowCustomValue && searchQuery.trim()) {
           // 如果是表单变体且有输入，但没有匹配的模型，则使用输入的内容
-          onSelect(searchQuery.trim());
+          onSelect(searchQuery.trim(), createModelRef(
+            activeProviderId || LEGACY_DEFAULT_PROVIDER_PROFILE_ID, searchQuery.trim()
+          ));
           setIsOpen(false);
           return true;
         }
@@ -1022,6 +1024,7 @@ export const ModelDropdown: React.FC<ModelDropdownProps> = ({
       handleSelect,
       variant,
       allowCustomValue,
+      activeProviderId,
       currentModel,
       onSelect,
       searchQuery,

@@ -20,12 +20,14 @@ import type {
 import { Task, TaskStatus, type TaskResult } from '../../types/task.types';
 import type { CacheWarning } from '../../types/cache-warning.types';
 import { taskStorageWriter } from './task-storage-writer';
+import { SubmissionPersistenceError } from '../submission-persistence';
 import { taskStorageReader } from '../task-storage-reader';
 import {
   resolveInvocationRoute,
   type ModelRef,
 } from '../../utils/settings-manager';
 import { getDefaultImageModel } from '../../constants/model-config';
+import { extractCompletionText, fetchTextCompletion, safeTextError, textCompletionPath, textRequestBody } from './text-response';
 import {
   providerTransport,
   readProviderResponseJson,
@@ -643,7 +645,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       await taskStorageWriter.failTask(
         taskId,
         {
-          code: 'IMAGE_GENERATION_ERROR',
+          code: error.code || 'IMAGE_GENERATION_ERROR',
           message: errorMessage,
         },
         requestId,
@@ -810,6 +812,8 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       const duration = Date.now() - logStartTime;
       const errorMessage = error.message || 'Async image generation failed';
 
+      if (error instanceof SubmissionPersistenceError) throw error;
+
       if (options?.isCurrentAttempt?.() === false) {
         failLLMApiLog(logId, { duration, errorMessage });
         throw error;
@@ -832,7 +836,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       await taskStorageWriter.failTask(
         taskId,
         {
-          code: 'ASYNC_IMAGE_GENERATION_ERROR',
+          code: error.code || 'ASYNC_IMAGE_GENERATION_ERROR',
           message: errorMessage,
         },
         submissionRequestId,
@@ -1306,7 +1310,11 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       }
       assertCurrentExecutionAttempt(options);
     }
+    const history = params.messages || [];
+    const lastMessage = history[history.length - 1];
+    const contextMessages = lastMessage?.role === 'user' && lastMessage.content.trim() === normalizedPrompt ? history.slice(0, -1) : history;
     const messages: UnifiedGeminiMessage[] = [
+      ...contextMessages.map((message) => ({ role: message.role, content: [{ type: 'text' as const, text: message.content }] })),
       {
         role: 'user',
         content: [
@@ -1322,8 +1330,9 @@ export class FallbackMediaExecutor implements IMediaExecutor {
       },
     ];
 
+    const textPath = textCompletionPath(config.textConfig.baseUrl, config.textConfig.binding?.submitPath, messages.some((message) => message.content.some((part) => part.type !== 'text')));
     const logId = startLLMApiLog({
-      endpoint: '/chat/completions',
+      endpoint: textPath,
       model: modelName,
       taskType: 'chat',
       prompt,
@@ -1473,13 +1482,14 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         : await providerTransport
             .send(buildProviderContext(config.textConfig), {
               path:
-                config.textConfig.binding?.submitPath || '/chat/completions',
+                textPath,
               baseUrlStrategy: config.textConfig.binding?.baseUrlStrategy,
               method: 'POST',
+              fetcher: fetchTextCompletion,
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify({
+              body: JSON.stringify(textRequestBody(textPath, {
                 model: modelName,
                 messages,
                 stream: false,
@@ -1495,7 +1505,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
                 ...(typeof extraParams?.response_format === 'object'
                   ? { response_format: extraParams.response_format }
                   : {}),
-              }),
+              })),
               signal: options?.signal,
             })
             .then(async (response) => {
@@ -1514,9 +1524,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
             });
       assertCurrentExecutionAttempt(options);
 
-      const fullResponse = normalizeLlmTextContent(
-        data.choices?.[0]?.message?.content
-      );
+      const fullResponse = extractCompletionText(data);
       options?.onProgress?.({ progress: 100 });
       assertCurrentExecutionAttempt(options);
       if (taskId) {
@@ -1565,7 +1573,7 @@ export class FallbackMediaExecutor implements IMediaExecutor {
         duration: Date.now() - startTime,
         errorMessage: error?.message || 'Text generation failed',
       });
-      throw error;
+      throw safeTextError(error, [config.textConfig.apiKey, ...Object.values(config.textConfig.extraHeaders || {})]);
     }
   }
 
