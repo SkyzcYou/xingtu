@@ -1,6 +1,21 @@
 {
   "versions": [
     {
+      "version": "6.7.32",
+      "date": "2026-09-30",
+      "type": "patch",
+      "highlights": "通过星图同源 Cloudflare Worker 访问 Tuzi 模型发现、图片提交与结果恢复",
+      "changes": {
+        "features": [
+          "通过星图同源 Cloudflare Worker 访问 Tuzi 模型发现、图片提交与结果恢复"
+        ],
+        "fixes": [
+          "限制固定 Tuzi 上游并完善流式响应、CORS 与敏感请求头处理"
+        ],
+        "improvements": []
+      }
+    },
+    {
       "version": "6.7.31",
       "date": "2026-09-29",
       "type": "patch",
