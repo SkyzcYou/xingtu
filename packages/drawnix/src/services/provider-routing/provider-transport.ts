@@ -14,6 +14,7 @@ import {
   loadTuziApiEndpointBaseUrls,
   normalizeTuziApiEndpointUrl,
 } from './tuzi-api-endpoints';
+import { resolveTuziProxyRequestUrl } from './tuzi-proxy';
 
 function getBaseUrlPathSuffix(baseUrl: string): string {
   try {
@@ -700,9 +701,14 @@ export class ProviderTransport {
     )
       ? context
       : { ...context, apiKey: '', extraHeaders: undefined };
-    const url = `${requestUrl}${buildQueryString(
-      applyAuthQueryWithCredential(credentialContext, request.query || {}, shouldInheritProviderCredentials(context, requestUrl) ? credential : '')
+    const authenticatedUrl = `${requestUrl}${buildQueryString(
+      applyAuthQueryWithCredential(
+        credentialContext,
+        request.query || {},
+        shouldInheritProviderCredentials(context, requestUrl) ? credential : ''
+      )
     )}`;
+    const url = resolveTuziProxyRequestUrl(authenticatedUrl);
     const mergedHeaders = mergeHeaders(
       credentialContext.extraHeaders,
       request.headers

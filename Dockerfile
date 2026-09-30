@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -7,7 +7,7 @@ ENV NODE_OPTIONS="--max-old-space-size=8192"
 ARG GITHUB_SHA=unknown
 ENV GITHUB_SHA=${GITHUB_SHA}
 
-COPY . /builder
+WORKDIR /app
 
 RUN corepack enable
 
@@ -16,6 +16,7 @@ COPY packages/drawnix/package.json ./packages/drawnix/package.json
 COPY packages/react-board/package.json ./packages/react-board/package.json
 COPY packages/react-text/package.json ./packages/react-text/package.json
 COPY packages/utils/package.json ./packages/utils/package.json
+COPY backend/web/package.json ./backend/web/package.json
 
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set registry https://registry.npmmirror.com/ \

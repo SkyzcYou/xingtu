@@ -129,6 +129,67 @@ describe('provider routing', () => {
     }
   });
 
+  it('uses the Xingtu same-origin proxy while preserving provider credentials', async () => {
+    vi.stubGlobal('location', {
+      hostname: 'xingtu.live',
+      origin: 'https://xingtu.live',
+    });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({}));
+
+    try {
+      await sendTuzi({ path: '/models', method: 'GET', fetcher });
+
+      expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+        'https://xingtu.live/__tuzi_proxy__/api/v1/models'
+      );
+      expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+        Authorization: 'Bearer secret',
+      });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('proxies all allowlisted Tuzi origins but leaves other providers direct', () => {
+    vi.stubGlobal('location', {
+      hostname: 'xingtu.live',
+      origin: 'https://xingtu.live',
+    });
+
+    try {
+      for (const [origin, alias] of [
+        ['https://api.tu-zi.com', 'api'],
+        ['https://apicdn.tu-zi.com', 'apicdn'],
+        ['https://apius.tu-zi.com', 'apius'],
+      ] as const) {
+        const prepared = providerTransport.prepareRequest(
+          { ...tuziTransportContext, baseUrl: `${origin}/v1` },
+          {
+            path: '/images/generations',
+            method: 'POST',
+            query: { model: 'gpt-image-2' },
+          }
+        );
+        expect(prepared.url).toBe(
+          `https://xingtu.live/__tuzi_proxy__/${alias}/v1/images/generations?model=gpt-image-2`
+        );
+        expect(prepared.headers.Authorization).toBe('Bearer secret');
+      }
+
+      const custom = providerTransport.prepareRequest(
+        {
+          ...tuziTransportContext,
+          baseUrl: 'https://images.example.com/v1',
+        },
+        { path: '/images/generations', method: 'POST' }
+      );
+      expect(custom.url).toBe('https://images.example.com/v1/images/generations');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('plans the highest-priority binding for the selected provider model', () => {
     const planner = new InvocationPlanner(
       createRepositories({

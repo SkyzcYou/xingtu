@@ -35,6 +35,7 @@ import {
 import { sortModelsByDisplayPriority } from './model-sort';
 import { isTuziEmbeddedMode } from '../services/tuzi-embedded-config';
 import { hasTuziSystemToken } from '../services/tuzi-token-auth';
+import { resolveTuziProxyRequestUrl } from '../services/provider-routing/tuzi-proxy';
 
 const LEGACY_CACHE_KEY = 'drawnix-runtime-model-discovery';
 const MODEL_DISCOVERY_TIMEOUT_MS = 15_000;
@@ -174,8 +175,7 @@ async function fetchRemoteModelList(
   baseUrl: string,
   apiKey: string,
   signal?: AbortSignal,
-  refreshOidcOnUnauthorized = false,
-  useTuziSessionProxy = true
+  refreshOidcOnUnauthorized = false
 ): Promise<string> {
   const controller =
     typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -187,9 +187,7 @@ async function fetchRemoteModelList(
   signal?.addEventListener('abort', abortFromCaller, { once: true });
   try {
     let response = await fetch(
-      useTuziSessionProxy
-        ? getModelListRequestUrl(baseUrl)
-        : `${baseUrl}/models`,
+      getModelListRequestUrl(baseUrl),
       {
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -202,9 +200,7 @@ async function fetchRemoteModelList(
       const token = await getFreshOidcAccessToken({ forceRefresh: true });
       if (token?.trim())
         response = await fetch(
-          useTuziSessionProxy
-            ? getModelListRequestUrl(baseUrl)
-            : `${baseUrl}/models`,
+          getModelListRequestUrl(baseUrl),
           {
             signal: controller?.signal || signal,
             headers: { Authorization: `Bearer ${token.trim()}` },
@@ -234,21 +230,8 @@ async function fetchRemoteModelList(
 }
 
 function getModelListRequestUrl(baseUrl: string): string {
-  if (typeof window === 'undefined') return `${baseUrl}/models`;
-  try {
-    const parsed = new URL(baseUrl);
-    if (
-      parsed.protocol === 'https:' &&
-      parsed.hostname.toLowerCase() === 'api.tu-zi.com'
-    ) {
-      const path = `${parsed.pathname.replace(/\/+$/, '')}/models`;
-      return new URL(
-        `/__opentu_tuzi_session__${path.startsWith('/') ? path : `/${path}`}`,
-        window.location.origin
-      ).toString();
-    }
-  } catch {}
-  return `${baseUrl}/models`;
+  const requestUrl = `${baseUrl.replace(/\/+$/, '')}/models`;
+  return resolveTuziProxyRequestUrl(requestUrl);
 }
 
 function buildModelDiscoveryBaseUrls(
@@ -286,8 +269,7 @@ async function fetchRemoteModelListWithFallback(
         baseUrls[index],
         apiKey,
         signal,
-        refreshOidcOnUnauthorized,
-        index === 0
+        refreshOidcOnUnauthorized
       );
     } catch (error) {
       if (error instanceof Error && !/failed to fetch/i.test(error.message)) {

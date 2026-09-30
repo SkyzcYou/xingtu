@@ -845,16 +845,14 @@ describe('runtime-model-discovery', () => {
     }
   });
 
-  it('浏览器请求 Tuzi 模型列表时走同源代理以保留鉴权错误响应', async () => {
-    vi.stubGlobal('window', {
-      location: {
-        origin: 'http://127.0.0.1:7200',
-        href: 'http://127.0.0.1:7200/',
-      },
+  it('浏览器请求 Tuzi 模型列表时走 Xingtu 同源代理以保留鉴权错误响应', async () => {
+    vi.stubGlobal('location', {
+      hostname: 'xingtu.live',
+      origin: 'https://xingtu.live',
     });
     const fetchMock = vi.fn(async (url: string) => {
       expect(url).toBe(
-        'http://127.0.0.1:7200/__opentu_tuzi_session__/v1/models'
+        'https://xingtu.live/__tuzi_proxy__/api/v1/models'
       );
       return {
         ok: false,

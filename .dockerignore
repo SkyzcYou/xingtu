@@ -16,3 +16,7 @@ test-results
 *.log
 .env
 .env.*
+
+backend/target
+backend/web/node_modules
+backend/web/dist

@@ -227,6 +227,45 @@ describe('image generation recovery service', () => {
     expect(headers.get('X-Request-Id')).toBe('submission-main');
   });
 
+  it('routes Xingtu recovery polling through the same-origin Tuzi proxy', async () => {
+    vi.stubGlobal('location', {
+      hostname: 'xingtu.live',
+      origin: 'https://xingtu.live',
+    });
+    const plan = createPlan();
+    plan.provider.baseUrl = 'https://apius.tu-zi.com/v1';
+    const fetcher = vi.fn(async () =>
+      Response.json({
+        status: 'succeeded',
+        request_id: 'submission-proxy',
+        data: [{ url: 'https://images.example.com/result-proxy.png' }],
+      })
+    );
+    const onSucceeded = vi.fn();
+    const service = new ImageGenerationRecoveryService({
+      fetcher,
+      resolveInvocationPlan: vi.fn(() => plan),
+      jitterRatio: 0,
+    });
+
+    service.start(
+      createTask('task-proxy', 'submission-proxy', Date.now(), plan),
+      {
+        onSucceeded,
+        onFailed: vi.fn(),
+      }
+    );
+    await vi.waitFor(() => expect(onSucceeded).toHaveBeenCalledTimes(1));
+
+    const [url, init] = fetcher.mock.calls[0] || [];
+    expect(String(url)).toBe(
+      'https://xingtu.live/__tuzi_proxy__/apius/v1/images/generations/result?request_id=submission-proxy'
+    );
+    const headers = new Headers(init?.headers);
+    expect(headers.get('Authorization')).toBe('Bearer secret-token');
+    expect(headers.get('X-Request-Id')).toBe('submission-proxy');
+  });
+
   it('re-resolves the same provider and model when a persisted binding ID no longer exists', async () => {
     const fetcher = vi.fn(async () =>
       Response.json({

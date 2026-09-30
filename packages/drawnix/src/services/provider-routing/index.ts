@@ -5,3 +5,5 @@ export * from './binding-inference';
 export * from './text-binding-capabilities';
 export * from './settings-repository';
 export * from './manual-http-template';
+export * from './tuzi-api-endpoints';
+export * from './tuzi-proxy';
