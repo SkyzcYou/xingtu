@@ -20,6 +20,19 @@
   bundle = true
   minify = true
 
+
+[[redirects]]
+  from = "/__opentu_tuzi_proxy__/api/*"
+  to = "https://api.tu-zi.com/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/__opentu_tuzi_session__/*"
+  to = "https://api.tu-zi.com/:splat"
+  status = 200
+  force = true
+
 # SPA路由重定向规则
 [[redirects]]
   from = "/*"

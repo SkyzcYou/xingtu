@@ -1,6 +1,23 @@
 {
   "versions": [
     {
+      "version": "6.7.35",
+      "date": "2026-10-03",
+      "type": "patch",
+      "highlights": "同步上游 Seedance 2.5 与 Tuzi 兼容性更新，保留本地特色功能",
+      "changes": {
+        "features": [
+          "完善 Seedance 2.5 分辨率、水印、输出格式、样片模式与优先级参数适配"
+        ],
+        "fixes": [
+          "修复旧版 Tuzi API 下手动服务商配置与账户令牌管理"
+        ],
+        "improvements": [
+          "保留星图主题、OIDC 帐号、同源代理与工作流路径访问"
+        ]
+      }
+    },
+    {
       "version": "6.7.34",
       "date": "2026-09-30",
       "type": "patch",

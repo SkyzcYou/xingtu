@@ -184,7 +184,8 @@ async function fetchRemoteModelList(
   baseUrl: string,
   apiKey: string,
   signal?: AbortSignal,
-  refreshOidcOnUnauthorized = false
+  refreshOidcOnUnauthorized = false,
+  accountManaged = false
 ): Promise<string> {
   const controller =
     typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -195,21 +196,17 @@ async function fetchRemoteModelList(
   if (signal?.aborted) abortFromCaller();
   signal?.addEventListener('abort', abortFromCaller, { once: true });
   try {
-    let response = await fetch(
-      getModelListRequestUrl(baseUrl),
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-        ...(controller ? { signal: controller.signal } : {}),
-      }
-    );
+    const requestUrl = getModelListRequestUrl(baseUrl, accountManaged);
+    let response = await fetch(requestUrl, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      ...(controller ? { signal: controller.signal } : {}),
+    });
 
     if (response.status === 401 && refreshOidcOnUnauthorized) {
       const token = await getFreshOidcAccessToken({ forceRefresh: true });
       if (token?.trim())
         response = await fetch(
-          getModelListRequestUrl(baseUrl),
+          getModelListRequestUrl(baseUrl, accountManaged),
           {
             signal: controller?.signal || signal,
             headers: { Authorization: `Bearer ${token.trim()}` },
@@ -238,9 +235,39 @@ async function fetchRemoteModelList(
   }
 }
 
-function getModelListRequestUrl(baseUrl: string): string {
-  const requestUrl = `${baseUrl.replace(/\/+$/, '')}/models`;
-  return resolveTuziProxyRequestUrl(requestUrl);
+function getModelListRequestUrl(
+  baseUrl: string,
+  accountManaged: boolean
+): string {
+  const directUrl = `${baseUrl.replace(/\/+$/, '')}/models`;
+  const proxyUrl = resolveTuziProxyRequestUrl(directUrl);
+  if (proxyUrl !== directUrl) return proxyUrl;
+
+  if (typeof window === 'undefined') {
+    return `${baseUrl}/models`;
+  }
+
+  try {
+    const parsed = new URL(baseUrl);
+    if (
+      parsed.protocol === 'https:' &&
+      parsed.hostname.toLowerCase() === 'api.tu-zi.com'
+    ) {
+      const path = `${parsed.pathname.replace(/\/+$/, '')}/models`;
+      return new URL(
+        `${
+          accountManaged
+            ? '/__opentu_tuzi_session__'
+            : '/__opentu_tuzi_proxy__/api'
+        }${path.startsWith('/') ? path : `/${path}`}`,
+        window.location.origin
+      ).toString();
+    }
+  } catch {
+    // Fall back to the direct URL for incomplete custom addresses.
+  }
+
+  return `${baseUrl}/models`;
 }
 
 function buildModelDiscoveryBaseUrls(
@@ -264,7 +291,8 @@ async function fetchRemoteModelListWithFallback(
   apiKey: string,
   fallbackBaseUrls: string[] = [],
   signal?: AbortSignal,
-  refreshOidcOnUnauthorized = false
+  refreshOidcOnUnauthorized = false,
+  accountManaged = false
 ): Promise<string> {
   const baseUrls = buildModelDiscoveryBaseUrls(
     primaryBaseUrl,
@@ -278,7 +306,8 @@ async function fetchRemoteModelListWithFallback(
         baseUrls[index],
         apiKey,
         signal,
-        refreshOidcOnUnauthorized
+        refreshOidcOnUnauthorized,
+        accountManaged
       );
     } catch (error) {
       if (error instanceof Error && !/failed to fetch/i.test(error.message)) {
@@ -1301,7 +1330,9 @@ function isProfileEnabled(profileId: string): boolean {
   ) {
     return profile.id.startsWith('tuzi-managed-')
       ? profile.enabled !== false && hasTuziSystemToken()
-      : isVerifiedTuziProvider(profile);
+      : profile.id.startsWith('tuzi-token-')
+      ? isVerifiedTuziProvider(profile)
+      : profile.enabled !== false;
   }
   return profile?.enabled !== false;
 }
@@ -2112,7 +2143,9 @@ class RuntimeModelDiscoveryStore {
       trimmedApiKey,
       fallbackBaseUrls,
       options.signal,
-      refreshOidcOnUnauthorized
+      refreshOidcOnUnauthorized,
+      profileId.startsWith('tuzi-managed-') ||
+        profileId.startsWith('tuzi-token-')
     );
 
     let parsed: unknown;

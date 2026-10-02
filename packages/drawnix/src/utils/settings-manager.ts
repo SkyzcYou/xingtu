@@ -13,7 +13,10 @@ import {
 import { CryptoUtils } from './crypto-utils';
 import { DRAWNIX_SETTINGS_KEY } from '../constants/storage';
 import { configIndexedDBWriter } from './config-indexeddb-writer';
-import { isTuziEmbeddedMode } from '../services/tuzi-embedded-config';
+import {
+  isTuziEmbeddedMode,
+  tuziEmbeddedConfig,
+} from '../services/tuzi-embedded-config';
 import { getTuziSystemUserId } from '../services/tuzi-token-auth';
 import { resolveTuziActiveProviderGroup } from '../services/tuzi-provider-selection';
 import type { GeminiConfig } from './gemini-api/types';
@@ -461,6 +464,8 @@ class SettingsManager {
         : {};
 
     return {
+      independentManualProvidersV1:
+        migrations.independentManualProvidersV1 === true,
       legacyDefaultImageApiCompatibilityV1:
         migrations.legacyDefaultImageApiCompatibilityV1 === true,
       legacyDefaultImageModelV1: migrations.legacyDefaultImageModelV1 === true,
@@ -752,7 +757,7 @@ class SettingsManager {
         profile?.videoApiCompatibility
       ),
       preferAsyncImageEndpoint: profile?.preferAsyncImageEndpoint === true,
-      enabled: true,
+      enabled: profile?.enabled !== false,
       capabilities: { ...DEFAULT_PROVIDER_CAPABILITIES },
     };
   }
@@ -1054,9 +1059,7 @@ class SettingsManager {
           ),
           preferAsyncImageEndpoint: profile.preferAsyncImageEndpoint === true,
           extraHeaders: this.normalizeStringRecord(profile.extraHeaders),
-          enabled:
-            profile.enabled !== false ||
-            (typeof profile.apiKey === 'string' && profile.apiKey.trim() !== ''),
+          enabled: profile.enabled !== false,
           capabilities: this.normalizeCapabilities(profile.capabilities),
           pricingUrl: normalizeNullableString(profile.pricingUrl) || undefined,
           cnyPerUsd:
@@ -1320,6 +1323,23 @@ class SettingsManager {
           profile.id !== TUZI_BUSINESS_PROVIDER_PROFILE_ID
       ),
     ];
+
+    // Repair the old account-sync side effect once, then preserve user toggles.
+    if (
+      tuziEmbeddedConfig.enabled &&
+      migrations.independentManualProvidersV1 !== true
+    ) {
+      providerProfiles.forEach((profile) => {
+        if (
+          !profile.id.startsWith('tuzi-managed-') &&
+          !profile.id.startsWith('tuzi-token-')
+        ) {
+          profile.enabled = true;
+        }
+      });
+      migrations.independentManualProvidersV1 = true;
+      this.shouldPersistSettingsAfterInitialization = true;
+    }
 
     const validProfileIds = new Set(
       providerProfiles.map((profile) => profile.id)
@@ -2278,6 +2298,11 @@ class SettingsManager {
     if (
       embedded &&
       !(
+        profile?.apiKey?.trim() &&
+        !profileIsManaged &&
+        !hasActiveProviderOverride
+      ) &&
+      !(
         profile &&
         isVerifiedTuziProvider(profile) &&
         !hasActiveProviderOverride
@@ -2298,16 +2323,7 @@ class SettingsManager {
       this.settings.gemini.baseUrl?.trim() || DEFAULT_SETTINGS.gemini.baseUrl;
     const normalizedLegacyApiKey = this.settings.gemini.apiKey?.trim() || '';
     const normalizedProfileBaseUrl = profile?.baseUrl?.trim() || '';
-    const ordinaryTuziProfile =
-      profile &&
-      !profile.id.startsWith('tuzi-managed-') &&
-      isCurrentTuziEndpoint(profile.baseUrl);
-    const normalizedProfileApiKey =
-      embedded &&
-      ordinaryTuziProfile &&
-      (!profile || !isVerifiedTuziProvider(profile))
-        ? ''
-        : profile?.apiKey?.trim() || '';
+    const normalizedProfileApiKey = profile?.apiKey?.trim() || '';
     const fallbackModelId =
       profileModels[0]?.id || this.getLegacyModelId(routeType);
 

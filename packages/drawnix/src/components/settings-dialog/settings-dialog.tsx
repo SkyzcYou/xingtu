@@ -100,7 +100,10 @@ import { ModelDropdown } from '../ai-input-bar/ModelDropdown';
 import { WinBoxWindow } from '../winbox';
 import { TtsSettingsPanel } from '../project-drawer/TtsSettingsPanel';
 import { TuziAccountPanel } from './TuziAccountPanel';
-import { isTuziEmbeddedMode } from '../../services/tuzi-embedded-config';
+import {
+  isTuziEmbeddedMode,
+  tuziEmbeddedConfig,
+} from '../../services/tuzi-embedded-config';
 import {
   requestTuziParentContext,
   getTuziBridgeContext,
@@ -1101,11 +1104,18 @@ export const SettingsDialog = ({
   } = useDeviceType();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const [dialogWidth, setDialogWidth] = useState(0);
-  const [tuziMode, setTuziMode] = useState(() => isTuziEmbeddedMode());
+  const [tuziMode, setTuziMode] = useState(
+    () =>
+      isTuziEmbeddedMode() ||
+      (tuziEmbeddedConfig.enabled && window.parent !== window)
+  );
   const [accountBoundary, setAccountBoundary] = useState('');
   useEffect(() => {
     const syncBridgeMode = () => {
-      setTuziMode(isTuziEmbeddedMode());
+      setTuziMode(
+        isTuziEmbeddedMode() ||
+          (tuziEmbeddedConfig.enabled && window.parent !== window)
+      );
       const context = getTuziBridgeContext();
       const boundary = `${context?.userId || ''}:${context?.status || ''}:${
         getTuziBridgeError() || ''
@@ -1523,7 +1533,8 @@ export const SettingsDialog = ({
           selectedProfileId,
           showTuziProviders,
           Boolean(
-            profilesDraft.find((profile) => profile.id === selectedProfileId)
+            profilesDraft
+              .find((profile) => profile.id === selectedProfileId)
               ?.apiKey?.trim()
           )
         ))
@@ -2801,9 +2812,7 @@ export const SettingsDialog = ({
           profile.id,
           showTuziProviders,
           Boolean(profile.apiKey?.trim())
-        ) &&
-        (!isTuziManagedProviderProfileId(profile.id) ||
-          !showTuziProviders)
+        ) && !isTuziManagedProviderProfileId(profile.id)
     );
 
     return (
