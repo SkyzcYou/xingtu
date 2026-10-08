@@ -1,6 +1,24 @@
 {
   "versions": [
     {
+      "version": "6.7.36",
+      "date": "2026-10-07",
+      "type": "patch",
+      "highlights": "同步上游图片模型、媒体详情与画布能力更新，保留本地特色功能",
+      "changes": {
+        "features": [
+          "接入 Nano Banana 2.1 图片模型",
+          "补充媒体生成详情与画布图片详情"
+        ],
+        "fixes": [
+          "修复 GPT Image 背景透明参数"
+        ],
+        "improvements": [
+          "优化参考图导入竞态"
+        ]
+      }
+    },
+    {
       "version": "6.7.35",
       "date": "2026-10-03",
       "type": "patch",
