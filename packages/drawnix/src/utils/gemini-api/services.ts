@@ -170,6 +170,7 @@ function normalizeGoogleImageResult(content: string): {
     data: [
       ...base64Matches.map((match) => ({
         b64_json: match[2],
+        url: match[0],
       })),
       ...urlMatches.map((match) => ({
         url: match[0],
@@ -191,6 +192,7 @@ export async function generateImageWithGemini(
     response_format?: 'url' | 'b64_json';
     omitDefaultResponseFormat?: boolean;
     quality?: '1k' | '2k' | '4k';
+    thinking?: 'minimal' | 'medium' | 'high';
     count?: number;
     model?: string; // 支持指定模型
     modelRef?: ModelRef | null;
@@ -227,6 +229,7 @@ export async function generateImageDirect(
     response_format?: 'url' | 'b64_json';
     omitDefaultResponseFormat?: boolean;
     quality?: '1k' | '2k' | '4k';
+    thinking?: 'minimal' | 'medium' | 'high';
     count?: number;
     model?: string;
     modelRef?: ModelRef | null;
@@ -253,6 +256,17 @@ export async function generateImageDirect(
       ? options.image
       : [options.image]
     : undefined;
+  if (modelName === 'gemini-nano-banana-2.1') {
+    if ((referenceImages?.length || 0) > 14) {
+      throw new Error('Nano Banana 2.1 最多支持 14 张参考图');
+    }
+    if (options.quality && !['1k', '2k', '4k'].includes(options.quality)) {
+      throw new Error('Nano Banana 2.1 分辨率必须为 1K、2K 或 4K');
+    }
+    if (options.thinking && !['minimal', 'medium', 'high'].includes(options.thinking)) {
+      throw new Error('Nano Banana 2.1 Thinking 必须为 minimal、medium 或 high');
+    }
+  }
   const submitPath = runtimeConfig.binding?.submitPath || '/images/generations';
   const logId = startLLMApiLog({
     endpoint: submitPath,
@@ -267,17 +281,15 @@ export async function generateImageDirect(
     const validatedConfig = await validateAndEnsureConfig(runtimeConfig);
 
     if (validatedConfig.protocol === 'google.generateContent') {
+      const imageSize = normalizeGoogleImageSize(
+        options.quality || (modelName === 'gemini-nano-banana-2.1' ? '1k' : undefined)
+      );
       const content = [
         {
           type: 'text' as const,
           text: prompt,
         },
-        ...(options.image
-          ? Array.isArray(options.image)
-            ? options.image
-            : [options.image]
-          : []
-        ).map((url) => ({
+        ...(referenceImages || []).map((url) => ({
           type: 'image_url' as const,
           image_url: {
             url,
@@ -297,20 +309,21 @@ export async function generateImageDirect(
           stream: false,
           requestId: options.requestId,
           signal: options.signal,
-        fetcher: options.fetcher,
+          fetcher: options.fetcher,
           ...(options.onSubmissionAttempt
             ? { onSubmissionAttempt: options.onSubmissionAttempt }
             : {}),
           onResponse: options.onResponse,
           generationConfig: {
             responseModalities: ['IMAGE'],
+            ...(modelName === 'gemini-nano-banana-2.1'
+              ? { thinkingConfig: { thinkingLevel: options.thinking || 'medium' } }
+              : {}),
             imageConfig: {
               ...(normalizeAspectRatio(options.size)
                 ? { aspectRatio: normalizeAspectRatio(options.size) }
                 : {}),
-              ...(normalizeGoogleImageSize(options.quality)
-                ? { imageSize: normalizeGoogleImageSize(options.quality) }
-                : {}),
+              ...(imageSize ? { imageSize } : {}),
             },
           },
         }

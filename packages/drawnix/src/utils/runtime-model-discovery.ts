@@ -198,7 +198,11 @@ async function fetchRemoteModelList(
   try {
     const requestUrl = getModelListRequestUrl(baseUrl, accountManaged);
     let response = await fetch(requestUrl, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Cache-Control': 'no-cache',
+      },
+      cache: 'no-store',
       ...(controller ? { signal: controller.signal } : {}),
     });
 
@@ -1231,7 +1235,8 @@ function adaptRuntimeModel(model: RemoteModelListItem): ModelConfig | null {
     const clonedConfig = cloneModelConfig(staticConfig);
     if (
       GPT_IMAGE_25_MODEL_IDS.includes(staticConfig.id) ||
-      GPT_IMAGE_2_MODEL_IDS.includes(staticConfig.id)
+      GPT_IMAGE_2_MODEL_IDS.includes(staticConfig.id) ||
+      staticConfig.id === 'gemini-nano-banana-2.1'
     ) {
       return clonedConfig;
     }

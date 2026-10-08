@@ -74,6 +74,8 @@ import { PopupDistributeButton } from './distribute-button';
 import { PopupBooleanButton } from './boolean-button';
 import { TextPropertyPanel } from './text-property-panel';
 import { PopupImage3DTransformButton } from './image-3d-transform-button';
+import { PopupImageDetailsButton } from './image-details-button';
+import { getCanvasGenerationDetailsSource } from '../../../utils/canvas-generation-details-source';
 import {
   AIImageIcon,
   AIVideoIcon,
@@ -283,6 +285,12 @@ export const PopupToolbar = () => {
     'top' | 'bottom'
   >('top');
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const [imageDetailsRequest, setImageDetailsRequest] = useState<{
+    id: string; url?: string; taskId?: string; sequence: number;
+  } | null>(null);
+  const imageDetailsSequence = useRef(0);
+  const generationDetailsSource = selectedElements.length === 1
+    ? getCanvasGenerationDetailsSource(selectedElements[0]) : undefined;
 
   // 初始化全局鼠标位置跟踪
   useGlobalMousePosition();
@@ -383,6 +391,7 @@ export const PopupToolbar = () => {
     hasVideoMergeable?: boolean; // 是否显示视频合成按钮
     hasImageEdit?: boolean; // 是否显示图片编辑按钮
     hasRegenerateImage?: boolean; // 是否显示再次生成回填按钮
+    hasImageDetails?: boolean;
     hasCornerRadius?: boolean; // 是否显示圆角设置按钮
     cornerRadius?: number; // 当前圆角值
     hasSizeInput?: boolean; // 是否显示宽高输入
@@ -479,14 +488,14 @@ export const PopupToolbar = () => {
       PlaitDrawElement.isImage(imageElement) &&
       imageElement.url?.startsWith('data:image/svg+xml');
 
-    const isImageSelected =
+    const hasImageDetails =
       selectedElements.length === 1 &&
       !hasVideoSelected &&
       !hasToolSelected &&
       PlaitDrawElement.isDrawElement(selectedElements[0]) &&
       PlaitDrawElement.isImage(selectedElements[0]) &&
-      !isSvgImage && // 排除SVG图片
       !PlaitBoard.hasBeenTextEditing(board);
+    const isImageSelected = hasImageDetails && !isSvgImage;
 
     // 只有检测到分割线时才显示拆图按钮
     const hasSplitImage = isImageSelected;
@@ -693,6 +702,7 @@ export const PopupToolbar = () => {
       hasLayerDecomposition,
       hasImageEdit,
       hasRegenerateImage: isImageSelected,
+      hasImageDetails: !!generationDetailsSource && !PlaitBoard.hasBeenTextEditing(board),
       hasDownloadable,
       hasMergeable,
       hasVideoMergeable,
@@ -1347,6 +1357,7 @@ export const PopupToolbar = () => {
     };
     const onPointerDown = (event: PointerEvent) => {
       cancelCentering();
+      setImageDetailsRequest(null);
       clickStart = event.button === 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey
         ? { x: event.clientX, y: event.clientY, id: event.pointerId, moved: false }
         : null;
@@ -1385,6 +1396,21 @@ export const PopupToolbar = () => {
       movingOrDraggingRef.current = false;
       setMovingOrDragging(false);
       pointerUp(event);
+
+      if (
+        isClick && !wasMovingOrDragging && event.button === 0 &&
+        !eventTarget?.closest(`.${ATTACHED_ELEMENT_CLASS_NAME}, .popup-toolbar, .ai-input-bar, .ai-input-bar__container`)
+      ) {
+        const selection = getSelectedElements(board);
+        const source = selection.length === 1 ? getCanvasGenerationDetailsSource(selection[0]) : undefined;
+        if (source && !PlaitBoard.hasBeenTextEditing(board)) {
+          setImageDetailsRequest({
+            id: source.id, url: source.url,
+            taskId: source.generationTaskId,
+            sequence: ++imageDetailsSequence.current,
+          });
+        }
+      }
 
       if (
         isClick &&
@@ -2774,6 +2800,18 @@ export const PopupToolbar = () => {
                 deleteFragment(board);
               }}
             />
+            {state.hasImageDetails && generationDetailsSource && (
+              <PopupImageDetailsButton
+                key={`generation-details-${generationDetailsSource.kind}-${generationDetailsSource.id}-${generationDetailsSource.url}-${generationDetailsSource.generationTaskId}`}
+                image={generationDetailsSource}
+                language={language}
+                selectionRect={selectionRect}
+                autoOpenRequest={imageDetailsRequest?.id === generationDetailsSource.id &&
+                  imageDetailsRequest.url === generationDetailsSource.url &&
+                  imageDetailsRequest.taskId === generationDetailsSource.generationTaskId
+                  ? imageDetailsRequest.sequence : 0}
+              />
+            )}
           </Stack.Row>
         </Island>
       )}

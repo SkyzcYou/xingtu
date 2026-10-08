@@ -7,10 +7,84 @@ import {
   getStaticModelConfig,
   ModelVendor,
   setRuntimeModelConfigs,
+  isGPTImage2ModelId,
+  isGPTImage25ModelId,
 } from '../model-config';
 import { getVideoModelConfig } from '../video-model-config';
 
 describe('model-config image size options', () => {
+  it('exposes Nano Banana 2.1 supported ratios, tiers and isolated Thinking', () => {
+    expect(getStaticModelConfig('gemini-nano-banana-2.1')).toMatchObject({
+      shortCode: 'nb21', type: 'image', vendor: ModelVendor.GEMINI,
+    });
+    const params = getCompatibleParams('gemini-nano-banana-2.1');
+    expect(params.filter(param => param.id === 'size')).toHaveLength(1);
+    expect(getSizeOptionsForModel('gemini-nano-banana-2.1').map(option => option.value)).toEqual([
+      'auto', '1x1', '1x4', '4x1', '1x8', '8x1', '16x9', '9x16',
+      '3x2', '2x3', '4x3', '3x4', '5x4', '4x5', '21x9',
+    ]);
+    expect(params.find(param => param.id === 'quality')?.options?.map(option => option.value))
+      .toEqual(['1k', '2k', '4k']);
+    expect(params.find(param => param.id === 'thinking')).toMatchObject({
+      defaultValue: 'medium',
+      options: [
+        { value: 'minimal', label: '最小' },
+        { value: 'medium', label: '标准' },
+        { value: 'high', label: '高' },
+      ],
+    });
+    for (const id of ['gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview', 'gpt-image-2']) {
+      expect(getCompatibleParams(id).some(param => param.id === 'thinking')).toBe(false);
+    }
+  });
+  it.each([
+    'gpt-image-2.5-1k',
+    'gpt-image-2.5', 'gpt-image-2.5-vip',
+    'gpt-image-2.5-sunburst', 'gpt-image-2.5-flare',
+  ])('%s exposes background controls', (modelId) => {
+    expect(getCompatibleParams(modelId).filter((param) => param.id === 'background'))
+      .toEqual([expect.objectContaining({
+        defaultValue: 'auto',
+        options: [
+          { value: 'auto', label: '自动' },
+          { value: 'transparent', label: '透明' },
+          { value: 'opaque', label: '不透明' },
+        ],
+      })]);
+  });
+
+  it.each(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image2', 'gpt-image2-vip',
+    'gpt-image-2-1k', 'gpt-image-2-pro', 'gpt-image-2-preview', 'image-2', 'image2'])(
+    '%s exposes only supported background values', (modelId) => {
+      setRuntimeModelConfigs([{ id: modelId, label: modelId, type: 'image', vendor: ModelVendor.GPT }]);
+      const backgrounds = getCompatibleParams(modelId).filter((param) => param.id === 'background');
+      expect(backgrounds).toHaveLength(1);
+      expect(backgrounds[0].options?.map((option) => option.value)).toEqual(['auto', 'opaque']);
+    }
+  );
+
+  it.each(['gpt-image-2-pro', 'gpt-image2-fast', 'gpt-image-2-preview'])(
+    '%s treats Image 2 variants as opaque-only', (modelId) => {
+      expect(isGPTImage2ModelId(modelId)).toBe(true);
+      expect(isGPTImage25ModelId(modelId)).toBe(false);
+    }
+  );
+
+  it.each(['gpt-image-2.5-custom', 'image-2.5-vip'])(
+    '%s keeps transparent controls separate from Image 2', (modelId) => {
+      setRuntimeModelConfigs([{ id: modelId, label: modelId, type: 'image', vendor: ModelVendor.GPT }]);
+      expect(isGPTImage2ModelId(modelId)).toBe(false);
+      expect(getCompatibleParams(modelId).find((param) => param.id === 'background')?.options)
+        .toContainEqual({ value: 'transparent', label: '透明' });
+    }
+  );
+
+  it.each(['gemini-3.1-flash-image-preview', 'doubao-seedream-4-5-251128', 'mj-imagine'])(
+    '%s does not expose GPT background controls', (modelId) => {
+      expect(getCompatibleParams(modelId).some((param) => param.id === 'background')).toBe(false);
+    }
+  );
+
   afterEach(() => {
     clearRuntimeModelConfigs();
   });
