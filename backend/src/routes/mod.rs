@@ -6,6 +6,8 @@ use axum::Router;
 use reqwest::Client;
 use sqlx::PgPool;
 use std::sync::Arc;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 mod admin_credits;
 mod admin_llm_config;
@@ -46,5 +48,9 @@ pub fn router(state: AppState) -> Router {
         .merge(image_jobs::router())
         .merge(playground_history::router())
         .merge(agent::router())
+        .merge(
+            SwaggerUi::new("/swagger-ui")
+                .url("/api-docs/openapi.json", crate::openapi::ApiDoc::openapi()),
+        )
         .with_state(state)
 }

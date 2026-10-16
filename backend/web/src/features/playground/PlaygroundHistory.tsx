@@ -95,7 +95,9 @@ function HistoryCard({ record, onReplay }: HistoryCardProps) {
       <div className="playground-history-card__meta">
         <span>{record.model}</span>
         <span>{formatDuration(record.durationMs)}</span>
-        {record.taskKind === 'image' && <span>{record.parameters.size}</span>}
+        {record.taskKind === 'image' && getImageParameterSummary(record).map((item) => (
+          <span key={item}>{item}</span>
+        ))}
       </div>
       <p className="playground-history-card__prompt">{record.prompt}</p>
 
@@ -112,6 +114,9 @@ function HistoryCard({ record, onReplay }: HistoryCardProps) {
           ))}
         </div>
       )}
+      {record.taskKind === 'image' && record.status === 'succeeded' && record.result?.images.length === 0 && (
+        <p className="playground-history-card__references">结果图片未同步保存，仅保留可再次发起的参数。</p>
+      )}
       {record.taskKind === 'image' && record.parameters.referenceFileNames.length > 0 && (
         <p className="playground-history-card__references">
           参考图：{record.parameters.referenceFileNames.join('、')}（再次发起时需重新选择）
@@ -123,6 +128,15 @@ function HistoryCard({ record, onReplay }: HistoryCardProps) {
       </footer>
     </article>
   );
+}
+
+function getImageParameterSummary(record: Extract<PlaygroundHistoryRecord, { taskKind: 'image' }>): string[] {
+  return [
+    record.parameters.aspectRatio || record.parameters.size,
+    record.parameters.resolutionTier,
+    record.parameters.quality ? `质量 ${record.parameters.quality}` : undefined,
+    record.parameters.count ? `${record.parameters.count} 张` : undefined,
+  ].filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
 function HistoryImage({ src, index }: { src: string; index: number }) {

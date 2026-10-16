@@ -24,7 +24,7 @@ struct LlmGlobalConfigRow {
     updated_at: DateTime<Utc>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateLlmConfigRequest {
     pub name: Option<String>,
@@ -37,7 +37,7 @@ pub struct UpdateLlmConfigRequest {
     pub timeout_seconds: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AdminLlmConfigResponse {
     pub configured: bool,
@@ -54,7 +54,7 @@ pub struct AdminLlmConfigResponse {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TestLlmConfigResponse {
     pub endpoint: String,
@@ -63,7 +63,7 @@ pub struct TestLlmConfigResponse {
     pub latency_ms: u128,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmModelsResponse {
     pub models: Vec<String>,

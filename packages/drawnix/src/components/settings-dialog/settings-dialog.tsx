@@ -1,6 +1,7 @@
 import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
 import { useDrawnix } from '../../hooks/use-drawnix';
 import { useDeviceType } from '../../hooks/useDeviceType';
+import { isTuziCompatibleBaseUrl } from '../../services/provider-routing/tuzi-api-endpoints';
 import './settings-dialog.scss';
 import {
   memo,
@@ -736,7 +737,7 @@ function resolveAutoImageApiCompatibilityForDisplay(
     return 'openai-gpt-image';
   }
 
-  if (normalizedBaseUrl.includes('.tu-zi.com')) {
+  if (isTuziCompatibleBaseUrl(profile.baseUrl)) {
     return 'tuzi-gpt-image';
   }
 

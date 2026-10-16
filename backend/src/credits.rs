@@ -47,13 +47,13 @@ impl From<AppError> for CreditChargeError {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateCreditPricesRequest {
     pub prices: Vec<UpdateCreditPriceInput>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateCreditPriceInput {
     pub model_id: String,
@@ -62,14 +62,14 @@ pub struct UpdateCreditPriceInput {
     pub enabled: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AdjustCreditsRequest {
     pub delta: i64,
     pub note: Option<String>,
 }
 
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelCreditPriceResponse {
     pub model_id: String,
@@ -79,13 +79,13 @@ pub struct ModelCreditPriceResponse {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreditPricesResponse {
     pub prices: Vec<ModelCreditPriceResponse>,
 }
 
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreditAccountSummaryResponse {
     pub principal_id: Uuid,
@@ -97,20 +97,20 @@ pub struct CreditAccountSummaryResponse {
     pub last_activity_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreditAccountsResponse {
     pub accounts: Vec<CreditAccountSummaryResponse>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreditAccountDetailResponse {
     pub account: CreditAccountSummaryResponse,
     pub ledger: Vec<CreditLedgerEntryResponse>,
 }
 
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreditLedgerEntryResponse {
     pub id: Uuid,

@@ -1,5 +1,17 @@
 use super::*;
 
+fn image_parameters() -> PlaygroundParameters {
+    PlaygroundParameters::Image {
+        size: Some("1024x1024".into()),
+        aspect_ratio: Some("1:1".into()),
+        resolution_tier: Some("1K".into()),
+        quality: Some("auto".into()),
+        count: Some(1),
+        mode: PlaygroundImageMode::Sync,
+        reference_file_names: vec![],
+    }
+}
+
 fn text_request() -> CreatePlaygroundHistoryRequest {
     CreatePlaygroundHistoryRequest {
         task_kind: PlaygroundTaskKind::Text,
@@ -34,7 +46,11 @@ fn accepts_url_only_image_success() {
     let mut request = text_request();
     request.task_kind = PlaygroundTaskKind::Image;
     request.parameters = PlaygroundParameters::Image {
-        size: "1024x1024".into(),
+        size: Some("1024x1024".into()),
+        aspect_ratio: Some("1:1".into()),
+        resolution_tier: Some("1K".into()),
+        quality: Some("auto".into()),
+        count: Some(1),
         mode: PlaygroundImageMode::Async,
         reference_file_names: vec!["reference.png".into()],
     };
@@ -49,22 +65,26 @@ fn accepts_url_only_image_success() {
 }
 
 #[test]
+fn accepts_image_success_without_persistable_results() {
+    let mut request = text_request();
+    request.task_kind = PlaygroundTaskKind::Image;
+    request.parameters = image_parameters();
+    request.result = Some(PlaygroundResult::Image { images: vec![] });
+    assert!(validate_create_input(request.clone()).is_ok());
+
+    request.result = None;
+    assert!(validate_create_input(request).is_ok());
+}
+
+#[test]
 fn rejects_cross_kind_and_binary_image_results() {
     let mut mismatch = text_request();
-    mismatch.parameters = PlaygroundParameters::Image {
-        size: "1024x1024".into(),
-        mode: PlaygroundImageMode::Sync,
-        reference_file_names: vec![],
-    };
+    mismatch.parameters = image_parameters();
     assert!(validate_create_input(mismatch).is_err());
 
     let mut image = text_request();
     image.task_kind = PlaygroundTaskKind::Image;
-    image.parameters = PlaygroundParameters::Image {
-        size: "1024x1024".into(),
-        mode: PlaygroundImageMode::Sync,
-        reference_file_names: vec![],
-    };
+    image.parameters = image_parameters();
     image.result = Some(PlaygroundResult::Image {
         images: vec![PlaygroundImageResultItem {
             url: "data:image/png;base64,AAAA".into(),
@@ -79,11 +99,7 @@ fn rejects_cross_kind_and_binary_image_results() {
 fn normalizes_empty_optional_image_metadata() {
     let mut request = text_request();
     request.task_kind = PlaygroundTaskKind::Image;
-    request.parameters = PlaygroundParameters::Image {
-        size: "1024x1024".into(),
-        mode: PlaygroundImageMode::Sync,
-        reference_file_names: vec![],
-    };
+    request.parameters = image_parameters();
     request.result = Some(PlaygroundResult::Image {
         images: vec![PlaygroundImageResultItem {
             url: "https://example.com/generated.png".into(),
@@ -97,6 +113,81 @@ fn normalizes_empty_optional_image_metadata() {
     };
     assert_eq!(images[0].revised_prompt, None);
     assert_eq!(images[0].job_id.as_deref(), Some("job-1"));
+}
+
+#[test]
+fn accepts_image_custom_parameters_and_legacy_records() {
+    let mut request = text_request();
+    request.task_kind = PlaygroundTaskKind::Image;
+    request.parameters = PlaygroundParameters::Image {
+        size: None,
+        aspect_ratio: Some("16:9".into()),
+        resolution_tier: Some("4K".into()),
+        quality: Some("high".into()),
+        count: Some(4),
+        mode: PlaygroundImageMode::Async,
+        reference_file_names: vec!["ref.png".into()],
+    };
+    request.result = Some(PlaygroundResult::Image { images: vec![] });
+    assert!(validate_create_input(request).is_ok());
+
+    let legacy = serde_json::json!({
+        "kind": "image",
+        "size": "1024x1536",
+        "mode": "sync",
+        "referenceFileNames": []
+    });
+    assert!(serde_json::from_value::<PlaygroundParameters>(legacy).is_ok());
+}
+
+#[test]
+fn rejects_invalid_image_custom_parameters() {
+    let mut request = text_request();
+    request.task_kind = PlaygroundTaskKind::Image;
+    request.parameters = PlaygroundParameters::Image {
+        size: None,
+        aspect_ratio: Some("4:5".into()),
+        resolution_tier: Some("4K".into()),
+        quality: Some("high".into()),
+        count: Some(1),
+        mode: PlaygroundImageMode::Sync,
+        reference_file_names: vec![],
+    };
+    request.result = Some(PlaygroundResult::Image { images: vec![] });
+    assert!(validate_create_input(request.clone()).is_err());
+
+    request.parameters = PlaygroundParameters::Image {
+        size: None,
+        aspect_ratio: Some("1:1".into()),
+        resolution_tier: Some("8K".into()),
+        quality: Some("high".into()),
+        count: Some(1),
+        mode: PlaygroundImageMode::Sync,
+        reference_file_names: vec![],
+    };
+    assert!(validate_create_input(request.clone()).is_err());
+
+    request.parameters = PlaygroundParameters::Image {
+        size: None,
+        aspect_ratio: Some("1:1".into()),
+        resolution_tier: Some("1K".into()),
+        quality: Some("best".into()),
+        count: Some(1),
+        mode: PlaygroundImageMode::Sync,
+        reference_file_names: vec![],
+    };
+    assert!(validate_create_input(request.clone()).is_err());
+
+    request.parameters = PlaygroundParameters::Image {
+        size: None,
+        aspect_ratio: Some("1:1".into()),
+        resolution_tier: Some("1K".into()),
+        quality: Some("auto".into()),
+        count: Some(0),
+        mode: PlaygroundImageMode::Sync,
+        reference_file_names: vec![],
+    };
+    assert!(validate_create_input(request).is_err());
 }
 
 #[test]

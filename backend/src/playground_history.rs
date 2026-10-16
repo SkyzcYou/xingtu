@@ -14,28 +14,28 @@ const MAX_CONTENT_LEN: usize = 1_000_000;
 const MAX_IMAGES: usize = 16;
 const MAX_REFERENCE_FILES: usize = 20;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum PlaygroundTaskKind {
     Text,
     Image,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum PlaygroundTaskStatus {
     Succeeded,
     Failed,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum PlaygroundImageMode {
     Sync,
     Async,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 pub enum PlaygroundParameters {
     Text {
@@ -45,7 +45,24 @@ pub enum PlaygroundParameters {
         system_prompt: String,
     },
     Image {
-        size: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        size: Option<String>,
+        #[serde(
+            default,
+            rename = "aspectRatio",
+            skip_serializing_if = "Option::is_none"
+        )]
+        aspect_ratio: Option<String>,
+        #[serde(
+            default,
+            rename = "resolutionTier",
+            skip_serializing_if = "Option::is_none"
+        )]
+        resolution_tier: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quality: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        count: Option<u8>,
         mode: PlaygroundImageMode,
         #[serde(rename = "referenceFileNames")]
         reference_file_names: Vec<String>,
@@ -61,7 +78,7 @@ impl PlaygroundParameters {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PlaygroundImageResultItem {
     pub url: String,
@@ -69,7 +86,7 @@ pub struct PlaygroundImageResultItem {
     pub job_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 pub enum PlaygroundResult {
     Text {
@@ -89,7 +106,7 @@ impl PlaygroundResult {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CreatePlaygroundHistoryRequest {
     pub task_kind: PlaygroundTaskKind,
@@ -102,7 +119,7 @@ pub struct CreatePlaygroundHistoryRequest {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaygroundHistoryRecord {
     pub id: Uuid,
@@ -123,7 +140,7 @@ pub struct Pagination {
     pub limit: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaygroundHistoryPage {
     pub records: Vec<PlaygroundHistoryRecord>,
@@ -169,9 +186,14 @@ pub fn validate_create_input(
 
     match input.status {
         PlaygroundTaskStatus::Succeeded => {
-            if input.result.is_none() || input.error.is_some() {
+            if input.error.is_some() {
                 return Err(AppError::bad_request(
-                    "succeeded history requires result and null error",
+                    "succeeded history requires null error",
+                ));
+            }
+            if input.task_kind == PlaygroundTaskKind::Text && input.result.is_none() {
+                return Err(AppError::bad_request(
+                    "succeeded text history requires result",
                 ));
             }
         }
@@ -271,10 +293,26 @@ fn validate_parameters(parameters: &mut PlaygroundParameters) -> AppResult<()> {
         }
         PlaygroundParameters::Image {
             size,
+            aspect_ratio,
+            resolution_tier,
+            quality,
+            count,
             reference_file_names,
             ..
         } => {
-            *size = required_text(std::mem::take(size), "size", 100)?;
+            normalize_optional(size, "size", 100)?;
+            validate_optional_choice(
+                aspect_ratio,
+                "aspectRatio",
+                &["1:1", "3:2", "2:3", "16:9", "9:16"],
+            )?;
+            validate_optional_choice(resolution_tier, "resolutionTier", &["1K", "2K", "4K"])?;
+            validate_optional_choice(quality, "quality", &["auto", "low", "medium", "high"])?;
+            if let Some(current) = count {
+                if !(1..=MAX_IMAGES as u8).contains(current) {
+                    return Err(AppError::bad_request("count must be between 1 and 16"));
+                }
+            }
             if reference_file_names.len() > MAX_REFERENCE_FILES {
                 return Err(AppError::bad_request("too many referenceFileNames"));
             }
@@ -294,8 +332,10 @@ fn validate_result(result: &mut PlaygroundResult) -> AppResult<()> {
             }
         }
         PlaygroundResult::Image { images } => {
-            if images.is_empty() || images.len() > MAX_IMAGES {
-                return Err(AppError::bad_request("images must contain 1 to 16 items"));
+            if images.len() > MAX_IMAGES {
+                return Err(AppError::bad_request(
+                    "images must contain at most 16 items",
+                ));
             }
             for image in images {
                 validate_image_result(image)?;
@@ -343,6 +383,21 @@ fn normalize_optional(value: &mut Option<String>, field: &str, max_len: usize) -
     Ok(())
 }
 
+fn validate_optional_choice(
+    value: &mut Option<String>,
+    field: &str,
+    allowed: &[&str],
+) -> AppResult<()> {
+    normalize_optional(value, field, 100)?;
+    if value
+        .as_deref()
+        .is_some_and(|current| !allowed.contains(&current))
+    {
+        return Err(AppError::bad_request(format!("{field} is invalid")));
+    }
+    Ok(())
+}
+
 fn pagination_metadata(offset: i64, limit: i64, fetched: usize) -> (usize, bool, i64) {
     let count = fetched.min(limit as usize);
     (count, fetched > limit as usize, offset + count as i64)
@@ -376,7 +431,9 @@ impl TryFrom<PlaygroundHistoryRow> for PlaygroundHistoryRecord {
             .transpose()
             .map_err(invalid_stored_record)?;
         let outcome_is_valid = match status {
-            PlaygroundTaskStatus::Succeeded => result.is_some() && row.error.is_none(),
+            PlaygroundTaskStatus::Succeeded => {
+                row.error.is_none() && (task_kind == PlaygroundTaskKind::Image || result.is_some())
+            }
             PlaygroundTaskStatus::Failed => result.is_none() && row.error.is_some(),
         };
         if row.duration_ms < 0

@@ -2,6 +2,38 @@
   font-variant-numeric: tabular-nums;
 }
 
+.playground-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.playground-prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.playground-prompt-counter {
+  color: #6b7280;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.playground-prompt-counter.is-invalid {
+  color: #b91c1c;
+}
+
+.playground-cost-hint {
+  padding: 10px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  color: #9a3412;
+  background: #fff7ed;
+  font-size: 13px;
+}
+
 .playground-replay-notice,
 .playground-history__sync-error {
   display: flex;

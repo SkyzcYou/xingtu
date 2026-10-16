@@ -52,8 +52,8 @@ impl AppError {
     }
 }
 
-#[derive(Serialize)]
-struct ErrorResponse {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ErrorResponse {
     error: String,
 }
 

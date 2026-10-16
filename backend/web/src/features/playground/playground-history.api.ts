@@ -1,5 +1,15 @@
 import { request } from '../../lib/api/request';
 import type { PlaygroundImageMode } from './playground.api';
+import {
+  imageAspectRatios,
+  imageCountOptions,
+  imageQualities,
+  imageResolutionTiers,
+  type ImageAspectRatio,
+  type ImageCount,
+  type ImageQuality,
+  type ImageResolutionTier,
+} from './playground-page.types';
 
 export type PlaygroundHistoryStatus = 'succeeded' | 'failed';
 
@@ -11,7 +21,11 @@ export interface TextHistoryParameters {
 
 export interface ImageHistoryParameters {
   kind: 'image';
-  size: string;
+  size?: string;
+  aspectRatio?: ImageAspectRatio;
+  resolutionTier?: ImageResolutionTier;
+  quality?: ImageQuality;
+  count?: ImageCount;
   mode: PlaygroundImageMode;
   referenceFileNames: string[];
 }
@@ -158,7 +172,11 @@ function isTextParameters(value: unknown): value is TextHistoryParameters {
 function isImageParameters(value: unknown): value is ImageHistoryParameters {
   return isObject(value)
     && value.kind === 'image'
-    && typeof value.size === 'string'
+    && (value.size === undefined || typeof value.size === 'string')
+    && isOptionalStringValue(value.aspectRatio, imageAspectRatios)
+    && isOptionalStringValue(value.resolutionTier, imageResolutionTiers)
+    && isOptionalStringValue(value.quality, imageQualities)
+    && isOptionalNumberValue(value.count, imageCountOptions)
     && (value.mode === 'sync' || value.mode === 'async')
     && Array.isArray(value.referenceFileNames)
     && value.referenceFileNames.every((item) => typeof item === 'string');
@@ -176,6 +194,20 @@ function isImageResult(value: unknown): value is ImageHistoryResult {
       && typeof item.url === 'string'
       && (item.revisedPrompt === undefined || typeof item.revisedPrompt === 'string')
       && (item.jobId === undefined || typeof item.jobId === 'string'));
+}
+
+function isOptionalStringValue<T extends string>(
+  value: unknown,
+  options: readonly T[]
+): value is T | undefined {
+  return value === undefined || (typeof value === 'string' && options.includes(value as T));
+}
+
+function isOptionalNumberValue<T extends number>(
+  value: unknown,
+  options: readonly T[]
+): value is T | undefined {
+  return value === undefined || (typeof value === 'number' && options.includes(value as T));
 }
 
 function isNonNegativeInteger(value: unknown): value is number {

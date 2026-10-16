@@ -5,11 +5,11 @@ import {
   resolveInvocationRoute,
   type ModelRef,
 } from '../../utils/settings-manager';
+import { isTuziCompatibleBaseUrl } from '../provider-routing/tuzi-api-endpoints';
 import {
   resolveInvocationPlanFromRoute,
   type ProviderModelBinding,
 } from '../provider-routing';
-import { isTuziCompatibleBaseUrl } from '../provider-routing/tuzi-api-endpoints';
 
 const adapterRegistry = new Map<string, ModelAdapter>();
 

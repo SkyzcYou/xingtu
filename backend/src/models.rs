@@ -60,7 +60,7 @@ pub struct PaymentOrder {
     pub paid_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaymentOrderResponse {
     pub out_trade_no: String,

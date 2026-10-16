@@ -4,13 +4,13 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateCreditSettingsRequest {
     pub new_user_bonus_credits: i64,
 }
 
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreditSettingsResponse {
     pub new_user_bonus_credits: i64,

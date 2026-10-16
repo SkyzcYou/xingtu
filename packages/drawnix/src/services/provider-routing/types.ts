@@ -1,3 +1,7 @@
+/**
+ * Provider routing types
+ */
+
 import type { ModelType } from '../../constants/model-config';
 import type {
   ImageApiCompatibility,
@@ -256,6 +260,15 @@ export interface InvocationPlannerRepositories {
   ): ProviderModelBinding[];
 }
 
+export interface ProviderRequestSentInfo {
+  url: string;
+  baseUrl: string;
+  path: string;
+  method: string;
+  requestId?: string;
+  requestIdHeaderApplied: boolean;
+}
+
 export interface ProviderTransportRequest {
   path: string;
   baseUrlStrategy?: ProviderBaseUrlStrategy;
@@ -275,6 +288,7 @@ export interface ProviderTransportRequest {
   controlledResponseBody?: boolean;
   /** Observe the final response before its body is consumed. */
   onResponse?: (response: Response) => void | Promise<void>;
+  onRequestSent?: (info: ProviderRequestSentInfo) => void;
 }
 
 export interface PreparedProviderTransportRequest {

@@ -8,7 +8,7 @@ use serde_json::json;
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RechargePackage {
     pub id: &'static str,
@@ -17,26 +17,26 @@ pub struct RechargePackage {
     pub credits: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RechargePackagesResponse {
     pub packages: Vec<RechargePackage>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreditBalanceResponse {
     pub principal_id: Uuid,
     pub balance: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RechargeOrdersResponse {
     pub orders: Vec<crate::models::PaymentOrderResponse>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreditUsageResponse {
     pub principal_id: Uuid,
@@ -44,7 +44,7 @@ pub struct CreditUsageResponse {
     pub ledger: Vec<CreditUsageLedgerEntryResponse>,
 }
 
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreditUsageLedgerEntryResponse {
     pub id: Uuid,

@@ -6,6 +6,7 @@ import type {
   PreparedProviderTransportRequest,
   ProviderBaseUrlStrategy,
   ProviderTransportRequest,
+  ProviderRequestSentInfo,
   ResolvedProviderContext,
 } from './types';
 import {
@@ -364,17 +365,21 @@ export async function readProviderResponseText(
   return readProviderResponseBody(response);
 }
 
-async function shouldRetryTuziResponse(
+function shouldRetryTuziResponse(
   context: ResolvedProviderContext,
   request: ProviderTransportRequest,
   response: Response
-): Promise<boolean> {
+): boolean {
   return (
-    isRecoverableTuziImageSubmission(context, request) &&
-    response.headers.get('X-Tuzi-Request-Accepted')?.trim().toLowerCase() ===
-      'false' &&
-    response.headers.get('X-Tuzi-Request-Retryable')?.trim().toLowerCase() ===
-      'true'
+    (isRecoverableTuziImageSubmission(context, request) &&
+      response.headers.get('X-Tuzi-Request-Accepted')?.trim().toLowerCase() === 'false' &&
+      response.headers.get('X-Tuzi-Request-Retryable')?.trim().toLowerCase() === 'true') ||
+    (!isRecoverableTuziImageSubmission(context, request) &&
+      response.status === 404 &&
+      isTrustedTuziApiBaseUrl(context.baseUrl) &&
+      !/^https?:\/\//i.test(request.path) &&
+      (request.method || 'GET').toUpperCase() === 'POST' &&
+      /\/images\/(?:generations|edits)\/?$/i.test(request.path))
   );
 }
 
@@ -384,19 +389,18 @@ async function getTuziFallbackBaseUrls(baseUrl: string): Promise<string[]> {
   }
 
   const currentOrigin = normalizeTuziApiEndpointUrl(baseUrl);
-  const versionSuffix = /\/v\d+(?:beta\d*)?\/?$/i.test(baseUrl.trim())
-    ? baseUrl.trim().match(/(\/v\d+(?:beta\d*)?)\/?$/i)?.[1] || ''
-    : '';
-  const candidates = await loadTuziApiEndpointBaseUrls();
-  return [...new Set(candidates)]
-    .filter(
-      (candidate) =>
-        isTrustedTuziApiBaseUrl(candidate) &&
-        normalizeTuziApiEndpointUrl(candidate) !== currentOrigin
-    )
-    .slice(0, 1)
-    .map((candidate) => `${candidate}${versionSuffix}`);
+  const currentPathSuffix = getBaseUrlPathSuffix(baseUrl);
+  const tuziOrigins = await loadTuziApiEndpointBaseUrls();
+
+  if (!tuziOrigins.includes(currentOrigin)) {
+    return [];
+  }
+
+  return tuziOrigins
+    .filter((origin) => origin !== currentOrigin)
+    .map((origin) => `${origin}${currentPathSuffix}`);
 }
+
 
 function buildQueryString(
   query?: Record<string, string | number | boolean | null | undefined>
@@ -661,9 +665,9 @@ function isTuziImageRecoveryQuery(
 }
 
 function allowsNetworkFallback(request: ProviderTransportRequest): boolean {
-  // 通用传输层不跨节点重放；恢复服务会在原节点失败后自行查询共享节点。
-  void request;
-  return false;
+  // 保留普通只读请求的本地节点切换；图片恢复查询由恢复服务管理。
+  return isReadOnlyRequestMethod(request.method) &&
+    !TUZI_IMAGE_RECOVERY_PATH_PATTERN.test(request.path.split(/[?#]/, 1)[0] || '');
 }
 
 /** X-Request-Id 仅用于可信 Tuzi 的同步图片 POST 与对应结果查询。 */
@@ -797,7 +801,10 @@ export class ProviderTransport {
     const sendFallbackRequests = async (
       initialResponse?: Response
     ): Promise<Response | null> => {
-      const fallbackBaseUrls = await getTuziFallbackBaseUrls(context.baseUrl);
+      const candidates = await getTuziFallbackBaseUrls(context.baseUrl);
+      const fallbackBaseUrls = isRecoverableTuziImageSubmission(context, request)
+        ? candidates.slice(0, 1)
+        : candidates;
       let retryResponse = initialResponse;
       for (const fallbackBaseUrl of fallbackBaseUrls) {
         try {
@@ -843,6 +850,15 @@ export class ProviderTransport {
         signal: timeoutControl.signal,
       };
       const prepared = await this.prepareRequestAsync(context, requestWithSignal);
+      const requestSentInfo: ProviderRequestSentInfo = {
+        url: prepared.url,
+        baseUrl: applyBaseUrlStrategy(context.baseUrl, request.baseUrlStrategy),
+        path: request.path,
+        method: request.method || 'GET',
+        requestId: request.requestId,
+        requestIdHeaderApplied: Boolean(prepared.headers['X-Request-Id'] || prepared.headers['x-request-id']),
+      };
+      request.onRequestSent?.(requestSentInfo);
       recoverableImageSubmission = isRecoverableTuziImageSubmission(context, request);
       let response = await fetcher(prepared.url, prepared.init);
       if (response.status === 401 && context.credentialSource === 'oidc-session') {
@@ -860,7 +876,9 @@ export class ProviderTransport {
       return await returnResponse(finalResponse, recoverableImageSubmission && finalResponse.ok);
     } catch (error) {
       if (timeoutControl.didTimeout()) {
-        throw createRequestTimeoutError(request.timeoutMs);
+        const timeoutError = createRequestTimeoutError(request.timeoutMs) as Error & { requestId?: string };
+        if (request.requestId && canAttachProviderRequestIdHeader(context, request)) timeoutError.requestId = request.requestId;
+        throw timeoutError;
       }
       if (
         recoverableImageSubmission &&

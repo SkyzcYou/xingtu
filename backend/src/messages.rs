@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub struct MessageListQuery {
     pub status: Option<String>,
@@ -15,7 +15,7 @@ pub struct MessageListQuery {
     pub limit: Option<i64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpsertMessageRequest {
     pub title: String,
@@ -30,7 +30,7 @@ pub struct UpsertMessageRequest {
     pub target_principal_ids: Option<Vec<Uuid>>,
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Serialize, FromRow, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AdminMessageResponse {
     pub id: Uuid,
@@ -51,13 +51,13 @@ pub struct AdminMessageResponse {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AdminMessagesResponse {
     pub messages: Vec<AdminMessageResponse>,
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Serialize, FromRow, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MessageCenterItem {
     pub id: Uuid,
@@ -75,13 +75,13 @@ pub struct MessageCenterItem {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MessagesResponse {
     pub messages: Vec<MessageCenterItem>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UnreadCountResponse {
     pub unread_count: i64,

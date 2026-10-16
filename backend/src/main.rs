@@ -12,6 +12,7 @@ mod message_events;
 mod messages;
 mod models;
 mod noipay;
+mod openapi;
 mod payment_provider;
 mod playground_history;
 mod qingke;

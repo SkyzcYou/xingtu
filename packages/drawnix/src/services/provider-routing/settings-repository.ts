@@ -23,9 +23,9 @@ import {
   type ModelRef,
   type ProviderProfile,
 } from '../../utils/settings-manager';
+import { isTuziCompatibleBaseUrl } from './tuzi-api-endpoints';
 import { InvocationPlanner } from './invocation-planner';
 import { inferBindingsForProviderCatalog } from './binding-inference';
-import { isTuziCompatibleBaseUrl } from './tuzi-api-endpoints';
 import { modelPricingService } from '../../utils/model-pricing-service';
 import type {
   InvocationPlan,

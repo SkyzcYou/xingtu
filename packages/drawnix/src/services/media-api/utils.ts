@@ -6,6 +6,7 @@
 
 import type { ApiConfig } from './types';
 import type { ResolvedProviderContext } from '../provider-routing/types';
+import { isTuziCompatibleBaseUrl } from '../provider-routing/tuzi-api-endpoints';
 
 /**
  * 异步图片模型 ID 列表
@@ -56,7 +57,7 @@ function inferProviderType(
     normalized.includes('/openai') ||
     normalized.endsWith('/v1') ||
     normalized.includes('api.openai.com') ||
-    normalized.includes('.tu-zi.com')
+    isTuziCompatibleBaseUrl(baseUrl)
   ) {
     return 'openai-compatible';
   }

@@ -29,7 +29,7 @@ export function buildTextHistoryRecord(
 export function buildImageHistoryRecord(
   input: ImageMutationInput,
   outcome: { results: PlaygroundImageResult[] } | { error: string }
-): CreatePlaygroundHistoryInput | null {
+): CreatePlaygroundHistoryInput {
   const succeeded = 'results' in outcome;
   const images = succeeded
     ? outcome.results
@@ -40,9 +40,6 @@ export function buildImageHistoryRecord(
         jobId: item.jobId,
       }))
     : [];
-  if (succeeded && images.length === 0) {
-    return null;
-  }
   return {
     taskKind: 'image',
     status: succeeded ? 'succeeded' : 'failed',
@@ -51,7 +48,10 @@ export function buildImageHistoryRecord(
     durationMs: Date.now() - input.startedAt,
     parameters: {
       kind: 'image',
-      size: input.size,
+      aspectRatio: input.aspectRatio,
+      resolutionTier: input.resolutionTier,
+      quality: input.quality,
+      count: input.count,
       mode: input.mode,
       referenceFileNames: input.referenceImages.map((file) => file.name),
     },

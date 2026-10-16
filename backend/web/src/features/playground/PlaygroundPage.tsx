@@ -14,10 +14,29 @@ import {
 } from './playground-history.records';
 import { PlaygroundHistory } from './PlaygroundHistory';
 import {
+  defaultImageAspectRatio,
+  defaultImageCount,
+  defaultImageQuality,
+  defaultImageResolutionTier,
+  getImagePromptLength,
   getModelListHint,
-  imageSizes,
+  imageAspectRatios,
+  imageCountOptions,
+  imageQualities,
+  imageResolutionTiers,
+  inferAspectRatioFromLegacySize,
+  isImageAspectRatio,
+  isImageCount,
+  isImageQuality,
+  isImageResolutionTier,
+  maxImagePromptLength,
+  maxReferenceImageCount,
   type ChatMutationInput,
+  type ImageAspectRatio,
+  type ImageCount,
   type ImageMutationInput,
+  type ImageQuality,
+  type ImageResolutionTier,
 } from './playground-page.types';
 import {
   generateImage,
@@ -66,7 +85,10 @@ export function PlaygroundPage() {
   const [messages, setMessages] = useState<PlaygroundMessage[]>([]);
   const [error, setError] = useState('');
   const [imagePrompt, setImagePrompt] = useState('');
-  const [imageSize, setImageSize] = useState<(typeof imageSizes)[number]>('1024x1024');
+  const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>(defaultImageAspectRatio);
+  const [imageResolutionTier, setImageResolutionTier] = useState<ImageResolutionTier>(defaultImageResolutionTier);
+  const [imageQuality, setImageQuality] = useState<ImageQuality>(defaultImageQuality);
+  const [imageCount, setImageCount] = useState<ImageCount>(defaultImageCount);
   const [imageMode, setImageMode] = useState<PlaygroundImageMode>('sync');
   const [referenceImages, setReferenceImages] = useState<File[]>([]);
   const [imageResults, setImageResults] = useState<PlaygroundImageResult[]>([]);
@@ -141,6 +163,7 @@ export function PlaygroundPage() {
   }, [imageMutation.isPending]);
 
   const gatewayEnabled = configQuery.data?.enabled === true;
+  const imagePromptLength = getImagePromptLength(imagePrompt);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -195,12 +218,23 @@ export function PlaygroundPage() {
       setImageError('请输入生图提示词');
       return;
     }
+    if (getImagePromptLength(prompt) > maxImagePromptLength) {
+      setImageError(`生图提示词不能超过 ${maxImagePromptLength} 个字符`);
+      return;
+    }
+    if (referenceImages.length > maxReferenceImageCount) {
+      setImageError(`参考图最多选择 ${maxReferenceImageCount} 张`);
+      return;
+    }
     setImageError('');
     setImageElapsedSeconds(0);
     imageMutation.mutate({
       model: selectedModel,
       prompt,
-      size: imageSize,
+      aspectRatio: imageAspectRatio,
+      resolutionTier: imageResolutionTier,
+      quality: imageQuality,
+      count: imageCount,
       referenceImages,
       mode: imageMode,
       startedAt: Date.now(),
@@ -222,13 +256,15 @@ export function PlaygroundPage() {
       return;
     }
 
-    const replaySize = imageSizes.includes(record.parameters.size as (typeof imageSizes)[number])
-      ? record.parameters.size as (typeof imageSizes)[number]
-      : imageSizes[0];
+    const replayAspectRatio = record.parameters.aspectRatio
+      || inferAspectRatioFromLegacySize(record.parameters.size);
     setActiveTab('image');
     setImageModel(record.model);
     setImagePrompt(record.prompt);
-    setImageSize(replaySize);
+    setImageAspectRatio(replayAspectRatio);
+    setImageResolutionTier(record.parameters.resolutionTier || defaultImageResolutionTier);
+    setImageQuality(record.parameters.quality || defaultImageQuality);
+    setImageCount(record.parameters.count || defaultImageCount);
     setImageMode(record.parameters.mode);
     setReferenceImages([]);
     setImageResults([]);
@@ -393,14 +429,64 @@ export function PlaygroundPage() {
                 </select>
                 <small>同步模式走 /v1/images/generations 或 /v1/images/edits；异步模式文生图用 async:true，参考图/编辑用 multipart async=true 触发后台 job。</small>
               </label>
-              <label>
-                <span>尺寸</span>
-                <select value={imageSize} onChange={(event) => setImageSize(event.target.value as typeof imageSize)}>
-                  {imageSizes.map((item) => (
-                    <option key={item} value={item}>{item}</option>
-                  ))}
-                </select>
-              </label>
+              <div className="playground-control-grid">
+                <label>
+                  <span>画面比例</span>
+                  <select
+                    value={imageAspectRatio}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (isImageAspectRatio(value)) setImageAspectRatio(value);
+                    }}
+                  >
+                    {imageAspectRatios.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>分辨率</span>
+                  <select
+                    value={imageResolutionTier}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (isImageResolutionTier(value)) setImageResolutionTier(value);
+                    }}
+                  >
+                    {imageResolutionTiers.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>质量</span>
+                  <select
+                    value={imageQuality}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (isImageQuality(value)) setImageQuality(value);
+                    }}
+                  >
+                    {imageQualities.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>数量</span>
+                  <select
+                    value={imageCount}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      if (isImageCount(value)) setImageCount(value);
+                    }}
+                  >
+                    {imageCountOptions.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               <label>
                 <span>调用方式</span>
                 <select value={imageMode} onChange={(event) => setImageMode(event.target.value as PlaygroundImageMode)}>
@@ -410,15 +496,21 @@ export function PlaygroundPage() {
                 <small>同步用于复现 OpenAI-compatible API；异步用于验证星图帐号后台 job 链路。</small>
               </label>
               <label>
-                <span>提示词</span>
+                <span className="playground-prompt-header">
+                  <span>提示词</span>
+                  <span className={imagePromptLength > maxImagePromptLength ? 'playground-prompt-counter is-invalid' : 'playground-prompt-counter'}>
+                    {imagePromptLength}/{maxImagePromptLength}
+                  </span>
+                </span>
                 <textarea
                   id="playground-image-prompt"
                   name="imagePrompt"
                   value={imagePrompt}
-                  placeholder="描述你想生成的图片。"
+                  placeholder="描述你想生成的画面、主体、风格、镜头和细节。"
                   rows={5}
                   onChange={(event) => setImagePrompt(event.target.value)}
                 />
+                <small>图片请求会发送 aspect_ratio、output_resolution、image_size、quality、n 与 stream:false；resolution 为视频专用字段，不会在这里发送。</small>
               </label>
               <label>
                 <span>参考图</span>
@@ -428,8 +520,11 @@ export function PlaygroundPage() {
                   type="file"
                   onChange={(event) => setReferenceImages(Array.from(event.target.files ?? []))}
                 />
-                <small>{referenceImages.length > 0 ? `已选择 ${referenceImages.length} 张参考图。` : '不上传参考图时执行文生图。'}</small>
+                <small>{referenceImages.length > 0 ? `已选择 ${referenceImages.length} 张参考图，最多 ${maxReferenceImageCount} 张。` : '不上传参考图时执行文生图。'}</small>
               </label>
+              <div className="playground-cost-hint">
+                实际消耗以模型配置和上游计费为准；失败或超时通常不计费。
+              </div>
               {(imageError || imageMutation.error) && <p className="form-error">{imageError || imageMutation.error?.message}</p>}
               <div className="playground-actions">
                 <Button theme="primary" type="submit" disabled={!gatewayEnabled} loading={imageMutation.isPending}>

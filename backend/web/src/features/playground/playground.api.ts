@@ -53,6 +53,26 @@ export interface PlaygroundImageResult {
   jobId?: string;
 }
 
+interface ImageGenerationInput {
+  model: string;
+  prompt: string;
+  aspectRatio: string;
+  resolutionTier: string;
+  quality: string;
+  count: number;
+  referenceImages: File[];
+  mode: PlaygroundImageMode;
+}
+
+interface ImageRequestFields {
+  aspect_ratio: string;
+  output_resolution: string;
+  image_size: string;
+  quality: string;
+  n: number;
+  stream: false;
+}
+
 export async function getGatewayModels(): Promise<string[]> {
   const response = await request<unknown>('/v1/models');
   const models = (response as ModelListResponse).data
@@ -62,24 +82,13 @@ export async function getGatewayModels(): Promise<string[]> {
   return Array.from(new Set(models)).sort();
 }
 
-export async function generateImage(input: {
-  model: string;
-  prompt: string;
-  size: string;
-  referenceImages: File[];
-  mode: PlaygroundImageMode;
-}): Promise<PlaygroundImageResult[]> {
+export async function generateImage(input: ImageGenerationInput): Promise<PlaygroundImageResult[]> {
   return input.mode === 'async'
     ? generateImageAsync(input)
     : generateImageSync(input);
 }
 
-async function generateImageSync(input: {
-  model: string;
-  prompt: string;
-  size: string;
-  referenceImages: File[];
-}): Promise<PlaygroundImageResult[]> {
+async function generateImageSync(input: ImageGenerationInput): Promise<PlaygroundImageResult[]> {
   const payload = buildImagePayload(input);
   const response = await rawRequest<unknown>(
     input.referenceImages.length > 0 ? '/v1/images/edits' : '/v1/images/generations',
@@ -92,12 +101,7 @@ async function generateImageSync(input: {
   return parseNonEmptyImageResponse(response);
 }
 
-async function generateImageAsync(input: {
-  model: string;
-  prompt: string;
-  size: string;
-  referenceImages: File[];
-}): Promise<PlaygroundImageResult[]> {
+async function generateImageAsync(input: ImageGenerationInput): Promise<PlaygroundImageResult[]> {
   const payload = buildImagePayload(input, { async: true });
   const submit = await rawRequest<ImageJobSubmitResponse>(
     input.referenceImages.length > 0 ? '/v1/images/edits' : '/v1/images/generations',
@@ -135,12 +139,7 @@ export async function sendChatCompletion(input: {
 }
 
 function buildImagePayload(
-  input: {
-    model: string;
-    prompt: string;
-    size: string;
-    referenceImages: File[];
-  },
+  input: ImageGenerationInput,
   options?: { async?: boolean }
 ): FormData | string {
   return input.referenceImages.length > 0
@@ -148,24 +147,25 @@ function buildImagePayload(
     : JSON.stringify({
         model: input.model,
         prompt: input.prompt,
-        size: input.size,
+        ...buildImageRequestFields(input),
         ...(options?.async ? { async: true } : {}),
       });
 }
 
 function buildImageEditForm(
-  input: {
-    model: string;
-    prompt: string;
-    size: string;
-    referenceImages: File[];
-  },
+  input: ImageGenerationInput,
   options?: { async?: boolean }
 ): FormData {
   const form = new FormData();
+  const fields = buildImageRequestFields(input);
   form.append('model', input.model);
   form.append('prompt', input.prompt);
-  form.append('size', input.size);
+  form.append('aspect_ratio', fields.aspect_ratio);
+  form.append('output_resolution', fields.output_resolution);
+  form.append('image_size', fields.image_size);
+  form.append('quality', fields.quality);
+  form.append('n', String(fields.n));
+  form.append('stream', 'false');
   if (options?.async) {
     form.append('async', 'true');
   }
@@ -173,6 +173,17 @@ function buildImageEditForm(
     form.append('image', file, file.name);
   });
   return form;
+}
+
+function buildImageRequestFields(input: ImageGenerationInput): ImageRequestFields {
+  return {
+    aspect_ratio: input.aspectRatio,
+    output_resolution: input.resolutionTier,
+    image_size: input.resolutionTier,
+    quality: input.quality,
+    n: input.count,
+    stream: false,
+  };
 }
 
 async function pollImageJob(id: string): Promise<ImageJobResponse> {
