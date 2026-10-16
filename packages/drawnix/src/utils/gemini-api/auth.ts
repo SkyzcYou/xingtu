@@ -64,6 +64,7 @@ function openProviderSettings(): void {
   }, 100);
 }
 import { isTuziEmbeddedMode } from '../../services/tuzi-embedded-config';
+import './auth-dialog.scss';
 
 /**
  * 兼容旧调用点：统一打开新的认证方式选择弹窗。

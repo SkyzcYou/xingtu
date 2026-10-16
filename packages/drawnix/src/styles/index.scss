@@ -341,7 +341,7 @@
     // ============================================================================
 
     // 平板及以下 (max-width: 768px) - 简化工具栏
-    @include tablet-and-below {
+    @include tablet-landscape-and-below {
       left: var(--aitu-toolbar-left, #{$mobile-spacing});
       top: calc(#{$safe-area-top} + #{$mobile-spacing});
       bottom: auto;
@@ -406,7 +406,7 @@
 
     // 移动端收起状态修饰符
     &--mobile-collapsed {
-      @include tablet-and-below {
+      @include tablet-landscape-and-below {
         height: auto !important;
         min-height: 0 !important;
         max-height: none !important;
@@ -425,7 +425,7 @@
     &__collapsed-shortcuts {
       display: none; // 默认隐藏
 
-      @include tablet-and-below {
+      @include tablet-landscape-and-below {
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -484,7 +484,7 @@
     &__mobile-toggle {
       display: none;
 
-      @include tablet-and-below {
+      @include tablet-landscape-and-below {
         display: flex;
         align-items: center;
         justify-content: center;

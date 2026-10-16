@@ -97,6 +97,14 @@ export interface ProviderPptExplainerBindingMetadata {
 export interface ProviderVideoBindingMetadata {
   videoApiCompatibility?: VideoApiCompatibility;
   resolvedVideoApiCompatibility?: Exclude<VideoApiCompatibility, 'auto'>;
+  /** Optional channel limits; supportedParameters is informational, not a gate. */
+  veoAdvancedParameters?: {
+    supportedParameters: Array<
+      'negative_prompt' | 'generate_audio' | 'seed' | 'person_generation'
+    >;
+    seedMax?: number;
+    personGenerationOptions?: string[];
+  };
   allowedDurations?: string[];
   defaultDuration?: string;
   durationMode?: ProviderVideoDurationMode;

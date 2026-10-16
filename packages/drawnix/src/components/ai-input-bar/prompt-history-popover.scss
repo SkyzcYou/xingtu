@@ -2,6 +2,7 @@
  * PromptHistoryPopover 样式
  */
 
+@import '../../styles/z-index.scss';
 
 .prompt-history-popover {
   --prompt-history-popover-glass-bg: rgba(229, 231, 235, 0.95);
@@ -72,10 +73,10 @@
 
   // 面板容器
   &__panel-wrapper {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    right: 0;
-    z-index: 1000;
+    --prompt-history-popover-glass-bg: rgba(229, 231, 235, 0.95);
+    --prompt-history-popover-glass-blur: blur(40px);
+    z-index: $z-popover;
+    pointer-events: auto;
 
     .prompt-list-panel {
       background: var(--prompt-history-popover-glass-bg);

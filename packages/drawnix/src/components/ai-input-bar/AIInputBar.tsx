@@ -223,6 +223,11 @@ import {
   type ImageGenerationAnchorPresentationState,
 } from '../../utils/image-generation-anchor-state';
 import { WorkZoneTransforms } from '../../plugins/with-workzone';
+import {
+  getRetainedTaskCardRectangles,
+  occupiesGenerationPlacement,
+  placeBelowRetainedTaskCards,
+} from '../../utils/generation-task-placement';
 import { useWorkflowSubmission } from '../../hooks/useWorkflowSubmission';
 import { isFrameElement } from '../../types/frame.types';
 import { matchFrameSizeForModel } from '../../utils/frame-size-matcher';
@@ -1176,26 +1181,35 @@ function selectedContentFromBoundTarget(
       : null;
   }
 
-  if (!target.url || !['image', 'video'].includes(target.type)) return null;
+  if (!target.url || !['image', 'video', 'audio'].includes(target.type)) return null;
 
   const isVideo = target.type === 'video';
+  const isAudio = target.type === 'audio';
 
   return {
-    type: target.type as 'image' | 'video',
+    type: target.type as 'image' | 'video' | 'audio',
     url: target.url,
     name:
       language === 'zh'
         ? referenceOnly
-          ? isVideo
+          ? isAudio
+            ? '参考音频'
+            : isVideo
             ? '参考视频'
             : '参考图'
+          : isAudio
+          ? '目标音频'
           : isVideo
           ? '目标视频'
           : '目标图片'
         : referenceOnly
-        ? isVideo
+        ? isAudio
+          ? 'Reference audio'
+          : isVideo
           ? 'Reference video'
           : 'Reference image'
+        : isAudio
+        ? 'Target audio'
         : isVideo
         ? 'Target video'
         : 'Target image',
@@ -4444,6 +4458,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
               ? `无法读取当前${
                   target.type === 'text'
                     ? '文本'
+                    : target.type === 'audio'
+                    ? '音频'
                     : target.type === 'video'
                     ? '视频'
                     : '图片'
@@ -4451,6 +4467,8 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
               : `Failed to read the follow setting for this ${
                   target.type === 'text'
                     ? 'text'
+                    : target.type === 'audio'
+                    ? 'audio'
                     : target.type === 'video'
                     ? 'video'
                     : 'image'
@@ -5954,7 +5972,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             const originY = board.viewport?.origination?.[1] || 0;
 
             const allElements = board.children.filter(
-              (el: { type?: string }) => el.type !== 'workzone'
+              occupiesGenerationPlacement
             );
 
             const viewportCenterX =
@@ -6132,6 +6150,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                       frameRect: shouldCreateIndependentBatchAnchors
                         ? targetFrameRect
                         : undefined,
+                      extraOccupiedRects: getRetainedTaskCardRectangles(board),
                     }
                   )
                 : null;
@@ -6218,6 +6237,18 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
                 }, 100);
               }
             } else {
+              const retainedTaskPlacement = placeBelowRetainedTaskCards(
+                board,
+                [workzoneX, workzoneY],
+                { width: WORKZONE_WIDTH, height: WORKZONE_HEIGHT },
+                GAP,
+                zoom
+              );
+              if (!targetFrameId) {
+                expectedInsertY += retainedTaskPlacement[1] - workzoneY;
+              }
+              [workzoneX, workzoneY] = retainedTaskPlacement;
+
               const workzoneElement = WorkZoneTransforms.insertWorkZone(board, {
                 workflow: workflowMessageData,
                 position: [workzoneX, workzoneY],
@@ -8026,6 +8057,13 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     ]);
     const boundTargetFollowCopy = useMemo(() => {
       if (language === 'zh') {
+        if (followControlsTargetType === 'audio') {
+          return {
+            once: '本次只作参考音频',
+            always: '对此音频始终只作参考音频',
+            stop: '关闭任务栏跟随',
+          };
+        }
         if (followControlsTargetType === 'text') {
           return {
             once: '本次只作上下文',
@@ -8047,6 +8085,13 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         };
       }
 
+      if (followControlsTargetType === 'audio') {
+        return {
+          once: 'Use this audio as a reference this time',
+          always: 'Always use this audio as reference',
+          stop: 'Stop following this audio',
+        };
+      }
       if (followControlsTargetType === 'text') {
         return {
           once: 'Use as context this time',
@@ -8111,13 +8156,17 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             <div className="ai-input-bar__settings-row">
               <span>
                 {language === 'zh'
-                  ? '点击图片后自动居中'
-                  : 'Center image after clicking'}
+                  ? '点击目标后自动居中'
+                  : 'Center target after clicking'}
               </span>
               <Switch
                 size="small"
                 value={centerImageOnClickEnabled}
-                aria-label={language === 'zh' ? '点击图片后自动居中' : 'Center image after clicking'}
+                aria-label={
+                  language === 'zh'
+                    ? '点击目标后自动居中'
+                    : 'Center target after clicking'
+                }
                 onChange={(checked) =>
                   handleCenterImageOnClickChange(checked as boolean)
                 }

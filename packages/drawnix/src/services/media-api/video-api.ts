@@ -32,6 +32,7 @@ import {
   shouldDownloadVideoContent,
 } from '../video-binding-utils';
 import { prepareVideoReferenceImageBlob } from '../video-reference-image-utils';
+import { appendVeoAdvancedMetadata } from '../../utils/veo-parameters';
 import { prepareMiniMaxH3Submission } from '../minimax-h3-video-workflow';
 
 const DURATION_IN_MODEL_PREFIX = 'sora-2-';
@@ -281,6 +282,7 @@ export async function submitVideoGeneration(
     if (submission.duration && !durationEncodedInModel(submission.model)) {
       formData.append(submission.durationField, String(submission.duration));
     }
+    appendVeoAdvancedMetadata(formData, model, params.params, config.binding?.metadata?.video);
 
     appendVideoOutputParams(formData, model, params.size, params.params);
 

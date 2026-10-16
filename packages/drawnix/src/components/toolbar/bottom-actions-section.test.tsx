@@ -21,6 +21,10 @@ vi.mock('../feedback-button', () => ({
   FeedbackButton: () => <button data-testid="toolbar-feedback" />,
 }));
 
+vi.mock('./canvas-resources-button', () => ({
+  CanvasResourcesButton: () => <button data-testid="toolbar-resources" />,
+}));
+
 vi.mock('../tool-button', () => ({
   ToolButton: ({
     'data-testid': testId,
@@ -78,8 +82,8 @@ describe('BottomActionsSection', () => {
       taskButton?.compareDocumentPosition(button as Node) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
-    expect(container.querySelectorAll('button[data-testid]')).toHaveLength(5);
-    expect(container.querySelectorAll('button[data-testid]').item(4)).toBe(
+    expect(container.querySelectorAll('button[data-testid]')).toHaveLength(6);
+    expect(container.querySelectorAll('button[data-testid]').item(5)).toBe(
       button
     );
   });

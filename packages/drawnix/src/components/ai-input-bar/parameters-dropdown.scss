@@ -251,6 +251,16 @@ $text-dark: var(--xingtu-glass-text-primary);
     font-size: 12px;
   }
 
+  &__options--three-state {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+
+    .parameters-dropdown__option {
+      justify-content: center;
+      min-width: 0;
+    }
+  }
+
   &__field-input {
     width: 100%;
     height: 32px;

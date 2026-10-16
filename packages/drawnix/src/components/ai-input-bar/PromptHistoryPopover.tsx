@@ -10,6 +10,17 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  autoUpdate,
+  flip,
+  FloatingPortal,
+  offset,
+  shift,
+  size,
+  useDismiss,
+  useFloating,
+  useInteractions,
+} from '@floating-ui/react';
 import { History } from 'lucide-react';
 import { usePromptHistory } from '../../hooks/usePromptHistory';
 import { useGenerationHistory } from '../../hooks/useGenerationHistory';
@@ -72,6 +83,33 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const leaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const promptPanelTitle = language === 'zh' ? '我的提示词' : 'My Prompts';
+  const { refs, floatingStyles, context } = useFloating({
+    open: isOpen,
+    onOpenChange: setIsOpen,
+    placement: 'top-end',
+    strategy: 'fixed',
+    whileElementsMounted: autoUpdate,
+    middleware: [
+      offset(8),
+      flip({ padding: 8 }),
+      shift({ padding: 8 }),
+      size({
+        padding: 8,
+        apply({ availableWidth, availableHeight, elements }) {
+          elements.floating.style.setProperty(
+            '--panel-max-width',
+            `${Math.max(0, availableWidth)}px`
+          );
+          elements.floating.style.setProperty(
+            '--panel-max-height',
+            `${Math.max(0, Math.min(400, availableHeight))}px`
+          );
+        },
+      }),
+    ],
+  });
+  const dismiss = useDismiss(context);
+  const { getReferenceProps, getFloatingProps } = useInteractions([dismiss]);
 
   const promptItems =
     generationType === 'image' || generationType === 'video'
@@ -271,10 +309,23 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
       <div className="prompt-history-popover__actions">
         <HoverTip content={promptPanelTitle} showArrow={false}>
           <button
+            ref={refs.setReference}
+            type="button"
+            aria-label={promptPanelTitle}
+            aria-expanded={isOpen}
+            {...getReferenceProps()}
             className="prompt-history-popover__trigger"
             data-track="ai_input_click_history"
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onClick={() => {
+              if (hoverTimeoutRef.current)
+                clearTimeout(hoverTimeoutRef.current);
+              if (leaveTimeoutRef.current)
+                clearTimeout(leaveTimeoutRef.current);
+              refreshHistory();
+              setIsOpen((open) => !open);
+            }}
           >
             <History size={18} />
           </button>
@@ -284,35 +335,40 @@ export const PromptHistoryPopover: React.FC<PromptHistoryPopoverProps> = ({
 
       {/* 提示词面板 */}
       {isOpen && (
-        <div
-          className="prompt-history-popover__panel-wrapper"
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        >
-          <PromptListPanel
-            title={promptPanelTitle}
-            items={promptItems}
-            onSelect={handleSelectPrompt}
-            onTogglePin={handleTogglePin}
-            onDelete={handleDelete}
-            onTitleClick={handleOpenMyPrompts}
-            language={language}
-            showCount={true}
-            footer={
-              <div className="prompt-history-popover__panel-footer">
-                <button
-                  type="button"
-                  className="prompt-history-popover__open-library-btn"
-                  onClick={handleOpenMyPrompts}
-                >
-                  {language === 'zh' ? '打开我的提示词库' : 'Open prompt library'}
-                </button>
-              </div>
-            }
-            analyticsSurface="ai_input_prompt_popover"
-            analyticsPromptType={generationType}
-          />
-        </div>
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            {...getFloatingProps()}
+            className="prompt-history-popover__panel-wrapper"
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+          >
+            <PromptListPanel
+              title={promptPanelTitle}
+              items={promptItems}
+              onSelect={handleSelectPrompt}
+              onTogglePin={handleTogglePin}
+              onDelete={handleDelete}
+              onTitleClick={handleOpenMyPrompts}
+              language={language}
+              showCount={true}
+              footer={
+                <div className="prompt-history-popover__panel-footer">
+                  <button
+                    type="button"
+                    className="prompt-history-popover__open-library-btn"
+                    onClick={handleOpenMyPrompts}
+                  >
+                    {language === 'zh' ? '打开我的提示词库' : 'Open prompt library'}
+                  </button>
+                </div>
+              }
+              analyticsSurface="ai_input_prompt_popover"
+              analyticsPromptType={generationType}
+            />
+          </div>
+        </FloatingPortal>
       )}
       {confirmDialog}
     </div>
