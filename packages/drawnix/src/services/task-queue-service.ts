@@ -1063,7 +1063,7 @@ class TaskQueueService {
         let cachedPreviewImageUrl = result.imageUrl;
         let cachedClips = result.clips;
 
-        if (fmt !== 'lyrics') {
+        if (fmt !== 'lyrics' && fmt !== 'json' && result.url) {
           try {
             const audioMeta = {
               extraMetadata: {
@@ -1209,6 +1209,7 @@ class TaskQueueService {
             primaryClipId: result.primaryClipId,
             clipIds: result.clipIds,
             clips: cachedClips,
+            analysisData: result.analysisData,
           },
           executionPhase: undefined,
           completedAt: now,

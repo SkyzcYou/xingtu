@@ -110,6 +110,34 @@ function spyOnResponseBodyCancel(response: Response) {
 }
 
 describe('provider routing', () => {
+  it('keeps native v2 and legacy Suno bindings separate despite stale chat metadata', () => {
+    const profile: ProviderProfileSnapshot = {
+      id: 'tuzi', name: 'Tuzi', providerType: 'openai-compatible',
+      baseUrl: 'https://api.tu-zi.com/v1', apiKey: 'test', authType: 'bearer',
+    };
+    const model: ModelConfig = { id: 'suno/music', label: 'Music', type: 'text', vendor: ModelVendor.SUNO };
+    const bindings = inferBindingsForProviderModel(profile, model, {
+      chat: { method: 'POST', path: '/v1/chat/completions' },
+      native: { method: 'POST', path: '/suno/v2/music', transport: 'task', async: true },
+      otherAction: { method: 'POST', path: '/suno/v2/cover' },
+    });
+    expect(bindings).toHaveLength(1);
+    expect(bindings[0]).toMatchObject({
+      operation: 'audio', protocol: 'tuzi.suno.v2',
+      submitPath: '/suno/v2/music', pollPathTemplate: '/suno/v2/fetch/{taskId}',
+    });
+    expect(inferBindingsForProviderModel(profile, { ...model, id: 'suno_music', type: 'audio' })[0])
+      .toMatchObject({ protocol: 'tuzi.suno.music', submitPath: '/suno/submit/music' });
+    for (const id of ['suno/create-voice', 'suno/add-instrumental', 'suno/add-vocals']) {
+      expect(inferBindingsForProviderModel(profile, { ...model, id, type: 'text' }, {
+        native: { path: `/suno/v2/${id.slice(5)}`, method: 'POST' },
+        chat: { path: '/v1/chat/completions', method: 'POST' },
+      })).toEqual([]);
+    }
+    expect(inferBindingsForProviderModel(profile, { ...model, id: 'suno/not-a-real-action' })).toEqual([]);
+    expect(inferBindingsForProviderModel({ ...profile, baseUrl: 'https://api.openai.com/v1' }, model)).toEqual([]);
+  });
+
   it('uses the configured Tuzi URL on opentu.ai without generating a proxy path', async () => {
     vi.stubGlobal('location', { hostname: 'opentu.ai' });
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({}));
@@ -2138,29 +2166,58 @@ describe('provider routing', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it('returns an image 404 from the configured endpoint without switching', async () => {
-    const notFoundResponse = new Response(
-      '<!doctype html><title>Not Found</title>',
-      { status: 404 }
-    );
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(notFoundResponse);
+  it.each(['/images/generations', '/images/edits'])(
+    'retries a %s 404 on a trusted Tuzi fallback',
+    async (path) => {
+      const endpoints = await import('../provider-routing/tuzi-api-endpoints');
+      const endpointList = vi
+        .spyOn(endpoints, 'loadTuziApiEndpointBaseUrls')
+        .mockResolvedValue([
+          'https://api.tu-zi.com',
+          'https://apius.tu-zi.com',
+        ]);
+      const notFoundResponse = new Response(
+        '<!doctype html><title>Not Found</title>',
+        { status: 404 }
+      );
+      const successResponse = Response.json({
+        data: [{ url: 'https://images.example.com/result.png' }],
+      });
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(notFoundResponse)
+        .mockResolvedValueOnce(successResponse);
+      const body = JSON.stringify({ model: 'gpt-image-2', prompt: 'test' });
 
-    const response = await sendTuzi({
-      path: '/images/generations',
-      baseUrlStrategy: 'ensure-v1',
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-image-2', prompt: 'test' }),
-      fetcher,
-    });
+      try {
+        const response = await sendTuzi({
+          path,
+          baseUrlStrategy: 'ensure-v1',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+          fetcher,
+        });
 
-    expect(response).toBe(notFoundResponse);
-    expect(response.status).toBe(404);
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
-      'https://api.tu-zi.com/v1/images/generations'
-    );
-  });
+        expect(response).toBe(successResponse);
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([
+          `https://api.tu-zi.com/v1${path}`,
+          `https://apius.tu-zi.com/v1${path}`,
+        ]);
+        expect(fetcher.mock.calls[1]?.[1]).toMatchObject({
+          method: 'POST',
+          body,
+          headers: {
+            Authorization: 'Bearer secret',
+            'Content-Type': 'application/json',
+          },
+        });
+      } finally {
+        endpointList.mockRestore();
+      }
+    }
+  );
 
   it('treats trusted Tuzi alternate domains as Tuzi GPT Image providers', () => {
     const model: ModelConfig = {

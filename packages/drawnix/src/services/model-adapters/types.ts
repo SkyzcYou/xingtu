@@ -142,6 +142,7 @@ export interface AudioGenerationResult {
   primaryClipId?: string;
   clipIds?: string[];
   clips?: AudioGenerationClipResult[];
+  analysisData?: unknown;
   raw?: unknown;
 }
 
