@@ -1,6 +1,25 @@
 {
   "versions": [
     {
+      "version": "6.7.38",
+      "date": "2026-10-20",
+      "type": "patch",
+      "highlights": "同步上游音乐工作流、蒙版编辑与图片恢复更新，保留本地特色功能",
+      "changes": {
+        "features": [
+          "接入 Suno v2 与原生音乐制作工作流",
+          "支持 Tuzi GPT Image 蒙版编辑与参考图保真开关"
+        ],
+        "fixes": [
+          "修复 Gemini 图片参数、参考图 MIME 类型与生成结果加载恢复"
+        ],
+        "improvements": [
+          "优化画布 @ 引用缩略图、悬停预览和生成文本卡片阅读复制",
+          "保留星图主题、帐号支付、Tuzi 同源代理及安全自动更新机制"
+        ]
+      }
+    },
+    {
       "version": "6.7.37",
       "date": "2026-10-17",
       "type": "patch",
