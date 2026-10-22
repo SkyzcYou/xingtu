@@ -2,6 +2,7 @@ import {
   getFreshOidcAccessToken,
   getOidcAccessToken,
 } from '../auth/oidc-session';
+import { withTuziClientChannel } from '../tuzi-client-attribution';
 import type {
   PreparedProviderTransportRequest,
   ProviderBaseUrlStrategy,
@@ -712,7 +713,9 @@ export class ProviderTransport {
         shouldInheritProviderCredentials(context, requestUrl) ? credential : ''
       )
     )}`;
-    const url = resolveTuziProxyRequestUrl(authenticatedUrl);
+    const url = resolveTuziProxyRequestUrl(
+      withTuziClientChannel(authenticatedUrl)
+    );
     const mergedHeaders = mergeHeaders(
       credentialContext.extraHeaders,
       request.headers

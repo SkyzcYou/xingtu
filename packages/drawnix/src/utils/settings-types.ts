@@ -122,6 +122,7 @@ export interface ProviderCatalogManualBinding {
 }
 
 export interface ProviderCatalog {
+  discoverySource?: 'marketplace' | 'models-endpoint';
   profileId: string;
   discoveredAt: number | null;
   discoveredModels: ModelConfig[];

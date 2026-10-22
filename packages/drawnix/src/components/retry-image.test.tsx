@@ -58,6 +58,28 @@ describe('RetryImage', () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('completes an already decoded browser-cache image once and preserves its forwarded ref', async () => {
+    vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(true);
+    vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(100);
+    const loaded = vi.fn();
+    const ref = React.createRef<HTMLImageElement>();
+    render(<RetryImage ref={ref} src="data:image/png;base64,cached" alt="already loaded" onLoadSuccess={loaded} />);
+    await waitFor(() => expect(loaded).toHaveBeenCalledTimes(1));
+    expect(ref.current).toBe(screen.getByAltText('already loaded'));
+    expect(ref.current?.style.opacity).toBe('1');
+    fireEvent.load(ref.current as HTMLImageElement);
+    expect(loaded).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not treat a broken completed request as a decoded image', () => {
+    vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(true);
+    vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(0);
+    const loaded = vi.fn();
+    render(<RetryImage src="data:image/png;base64,bad" alt="bad cache" onLoadSuccess={loaded} />);
+    expect(loaded).not.toHaveBeenCalled();
   });
 
   it('关闭 skeleton 时加载中的图片保持可见', () => {
@@ -73,6 +95,74 @@ describe('RetryImage', () => {
       'style.opacity',
       '1'
     );
+  });
+
+  it('exhausted retries can recover through the canvas fallback without leaving the image hidden', () => {
+    const loaded = vi.fn();
+    const sourceChanged = vi.fn();
+    render(
+      <RetryImage
+        src="/__aitu_cache__/image/recovery.png"
+        alt="recoverable"
+        maxRetries={0}
+        skipCacheFallback
+        showSkeleton={false}
+        onSourceChange={sourceChanged}
+        onError={(event) => {
+          event.currentTarget.style.visibility = 'hidden';
+          event.currentTarget.src = 'blob:canvas-recovery';
+        }}
+        onLoad={(event) => {
+          event.currentTarget.style.visibility = '';
+          loaded();
+        }}
+      />
+    );
+    const image = screen.getByAltText('recoverable');
+    fireEvent.error(image);
+    expect(image.style.visibility).toBe('hidden');
+    fireEvent.load(image);
+    expect(image.style.visibility).toBe('');
+    expect(sourceChanged).toHaveBeenLastCalledWith('blob:canvas-recovery');
+    expect(loaded).toHaveBeenCalledOnce();
+    fireEvent.load(image);
+    expect(loaded).toHaveBeenCalledOnce();
+  });
+
+  it('still ignores late load events from the failed source when no fallback was adopted', () => {
+    const loaded = vi.fn();
+    render(
+      <RetryImage
+        src="https://example.com/failed.png"
+        alt="failed"
+        maxRetries={0}
+        skipCacheFallback
+        showSkeleton={false}
+        onLoad={loaded}
+      />
+    );
+    const image = screen.getByAltText('failed');
+    fireEvent.error(image);
+    fireEvent.load(image);
+    expect(loaded).not.toHaveBeenCalled();
+  });
+
+  it('does not accept a timed-out request as a successful late recovery', async () => {
+    vi.useFakeTimers();
+    const loaded = vi.fn();
+    render(
+      <RetryImage
+        src="https://example.com/timeout.png"
+        alt="timeout"
+        eager
+        skipCacheFallback
+        loadTimeoutMs={10}
+        onLoad={loaded}
+      />
+    );
+    await act(() => vi.advanceTimersByTimeAsync(10));
+    fireEvent.load(screen.getByAltText('timeout'));
+    expect(loaded).not.toHaveBeenCalled();
   });
 
   it('开启 skeleton 时图片加载完成后再淡入', () => {

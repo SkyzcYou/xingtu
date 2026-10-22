@@ -120,7 +120,7 @@ import { isFrameElement } from './types/frame.types';
 import { openCardInKnowledgeBase } from './utils/card-actions';
 import { useI18n } from './i18n';
 import { hasPersistedRecoverableTasks, safeReload } from './utils/active-tasks';
-import { useTabSync } from './hooks/useTabSync';
+import { useTabSync, type TabSyncHandler } from './hooks/useTabSync';
 import { canvasAudioPlaybackService } from './services/canvas-audio-playback-service';
 import { useCanvasAudioPlaybackSelector } from './hooks/useCanvasAudioPlayback';
 import { isAudioNodeElement } from './types/audio-node.types';
@@ -266,7 +266,7 @@ export type DrawnixProps = {
   /** Called when board is switched */
   onBoardSwitch?: (board: WorkspaceBoard) => void;
   /** Called when tab sync is needed (other tab modified data) */
-  onTabSyncNeeded?: () => void;
+  onTabSyncNeeded?: TabSyncHandler;
   /** 数据是否已准备好（用于判断画布是否为空） */
   isDataReady?: boolean;
   /** 当前画板 ID（用于 tab 同步过滤） */
@@ -391,7 +391,9 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     useState<MediaLibraryOpenConfig>({
       mode: SelectionMode.BROWSE,
     });
-  const [backupRestoreOpen, setBackupRestoreOpen] = useState(false);
+  const [backupRestoreOpen, setBackupRestoreOpen] = useState(
+    () => new URLSearchParams(window.location.search).get('legacyData') === '1'
+  );
   const [cloudSyncOpen, setCloudSyncOpen] = useState(false);
   useAutoUpdateGuard('workspace-edit-dialogs', getOpenEditorBlockReason({
     standaloneDialog: appState.openDialogTypes.size > 0,
@@ -1186,7 +1188,7 @@ interface DrawnixContentProps {
   onValueChange?: (value: PlaitElement[]) => void;
   afterInit?: (board: PlaitBoard) => void;
   onBoardSwitch?: (board: WorkspaceBoard) => void;
-  onTabSyncNeeded?: () => void;
+  onTabSyncNeeded?: TabSyncHandler;
   handleMessageDrawerToggle: () => void;
   handleProjectDrawerToggle: () => void;
   handleToolboxDrawerToggle: () => void;
@@ -1294,7 +1296,7 @@ const DrawnixContent: React.FC<DrawnixContentProps> = ({
     onSyncNeeded: useCallback(() => {
       // 如果父组件提供了回调，使用无刷新同步
       if (onTabSyncNeeded) {
-        onTabSyncNeeded();
+        return onTabSyncNeeded();
       } else {
         // 否则降级到刷新页面（向后兼容）
         void safeReload();

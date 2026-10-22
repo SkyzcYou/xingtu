@@ -6,6 +6,10 @@ import {
   normalizeModelApiBaseUrl,
   runtimeModelDiscovery,
 } from '../../utils/runtime-model-discovery';
+import {
+  discoverProviderModels,
+  usesTuziMarketplace,
+} from '../../services/provider-model-catalog';
 
 export function getCredentialChangedProfiles(
   profiles: ProviderProfile[],
@@ -15,6 +19,7 @@ export function getCredentialChangedProfiles(
     const previous = previousProfiles.find((item) => item.id === profile.id);
     return (
       !previous ||
+      profile.credentialSource !== previous.credentialSource ||
       profile.apiKey.trim() !== previous.apiKey.trim() ||
       normalizeModelApiBaseUrl(
         profile.baseUrl || TUZI_PROVIDER_DEFAULT_BASE_URL
@@ -32,17 +37,20 @@ export async function refreshChangedProviderModels(
   const failures = await Promise.all(
     profiles.map(async (profile) => {
       if (
-        !profile.apiKey.trim() ||
+        (!profile.apiKey.trim() && profile.credentialSource !== 'oidc-session') ||
         profile.capabilities.supportsModelsEndpoint === false
       ) {
         return null;
       }
       try {
-        const models = await runtimeModelDiscovery.discover(
-          profile.id,
-          profile.baseUrl || TUZI_PROVIDER_DEFAULT_BASE_URL,
-          profile.apiKey.trim()
-        );
+        const models =
+          profile.credentialSource === 'oidc-session' || usesTuziMarketplace(profile)
+            ? await discoverProviderModels(profile)
+            : await runtimeModelDiscovery.discover(
+                profile.id,
+                profile.baseUrl || TUZI_PROVIDER_DEFAULT_BASE_URL,
+                profile.apiKey.trim()
+              );
         runtimeModelDiscovery.applySelection(
           profile.id,
           models.map((model) => model.id)

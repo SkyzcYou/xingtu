@@ -1,23 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderProfile } from '../../../utils/settings-manager';
+import {
+  getCredentialChangedProfiles,
+  refreshChangedProviderModels,
+} from '../provider-model-refresh';
 
 const discovery = vi.hoisted(() => ({
   discover: vi.fn(),
+  discoverForProfile: vi.fn(),
   applySelection: vi.fn(),
   setError: vi.fn(),
 }));
 vi.mock('../../../utils/settings-manager', () => ({
+  LEGACY_DEFAULT_PROVIDER_PROFILE_ID: 'legacy-default',
   TUZI_PROVIDER_DEFAULT_BASE_URL: 'https://api.example.com/v1',
 }));
 vi.mock('../../../utils/runtime-model-discovery', () => ({
   runtimeModelDiscovery: discovery,
   normalizeModelApiBaseUrl: (url: string) => url.trim().replace(/\/$/, ''),
 }));
-import {
-  getCredentialChangedProfiles,
-  refreshChangedProviderModels,
-} from '../provider-model-refresh';
-
 const profile = (overrides: Partial<ProviderProfile> = {}): ProviderProfile =>
   ({
     id: 'default',
@@ -81,6 +82,33 @@ describe('provider model refresh after saving credentials', () => {
       }),
     ]);
     expect(discovery.discover).not.toHaveBeenCalled();
+  });
+
+  it('refreshes a login provider through its current session without a stored key', async () => {
+    const account = profile({
+      id: 'xingtu-login',
+      credentialSource: 'oidc-session',
+      apiKey: '',
+    });
+    discovery.discoverForProfile.mockResolvedValueOnce([{ id: 'account-model' }]);
+
+    expect(await refreshChangedProviderModels([account])).toEqual([]);
+    expect(discovery.discoverForProfile).toHaveBeenCalledWith(account, {
+      selectAll: undefined,
+      signal: undefined,
+    });
+    expect(discovery.applySelection).toHaveBeenCalledWith(account.id, ['account-model']);
+    expect(discovery.discover).not.toHaveBeenCalled();
+  });
+
+  it('refreshes when the credential source changes with the same stored key', () => {
+    const original = profile({ apiKey: '' });
+    expect(
+      getCredentialChangedProfiles(
+        [profile({ apiKey: '', credentialSource: 'oidc-session' })],
+        [original]
+      )
+    ).toHaveLength(1);
   });
 
   it('reports failure without leaking responses or affecting other providers', async () => {

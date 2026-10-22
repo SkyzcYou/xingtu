@@ -1,6 +1,36 @@
 {
   "versions": [
     {
+      "version": "1.2.1",
+      "date": "2026-10-22",
+      "changes": {
+        "features": [
+          "整合图片创作能力并移除独立工作流模式 (#316)"
+        ],
+        "fixes": [],
+        "improvements": [
+          "add: 接入 Tuzi 每请求渠道归因并支持唯一桌面渠道 (#315)"
+        ]
+      },
+      "type": "patch",
+      "highlights": "整合图片创作能力并移除独立工作流模式 (#316)"
+    },
+    {
+      "version": "1.2.0",
+      "date": "2026-10-21",
+      "changes": {
+        "features": [],
+        "fixes": [
+          "点击画布素材时保留用户选择的生成模式 (#313)",
+          "按提示词比例固定 Image 2.5 的 2K/4K 请求尺寸 (#312)",
+          "修复 Tuzi 模型目录与画布显示并优化 PPT 路由校验 (#311)"
+        ],
+        "improvements": []
+      },
+      "type": "minor",
+      "highlights": "点击画布素材时保留用户选择的生成模式 (#313)"
+    },
+    {
       "version": "6.7.38",
       "date": "2026-10-20",
       "type": "patch",

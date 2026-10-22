@@ -1107,6 +1107,9 @@ class SettingsManager {
         manualBindings: this.normalizeProviderCatalogManualBindings(
           draft.manualBindings
         ),
+        discoverySource: draft.discoverySource === 'marketplace'
+          ? 'marketplace'
+          : undefined,
         sourceBaseUrl:
           typeof draft.sourceBaseUrl === 'string'
             ? draft.sourceBaseUrl

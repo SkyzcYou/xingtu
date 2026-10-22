@@ -35,6 +35,7 @@ import type {
 import { ErrorFallbackUI, safeModeReload, goToDebug } from './ErrorBoundary';
 import { collectAndDownloadErrorLog } from '../utils/error-log-exporter';
 import { BoardSaveBarrier, hasEmbeddedBoardTool } from '../utils/board-save-barrier';
+import { PendingPersistence } from './pending-persistence';
 
 importLocalTuziCredentials();
 
@@ -246,12 +247,14 @@ export function App() {
   const isHandlingPopStateRef = useRef<boolean>(false);
   // 保存 board 引用，用于手动触发边界更新
   const boardRef = useRef<PlaitBoard | null>(null);
-  // 标记是否正在同步其他标签页的数据（同步期间不保存，防止旧数据覆盖新数据）
+  // 只在应用同步结果时忽略相同快照的回写，不阻止读取期间的新编辑。
   const isSyncingRef = useRef<boolean>(false);
+  const appliedSyncDataRef = useRef<BoardPersistencePayload | null>(null);
+  const tabSyncRequestRef = useRef(0);
   // 标记本标签页是否有用户主动修改（只有用户修改过才在 visibilitychange 时保存）
   const localDirtyRef = useRef<boolean>(false);
-  // 标记当前标签页是否还有未落盘的本地变更（含元素与 viewport）
-  const hasPendingPersistenceRef = useRef<boolean>(false);
+  // 全局变更序号防止过期跨标签读取覆盖本地编辑，保存屏障按画板串行落盘。
+  const [pendingPersistence] = useState(() => new PendingPersistence());
   const boardSaveBarrierRef = useRef(new BoardSaveBarrier());
   const boardSyncBaselinesRef = useRef(new Map<string, string | null>());
   const externalBoardChangesRef = useRef(new Set<string>());
@@ -270,20 +273,19 @@ export function App() {
 
   const persistBoardData = useCallback(
     (boardId: string, data: BoardPersistencePayload, revision: number) => {
+      const persistenceRevision = pendingPersistence.begin();
       return boardSaveBarrierRef.current.save(boardId, revision, async () => {
         await WorkspaceService.getInstance().saveBoard(boardId, data);
         markTabSyncVersion(boardId);
         rememberBoardSyncBaseline(boardId);
       }).then(() => {
-        if (currentBoardIdRef.current === boardId) {
-          hasPendingPersistenceRef.current = boardSaveBarrierRef.current.isDirty(boardId);
-        }
         if (!boardSaveBarrierRef.current.isDirty(boardId)) {
+          pendingPersistence.complete(persistenceRevision);
           clearBoardCloseSnapshot(boardId);
         }
       });
     },
-    [rememberBoardSyncBaseline]
+    [pendingPersistence, rememberBoardSyncBaseline]
   );
 
   useEffect(() => {
@@ -304,6 +306,13 @@ export function App() {
   useEffect(() => {
     currentBoardIdRef.current = currentBoardId;
   }, [currentBoardId]);
+
+  useEffect(
+    () => () => {
+      tabSyncRequestRef.current += 1;
+    },
+    []
+  );
 
   const updateLatestBoardData = useCallback(
     (
@@ -332,7 +341,7 @@ export function App() {
         !snapshot ||
         !boardId ||
         snapshot.boardId !== boardId ||
-        !hasPendingPersistenceRef.current
+        !pendingPersistence.hasPending
       ) {
         return;
       }
@@ -350,7 +359,7 @@ export function App() {
           console.warn(`[App] Failed to flush board on ${reason}:`, error);
         });
     },
-    [persistBoardData]
+    [pendingPersistence, persistBoardData]
   );
 
   useEffect(() => {
@@ -479,7 +488,7 @@ export function App() {
             nextData,
             currentBoard.updatedAt
           );
-          hasPendingPersistenceRef.current = false;
+          pendingPersistence.reset();
           setValue(nextData);
         }
         setIsLoading(false);
@@ -606,7 +615,7 @@ export function App() {
           setCurrentBoardId(currentBoard.id);
           // 持久化到 sessionStorage，确保标签页隔离
           workspaceService.persistCurrentBoardId(currentBoard.id);
-          hasPendingPersistenceRef.current = false;
+          pendingPersistence.reset();
         }
 
         if (currentBoard) {
@@ -639,7 +648,6 @@ export function App() {
               boardSaveBarrierRef.current.markDirty(restoredBoardId)
             )
               .then(() => {
-                hasPendingPersistenceRef.current = false;
                 clearBoardCloseSnapshot(restoredBoardId);
               })
               .catch((error: Error) => {
@@ -666,7 +674,6 @@ export function App() {
             initialData,
             currentBoard.updatedAt
           );
-          hasPendingPersistenceRef.current = false;
 
           // 先设置原始元素，让页面先渲染
           setValue(initialData);
@@ -707,7 +714,7 @@ export function App() {
     };
 
     initialize();
-  }, [updateLatestBoardData, persistBoardData]);
+  }, [pendingPersistence, updateLatestBoardData, persistBoardData]);
 
   // Handle board switching
   const handleBoardSwitch = useCallback(
@@ -742,7 +749,7 @@ export function App() {
 
         // 切换画布时重置脏标志，新画布的初始数据不需要保存
         localDirtyRef.current = false;
-        hasPendingPersistenceRef.current = false;
+        pendingPersistence.reset();
 
         // 在设置 state 之前，预先恢复失效的视频 URL
         const elements = await recoverVideoUrlsInElements(board.elements || []);
@@ -778,7 +785,7 @@ export function App() {
         finishSwitch();
       }
     },
-    [updateLatestBoardData, rememberBoardSyncBaseline, persistBoardData]
+    [pendingPersistence, updateLatestBoardData, rememberBoardSyncBaseline, persistBoardData]
   );
 
   // Handle browser back/forward navigation
@@ -820,13 +827,23 @@ export function App() {
   }, [currentBoardId, handleBoardSwitch]);
 
   // Handle tab sync (when other tab modified data)
-  const handleTabSyncNeeded = useCallback(async () => {
-    // 设置同步标志，防止同步期间的 onChange 触发保存（保存旧数据覆盖新数据）
-    isSyncingRef.current = true;
+  const handleTabSyncNeeded = useCallback(async (): Promise<boolean> => {
+    if (pendingPersistence.hasPending || isSyncingRef.current) return false;
+    const workspaceService = WorkspaceService.getInstance();
+    const syncBoardId = workspaceService.getState().currentBoardId;
+    if (!syncBoardId) return false;
+    const requestId = ++tabSyncRequestRef.current;
+    const revision = pendingPersistence.currentRevision;
+    const canApply = () =>
+      tabSyncRequestRef.current === requestId &&
+      pendingPersistence.currentRevision === revision &&
+      !pendingPersistence.hasPending &&
+      workspaceService.getState().currentBoardId === syncBoardId;
+    let applied = false;
 
     try {
       await boardSaveBarrierRef.current.waitForPending();
-      const workspaceService = WorkspaceService.getInstance();
+      if (!canApply()) return false;
       let currentBoard = workspaceService.getCurrentBoard();
 
       // 如果画板未加载（getCurrentBoard 返回 null），先通过 switchBoard 加载
@@ -834,7 +851,7 @@ export function App() {
         const currentBoardId = workspaceService.getState().currentBoardId;
         if (!currentBoardId) {
           console.warn('[App] handleTabSyncNeeded: no current board ID');
-          return;
+          return false;
         }
 
         // 验证画板是否存在
@@ -843,7 +860,7 @@ export function App() {
             '[App] handleTabSyncNeeded: board not found',
             currentBoardId
           );
-          return;
+          return true;
         }
 
         try {
@@ -854,47 +871,64 @@ export function App() {
             '[App] handleTabSyncNeeded: failed to load board',
             error
           );
-          return;
+          return false;
         }
       }
 
       // 使用 reloadBoard 强制从 IndexedDB 重新加载数据（而不是使用缓存）
-      const updatedBoard = await workspaceService.reloadBoard(currentBoard.id);
+      const updatedBoard = await workspaceService.reloadBoard(
+        currentBoard.id,
+        canApply
+      );
 
       if (updatedBoard) {
         // 恢复视频 URL
         const elements = await recoverVideoUrlsInElements(
           updatedBoard.elements || []
         );
+        if (!canApply()) return false;
         const nextData = {
           children: elements,
           viewport: updatedBoard.viewport,
           theme: updatedBoard.theme,
         };
+        isSyncingRef.current = true;
+        appliedSyncDataRef.current = nextData;
+        applied = true;
         updateLatestBoardData(
           updatedBoard.id,
           nextData,
           updatedBoard.updatedAt
         );
-        hasPendingPersistenceRef.current = false;
+        pendingPersistence.reset();
         boardSaveBarrierRef.current.markLoaded(updatedBoard.id);
         rememberBoardSyncBaseline(updatedBoard.id);
 
         // 更新 React 状态，触发重新渲染
         setValue(nextData);
+        return true;
       }
+      return false;
     } catch (error) {
       console.error('[App] Failed to sync board data:', error);
       // 如果同步失败，降级到刷新页面
-      void safeReload();
+      if (canApply()) {
+        void safeReload();
+        return true;
+      }
+      return false;
     } finally {
       // 延迟清除同步标志，等待 React 重渲染完成后 onChange 触发的保存被跳过
       // React 18 的批量更新可能在下一帧才执行，所以使用 setTimeout 确保足够延迟
-      setTimeout(() => {
-        isSyncingRef.current = false;
-      }, 100);
+      if (applied) {
+        setTimeout(() => {
+          if (tabSyncRequestRef.current !== requestId) return;
+          isSyncingRef.current = false;
+          appliedSyncDataRef.current = null;
+        }, 100);
+      }
     }
-  }, [updateLatestBoardData, rememberBoardSyncBaseline]);
+  }, [pendingPersistence, updateLatestBoardData, rememberBoardSyncBaseline]);
 
   // Handle board changes (auto-save)
   const handleBoardChange = useCallback(
@@ -909,14 +943,16 @@ export function App() {
         return;
       }
 
-      // 同步期间不保存，防止用旧数据覆盖其他标签页保存的新数据
-      if (isSyncingRef.current) {
+      // 仅跳过同步快照自身的回写，期间新插入的节点仍正常保存。
+      if (
+        isSyncingRef.current &&
+        data.children === appliedSyncDataRef.current?.children
+      ) {
         return;
       }
 
       // 标记本标签页有用户主动修改
       localDirtyRef.current = true;
-      hasPendingPersistenceRef.current = true;
 
       // Save to current board
       const workspaceService = WorkspaceService.getInstance();
@@ -938,7 +974,7 @@ export function App() {
           console.error('[App] Failed to save board:', err);
         });
     },
-    [updateLatestBoardData, persistBoardData]
+    [pendingPersistence, updateLatestBoardData, persistBoardData]
   );
 
   // Handle viewport changes (pan/zoom) - 单独保存 viewport
@@ -955,14 +991,18 @@ export function App() {
         };
       }
 
-      // 同步期间不保存 viewport，防止用旧数据覆盖
-      if (isSyncingRef.current) {
+      // 同步快照的视口不回写，用户随后移动视口仍正常保存。
+      if (
+        isSyncingRef.current &&
+        viewport === appliedSyncDataRef.current?.viewport
+      ) {
         return;
       }
 
-      hasPendingPersistenceRef.current = true;
       const dirtyBoardId = currentBoardIdRef.current;
-      const revision = dirtyBoardId ? boardSaveBarrierRef.current.markDirty(dirtyBoardId) : 0;
+      if (!isDataReadyRef.current || !dirtyBoardId) return;
+      pendingPersistence.begin();
+      const revision = boardSaveBarrierRef.current.markDirty(dirtyBoardId);
 
       // 防抖保存
       if (viewportSaveTimerRef.current) {
@@ -970,7 +1010,10 @@ export function App() {
       }
       viewportSaveTimerRef.current = setTimeout(() => {
         // 再次检查同步状态
-        if (isSyncingRef.current) {
+        if (
+          isSyncingRef.current &&
+          viewport === appliedSyncDataRef.current?.viewport
+        ) {
           return;
         }
 
@@ -991,7 +1034,7 @@ export function App() {
         }
       }, VIEWPORT_SAVE_DEBOUNCE);
     },
-    [updateLatestBoardData, persistBoardData]
+    [pendingPersistence, updateLatestBoardData, persistBoardData]
   );
 
   // 页面关闭/隐藏前保存当前画布快照，并尽量 flush 到 IndexedDB
@@ -1005,8 +1048,8 @@ export function App() {
         viewportSaveTimerRef.current = null;
       }
 
-      // 同步期间不保存，防止旧数据覆盖
-      if (isSyncingRef.current) {
+      // 同步快照本身不回写，但其后的本地修改仍需在离开前保留。
+      if (isSyncingRef.current && !pendingPersistence.hasPending) {
         return;
       }
 
@@ -1067,7 +1110,7 @@ export function App() {
         clearTimeout(viewportSaveTimerRef.current);
       }
     };
-  }, [persistCloseSnapshot, updateLatestBoardData]);
+  }, [pendingPersistence, persistCloseSnapshot, updateLatestBoardData]);
 
   // 处理安全模式选择
   const handleSafeModeChoice = useCallback((useSafeMode: boolean) => {
