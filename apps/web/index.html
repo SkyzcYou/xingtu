@@ -153,19 +153,19 @@
         ]
       }
     </script>
-    <!-- Workflow deep links resolve relative entry assets from the app root. -->
-    <script id="workflow-resource-base">
+    <!-- Retired workflow bookmarks load the main canvas and legacy data recovery. -->
+    <script id="legacy-canvas-resource-base">
       if (/^\/workflow(?:\/|$)/.test(window.location.pathname)) {
-        var workflowBase = document.createElement('base');
-        workflowBase.href = '/';
-        document.head.appendChild(workflowBase);
+        var legacyCanvasBase = document.createElement('base');
+        legacyCanvasBase.href = '/';
+        document.head.appendChild(legacyCanvasBase);
       }
     </script>
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
-    <meta name="app-version" content="6.7.39" />
+    <meta name="app-version" content="6.7.40" />
     <script>
       (function () {
         try {
@@ -527,7 +527,7 @@
     <link rel="icon" type="image/ico" href="./favicon.ico" />
 
     <!-- PWA Manifest -->
-    <link rel="manifest" href="./manifest.json?v=6.7.39" />
+    <link rel="manifest" href="./manifest.json?v=6.7.40" />
 
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#ffffff" />

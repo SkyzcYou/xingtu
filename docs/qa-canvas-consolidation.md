@@ -192,3 +192,14 @@
 - 基于 HEAD 和当前 readiness 函数做同输入对照：当前结果已加载、旧副本未加载时，HEAD 返回 false，修复后 true；当前结果未加载时仍 false。组件和 hook 回归覆盖缓存已解码无 load 事件、损坏图片不能误报、旧副本不阻止占位完成与移除、本次多图完整性。
 - 6 文件 109 项测试通过，包含自动插入、占位内容/同步、图片重试和实际画布图片确认。drawnix/Web TypeScript、Web 主应用构建和 `git diff --check` 通过。ESLint 为 retry-image 原有 1 个 Nx 模块边界错误和 1 条无用 Fragment 警告，已用 HEAD 源码 stdin 运行相同规则核对，本次没有新 lint 问题。日志为 `/tmp/opentu-canvas-display-{tests,types,build,lint,lint-baseline}.log`。
 - 本次未执行真实页面、用户浏览器数据库、供应商请求或网络计时，未证明截图现场必然由上述条件触发。修复可消除这些前端状态等待；原图下载、缓存缺失/损坏等其他环境问题仍可能导致等待。更新既有 DOC/QA，不新增文档。开发服务保持 7202。
+
+
+## 本地星图版本跟进
+
+用户确认采用上游退役方案，撤销上一版本继续保留独立工作流的取舍。删除完整模式目录、挂载/菜单/翻译、21 项独占直接依赖及专用资源、样式隔离和测试配置。保留本地帐号、支付、主题、同源代理、安全更新与主画布共用生成和任务服务。
+
+旧 `/workflow` 及其深层书签仅用于兼容：通过主画布 shell 加载后归一化为主画布并打开旧数据恢复。Docker 精确匹配这两类路径，类似 `/workflower` 的地址按普通未知路径处理；不再生成独立模式 JS/CSS 或 `workflow-assets`。
+
+已验证 Web 与 drawnix 库 TypeScript；上游变更回归及共享服务回归共 52 个测试文件中 51 个通过，另一个文件的首次动态导入用例在 5 秒内未完成；独立 detached worktree 的修改前提交 `de4ead53` 复现相同超时（14 通过、1 失败），确认为既有基线。日志 `/tmp/aitu-workflow-engine-baseline.log` 与 `/tmp/aitu-workflow-engine-retest.log`。App 同步/持久化/保存屏障 16 项及工具栏/路径 18 项通过。未调用收费生成接口，也未读取或清除用户的旧数据库。
+
+生产 Docker 镜像构建（含 frozen lockfile 安装、Web 类型、应用和 SW 构建）通过，启动资源检查通过；产物中无独立模式挂载标记、专用 CSS 或资源目录。首页、`/workflow` 及深层链接返回主应用；`/workflower`、`/workflow-app/index.html` 和 `/workflow-assets/plugins/index.json` 返回 404。浏览器从 `/workflow/canvas/retired` 进入后 URL 归一化为主画布并带 `legacyData=1`，显示“独立工作流模式已移除”的历史数据恢复界面；未点击读取或导入旧数据。发布版本为 6.7.40。

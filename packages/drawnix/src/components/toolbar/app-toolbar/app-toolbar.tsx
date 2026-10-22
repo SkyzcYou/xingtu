@@ -25,7 +25,6 @@ import { ToolbarContextMenu } from '../toolbar-context-menu';
 export interface AppToolbarProps extends ToolbarSectionProps {
   onOpenBackupRestore?: () => void;
   onOpenCloudSync?: () => void;
-  onOpenWorkflowMode?: () => void;
 }
 
 export const AppToolbar: React.FC<AppToolbarProps> = ({
