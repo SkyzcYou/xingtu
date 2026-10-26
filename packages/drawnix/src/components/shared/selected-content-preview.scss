@@ -44,7 +44,7 @@ $text-dark: #1F2937;
   &__retry {
     cursor: pointer;
     &:focus-visible {
-      outline: 2px solid $orange-primary;
+      outline: 2px solid $accent-primary;
       outline-offset: -2px;
     }
   }
