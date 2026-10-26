@@ -120,9 +120,9 @@ const DEFAULT_SETTINGS: AppSettings = {
     apiKey: '',
     baseUrl: TUZI_PROVIDER_DEFAULT_BASE_URL,
     chatModel: getDefaultTextModel(),
-    audioModelName: 'suno_music',
+    audioModelName: getDefaultAudioModel(),
     imageModelName: getDefaultImageModel(),
-    videoModelName: 'seedance-1.5-pro',
+    videoModelName: getDefaultVideoModel(),
     textModelName: getDefaultTextModel(),
   },
   tts: {
@@ -469,6 +469,7 @@ class SettingsManager {
       legacyDefaultImageApiCompatibilityV1:
         migrations.legacyDefaultImageApiCompatibilityV1 === true,
       legacyDefaultImageModelV1: migrations.legacyDefaultImageModelV1 === true,
+      compatibilityDefaultModelsV2: migrations.compatibilityDefaultModelsV2 === true,
     };
   }
 
@@ -543,6 +544,22 @@ class SettingsManager {
     return {
       ...gemini,
       imageModelName: getDefaultImageModel(),
+    };
+  }
+
+  private migrateCompatibilityDefaultModels(gemini: GeminiSettings): GeminiSettings {
+    if (!this.isTuziProviderBaseUrl(gemini.baseUrl || '')) return gemini;
+
+    return {
+      ...gemini,
+      imageModelName: ['gpt-image-2', 'gpt-image-2-vip'].includes(gemini.imageModelName || '')
+        ? getDefaultImageModel() : gemini.imageModelName,
+      videoModelName: gemini.videoModelName === 'seedance-1.5-pro'
+        ? getDefaultVideoModel() : gemini.videoModelName,
+      textModelName: gemini.textModelName === 'gpt-5.5'
+        ? getDefaultTextModel() : gemini.textModelName,
+      chatModel: gemini.chatModel === 'gpt-5.5'
+        ? getDefaultTextModel() : gemini.chatModel,
     };
   }
 
@@ -1257,9 +1274,14 @@ class SettingsManager {
       migrations.legacyDefaultImageApiCompatibilityV1 !== true;
     const shouldRunLegacyDefaultImageModelMigration =
       migrations.legacyDefaultImageModelV1 !== true;
-    const gemini = shouldRunLegacyDefaultImageModelMigration
+    const shouldRunCompatibilityDefaultModelsMigration =
+      migrations.compatibilityDefaultModelsV2 !== true;
+    const legacyGemini = shouldRunLegacyDefaultImageModelMigration
       ? this.migrateLegacyDefaultImageModel(settings.gemini)
       : settings.gemini;
+    const gemini = shouldRunCompatibilityDefaultModelsMigration
+      ? this.migrateCompatibilityDefaultModels(legacyGemini)
+      : legacyGemini;
     const legacyBaseUrl = gemini.baseUrl || DEFAULT_SETTINGS.gemini.baseUrl;
     const legacyProfileForBuild =
       shouldRunLegacyDefaultImageMigration &&
@@ -1283,6 +1305,10 @@ class SettingsManager {
       if (gemini !== settings.gemini) {
         this.shouldPersistSettingsAfterInitialization = true;
       }
+    }
+    if (shouldRunCompatibilityDefaultModelsMigration) {
+      migrations.compatibilityDefaultModelsV2 = true;
+      this.shouldPersistSettingsAfterInitialization = true;
     }
 
     const xingtuLoginProfile = this.buildXingtuLoginProfile(

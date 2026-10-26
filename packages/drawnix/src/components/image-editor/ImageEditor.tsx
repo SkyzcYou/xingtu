@@ -3,7 +3,7 @@
  * 包装 ImageEditorCore，提供全屏模态框体验
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
 import { createPortal } from 'react-dom';
 import { Z_INDEX } from '../../constants/z-index';
@@ -18,11 +18,14 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   onSave,
   onOverwrite,
   onInsert,
+  onSplit,
+  onResize,
   showOverwrite = false,
 }) => {
   const updateGuardId = React.useId();
   useAutoUpdateGuard(`image-editor:${updateGuardId}`, visible ? '图片编辑窗口尚未关闭' : null);
   const editorRef = useRef<ImageEditorCoreRef>(null);
+  const [busy, setBusy] = useState(false);
 
   // 重置状态当编辑器关闭时
   useEffect(() => {
@@ -34,8 +37,17 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   if (!visible) return null;
 
   const content = (
-    <div className="image-editor" style={{ zIndex: Z_INDEX.DIALOG_AI_IMAGE }} data-testid="image-editor">
-      <div className="image-editor__backdrop" onClick={onClose} />
+    <div
+      className="image-editor"
+      style={{ zIndex: Z_INDEX.DIALOG_AI_IMAGE }}
+      data-testid="image-editor"
+    >
+      <div
+        className="image-editor__backdrop"
+        onClick={() => {
+          if (!busy) onClose();
+        }}
+      />
       <div className="image-editor__container">
         <ImageEditorCore
           ref={editorRef}
@@ -43,6 +55,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           showOverwrite={showOverwrite}
           onOverwrite={onOverwrite}
           onInsert={onInsert}
+          onSplit={onSplit}
+          onResize={onResize}
+          onBusyChange={setBusy}
           onClose={onClose}
           onSave={onSave}
         />

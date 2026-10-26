@@ -156,6 +156,7 @@ export interface SettingsMigrations {
   independentManualProvidersV1?: boolean;
   legacyDefaultImageApiCompatibilityV1?: boolean;
   legacyDefaultImageModelV1?: boolean;
+  compatibilityDefaultModelsV2?: boolean;
 }
 
 export interface TtsSettings {

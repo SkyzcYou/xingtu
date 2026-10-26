@@ -616,6 +616,27 @@ function normalizeAIInputImageUrl(url: string): string {
   }
 }
 
+// Match canvas identity as well as pixels: distinct elements may share a URL.
+function isUploadedCanvasReference(
+  content: SelectedContent,
+  uploaded: SelectedContent[]
+): boolean {
+  const url = content.url;
+  return (
+    content.type === 'image' &&
+    !!content.sourceElementId &&
+    typeof url === 'string' &&
+    uploaded.some(
+      (item) =>
+        item.type === 'image' &&
+        item.sourceElementId === content.sourceElementId &&
+        typeof item.url === 'string' &&
+        normalizeAIInputImageUrl(item.url) === normalizeAIInputImageUrl(url) &&
+        item.maskImage === content.maskImage
+    )
+  );
+}
+
 function buildPromptLineageMeta(
   workflow: WorkflowDefinition,
   step: Pick<WorkflowDefinition['steps'][number], 'mcp' | 'args'>
@@ -1276,6 +1297,7 @@ const SelectionWatcher: React.FC<{
     elements: PlaitElement[]
   ) => boolean;
   onBoundImageTargetChange?: (target: BoundImageTarget | null) => void;
+  onCanvasPointer?: () => void;
   onBoundInputViewportChange?: () => void;
   /** 用于存储 board 引用的 ref，供父组件使用 */
   externalBoardRef?: React.MutableRefObject<any>;
@@ -1297,6 +1319,7 @@ const SelectionWatcher: React.FC<{
     canvasAssociationPickingToken,
     onCanvasAssociationSelection,
     onBoundImageTargetChange,
+    onCanvasPointer,
     onBoundInputViewportChange,
     externalBoardRef,
     onCanvasEmptyChange,
@@ -1393,6 +1416,8 @@ const SelectionWatcher: React.FC<{
 
     const onBoundImageTargetChangeRef = useRef(onBoundImageTargetChange);
     onBoundImageTargetChangeRef.current = onBoundImageTargetChange;
+    const onCanvasPointerRef = useRef(onCanvasPointer);
+    onCanvasPointerRef.current = onCanvasPointer;
 
     const onBoundInputViewportChangeRef = useRef(onBoundInputViewportChange);
     onBoundInputViewportChangeRef.current = onBoundInputViewportChange;
@@ -1400,6 +1425,8 @@ const SelectionWatcher: React.FC<{
     const onFrameSelectedRef = useRef(onFrameSelected);
     onFrameSelectedRef.current = onFrameSelected;
     const selectionRunIdRef = useRef(0);
+    const boundTargetRunIdRef = useRef(0);
+    const refreshSelectionRef = useRef<(() => void) | null>(null);
     const currentBoardIdRef = useRef(currentBoardId);
     currentBoardIdRef.current = currentBoardId;
 
@@ -1412,6 +1439,7 @@ const SelectionWatcher: React.FC<{
         const selectionBoardId = currentBoardIdRef.current;
         const runId = selectionRunIdRef.current + 1;
         selectionRunIdRef.current = runId;
+        const boundTargetRunId = ++boundTargetRunIdRef.current;
 
         const selectedElements =
           canvasAssociationPickElements ?? getSelectedElements(currentBoard);
@@ -1464,7 +1492,9 @@ const SelectionWatcher: React.FC<{
         ) {
           return;
         }
-        onBoundImageTargetChangeRef.current?.(boundImageTarget);
+        if (boundTargetRunId === boundTargetRunIdRef.current) {
+          onBoundImageTargetChangeRef.current?.(boundImageTarget);
+        }
 
         // 检测是否选中了单个 Frame，通知父组件
         if (
@@ -1573,11 +1603,16 @@ const SelectionWatcher: React.FC<{
         const isCanvasPointer = Boolean(
           pointerTarget &&
             boardContainer?.contains(pointerTarget) &&
-            !pointerTarget.closest(`.${ATTACHED_ELEMENT_CLASS_NAME}`)
+            !pointerTarget.closest(
+              `.${ATTACHED_ELEMENT_CLASS_NAME}, .Dialog-overlay, [role="dialog"], .ai-input-bar`
+            )
         );
 
         if (pickingAtPointer && !isCanvasPointer) {
           return;
+        }
+        if (isCanvasPointer && !pickingAtPointer) {
+          onCanvasPointerRef.current?.();
         }
         const pointer = {
           clientX: event.clientX,
@@ -1613,6 +1648,7 @@ const SelectionWatcher: React.FC<{
       const handleSelectionRefresh = () => {
         void handleSelectionChange();
       };
+      refreshSelectionRef.current = handleSelectionRefresh;
       let viewportRaf: number | null = null;
       const handleViewportChange = () => {
         if (viewportRaf !== null) return;
@@ -1623,8 +1659,10 @@ const SelectionWatcher: React.FC<{
           const currentBoard = boardRef.current;
           if (!currentBoard) return;
           const selectionBoardId = currentBoardIdRef.current;
-          const runId = selectionRunIdRef.current + 1;
-          selectionRunIdRef.current = runId;
+          // Moving/zooming only refreshes the bound target's position. It must
+          // not cancel content still being extracted for the same selection.
+          const runId = selectionRunIdRef.current;
+          const boundTargetRunId = ++boundTargetRunIdRef.current;
           void resolveBoundImageTarget(
             currentBoard,
             getSelectedElements(currentBoard),
@@ -1632,6 +1670,7 @@ const SelectionWatcher: React.FC<{
           ).then((target) => {
             if (
               runId === selectionRunIdRef.current &&
+              boundTargetRunId === boundTargetRunIdRef.current &&
               selectionBoardId === currentBoardIdRef.current
             ) {
               onBoundImageTargetChangeRef.current?.(target);
@@ -1654,6 +1693,9 @@ const SelectionWatcher: React.FC<{
       );
 
       return () => {
+        selectionRunIdRef.current += 1;
+        boundTargetRunIdRef.current += 1;
+        refreshSelectionRef.current = null;
         document.removeEventListener('pointerup', handlePointerUp);
         document.removeEventListener('keyup', handleViewportChange);
         document.removeEventListener('pointermove', handleViewportChange);
@@ -1683,21 +1725,9 @@ const SelectionWatcher: React.FC<{
       const currentBoard = boardRef.current;
       const selectedElements = getSelectedElements(currentBoard);
       if (selectedElements.length !== 1) return;
-      const selectionBoardId = currentBoardIdRef.current;
-      const runId = selectionRunIdRef.current + 1;
-      selectionRunIdRef.current = runId;
-      void resolveBoundImageTarget(
-        currentBoard,
-        selectedElements,
-        semanticEditPrompt
-      ).then((target) => {
-        if (
-          runId === selectionRunIdRef.current &&
-          selectionBoardId === currentBoardIdRef.current
-        ) {
-          onBoundImageTargetChangeRef.current?.(target);
-        }
-      });
+      // Prompt changes can change target binding. Refresh content as well so
+      // replacing an in-flight selection never leaves an unbound image empty.
+      refreshSelectionRef.current?.();
     }, [semanticEditPrompt]);
 
     return null; // 这个组件不渲染任何内容
@@ -2356,6 +2386,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       canvasAssociationTrigger
     );
     const suppressSelectionContentUrlsRef = useRef<Set<string>>(new Set());
+    const canvasToolbarPrefillElementIdRef = useRef<string | null>(null);
     const applyCanvasAssociationRefs = useCallback(
       (references: readonly CanvasAssociationRef[]) => {
         const snapshot = snapshotCanvasAssociationRefs(references);
@@ -2503,6 +2534,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
         activeDraftBaselineRef.current = null;
         lastBoundImageTargetKeyRef.current = null;
         suppressedBoundImageElementIdRef.current = null;
+        canvasToolbarPrefillElementIdRef.current = null;
         dismissedPromptElementIdRef.current = null;
         dismissedPromptGenerationTaskIdRef.current = null;
         lastPrunedBoardChildrenRef.current = null;
@@ -2587,7 +2619,12 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
 
     // 合并画布选中内容和用户上传内容
     const allContent = useMemo(() => {
-      return [...uploadedContent, ...selectedContent];
+      return [
+        ...uploadedContent,
+        ...selectedContent.filter(
+          (item) => !isUploadedCanvasReference(item, uploadedContent)
+        ),
+      ];
     }, [uploadedContent, selectedContent]);
     const effectiveBoundTargetMode = resolveBoundTargetMode(
       boundImageTargetMode,
@@ -2620,14 +2657,27 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
     const displayContent = useMemo(
       () =>
         boundTargetContent
-          ? [...uploadedContent, boundTargetContent]
+          ? [
+              ...uploadedContent,
+              ...(isUploadedCanvasReference(boundTargetContent, uploadedContent)
+                ? []
+                : [boundTargetContent]),
+            ]
           : allContent,
       [allContent, boundTargetContent, uploadedContent]
     );
     const generationContent = useMemo(
       () =>
         boundTargetGenerationContent
-          ? [boundTargetGenerationContent, ...uploadedContent]
+          ? [
+              ...(isUploadedCanvasReference(
+                boundTargetGenerationContent,
+                uploadedContent
+              )
+                ? []
+                : [boundTargetGenerationContent]),
+              ...uploadedContent,
+            ]
           : allContent,
       [allContent, boundTargetGenerationContent, uploadedContent]
     );
@@ -3794,10 +3844,24 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
           width: image.width,
           height: image.height,
           maskImage: image.maskImage,
+          sourceElementId: image.sourceElementId,
         }));
         const nextKnowledgeContextRefs = normalizeKnowledgeContextRefs(
           detail.knowledgeContextRefs
         );
+        if (
+          detail.source === 'canvas-toolbar' &&
+          boundImageTargetRef.current?.type === 'image' &&
+          nextUploadedContent.some(
+            (item) => item.sourceElementId === boundImageTargetRef.current?.elementId
+          )
+        ) {
+          // Tool instructions belong to the new generation, not the source
+          // image's draft. Preserve that draft before replacing the input.
+          detachTaskbarDraft(true);
+          canvasToolbarPrefillElementIdRef.current =
+            boundImageTargetRef.current.elementId;
+        }
         applyCanvasAssociationPromptOverwrite(nextPrompt);
         uploadedContentRef.current = nextUploadedContent;
         knowledgeContextRefsRef.current = nextKnowledgeContextRefs;
@@ -3834,6 +3898,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       audioModels,
       applyCanvasAssociationPromptOverwrite,
       confirmOverwriteInputIfNeeded,
+      detachTaskbarDraft,
       focusInput,
       imageModels,
       language,
@@ -4354,9 +4419,32 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
       [selectedModel]
     );
 
+    const handleCanvasPointer = useCallback(() => {
+      if (!canvasToolbarPrefillElementIdRef.current) return;
+      canvasToolbarPrefillElementIdRef.current = null;
+      lastBoundImageTargetKeyRef.current = null;
+      dismissedPromptElementIdRef.current = null;
+      dismissedPromptGenerationTaskIdRef.current = null;
+    }, []);
+
     const handleBoundImageTargetChange = useCallback(
       (target: BoundImageTarget | null) => {
         resetBoundTaskbarDraftsForBoard(currentBoardId ?? null);
+        if (canvasToolbarPrefillElementIdRef.current) {
+          if (
+            target?.elementId === canvasToolbarPrefillElementIdRef.current
+          ) {
+            // Viewport/async refreshes must not discard freshly filled input.
+            boundImageTargetRef.current = target;
+            setBoundImageTarget(target);
+            setBoundInputLayoutTick((tick) => tick + 1);
+            return;
+          }
+          canvasToolbarPrefillElementIdRef.current = null;
+          lastBoundImageTargetKeyRef.current = null;
+          dismissedPromptElementIdRef.current = null;
+          dismissedPromptGenerationTaskIdRef.current = null;
+        }
         const targetSupportsFollowControls = Boolean(
           target && supportsBoundTargetFollowControls(target.type)
         );
@@ -8469,6 +8557,7 @@ export const AIInputBar: React.FC<AIInputBarProps> = React.memo(
             canvasAssociationPickingToken={canvasAssociationTrigger}
             onCanvasAssociationSelection={handleCanvasAssociationSelection}
             onBoundImageTargetChange={handleBoundImageTargetChange}
+            onCanvasPointer={handleCanvasPointer}
             onBoundInputViewportChange={handleBoundInputViewportChange}
             externalBoardRef={SelectionWatcherBoardRef}
             onCanvasEmptyChange={setIsCanvasEmpty}
