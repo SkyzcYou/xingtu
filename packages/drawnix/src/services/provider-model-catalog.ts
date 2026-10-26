@@ -28,6 +28,8 @@ export async function discoverProviderModels(
   fallbackBaseUrls: string[] = [],
   options: DiscoverProviderModelsOptions = {}
 ): Promise<ModelConfig[]> {
+  options.signal?.throwIfAborted();
+
   if (profile.credentialSource === 'oidc-session') {
     return runtimeModelDiscovery.discoverForProfile(profile, {
       selectAll: options.selectAll,
@@ -41,37 +43,43 @@ export async function discoverProviderModels(
   let authoritativeModels: RuntimeModelDiscoveryOptions['authoritativeModels'];
 
   if (usesTuziMarketplace(profile)) {
-    const { modelPricingService, resolveProviderPricingConfig } = await import(
-      '../utils/model-pricing-service'
-    );
-    const pricingConfig = resolveProviderPricingConfig(profile, {
-      forModelCatalog: true,
-    });
-    if (!pricingConfig) {
-      throw new Error('未配置 Tuzi API 模型广场地址');
-    }
-    const catalog = await modelPricingService.fetchAndCache(
-      profile.id,
-      pricingConfig.pricingUrl,
-      profile.apiKey.trim(),
-      pricingConfig.pricingGroup,
-      pricingConfig.cnyPerUsd,
-      { force: options.forceMarketplaceRefresh }
-    );
-    authoritativeModels = Object.entries(catalog.prices).map(
-      ([id, price]) => ({
-        id,
-        description: price.description,
-        ...catalog.modelCatalog?.[id],
-        supported_endpoint_types:
-          catalog.modelCatalog?.[id]?.supported_endpoint_types ||
-          Object.keys(catalog.modelEndpoints?.[id] || {}),
-      })
-    );
-    if (authoritativeModels.length === 0) {
-      throw new Error('Tuzi API 模型广场暂无该分组可用模型');
+    try {
+      const { modelPricingService, resolveProviderPricingConfig } = await import(
+        '../utils/model-pricing-service'
+      );
+      const pricingConfig = resolveProviderPricingConfig(profile, {
+        forModelCatalog: true,
+      });
+      if (pricingConfig) {
+        const catalog = await modelPricingService.fetchAndCache(
+          profile.id,
+          pricingConfig.pricingUrl,
+          profile.apiKey.trim(),
+          pricingConfig.pricingGroup,
+          pricingConfig.cnyPerUsd,
+          { force: options.forceMarketplaceRefresh }
+        );
+        const catalogModels = Object.entries(catalog.prices).map(
+          ([id, price]) => ({
+            id,
+            description: price.description,
+            ...catalog.modelCatalog?.[id],
+            supported_endpoint_types:
+              catalog.modelCatalog?.[id]?.supported_endpoint_types ||
+              Object.keys(catalog.modelEndpoints?.[id] || {}),
+          })
+        );
+        if (catalogModels.length > 0) {
+          authoritativeModels = catalogModels;
+        }
+      }
+    } catch {
+      // Pricing is optional; use the provider's authenticated /models endpoint
+      // when the marketplace is unavailable or returns an unsupported response.
     }
   }
+
+  options.signal?.throwIfAborted();
 
   return runtimeModelDiscovery.discover(
     profile.id,

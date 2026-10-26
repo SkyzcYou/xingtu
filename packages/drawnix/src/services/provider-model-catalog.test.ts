@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   discover: vi.fn(),
   discoverForProfile: vi.fn(),
   fetchAndCache: vi.fn(),
+  resolveProviderPricingConfig: vi.fn(),
 }));
 
 vi.mock('../utils/runtime-model-discovery', () => ({
@@ -16,11 +17,7 @@ vi.mock('../utils/runtime-model-discovery', () => ({
 }));
 
 vi.mock('../utils/model-pricing-service', () => ({
-  resolveProviderPricingConfig: (profile: ProviderProfile) => ({
-    pricingUrl: 'https://api.tu-zi.com/api/pricing',
-    pricingGroup: profile.pricingGroup || 'default',
-    cnyPerUsd: 0.7,
-  }),
+  resolveProviderPricingConfig: mocks.resolveProviderPricingConfig,
   modelPricingService: {
     fetchAndCache: mocks.fetchAndCache,
   },
@@ -45,8 +42,13 @@ function profile(overrides: Partial<ProviderProfile> = {}): ProviderProfile {
 
 describe('provider model catalog', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mocks.discover.mockResolvedValue([]);
+    mocks.resolveProviderPricingConfig.mockImplementation((profile: ProviderProfile) => ({
+      pricingUrl: 'https://api.tu-zi.com/api/pricing',
+      pricingGroup: profile.pricingGroup || 'default',
+      cnyPerUsd: 0.7,
+    }));
     mocks.fetchAndCache.mockResolvedValue({
       profileId: 'tuzi-token-default',
       fetchedAt: Date.now(),
@@ -171,15 +173,91 @@ describe('provider model catalog', () => {
     ]);
   });
 
-  it('does not fall back to the models endpoint when the marketplace fails', async () => {
-    mocks.fetchAndCache.mockRejectedValueOnce(new Error('Pricing API error: 503'));
-    await expect(discoverProviderModels(profile())).rejects.toThrow('503');
+  it.each([
+    'Pricing API error: 404',
+    'Pricing API error: 503',
+    'Invalid pricing API response',
+    '价格接口请求失败：Unauthorized, invalid access token',
+    '模型广场请求超时，请稍后重试',
+    'Failed to fetch',
+  ])('falls back to authenticated model discovery when pricing fails: %s', async (message) => {
+    mocks.fetchAndCache.mockRejectedValueOnce(new Error(message));
+    const models = [{ id: 'unpriced-model' }];
+    mocks.discover.mockResolvedValueOnce(models);
+    const controller = new AbortController();
+    const currentProfile = profile({
+      baseUrl: 'https://apius.tu-zi.com/v1',
+      apiKey: ' test-key ',
+    });
+    const fallbackBaseUrls = ['https://apicdn.tu-zi.com/v1'];
+
+    await expect(discoverProviderModels(currentProfile, fallbackBaseUrls, {
+      selectAll: true,
+      signal: controller.signal,
+    })).resolves.toBe(models);
+    expect(mocks.discover).toHaveBeenCalledExactlyOnceWith(
+      currentProfile.id,
+      currentProfile.baseUrl,
+      'test-key',
+      fallbackBaseUrls,
+      {
+        selectAll: true,
+        signal: controller.signal,
+        authoritativeModels: undefined,
+      }
+    );
+  });
+
+  it('fetches models without prices when the marketplace catalog is empty', async () => {
+    mocks.fetchAndCache.mockResolvedValueOnce({ prices: {} });
+    const models = [{ id: 'unpriced-model' }];
+    mocks.discover.mockResolvedValueOnce(models);
+
+    await expect(discoverProviderModels(profile())).resolves.toBe(models);
+    expect(mocks.discover.mock.calls[0][4].authoritativeModels).toBeUndefined();
+  });
+
+  it('fetches models when no pricing endpoint is configured', async () => {
+    mocks.resolveProviderPricingConfig.mockReturnValueOnce(null);
+    const models = [{ id: 'unpriced-model' }];
+    mocks.discover.mockResolvedValueOnce(models);
+
+    await expect(discoverProviderModels(profile())).resolves.toBe(models);
+    expect(mocks.fetchAndCache).not.toHaveBeenCalled();
+    expect(mocks.discover.mock.calls[0][4].authoritativeModels).toBeUndefined();
+  });
+
+  it('reports the models endpoint failure when pricing and model discovery both fail', async () => {
+    mocks.fetchAndCache.mockRejectedValueOnce(new Error('Invalid pricing API response'));
+    const modelError = new Error('获取模型列表失败: HTTP 401');
+    mocks.discover.mockRejectedValueOnce(modelError);
+
+    await expect(discoverProviderModels(profile())).rejects.toBe(modelError);
+  });
+
+  it('does not start discovery for an already canceled request', async () => {
+    const controller = new AbortController();
+    const reason = new Error('已取消模型获取');
+    controller.abort(reason);
+
+    await expect(discoverProviderModels(profile(), [], {
+      signal: controller.signal,
+    })).rejects.toBe(reason);
+    expect(mocks.fetchAndCache).not.toHaveBeenCalled();
     expect(mocks.discover).not.toHaveBeenCalled();
   });
 
-  it('rejects an empty group catalog without importing unconfigured models', async () => {
-    mocks.fetchAndCache.mockResolvedValueOnce({ prices: {} });
-    await expect(discoverProviderModels(profile())).rejects.toThrow('暂无该分组可用模型');
+  it('does not start fallback model discovery after cancellation', async () => {
+    const controller = new AbortController();
+    const reason = new Error('已取消模型获取');
+    mocks.fetchAndCache.mockImplementationOnce(async () => {
+      controller.abort(reason);
+      throw new Error('Pricing API error: 503');
+    });
+
+    await expect(discoverProviderModels(profile(), [], {
+      signal: controller.signal,
+    })).rejects.toBe(reason);
     expect(mocks.discover).not.toHaveBeenCalled();
   });
 });

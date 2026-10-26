@@ -1,5 +1,35 @@
 # Provider Model Refresh QA
 
+## 2026-10-26：美国节点价格目录与无价格兼容
+
+默认 Tuzi 地址已是 `https://apius.tu-zi.com/v1`，但公开价格目录免认证逻辑只匹配主站，导致美国节点目录仍携带生成 Key。此次将同一规则补齐到现有固定源站映射中的 `api`、`apius`、`apicdn`，保留精确 HTTPS 源站与 `/api/pricing` 路径限制，继续复用现有代理。
+
+当日直接读取主站、美国节点及星图同源代理的公开 `/api/pricing`，均返回 HTTP 200、`success=true` 和 661 条记录。美国/CDN 节点不带认证头读取成功，附带明确虚构的诊断占位令牌时返回 HTTP 200、`success=false`、`Unauthorized, invalid access token`。没有读取或使用用户真实 Key；这些结果只说明公开目录的请求方式，不验证用户令牌权限。
+
+按用户补充要求，价格信息不再是获取模型的前提：价格配置缺失、HTTP 错误、格式不兼容、接口拒绝、超时、网络异常和空目录均回退到当前供应商的 `/models`。回退继续传递 API Key、候选地址、全选选项和取消信号；如果模型接口也失败，则报告模型接口错误。已取消的操作不会再启动模型请求。正常非空模型广场仍保留原有分组和元数据流程。本节更新 2026-10-19 记录的“价格失败不回退”行为。
+
+验证环境：Linux、Node v26.12.1、Vitest 3.2.4，使用已有本地依赖：
+
+```sh
+cd packages/drawnix
+NODE_OPTIONS=--no-experimental-webstorage node ../../node_modules/vitest/vitest.mjs run --config vitest.config.ts \
+  src/utils/__tests__/model-pricing-service.test.ts \
+  src/services/provider-model-catalog.test.ts \
+  src/utils/__tests__/runtime-model-discovery.test.ts \
+  src/utils/__tests__/runtime-model-classification.test.ts \
+  src/components/settings-dialog/__tests__/provider-model-refresh.test.ts \
+  src/services/__tests__/tuzi-managed-provider-models.test.ts \
+  src/services/__tests__/tuzi-proxy.test.ts \
+  src/utils/__tests__/suno-v2-discovery.test.ts --silent
+```
+
+- 修改实现前，新增价格目录用例在美国/CDN 节点的直连和生产代理场景中有 4 项失败；模型发现兼容用例有 11 项失败。
+- 修复后，8 个文件、106 项全部通过，覆盖公开目录读取、价格缺失回退、模型分类与选择、渠道同步及代理路由。
+- 根目录 `node node_modules/typescript/bin/tsc -p packages/drawnix/tsconfig.lib.json --noEmit` 通过。
+- 对两份源文件和两份测试文件执行 ESLint，通过；`git diff --check` 通过。
+
+没有新增依赖或修改供应商配置。未进行完整仓库测试、页面操作、生成请求或生产部署；线上生效仍需要发布本次前端修改。
+
 ## 2026-10-22：PR 最终集成验证
 
 功能分支 `dev/fix-selected-previews-and-model-discovery`，目标 `origin/develop`。本次 PR 统一交付选中图片预览恢复、较新兼容默认模型与公开价格目录认证修复。原有独立 `src/data/image.test.ts` 修改不纳入 PR。

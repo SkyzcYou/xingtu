@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPricingSourceSignature,
-  derivePricingUrl,
   getPricingRequestUrl,
   formatModelPrice,
   getPricingCacheTtlMs,
@@ -198,8 +197,17 @@ describe('model-pricing-service', () => {
       .toBe('https://xingtu.live/__tuzi_proxy__/api/api/pricing?group=default');
   });
 
-  it('reads the public Tuzi catalog through the proxy without generation keys or cookies', async () => {
-    vi.stubGlobal('window', { location: { origin: 'http://localhost:7201' } });
+  it.each([
+    ['api', 'http://localhost:7201', 'http://localhost:7201/__opentu_tuzi_session__/api/pricing'],
+    ['apius', 'http://localhost:7201', 'https://apius.tu-zi.com/api/pricing'],
+    ['apicdn', 'http://localhost:7201', 'https://apicdn.tu-zi.com/api/pricing'],
+    ['api', 'https://xingtu.live', 'https://xingtu.live/__tuzi_proxy__/api/api/pricing'],
+    ['apius', 'https://xingtu.live', 'https://xingtu.live/__tuzi_proxy__/apius/api/pricing'],
+    ['apicdn', 'https://xingtu.live', 'https://xingtu.live/__tuzi_proxy__/apicdn/api/pricing'],
+  ])('reads the public %s catalog from %s without generation keys or cookies', async (alias, origin, requestUrl) => {
+    const location = new URL(origin);
+    vi.stubGlobal('location', location);
+    vi.stubGlobal('window', { location });
     const fetchMock = vi.fn().mockImplementation(async (_url, init) => ({
       ok: true,
       json: async () => init.headers.Authorization
@@ -208,14 +216,14 @@ describe('model-pricing-service', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
     vi.spyOn(providerPricingCacheSettings, 'update').mockResolvedValue();
-    const url = 'https://api.tu-zi.com/api/pricing?case=public-auth';
+    const url = `https://${alias}.tu-zi.com/api/pricing?case=public-auth`;
     const caches = await Promise.all([
-      modelPricingService.fetchAndCache('public-main-a', url, 'generation-key-a', 'default', 0.7, { force: true }),
-      modelPricingService.fetchAndCache('public-main-b', url, 'generation-key-b', 'default', 0.7, { force: true }),
+      modelPricingService.fetchAndCache(`public-${alias}-a`, url, 'generation-key-a', 'default', 0.7, { force: true }),
+      modelPricingService.fetchAndCache(`public-${alias}-b`, url, 'generation-key-b', 'default', 0.7, { force: true }),
     ]);
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0]).toEqual([
-      'http://localhost:7201/__opentu_tuzi_session__/api/pricing?case=public-auth',
+      `${requestUrl}?case=public-auth`,
       expect.objectContaining({ headers: { Accept: 'application/json' }, credentials: 'omit' }),
     ]);
     expect(caches.every((cache) => cache.prices['gpt-6-sol'])).toBe(true);
@@ -226,6 +234,8 @@ describe('model-pricing-service', () => {
     'https://gateway.example.com/api/pricing',
     'https://api.tu-zi.com.evil.example/api/pricing',
     'https://api.tu-zi.com/api/private-pricing',
+    'https://apius.tu-zi.com/api/private-pricing',
+    'https://apicdn.tu-zi.com/api/private-pricing',
   ])('preserves provider authentication for %s', async (url) => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true, json: async () => ({ success: true, data: [] }),

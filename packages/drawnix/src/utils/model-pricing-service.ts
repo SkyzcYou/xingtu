@@ -1,4 +1,7 @@
-import { resolveTuziProxyRequestUrl } from '../services/provider-routing/tuzi-proxy';
+import {
+  getTuziProxyUpstreamAlias,
+  resolveTuziProxyRequestUrl,
+} from '../services/provider-routing/tuzi-proxy';
 import {
   providerPricingCacheSettings,
   type ProviderProfile,
@@ -118,7 +121,7 @@ function isTuziPricingUrl(pricingUrl: string): boolean {
 function isPublicTuziPricingUrl(pricingUrl: string): boolean {
   try {
     const url = new URL(pricingUrl);
-    return url.origin === `https://${TUZI_API_HOST}` && url.pathname === '/api/pricing';
+    return getTuziProxyUpstreamAlias(url) !== null && url.pathname === '/api/pricing';
   } catch {
     return false;
   }
@@ -681,7 +684,7 @@ class ModelPricingService {
     options: FetchAndCacheOptions = {}
   ): Promise<PricingApiResponse> {
     const normalizedPricingUrl = normalizePricingUrl(pricingUrl);
-    // This public directory rejects generation keys as invalid site tokens.
+    // The public api/apius/apicdn directories reject generation keys as site tokens.
     // Match its logical upstream URL, even when fetched via the local proxy.
     const publicPricing = isPublicTuziPricingUrl(normalizedPricingUrl);
     const requestApiKey = publicPricing ? '' : apiKey;
