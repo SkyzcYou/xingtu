@@ -2,6 +2,8 @@ import { useAutoUpdateGuard } from '../../hooks/useAutoUpdateGuard';
 import { useDrawnix } from '../../hooks/use-drawnix';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import { isTuziCompatibleBaseUrl } from '../../services/provider-routing/tuzi-api-endpoints';
+import { useFeatureDiscovery } from '../../hooks/use-feature-discovery';
+import { NewFeatureDot } from '../shared/new-feature-dot';
 import './settings-dialog.scss';
 import {
   memo,
@@ -1145,6 +1147,8 @@ export const SettingsDialog = ({
   const [activeView, setActiveView] = useState<SettingsView>(() =>
     isTuziEmbeddedMode() ? 'tuzi-account' : 'providers'
   );
+  const { hasNewFeature: hasNewCanvasFeature, markSeen: markCanvasFeatureSeen } =
+    useFeatureDiscovery('canvas-settings');
   const [tuziGroupPickerRequest, setTuziGroupPickerRequest] = useState(0);
   const groupPickerReturnTo = useRef<string | undefined>(undefined);
   const [selectedProfileId, setSelectedProfileId] = useState(
@@ -1305,6 +1309,7 @@ export const SettingsDialog = ({
   }, [appState.openSettings]);
 
   const handleViewChange = async (nextView: SettingsView) => {
+    if (nextView === 'canvas') markCanvasFeatureSeen();
     analytics.trackUIInteraction({
       area: 'settings',
       action: 'view_changed',
@@ -4504,9 +4509,17 @@ export const SettingsDialog = ({
                     : ''
                 }`}
                 onClick={() => handleViewChange(item.value)}
+                aria-label={
+                  item.value === 'canvas' && hasNewCanvasFeature
+                    ? `${item.label}（有新功能）`
+                    : undefined
+                }
               >
                 <span className="settings-dialog__nav-item-title">
                   {item.label}
+                  {item.value === 'canvas' && hasNewCanvasFeature && (
+                    <NewFeatureDot />
+                  )}
                 </span>
               </button>
             ))}

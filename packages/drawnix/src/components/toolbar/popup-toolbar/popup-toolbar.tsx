@@ -2810,6 +2810,7 @@ export const PopupToolbar = () => {
               <PopupImageDetailsButton
                 key={`generation-details-${generationDetailsSource.kind}-${generationDetailsSource.id}-${generationDetailsSource.url}-${generationDetailsSource.generationTaskId}`}
                 image={generationDetailsSource}
+                board={board}
                 language={language}
                 selectionRect={selectionRect}
                 autoOpenRequest={imageDetailsRequest?.id === generationDetailsSource.id &&
