@@ -40,7 +40,7 @@ export async function discoverProviderModels(
   const baseUrl = normalizeModelApiBaseUrl(
     profile.baseUrl || TUZI_PROVIDER_DEFAULT_BASE_URL
   );
-  let authoritativeModels: RuntimeModelDiscoveryOptions['authoritativeModels'];
+  let modelMetadata: RuntimeModelDiscoveryOptions['modelMetadata'];
 
   if (usesTuziMarketplace(profile)) {
     try {
@@ -59,23 +59,17 @@ export async function discoverProviderModels(
           pricingConfig.cnyPerUsd,
           { force: options.forceMarketplaceRefresh }
         );
-        const catalogModels = Object.entries(catalog.prices).map(
-          ([id, price]) => ({
-            id,
-            description: price.description,
-            ...catalog.modelCatalog?.[id],
-            supported_endpoint_types:
-              catalog.modelCatalog?.[id]?.supported_endpoint_types ||
-              Object.keys(catalog.modelEndpoints?.[id] || {}),
-          })
-        );
-        if (catalogModels.length > 0) {
-          authoritativeModels = catalogModels;
-        }
+        modelMetadata = Object.entries(catalog.prices).map(([id, price]) => ({
+          id,
+          description: price.description,
+          ...catalog.modelCatalog?.[id],
+          supported_endpoint_types:
+            catalog.modelCatalog?.[id]?.supported_endpoint_types ||
+            Object.keys(catalog.modelEndpoints?.[id] || {}),
+        }));
       }
     } catch {
-      // Pricing is optional; use the provider's authenticated /models endpoint
-      // when the marketplace is unavailable or returns an unsupported response.
+      // Pricing is optional metadata; availability comes from the authenticated request.
     }
   }
 
@@ -89,7 +83,7 @@ export async function discoverProviderModels(
     {
       selectAll: options.selectAll,
       signal: options.signal,
-      authoritativeModels,
+      modelMetadata,
     }
   );
 }

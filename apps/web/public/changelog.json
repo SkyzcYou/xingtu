@@ -1,6 +1,21 @@
 {
   "versions": [
     {
+      "version": "1.2.4",
+      "date": "2026-11-01",
+      "changes": {
+        "features": [
+          "add warm white dot background (#321)"
+        ],
+        "fixes": [
+          "恢复按当前 API Key 认证获取模型 (#322)"
+        ],
+        "improvements": []
+      },
+      "type": "patch",
+      "highlights": "add warm white dot background (#321)"
+    },
+    {
       "version": "6.7.44",
       "date": "2026-10-28",
       "changes": {

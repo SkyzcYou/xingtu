@@ -1,6 +1,15 @@
 @mixin board-background-color {
+    .board-dot-background {
+        display: none;
+    }
+    &.theme-colorful .board-dot-background {
+        display: block;
+    }
+    &.theme-colorful .plait-dot-grid-background__base {
+        display: none;
+    }
     &.theme-colorful {
-        --plait-board-background-color: #ffffff;
+        --plait-board-background-color: #fcfbf8;
         --plait-dot-grid-color: #cccccc;
         --plait-dot-grid-glow-color: #000000;
     }
